@@ -1,0 +1,142 @@
+% ============================================================
+%  references.bib  —  Multi-Teacher Mechanism-Driven Curriculum for UED
+%  All arXiv IDs / venues verified (2026-06). Page numbers / exact
+%  publisher metadata may need a final check before submission.
+% ============================================================
+
+% ---------- UED methods / baselines ----------
+
+@inproceedings{parkerholder2022accel,
+  title     = {Evolving Curricula with Regret-Based Environment Design},
+  author    = {Parker-Holder, Jack and Jiang, Minqi and Dennis, Michael
+               and Samvelyan, Mikayel and Foerster, Jakob and Grefenstette, Edward
+               and Rockt{\"a}schel, Tim},
+  booktitle = {Proceedings of the 39th International Conference on Machine Learning (ICML)},
+  year      = {2022},
+  note      = {arXiv:2203.01302}
+}
+
+@inproceedings{jiang2021robustplr,
+  title     = {Replay-Guided Adversarial Environment Design},
+  author    = {Jiang, Minqi and Dennis, Michael and Parker-Holder, Jack
+               and Foerster, Jakob and Grefenstette, Edward and Rockt{\"a}schel, Tim},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2021},
+  note      = {arXiv:2110.02439; introduces PLR$^\perp$ (Robust PLR)}
+}
+
+@inproceedings{dennis2020paired,
+  title     = {Emergent Complexity and Zero-Shot Transfer via Unsupervised Environment Design},
+  author    = {Dennis, Michael and Jaques, Natasha and Vinitsky, Eugene
+               and Bayen, Alexandre and Russell, Stuart and Critch, Andrew and Levine, Sergey},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2020},
+  note      = {arXiv:2012.02096; PAIRED}
+}
+
+@inproceedings{rutherford2024sfl,
+  title     = {No Regrets: Investigating and Improving Regret Approximations for Curriculum Discovery},
+  author    = {Rutherford, Alexander and Beukman, Michael and Willi, Timon
+               and Lacerda, Bruno and Hawes, Nick and Foerster, Jakob},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2024},
+  note      = {arXiv:2408.15099; SFL / learnability p(1-p)}
+}
+
+@inproceedings{monette2025ncc,
+  title     = {An Optimisation Framework for Unsupervised Environment Design},
+  author    = {Monette, Nathan and others},
+  booktitle = {Reinforcement Learning Conference (RLC)},
+  year      = {2025},
+  note      = {arXiv:2505.20659; NCC, generalized learnability, zero-sum convergence}
+}
+
+@inproceedings{teoh2024cenie,
+  title     = {Improving Environment Novelty Quantification for Effective Unsupervised Environment Design},
+  author    = {Teoh, others},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2024},
+  note      = {arXiv:2502.05726; CENIE coverage / GMM novelty}
+}
+
+@inproceedings{samvelyan2023maestro,
+  title     = {MAESTRO: Open-Ended Environment Design for Multi-Agent Reinforcement Learning},
+  author    = {Samvelyan, Mikayel and Khan, Akbir and Dennis, Michael
+               and Jiang, Minqi and Parker-Holder, Jack and Foerster, Jakob
+               and Raileanu, Roberta and Rockt{\"a}schel, Tim},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2023},
+  note      = {arXiv:2303.03376}
+}
+
+@misc{jiang2023minimax,
+  title        = {minimax: Efficient Baselines for Autocurricula in JAX},
+  author       = {Jiang, Minqi and Dennis, Michael and Grefenstette, Edward and Rockt{\"a}schel, Tim},
+  year         = {2023},
+  note         = {arXiv:2311.12716; code library}
+}
+
+% ---------- Optimization theory (the convergence machinery) ----------
+
+@inproceedings{lin2020gda,
+  title     = {On Gradient Descent Ascent for Nonconvex-Concave Minimax Problems},
+  author    = {Lin, Tianyi and Jin, Chi and Jordan, Michael I.},
+  booktitle = {Proceedings of the 37th International Conference on Machine Learning (ICML)},
+  year      = {2020},
+  note      = {arXiv:1906.00331; two-timescale GDA, NC-(strongly-)concave}
+}
+
+@inproceedings{zhang2021ncsc,
+  title     = {The Complexity of Nonconvex-Strongly-Concave Minimax Optimization},
+  author    = {Zhang, Siqi and Yang, Junchi and Guzm{\'a}n, Crist{\'o}bal
+               and Kiyavash, Negar and He, Niao},
+  booktitle = {Proceedings of the 37th Conference on Uncertainty in Artificial Intelligence (UAI)},
+  year      = {2021},
+  note      = {arXiv:2103.15888}
+}
+
+@article{hong2023ttsa,
+  title   = {A Two-Timescale Stochastic Algorithm Framework for Bilevel Optimization:
+             Complexity Analysis and Application to Actor-Critic},
+  author  = {Hong, Mingyi and Wai, Hoi-To and Wang, Zhaoran and Yang, Zhuoran},
+  journal = {SIAM Journal on Optimization},
+  year    = {2023},
+  note    = {arXiv:2007.05170; bilevel TTSA, strongly-convex inner}
+}
+
+@article{nesterov2005smoothing,
+  title   = {Smooth Minimization of Non-Smooth Functions},
+  author  = {Nesterov, Yurii},
+  journal = {Mathematical Programming},
+  volume  = {103},
+  number  = {1},
+  pages   = {127--152},
+  year    = {2005},
+  note    = {entropy smoothing / log-sum-exp, $\alpha\log n$ bias}
+}
+
+@inproceedings{babaioff2009truthful,
+  title     = {Characterizing Truthful Multi-Armed Bandit Mechanisms},
+  author    = {Babaioff, Moshe and Sharma, Yogeshwer and Slivkins, Aleksandrs},
+  booktitle = {Proceedings of the 10th ACM Conference on Electronic Commerce (EC)},
+  year      = {2009},
+  note      = {arXiv:0812.2291; truthful MAB mechanisms incur higher regret}
+}
+
+% ---------- Diagnostics / related ----------
+
+@inproceedings{beukman2024remidi,
+  title     = {Refining Minimax Regret for Unsupervised Environment Design},
+  author    = {Beukman, Michael and others},
+  booktitle = {Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  year      = {2024},
+  note      = {arXiv:2402.12284; ReMiDi, irreducible-regret counterexample}
+}
+
+@inproceedings{li2023diplr,
+  title     = {Generalization through Diversity: Improving Unsupervised Environment Design},
+  author    = {Li, Wenjun and others},
+  booktitle = {Proceedings of the International Joint Conference on Artificial Intelligence (IJCAI)},
+  year      = {2023},
+  note      = {DIPLR}
+}

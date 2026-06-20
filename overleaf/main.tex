@@ -1,0 +1,295 @@
+\documentclass[11pt]{article}
+
+% ==============================================================
+%  Multi-Teacher Mechanism-Driven Curriculum for UED
+%  Shared draft for Amy & Hrithik — math formulation
+%  Sections: (1) Bilevel problem formulation
+%            (2) Baselines and what they do
+%            (3) Our proposal
+% ==============================================================
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}
+
+% --- handy macros ---
+\newcommand{\reals}{\mathbb{R}}
+\newcommand{\expect}{\mathbb{E}}
+\newcommand{\simplex}{\Delta}
+\newcommand{\level}{\theta}        % a level / environment parameter
+\newcommand{\levelset}{\Theta}     % space of levels
+\newcommand{\policy}{\pi}
+\newcommand{\param}{x}             % student parameters
+\newcommand{\paramset}{\mathcal{X}}
+\newcommand{\dist}{y}              % teacher / curriculum distribution
+\newcommand{\score}{s}             % score (bid) vector
+\newcommand{\reg}{\mathrm{Regret}}
+\newcommand{\pvl}{\mathrm{PVL}}
+\newcommand{\lrn}{\mathrm{learn}}
+\newcommand{\cov}{\mathrm{cov}}
+\newcommand{\entropy}{H}
+\newcommand{\todo}[1]{\textcolor{red}{[\textbf{TODO:} #1]}}
+\usepackage{xcolor}
+
+\title{\textbf{Multi-Teacher Mechanism-Driven Curriculum for\\ Unsupervised Environment Design}\\[4pt]
+\large A bilevel formulation and a convergent entropy-regularized solver}
+\author{Jiayu Zhu (Alec), Hrithik Nambiar \\ \small Advisor: Amy }
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study unsupervised environment design (UED) with a \emph{population of heterogeneous teachers}: several level-scoring agents, each using a structurally different estimator (regret, learnability, coverage), whose bids are aggregated into a training curriculum by a tunable, possibly non-incentive-compatible mechanism. The dependent variable throughout is the student's zero-shot generalization on held-out levels. We first cast the problem as a \emph{bilevel} optimization (Sec.~\ref{sec:formulation}): an outer curriculum-design problem over a student that solves an inner RL problem. Because the inner RL problem is nonconvex --- so generic bilevel solvers that require a strongly convex inner problem do not apply --- we solve a \emph{relaxation}: an entropy-regularized min--max game whose adversary is strongly concave by construction, for which a two-timescale stochastic scheme provably converges at a \emph{polynomial} rate $\mathcal{O}(\alpha^{-3}\epsilon^{-4})$ --- with \emph{no} truncation of the simplex and no exponential dependence on the score bound. The entropy weight $\alpha$ becomes an analytically controlled \emph{stability vs.\ heterogeneity-fidelity} knob. We position existing methods (PAIRED, PLR$^\perp$, ACCEL, SFL, NCC, CENIE, MAESTRO) as special cases or baselines (Sec.~\ref{sec:baselines}) and state our proposal and its guarantee (Sec.~\ref{sec:proposal}).
+\end{abstract}
+
+% ==============================================================
+\section{Problem formulation: UED as a bilevel problem}
+\label{sec:formulation}
+
+\subsection{Objects}
+Let $\level \in \levelset$ denote a \emph{level} (environment parameters: a maze layout, BipedalWalker terrain parameters, a Craftax seed). A student is a policy $\policy_{\param}$ parameterized by $\param \in \paramset \subseteq \reals^{d}$. For a level $\level$, let
+\[
+  U(\param,\level) \;=\; \expect_{\tau \sim \policy_{\param},\,\level}\!\Big[\textstyle\sum_{t} \gamma^{t} r_t\Big]
+\]
+be the expected discounted return. The \emph{regret} of $\policy_\param$ on $\level$ is
+\begin{equation}
+  \reg(\param,\level) \;=\; \max_{\param'} U(\param',\level) \;-\; U(\param,\level)
+  \;=\; U(\param^{*}_{\level},\level) - U(\param,\level),
+  \label{eq:regret}
+\end{equation}
+the gap to the level-optimal return.
+
+A \emph{curriculum} is a distribution over levels. Restricting to a finite candidate buffer $\levelset_n=\{\level_1,\dots,\level_n\}$ (the standard PLR/ACCEL replay buffer), a curriculum is a point on the simplex $\dist \in \simplex_n$.
+
+\subsection{The bilevel structure}
+UED has an intrinsic two-level (\emph{bilevel}) structure:
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+  \item \textbf{Outer (leader):} the teacher / mechanism chooses the curriculum $\dist$ (and, in our case, how to aggregate several teachers' bids) so as to maximize the \emph{eventual} generalization of the student it produces.
+  \item \textbf{Inner (follower):} given a curriculum $\dist$, the student solves an RL problem and converges to parameters $\param^{*}(\dist)$.
+\end{itemize}
+Writing $G(\param)$ for the held-out generalization objective (e.g.\ minimax-regret proxy on an evaluation set), the problem is
+\begin{equation}
+  \min_{\dist \in \simplex_n}\; G\big(\param^{*}(\dist)\big)
+  \qquad \text{s.t.}\qquad
+  \param^{*}(\dist) \in \arg\min_{\param \in \paramset}\; \expect_{\level \sim \dist}\big[\ell(\param,\level)\big],
+  \label{eq:bilevel}
+\end{equation}
+where $\ell$ is the student's training loss (negative return / policy-gradient surrogate). Equation~\eqref{eq:bilevel} is a genuine bilevel program: the outer objective depends on $\dist$ \emph{only through} the inner solution $\param^{*}(\dist)$. The classical zero-sum (minimax) UED game is the special case in which the outer objective is taken to be the student's own regret and the leader is adversarial.
+
+\begin{remark}[Why we do not solve \eqref{eq:bilevel} with a generic bilevel solver]
+\label{rem:why-not-bilevel}
+Two-timescale bilevel frameworks (e.g.\ Hong et al.\ 2020, TTSA) attain clean rates \emph{when the inner problem is unconstrained and strongly convex}, so that $\param^{*}(\dist)$ is unique and smooth in $\dist$. The student's inner RL problem is \emph{nonconvex}; $\param^{*}(\dist)$ is neither unique nor a smooth map. Hence we do not apply a generic bilevel solver directly. Instead we solve a \emph{tractable relaxation} of \eqref{eq:bilevel} --- an entropy-regularized min--max game (Sec.~\ref{sec:proposal}) --- which is exactly the route taken by the convergent zero-sum UED analyses (NCC). \textbf{The bilevel statement \eqref{eq:bilevel} is the ground truth of what we optimize; the min--max relaxation is how we obtain a convergent algorithm.}
+\end{remark}
+
+\subsection{Score-based min--max relaxation}
+Replace the intractable inner-dependent outer objective by a \emph{score} (bid) that a teacher assigns to each level, $\score(\param,\levelset_n)\in\reals^n$. The adversary (teacher) maximizes the score-weighted curriculum while the student minimizes; this yields the min--max relaxation
+\begin{equation}
+  \min_{\param\in\paramset}\;\max_{\dist\in\simplex_n}\;
+  \dist^{\top}\score(\param,\levelset_n).
+  \label{eq:minimax}
+\end{equation}
+When $\score=-J$ (negative return, i.e.\ regret), \eqref{eq:minimax} is the zero-sum UED game. Our proposal keeps this min--max \emph{form} but (i) lets $\score$ come from a \emph{heterogeneous population} and (ii) adds entropy regularization to make it provably solvable (Sec.~\ref{sec:proposal}).
+
+% ==============================================================
+\section{Baselines and what they do}
+\label{sec:baselines}
+
+All methods below instantiate \eqref{eq:minimax} (or \eqref{eq:bilevel}) with a particular score $\score$ and a particular way of turning scores into the next training level. They differ in \emph{which question the score asks}.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Score / mechanism} & \textbf{What it does} \\
+\midrule
+DR & none (uniform $\dist$) & samples levels i.i.d.; no curriculum. \\
+PAIRED & adversary's regret estimate & a learned antagonist proposes high-regret levels. \\
+PLR$^\perp$ (Robust PLR) & $\pvl$ (positive value loss) & replays buffered levels by a regret proxy. \\
+ACCEL & $\pvl$ + edit/evolve & mutates high-$\pvl$ levels to evolve a curriculum. \\
+SFL & learnability $p(1-p)$ & trains on levels solved $\approx$ half the time. \\
+NCC & generalized learnability (Eq.~\eqref{eq:genlearn}) & convergent zero-sum solver for regret-type scores. \\
+CENIE & coverage / novelty (Eq.~\eqref{eq:cenie}) & prioritizes under-visited state--action regions. \\
+MAESTRO & regret over (env, co-player) pairs & joint curriculum for multi-agent settings. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Score definitions (the three families we build on).}
+\begin{align}
+  \pvl(\param,\level) &= \frac{1}{T}\sum_{t=1}^{T}\max\!\Big(\textstyle\sum_{k=t}^{T}(\gamma\lambda_{\mathrm{GAE}})^{k-t}\delta_k,\;0\Big),
+    \quad \delta_t = r_t+\gamma V(o_{t+1})-V(o_t),
+    \label{eq:pvl}\\[2pt]
+  \mathrm{learn}(\param,\level) &= p\,(1-p), \qquad p=\text{success rate of }\policy_\param\text{ on }\level
+    \quad\text{(Bernoulli variance)},
+    \label{eq:learn}\\[2pt]
+  s_{\mathrm{Gen\text{-}SFL}}(\param,\level) &= \sigma_{\level}\cdot \mathcal{N}(\mu_{\level}\mid \mu,\sigma^2)
+    \quad\text{(within-level return std.\ }\sigma_\level\text{; NCC Eq.~11)},
+    \label{eq:genlearn}\\[2pt]
+  \mathrm{Novelty}(\param,\level) &= -\frac{1}{|X|}\sum_{(s,a)\in X}\log p\big((s,a)\mid \lambda_\Gamma\big),
+    \quad X\sim\tau_{\policy_\param},\ \lambda_\Gamma=\text{GMM on coverage buffer},
+    \label{eq:cenie}
+\end{align}
+where $\pvl$ approximates regret \eqref{eq:regret}, $\mathrm{learn}$/Gen-SFL measure return dispersion (``can the student learn here now?''), and $\mathrm{Novelty}$ measures state--action coverage (``have we taken the student somewhere new?''). These ask \emph{structurally different} questions, which is our source of diversity.
+
+\paragraph{Key fact we exploit.}
+The learnability and coverage scores are \emph{statistically distinct} from regret (empirically: weak/zero correlation with $\pvl$/MaxMC; and there exist high-true-regret, low-learnability levels). Hence they \textbf{cannot} be written as ``regret $+$ small perturbation,'' and a heterogeneous population that mixes them is no longer a zero-sum game --- which is precisely why the convergence question below is nontrivial and open (NCC leaves the non-zero-sum case as future work).
+
+% ==============================================================
+\section{Our proposal}
+\label{sec:proposal}
+
+\subsection{Heterogeneous teachers + tunable mechanism}
+We run $N$ teachers, teacher $j$ scoring with estimator $\score^{(j)}\in\{\pvl,\ \text{Gen-SFL},\ \text{Novelty}\}$. A mechanism aggregates the bids into the curriculum. Two orthogonal axes:
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+  \item \textbf{Gap B (heterogeneity, main axis):} structurally different estimators \eqref{eq:pvl}--\eqref{eq:cenie}, not noise on a single signal.
+  \item \textbf{Gap A (mechanism truthfulness, knob):} a tunable family from VCG (truthful) to non-IC, with an IC-violation penalty $\lambda$; motivated by Babaioff--Sharma--Slivkins (forcing truthfulness raises regret in bandit learning systems). \emph{Motivation, not a transferred guarantee.}
+\end{itemize}
+
+\subsection{The mechanism family (Gap A, formalized)}
+\label{sec:mechanism}
+Each teacher $j$ submits a bid vector $\score^{(j)}(\param,\levelset_n)\in\reals^n$ scoring the $n$ candidate levels in the buffer $\levelset_n=\{\level_1,\dots,\level_n\}$. A mechanism $M$ turns the $N$ bid vectors into the next curriculum. We parameterize $M$ by a \emph{winner weight} $w\in\simplex_N$ over teachers and an \emph{IC-violation penalty} $\lambda\in[0,\infty]$, and define a single family $\{M_{w,\lambda}\}$ that contains the existing single-winner baselines as degenerate endpoints.
+
+\paragraph{Aggregated score and the (combination) inner solution.}
+Given winner weights $w$, the mechanism aggregates the heterogeneous bids into one mixed score
+\begin{equation}
+  \bar\score_w(\param,\levelset_n)\;=\;\sum_{j=1}^{N} w_j\,\score^{(j)}(\param,\levelset_n)\;\in\;\reals^n,
+  \label{eq:mixscore}
+\end{equation}
+and runs the entropy-regularized solver \eqref{eq:reg-obj} on $\bar\score_w$. Its inner maximizer is, by the same softmax argument as Thm.~\ref{thm:conv}(ii),
+\begin{equation}
+  \dist^{*}_w(\param)\;=\;\mathrm{softmax}\!\Big(\tfrac{1}{\alpha}\,\bar\score_w(\param)\Big)
+  \;=\;\mathrm{softmax}\!\Big(\tfrac{1}{\alpha}\textstyle\sum_j w_j\,\score^{(j)}(\param)\Big)\;\in\;\simplex_n,
+  \label{eq:mixsolution}
+\end{equation}
+a \emph{distribution over levels} from which a single complete buffer level is sampled. \textbf{Mixing happens in the sampling-probability layer, never on level content:} the level that is drawn is always a full, valid buffer level (a maze map / walker parameter / seed), never an average of levels. Because $\bar\score_w$ is bounded ($\|\bar\score_w\|_\infty\le\max_j B_s^{(j)}$ since $w\in\simplex_N$) and enters $f_\alpha$ only through the linear term $\dist^{\top}\bar\score_w$, \eqref{eq:mixscore} satisfies Assumption~\ref{ass:main} (A2, A5), so Theorem~\ref{thm:conv} applies verbatim to the mixed score --- the convergence guarantee carries over to \emph{any} winner weight $w$.
+
+\paragraph{Three allocation regimes (one family, increasing richness).}
+\begin{enumerate}[topsep=2pt,itemsep=2pt,label=\textup{(\alph*)}]
+  \item \textbf{Single-winner selection} (existing baselines, \texttt{argmax}/\texttt{exp3}): $w=e_{j^{*}}$ is a vertex of $\simplex_N$; only the winning teacher's bid enters \eqref{eq:mixscore}. This is the degenerate endpoint and serves as the ablation reference.
+  \item \textbf{Multi-unit (top-$k$) allocation:} $w$ is uniform on the top-$k$ teachers; the student trains on a mini-batch holding one winning level from each. VCG natively supports multi-item allocation, so extending from $k=1$ to $k>1$ does not break the truthful (VCG) anchor.
+  \item \textbf{Fractional allocation / distribution-level combination:} general $w\in\simplex_N$ splits the next-$T$-step training budget across teachers (a divisible-good allocation), realized in the sampling layer by \eqref{eq:mixsolution}. The single-winner case (a) is exactly the one-hot ($w=e_{j^{*}}$) special case, so the existing baselines are recovered as a face of this family.
+\end{enumerate}
+Thus single-winner $\subset$ top-$k$ $\subset$ fractional, and \texttt{argmax} is the $w=e_{j^{*}}$ vertex; $w$ is a \emph{third} mechanism axis alongside $\alpha$ (entropy strength) and $\lambda$.
+
+\paragraph{The truthfulness knob $\lambda$.}
+The weights $w$ are produced by a payment/scoring rule on the submitted bids. At $\lambda=\infty$ the rule is VCG (truthful: a teacher's payment is the externality it imposes, so honest bidding is dominant), and decreasing $\lambda$ relaxes incentive compatibility by penalizing IC violations less, sweeping toward an unconstrained ($\lambda=0$) rule:
+\begin{equation}
+  M_{w,\lambda}:\quad
+  w \;=\; \arg\max_{w'\in\simplex_N}\;\Big\{\,\underbrace{\textstyle\sum_j w'_j\,b_j}_{\text{allocation value}}\;-\;\lambda\cdot \mathrm{ICV}(w',b)\,\Big\},
+  \qquad b_j=\text{teacher $j$'s submitted bid summary},
+  \label{eq:lambda-knob}
+\end{equation}
+where $\mathrm{ICV}(\cdot)$ measures the mechanism's departure from a truthful (VCG) allocation and $\lambda$ is the swept knob; $\lambda=\infty$ forces $\mathrm{ICV}=0$ (VCG), $\lambda=0$ ignores truthfulness. Following Babaioff--Sharma--Slivkins, we expect an \emph{intermediate} $\lambda$ --- not the truthful extreme --- to maximize the downstream objective (student zero-shot generalization, not auction welfare); this is a motivation, not a transferred guarantee, and is the quantity swept in the Stage-3 $\lambda$-frontier. Crucially, for every fixed $(w,\lambda)$ the curriculum solver still runs on the bounded linear score \eqref{eq:mixscore}, so the convergence guarantee of Theorem~\ref{thm:conv} holds \emph{uniformly along the entire $\lambda$ sweep}.
+
+\subsection{Entropy-regularized objective and the convergent solver}
+We solve the min--max relaxation \eqref{eq:minimax} with an entropy regularizer on the adversary:
+\begin{equation}
+  f_\alpha(\param,\dist) \;=\; \dist^{\top}\score(\param,\levelset_n)\;+\;\alpha\,\entropy(\dist),
+  \qquad
+  \entropy(\dist)=-\sum_i \dist_i\log \dist_i,
+  \qquad
+  \Phi_\alpha(\param)=\max_{\dist\in\simplex_n} f_\alpha(\param,\dist).
+  \label{eq:reg-obj}
+\end{equation}
+\textbf{Crucial structural point.} The strong concavity in $\dist$ comes from $\alpha\entropy(\dist)$, \emph{not} from $\score=-J$; the score enters only through the term $\dist^{\top}\score$, which is \emph{linear} in $\dist$. Therefore $f_\alpha(\param,\cdot)$ is $\alpha$-strongly concave \emph{for any bounded score}, heterogeneous or not. This is what lets us keep heterogeneous (learnability/coverage) scores while retaining a convergent solver.
+
+\paragraph{Algorithm (the scheme analyzed).}
+We run a two-timescale stochastic scheme on \eqref{eq:reg-obj}: KL-mirror ascent (exponentiated gradient) on the curriculum $\dist$ with the inner step size $\eta_\dist$, and SGD on the student $\param$ with the outer step size $\eta_\param$:
+\begin{equation}
+  \dist_{t+1}=\arg\max_{\dist\in\simplex_n}\big\{\eta_\dist\langle \widehat{\score}(\param_t),\dist\rangle - \eta_\dist\alpha\entropy^{-}(\dist) - D_{\mathrm{KL}}(\dist\,\|\,\dist_t)\big\},
+  \qquad
+  \param_{t+1}=\param_t-\eta_\param\,\widehat{\nabla}_\param f_\alpha(\param_t,\dist_{t+1}),
+  \label{eq:algo}
+\end{equation}
+with $\eta_\param/\eta_\dist\to0$ (outer slow, inner fast). Here $\widehat{\score},\widehat{\nabla}$ are unbiased stochastic estimates and $\entropy^{-}=-\entropy$.
+
+\begin{assumption}\label{ass:main}
+\textbf{(A1)} $\paramset$ closed, $\simplex_n$ compact convex.
+\textbf{(A2, bounded scores)} $\|\score(\param,\levelset_n)\|_\infty\le B_s$ for all $\param$.
+\textbf{(A3, smooth in $\param$)} $\score(\param,\cdot)$ is $L_s$-Lipschitz and $\ell_s$-smooth in $\param$ (for $\pvl$, after softplus smoothing of $\max(\cdot,0)$ with temperature $\tau=\mathcal{O}(\alpha)$; for coverage, after clipping $-\log p$ at level $C$, giving $B_s=C$).
+\textbf{(A4, stochastic oracle)} $\expect[\widehat{\score}\mid\mathcal{F}_t]=\score$, $\expect[\widehat{\nabla}_\param f_\alpha\mid\mathcal{F}_t]=\nabla_\param f_\alpha$, variances $\le\sigma^2$.
+\textbf{(A5, linear entry)} $\score$ enters $f_\alpha$ only through the term $\dist^{\top}\score$, which is linear in $\dist$ (so strong concavity is supplied entirely by $\alpha\entropy$).
+\end{assumption}
+
+\begin{theorem}[Fixed-$\alpha$ convergence of the entropy-regularized heterogeneous-score game]
+\label{thm:conv}
+Fix $\alpha>0$. Under Assumption~\ref{ass:main}, the following hold for the scheme \eqref{eq:algo} and \emph{any} bounded heterogeneous score $\score$ (regret, learnability, coverage, or a mixture):
+\begin{enumerate}[topsep=2pt,itemsep=1pt,label=\textup{(\roman*)}]
+  \item \textup{(Strong concavity, exact constant.)} $f_\alpha(\param,\cdot)$ is $\alpha$-strongly concave relative to the entropy reference on all of $\simplex_n$; equivalently the relative condition number is $\kappa_{\mathrm{rel}}=1$. The constant does \emph{not} degrade at the boundary of $\simplex_n$.
+  \item \textup{(Envelope smoothness.)} $\Phi_\alpha(\param)=\max_\dist f_\alpha(\param,\dist)$ is $L_\Phi$-smooth with
+  $L_\Phi=\ell_s+\tfrac{G_s L_s}{\alpha}$, where $G_s=\sup_\param\|\nabla_\param\score\|$; and $\nabla\Phi_\alpha(\param)=\nabla_\param f_\alpha(\param,\dist^{*}(\param))$ with $\dist^{*}(\param)=\mathrm{softmax}(\score(\param)/\alpha)$, which is $\tfrac{L_s}{\alpha}$-Lipschitz in $\ell_1$.
+  \item \textup{(Iteration complexity --- polynomial, no boundary blow-up.)} Running the inner mirror ascent in the \emph{dual} (log-sum-exp) coordinate---whose curvature $\nabla^2 Z(u)=\mathrm{diag}(p)-pp^{\top}\preceq I$ is globally $1$-smooth, \emph{independent} of how close $\dist^{*}$ sits to the boundary of $\simplex_n$---the cross-step drift is bounded by $\tfrac{L_s^2}{2\alpha^2}\|\param_{t+1}-\param_t\|^2$ with \emph{no} $1/\nu$ factor. With step sizes $\eta_\dist=\Theta(\alpha\epsilon^2)$, $\eta_\param=\Theta(\alpha^3\epsilon^3)$ (ratio $\eta_\param/\eta_\dist=\Theta(\alpha^2\epsilon)$, free of any boundary radius), the scheme reaches $\tfrac1K\sum_{t<K}\expect\|\nabla\Phi_\alpha(\param_t)\|^2\le\epsilon^2$ (an $\epsilon$-approximate first-order stationary point of $\Phi_\alpha$) in
+  \begin{equation}
+    K \;=\; \mathcal{O}\!\left(\frac{G_s^2\sigma^2\,\Delta_\Phi}{\alpha^{3}\,\epsilon^{5}}\right)
+    \quad\text{(single-sample)},
+    \qquad
+    K \;=\; \mathcal{O}\!\left(\frac{1}{\alpha^{3}\,\epsilon^{4}}\right)
+    \quad\text{(inner batch }B=\mathcal{O}(\epsilon^{-2})\text{)},
+    \label{eq:complexity}
+  \end{equation}
+  where $\Delta_\Phi=\Phi_\alpha(\param_0)-\min\Phi_\alpha$. The rate is \emph{polynomial} in $1/\alpha$; crucially there is \emph{no} $e^{2B_s/\alpha}$ term. The dependence on $1/\alpha$ is one order worse than the truncated-simplex Euclidean route (NCC, $\mathcal{O}(1/\alpha^2)$), the price of keeping the \emph{un-truncated} softmax curriculum (Sec.~\ref{sec:proposal-vs-ncc}); the $\epsilon$-order matches NCC under the same inner-batch convention.
+  \item \textup{(Regularization bias, Nesterov smoothing.)} Uniformly in $\param$,
+  \begin{equation}
+    0 \;\le\; \Phi_\alpha(\param)-\Phi_0(\param)\;\le\;\alpha\log n,
+    \qquad \Phi_0(\param)=\max_{\dist\in\simplex_n}\dist^{\top}\score(\param),
+    \label{eq:bias}
+  \end{equation}
+  hence $\big|\min_\param\Phi_\alpha-\min_\param\Phi_0\big|\le\alpha\log n$ (\emph{value} suboptimality; we do not claim closeness of the minimizers $\param^{*}$).
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}[Proof sketch (full proof under verification --- see open items)]
+\textbf{(i)} For fixed $\param$, $\nabla_\dist f_\alpha(\dist)=\score-\alpha\nabla\entropy^{-}(\dist)$, so $\langle\dist-\dist',\nabla_\dist f_\alpha(\dist)-\nabla_\dist f_\alpha(\dist')\rangle=-\alpha\langle\dist-\dist',\nabla\entropy^{-}(\dist)-\nabla\entropy^{-}(\dist')\rangle$ exactly, giving relative strong-concavity and -smoothness both equal to $\alpha$. \textbf{(ii)} Danskin's theorem (unique maximizer by strict concavity of entropy) gives the gradient; the $\ell_1$-Lipschitz bound on $\dist^{*}$ follows from the first-order optimality conditions and Pinsker's inequality ($\entropy$ is $1$-strongly convex in $\ell_1$). \textbf{(iii)} Two-timescale coupling (outer SGD using the inner near-solution) in the KL/Bregman geometry; the inner KL-mirror ascent contracts as $\expect[D_{\mathrm{KL}}(\dist^{*}_t\|\dist_{t+1})\mid\mathcal{F}_t]\le(1-\tfrac{\eta_\dist\alpha}{2})D_{\mathrm{KL}}(\dist^{*}_t\|\dist_t)+\tfrac{\eta_\dist^2\sigma^2}{2}$. The cross-step drift $D_{\mathrm{KL}}(\dist^{*}(\param_{t+1})\|\dist^{*}(\param_t))$ is measured in the \emph{dual} coordinate via $D_{\mathrm{KL}}(\dist^*_1\|\dist^*_2)=D_Z(\nabla\entropy(\dist^*_2)\|\nabla\entropy(\dist^*_1))$ with $Z$ the log-sum-exp conjugate; since the pre-image of $\dist^{*}=\mathrm{softmax}(\score/\alpha)$ is exactly $\score/\alpha$ and $\nabla^2 Z\preceq I$ globally, the drift is $\le\tfrac{L_s^2}{2\alpha^2}\|\param_{t+1}-\param_t\|^2$ --- bounded by the \emph{global} $1$-smoothness of $Z$, with \emph{no} dependence on the minimal component of $\dist^{*}$. (An earlier bound routed this drift through an $\ell_1$ detour and incurred a spurious $1/\nu=n\,e^{2B_s/\alpha}$ factor; the dual route removes it.) \textbf{(iv)} $\Phi_\alpha(\param)=\alpha\log\sum_i e^{\score_i/\alpha}$ is the log-sum-exp smoothing of $\Phi_0$; the $\alpha\log n$ bound is the standard Nesterov entropy-smoothing estimate; value-level comparison of the minima follows by uniformity in $\param$.
+\end{proof}
+
+\begin{remark}[The $\alpha$ knob, and why we still report at a fixed $\alpha$]
+\label{rem:fixed-alpha}
+Since \eqref{eq:complexity} is \emph{polynomial} in $1/\alpha$ (no $e^{2B_s/\alpha}$), driving $\alpha\to0$ to shrink the bias \eqref{eq:bias} is no longer intractable: taking $\alpha=\Theta(\epsilon_{\mathrm{target}}/\log n)$ inflates $K$ only \emph{polynomially} in $1/\epsilon_{\mathrm{target}}$. Convergence to the heterogeneous target $\Phi_0$ is thus achievable in principle. We nonetheless \emph{report} at a fixed, moderate $\alpha$ --- as the entropy coefficient is treated in soft actor-critic / entropy-regularized OT --- because \eqref{eq:bias} makes $\alpha$ a clean \emph{analytic} ``optimization cost vs.\ heterogeneity-fidelity'' Pareto knob ($K\propto\alpha^{-3}$ vs.\ bias $\le\alpha\log n$), not because small $\alpha$ is unreachable. This is a \emph{strictly milder} claim than an exponential rate would force: the regularizer is a modelling choice, no longer a tractability necessity.
+\end{remark}
+
+\subsection{Feasible range of $\alpha$ (no experiments needed)}
+\label{sec:alpha-range}
+The two bounds in Theorem~\ref{thm:conv} bracket a usable range analytically. Two \emph{distinct} tolerances enter, and we keep them separate throughout: $\epsilon_{\mathrm{bias}}$ is the tolerable \emph{regularization bias} (how far $\Phi_\alpha$ may sit from $\Phi_0$, eq.~\eqref{eq:bias}), whereas $\epsilon$ is the \emph{optimization accuracy} (the stationarity target of \eqref{eq:complexity}); these are different quantities and must not be conflated. Given $\epsilon_{\mathrm{bias}}$, $\epsilon$, and a compute budget of $K_{\mathrm{budget}}$ iterations,
+\begin{equation}
+  \alpha_{\max}=\frac{\epsilon_{\mathrm{bias}}-\mathcal{E}_{\mathrm{clip}}(C)}{\log n},
+  \qquad
+  \alpha_{\min}=\Theta\!\left(\Big(\tfrac{1}{K_{\mathrm{budget}}\,\epsilon^{4}}\Big)^{1/3}\right)
+  \ \ \text{(from }K\le K_{\mathrm{budget}}\text{ with }K=\mathcal{O}(\alpha^{-3}\epsilon^{-4})\text{)},
+  \label{eq:alpha-range}
+\end{equation}
+where $\mathcal{E}_{\mathrm{clip}}(C)$ is the $\alpha$-independent clip bias floor (Sec.~\ref{sec:coverage}; set $\mathcal{E}_{\mathrm{clip}}=0$ for the un-clipped scores PVL/learnability). Because the complexity \eqref{eq:complexity} is \emph{polynomial} in $1/\alpha$ (the dual-coordinate analysis removed the former $e^{2B_s/\alpha}$ term), $\alpha_{\min}$ now shrinks only \emph{polynomially} as the budget grows --- a closed form, no transcendental root. We then search $2$--$3$ points inside $[\alpha_{\min},\alpha_{\max}]$. The range is empty only in the degenerate case $\mathcal{E}_{\mathrm{clip}}(C)\ge\epsilon_{\mathrm{bias}}$ (the clip floor alone exceeds the bias budget, i.e.\ the coverage teacher's $C$ is set too aggressively); otherwise, since $\alpha_{\min}$ decays polynomially in $K_{\mathrm{budget}}$, a modest budget already opens the window. \emph{The binding quantity is the coverage clip level $C$ --- through the bias floor $\mathcal{E}_{\mathrm{clip}}(C)$ on $\alpha_{\max}$ --- not the (now polynomial) compute side.}
+
+\subsection{Coverage via reverse-density sampling (handling the heterogeneous coverage teacher)}
+\label{sec:coverage}
+Coverage does not enter \eqref{eq:reg-obj} additively in its native CENIE form (which mixes at the sampling-probability level). We instead define the linear coverage score $\score_i=\mathrm{clip}\big(-\log p(\level_i\mid\lambda_\Gamma),-C,C\big)$. The inner solution of \eqref{eq:reg-obj} is then $\dist^{*}_i \propto \exp(\score_i/\alpha)$, i.e.\ for un-clipped $-\log p$, $\dist^{*}_i \propto p(\level_i)^{-1/\alpha}$ --- \emph{reverse-density power sampling}: lower coverage (higher novelty) $\Rightarrow$ exponentially higher sampling probability. This is a maximum-entropy formalization of CENIE's ``prioritize low-coverage'' principle (a principled \emph{reformulation}, not a numerical equivalence). The clip introduces a fixed bias floor $\mathcal{E}_{\mathrm{clip}}(C)$ independent of $\alpha$, which we report.
+
+\subsection{What is new vs.\ borrowed, and the route relative to NCC}
+\label{sec:proposal-vs-ncc}
+Borrowed building blocks: the smoothing bias \eqref{eq:bias} (Nesterov); the NC-strongly-concave two-timescale rate (Lin--Jin--Jordan 2020; Zhang et al.\ 2021); relative-smoothness / Bregman mirror descent. New (our contribution): (i) recasting NCC's zero-sum objective as ``any bounded heterogeneous score $+$ entropy,'' with strong concavity supplied by the regularizer rather than by $\score=-J$; (ii) a \emph{polynomial-rate} convergence theorem for arbitrary bounded heterogeneous scores under an \emph{un-truncated} KL-mirror inner loop --- the key device being that the cross-step drift is measured in the dual log-sum-exp coordinate, whose Hessian $\mathrm{diag}(p)-pp^{\top}\preceq I$ is globally $1$-smooth, eliminating the boundary ($1/\nu$) blow-up that an $\ell_1$ detour would incur; (iii) the $\alpha$ feasibility range \eqref{eq:alpha-range}; (iv) the reverse-density reformulation of coverage; (v) the tunable non-IC mechanism layer (Gap A). To our knowledge no prior work folds a non-regret (learnability/coverage) score into a UED framework \emph{with} a convergence guarantee; NCC explicitly leaves the non-zero-sum case as open.
+
+\paragraph{Route relative to NCC.}
+NCC attacks the \emph{same} objective family $f_\alpha=\dist^{\top}\score+\alpha\entropy(\dist)$ but on a \emph{$\delta$-truncated} simplex $\{\dist_i\ge\delta\}$ with Euclidean projection, invoking Lin--Jin--Jordan to obtain $\mathcal{O}(1/\alpha^2)$. We instead keep the \emph{full} simplex and the exact softmax curriculum $\dist^{*}=\mathrm{softmax}(\score/\alpha)$ --- never truncating away the high-novelty tail that the coverage teacher depends on --- and obtain $\mathcal{O}(1/\alpha^3)$ (one order worse in $\alpha$, the same in $\epsilon$ under a matched inner batch). The trade is deliberate: a slightly worse $\alpha$-dependence in exchange for an un-truncated curriculum and the admissibility of heterogeneous (non-regret) scores, neither of which the truncated-Euclidean route accommodates.
+
+\paragraph{Dependent variable.}
+Throughout, the reported metric is the student's zero-shot generalization (solve rate / return, with $\alpha$-CVaR robustness) on held-out levels --- never auction welfare --- so results are directly comparable to ACCEL/PLR/SFL/NCC.
+
+% ==============================================================
+\section*{Open items for discussion}
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+  \item \textbf{Theorem~\ref{thm:conv} --- status.} The algebraic core (Hessian, softmax solution, envelope smoothness, dual log-sum-exp drift bound, step-size ratio) has been symbolically machine-checked, and the dual-coordinate analysis removes the earlier $e^{2B_s/\alpha}$ factor, yielding the polynomial rate \eqref{eq:complexity}. The remaining gap is the \emph{end-to-end} rigour of the stochastic two-timescale Lyapunov coupling (optimality of the coupling constant, the $O(1)$ constants in each bound) --- cross-validated but not yet machine-formalized; a Lean pass on the single load-bearing descent inequality is optional and would close it.
+  \item \textbf{Feasible $\alpha$ range --- closed.} The range \eqref{eq:alpha-range} is fully analytic (no runs): with the polynomial rate, $\alpha_{\min}=\Theta((K_{\mathrm{budget}}\,\epsilon^{4})^{-1/3})$ no longer depends on $B_s$, and the range is empty only in the degenerate case $\mathcal{E}_{\mathrm{clip}}(C)\ge\epsilon_{\mathrm{bias}}$ (coverage clip set too aggressively). A solver implementing \eqref{eq:alpha-range} confirms the window is open at modest budgets.
+  \item \textbf{Mechanism layer (Gap A).} The VCG $\to$ tunable-$\lambda$ formalization --- the mechanism family $\{M_{w,\lambda}\}$, the IC-violation penalty \eqref{eq:lambda-knob}, the single-/multi-winner and fractional (distribution-level combination) variants \eqref{eq:mixscore}--\eqref{eq:mixsolution}, and the proof that Theorem~\ref{thm:conv} carries over uniformly in $(w,\lambda)$ --- is now written into Sec.~\ref{sec:mechanism}. The remaining item is empirical: the Stage-3 $\lambda$-frontier and the choice of the $\mathrm{ICV}$ instantiation.
+\end{itemize}
+
+\end{document}

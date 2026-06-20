@@ -1,0 +1,15 @@
+# ===== 私有 / 不分享给校外合作者 =====
+# Oscar (Brown CCV) 专有部署/传输脚本与文档：含集群 host、账号、Duo、SLURM 配额等
+oscar*
+OSCAR*
+(运行脚本写法参考)my_script.sh
+*my_script.sh
+results/STAGE1_作业并发实测.md
+
+# 私有数据（账号、host、路径、邮箱、wandb entity 等）——分享文档用占位符引用本文件
+.env
+
+# ===== 常规 =====
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
