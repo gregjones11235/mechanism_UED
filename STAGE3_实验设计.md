@@ -5,6 +5,11 @@
 > **生成日期**：2026-06-19。基于：①四个 verdict（`gemini scripts/experiment optimization theorem/T{1,2,3,4}_redteam_verdict.md`）；②`任务运行时间分析.md` 实测墙钟；③本轮 measure/diag 实测（SFL 全程方差 0、ρ(PVL,CENIE) 跨 seed 漂移）。
 >
 > ⚠ **本文档区分"设计矩阵"与"实现现状"**：设计有 α/λ/w 三轴，但当前 `multi_estimator_plr` runner **只实现了 λ 一根轴**（=auction_lambda）。α 轴和"w 独立于 λ"需先改代码。见 §2.3。
+>
+> ⛔ **2026-06-20 重大修正**：本文档大量结论基于「maze 主场 + 现有 bid 标准化」，二者均已被推翻——
+> ① 主场改 jaxnav（maze 上 learnability estimator 退化）；② bid 标准化有三个 bug（含 λ 语义写反）。
+> 项目方向已转 **方案 B（多 generator 注入）**。本文档降级为「旧 maze 实验矩阵的历史记录」，
+> **新设计以 [方案B_多generator设计.md](方案B_多generator设计.md) 为准**。下方 λ/bid 相关表述按 §6 修正标注。
 
 ---
 
@@ -60,6 +65,9 @@ argmax 端（w=single-winner）同时是**归因消融下界**（"只用一个 e
 **α 实现细节（路 A，已 CPU sanity 验证）**：
 - **数学对象**：采样分布 = 熵正则内层解析解 `y*∝softmax(s̄_w/α)`（proof_skeleton A5），替换 PLR 的 rank/temp 变换。`α>0` 时 `_get_replay_dist` 走 `softmax(scores/α)`；`α=0`（默认）走原 rank 路 → **基线 ACCEL/PLR/PAIRED 零污染**。
 - **score 标准化**：α 路启用时，混合前对每个 estimator 的 `s^(j)` 做 z-score（减均值除标准差）。**必须**——实测 CENIE~1e3 vs PVL~1e-4 量级悬殊，不标准化则 softmax 被 CENIE 支配、退化为"只听 CENIE"。
+  > ⛔ **2026-06-20 修正**：per-level `s^(j)` 的 z-score 是对的，但 **bid 摘要 `b_j` 也用 z-score 后均值是错的**——
+  > z-score 定义上零均值 ⇒ bid≈0 ⇒ auction 塌成 uniform、λ 失效。**bid 须改用「z-score 后 top-k 分位均值」**
+  > 且解除 `auction_alpha>0` 门控（α=0 也要标准化 bid）。完整三 bug + 修复见 [方案B_多generator设计.md](方案B_多generator设计.md) §6。
 - **改动 4 处**（全向后兼容）：`plr.py`（PLRBuffer/PLRManager 加 `score_temp_alpha` + `_get_replay_dist` 分支）、`plr_runner.py`（透传）、`multi_estimator_plr_runner.py`（`auction_alpha` + z-score 标准化）、`arguments.py`（`--auction_alpha`）。
 - **验证**（`_test_alpha_path.py`，CPU）：α=0 输出 `[0.48,0.24,0.16,0.12]`（标准 rank）；α=1 输出与 `softmax([2,1,0,-1])` 逐位相等；α=0.5 更尖锐（top1 0.865>0.644）。三条全过。
 
@@ -100,7 +108,12 @@ argmax 端（w=single-winner）同时是**归因消融下界**（"只用一个 e
 | 正式（top-3 候选）| ~3 | **10** | 30 | ⌈30/2⌉×1.1h ≈ **17h** |
 | measure Σ / h_drift / T3T4 | — | — | ~6 | 每个 ~1min（已有脚本，近免费） |
 | **训练小计** | | | **~66 run** | **~37h（2 GPU 串行）** |
-| PerfectMaze eval（对标 8%）| top 候选 | 10 | — | 单 seed ~91min；top-2 候选×10 ≈ **30h+** |
+| ~~PerfectMaze eval（对标 8%）~~ ⛔**已废** | top 候选 | 10 | — | ~~单 seed ~91min；top-2 候选×10 ≈ **30h+**~~ |
+
+> ⛔ **2026-06-22 口径修正**：PerfectMaze eval + "对标 8%" 是 **maze 主场的旧口径，已作废**。
+> 项目转 jaxnav 主场后，对标改为 **jaxnav 上 SFL 论文那排 baseline（DR/PLR/ACCEL/SFL/PAIRED，
+> CVaR worst-case + hand-designed test set + 随机 100-map，10 seed）**——baseline 在 SFL repo 现成、
+> 已部署，直接同表。新实验设计见 [STAGE4_实验设计.md](STAGE4_实验设计.md)。
 
 ### 4.3 对比：选对 runner 的红利
 同样 ~66 run：
@@ -155,9 +168,14 @@ Stage1 的 ACCEL/PLR/PAIRED 10-seed 基线**已在 Oscar**，不必重跑。Stag
 2. 若 frontier 有信号 → 实现 α 旋钮（§2.3 #1），展开粗筛。
 3. 锁 top 候选 → 双人分配（§5）补 10 seed。
 4. 归集 ckpt → measure Σ + h_drift + 事后消融（去 SFL / 去 CENIE）。
-5. top-1~2 候选 → PerfectMaze eval → rliable 表对标 8%。
+5. ~~top-1~2 候选 → PerfectMaze eval → rliable 表对标 8%~~ ⛔ → **改为 jaxnav CVaR+test set+100map 口径同表对标 SFL/PLR/ACCEL/PAIRED**（见 [STAGE4_实验设计.md](STAGE4_实验设计.md)）。
 
 ---
+
+> ⚠ **本文档（STAGE3）整体定位**：minimax/maze 主场 + multi_estimator_plr runner 的旧实验矩阵，
+> 已随「转方案 B 多 generator + jaxnav 主场 + SFL repo 载体」而**降级为历史记录**。α/λ/w 三轴的*机制设计*
+> （尤其 λ=auction 温度、N=3 异质 estimator、事后消融）思路仍可参考，但**载体（SFL repo 非 minimax）、
+> 环境（jaxnav 非 maze）、对标（SFL 那排 baseline 非 8%）均以 [STAGE4_实验设计.md] 为准**。
 
 ## 附：关键 CLI（multi_estimator_plr）
 ```
