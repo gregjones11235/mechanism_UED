@@ -16,6 +16,32 @@
 
 ---
 
+## 0.6 Oscar 资源追问应答（2026-06-22 收到 CCV 邮件，备查）
+
+> CCV Systems 于 2026-06-22 发邮件给 PI(nopi/ccv-nopi 组)，称用户 jzhu223 过去一周「allocated 15 GPU-hours but not utilized」，点名 jobid **`3363545_6` 和 `3363547_0`**（注明"may not be exhaustive"）。这是发给 PI 的全组资源效率提醒，非针对个人警告。以下是 `jobstats` + 日志 + 代码三方核实的事实，若被追问可直接引用。
+
+**这两个 job 当时在干什么**：SFL auction ablation 的 array job（job 名 `sfljnAbl`），各自卡死在 **Dijkstra × io_callback 黑洞**（即本文档 §0.5 真因），空占 GPU 显存数小时无推进，最终被取消。
+
+| 事实 | `3363545_6`（内部 3365430） | `3363547_0`（内部 3370954） |
+|---|---|---|
+| 配置 | seed=6, `auction_lambda=inf`, group=auction-abl-linf | seed=0, `auction_lambda=3.0`, group=auction-abl-l3_0 |
+| 同 array 兄弟 task 正常时长 | ~50min | ~50min |
+| 实际 | 卡 **11:35:40** 后 CANCELLED | 卡 **03:40:26** 后 CANCELLED |
+| GPU 利用率 | **0%** | **0%** |
+| GPU 显存 | **34.4GB / 45GB（76%）一直占着** | 同左 |
+| CPU 时间（整段 run） | 仅 **31 秒**（efficiency 0%） | 仅 **14 秒** |
+| 日志停在 | `JAX devices: [CudaDevice(id=0)]` → `auction+cenie import OK` **之后再无输出** | 同左 |
+
+**为何 GPU 0% 利用却占着 34GB 显存**：JAX 已初始化并把模型/buffer 搬上卡（→ 显存占用），但主循环第一步即撞进 ordered `io_callback`，把 generator PCGRL 迷宫地图上的 Dijkstra `while_loop`（数据依赖、无提前终止、迭代爆炸）串到每个 update 同步点 → 进程 hang，GPU kernel 不再推进 → 利用率恒 0%。**不是代码退回 CPU 跑**（那样 CPU 利用率会很高，实测 CPU 整段只动十几秒），是死锁式卡死。
+
+**重要佐证（说明非系统性浪费）**：同两个 array（3363545/3363546/3363547）中十余个兄弟 task 全部 `COMPLETED` 正常跑完（各 ~50min–1h22min），仅这两个个例触发卡死路径。
+
+**已修复**：致卡根因（每-update 的 env-metrics/Dijkstra）已于 jaxnav_sfl.py:823/856 移除并注释存档，env-metrics 仅为 wandb 训练曲线日志、不参与课程/训练/SOTA 评估，移除 0 数值影响。后续重跑不再触发。另已规划看门狗（§4 第 5 条）使"慢/卡但未死"也能告警，避免再次长时间空占。
+
+> 与"墙钟（walltime）刻意留长"无关：邮件查的是 GPU utilization（运行期实际使用率），walltime 只是申请的运行窗口，两者独立。
+
+---
+
 ## 0.5 修法（真因对症，约束=不影响 SOTA）
 
 > 待定，2026-06-22 晚讨论中。候选方向(均不碰 generator 课程/方法)：

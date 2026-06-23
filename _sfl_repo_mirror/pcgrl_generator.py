@@ -62,11 +62,19 @@ def place_start_goal_on_map(map_obj, jaxnav_map, rng):
     inside_grid = map_data[1:-1, 1:-1]               # (H-2, W-2) 内部，1=占用
     valid_path_check = bool(getattr(map_obj, "valid_path_check", False))
 
+    # [卡死修复·A 止血] 加迭代上界，根除无界 while_loop 死循环。原 _cond 只判 `while not
+    #   valid`，无上界：当 generator 造出病态全墙图（连通区只剩孤立单格，valid_path_check=True
+    #   时 component_mask 算出无合法 goal）→ valid 永远 False → device 上无限重采、GPU 满频自旋、
+    #   日志 mtime 死（与 GPU=0% 的 XLA 死锁画像不同）。正常图 1-2 次必中，上界不触发、行为零变化；
+    #   病态图耗尽 MAX_PLACE_TRIES 后带 valid=False 退出，由下游（B 注入端 -inf / C 奖励端罚分）处理。
+    MAX_PLACE_TRIES = 64
+
     def _cond(val):
-        return jnp.bitwise_not(val[0])               # while not valid
+        _valid, _it = val[0], val[1]
+        return jnp.bitwise_not(_valid) & (_it < MAX_PLACE_TRIES)
 
     def _body(val):
-        _valid, rng, _s, _g = val
+        _valid, _it, rng, _s, _g = val
         rng, k1, k2 = jax.random.split(rng, 3)
         flat_occ = inside_grid.flatten()
         # start：内部非占用格里随机选。
@@ -83,10 +91,10 @@ def place_start_goal_on_map(map_obj, jaxnav_map, rng):
         goal_idx = jax.random.choice(k2, flat_occ.shape[0], (1,),
                                      p=goal_poss.astype(jnp.float32))[0]
         goal = jnp.array([goal_idx % iwidth, goal_idx // iwidth])
-        return (valid, rng, start.astype(jnp.float32), goal.astype(jnp.float32))
+        return (valid, _it + 1, rng, start.astype(jnp.float32), goal.astype(jnp.float32))
 
-    init = (False, rng, jnp.zeros((2,)), jnp.zeros((2,)))
-    valid, _, start, goal = jax.lax.while_loop(_cond, _body, init)
+    init = (False, jnp.int32(0), rng, jnp.zeros((2,)), jnp.zeros((2,)))
+    valid, _, _, start, goal = jax.lax.while_loop(_cond, _body, init)
     # 坐标转换：内部坐标 +1.5（+1 回含边界，+0.5 取格中心），与 grid_sample_test_case 的 pos+1.5 一致。
     return start + 1.5, goal + 1.5, valid
 
@@ -801,6 +809,9 @@ def gen_ppo_loss_batched(params, network, trajs, advantages, returns,
 GEN_ESTIMATOR_DIFFICULTY = "difficulty"   # -(p-0.5)²，造"刚好能学"（part1）
 GEN_ESTIMATOR_PVL = "pvl"                 # positive value loss，regret 系（part2）
 GEN_ESTIMATOR_CENIE = "cenie"             # GMM 反密度，exploration 主力（part2，需 gmm_params）
+# [卡死修复·C] invalid 图（放不下合法起终点）的固定强负 terminal reward。difficulty=-(p-0.5)²∈
+#   [-0.25,0]，故 -1.0 显著低于任何 valid 图 → 形成清晰"少造 invalid"梯度，量级又不至于炸 PPO。
+GEN_INVALID_PENALTY = -1.0
 
 
 def compute_terminal_reward(estimator_id, student_env, student_network, student_params,
@@ -873,6 +884,11 @@ def gen_train_iter(env, network, params, opt_state, optimizer, rng,
         gmm_params=gmm_params, gamma=gamma, gae_lambda=gae_lambda)   # (num_levels,)
     # incomplete level（-inf）→ 置 0（不参与梯度，避免 NaN）。
     terminal_rew = jnp.where(jnp.isfinite(terminal_rew), terminal_rew, 0.0)
+    # [卡死修复·C 奖励端罚分] invalid 图（place_start_goal 耗尽 MAX_PLACE_TRIES，放不下合法
+    #   起终点）→ 固定强负 reward，让 generator PPO 学到"造 invalid=亏"，从源头抑制 reward-hack。
+    #   不做则 difficulty 信号会把 success=0 的不可解图当"最难=最优"正向激励，invalid 产出率随训练
+    #   单调升高（阶段二尤甚）。GEN_INVALID_PENALTY 量级与正常 difficulty 分相当（默认 -1.0）。
+    terminal_rew = jnp.where(valids, terminal_rew, GEN_INVALID_PENALTY)
 
     # 3) 回填 terminal + GAE（per level，vmap）。
     def _backfill_gae(traj, trew, lv):
@@ -1025,6 +1041,7 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
 
     all_insts = []           # 各 generator 造的 EnvInstance（待 concat）
     all_scores = []          # 各 level 的 difficulty 分（待 concat）
+    all_valids = []          # 各 level 是否放下了合法起终点（待 concat，B 注入端过滤用）
     per_gen_metrics = []
 
     for g in range(N):
@@ -1049,8 +1066,9 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
         # 起终点用 place_env（valid_path_check=True 根除不可解图）；rollout 仍 student_env。
         rng, r_roll, r_inst, r_score = jax.random.split(rng, 4)
         env_maps = gen_rollout_batch(gen_env, gen_network, p, r_roll, num_levels_per_gen)
-        insts, _valids = gen_batch_to_env_instances(env_maps, place_env, r_inst)
+        insts, valids_g = gen_batch_to_env_instances(env_maps, place_env, r_inst)
         all_insts.append(insts)
+        all_valids.append(valids_g)   # [B] 接住 valid，下游把 invalid 图 score→-inf 挤出 buffer
         # fallback（auction_lambda=None）：每 gen 用自己信号评自己 level（part2 行为，消融用）。
         if auction_lambda is None:
             scores_g, _info = compute_terminal_reward(
@@ -1079,6 +1097,14 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
     else:
         cat_scores = jnp.concatenate(all_scores, axis=0)              # (M,) 单信号 fallback
         auction_info = None
+
+    # ── [B 注入端过滤] invalid 图（放不下合法起终点）score→-inf，复用下方 incomplete 同款
+    #    "-inf 被 argsort 排末尾→top-K 挤掉"通道，不污染 student 课程。物理删除会破坏 jit 静态
+    #    形状（buffer 固定 num_to_save 槽位），故判分而非删除——与 incomplete 处理一致。
+    #    ⚠ 同 incomplete：须保证有效图数(valid 且 finite)≥ num_to_save，否则 -inf 图被迫选入。
+    #    阶段二 invalid 产出率升高会吃掉这个余量，届时需调大 GEN_NUM_LEVELS_PER_GEN（见文档）。
+    cat_valids = jnp.concatenate(all_valids, axis=0)                  # (M,) bool
+    cat_scores = jnp.where(cat_valids, cat_scores, -jnp.inf)
 
     # ── top-K 选 num_to_save ──
     # top-K 用**原始 cat_scores（含 -inf）排序**：incomplete level(-inf)被排到末尾，
@@ -1110,7 +1136,9 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
         "gen_per_gen": per_gen_metrics,
         "gen_pool_size": M,
         "gen_injected": int(k),
+        # n_incomplete 现含 invalid（都被设 -inf）；单列 n_invalid 监控病态率（C 应使其随训练下降）。
         "gen_n_incomplete": (~cat_finite).sum(),     # traced 标量（jit 内不可 int()）
+        "gen_n_invalid": (~cat_valids).sum(),        # [B/C 监控] 放不下合法起终点的图数
         "gen_mean_score": gen_mean,
         "gen_top_mean_score": top_scores.mean(),
     }

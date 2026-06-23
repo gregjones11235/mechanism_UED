@@ -91,8 +91,11 @@ python sfl/train/jaxnav_sfl.py SEED=0 GROUP_NAME=s4-lambda-none WANDB_MODE=onlin
   - 其余 config（`NUM_ENVS` / `EVAL_FREQ` / `ROLLOUT_STEPS` 等）**一律用默认值，不 override**——保证两人 35 run 完全可比。
 
 ### 1.4 看门狗（已钉死阈值，两人都按这个判死锁）
-- **XLA 线程死锁 ~10% 概率**：所有线程 futex_wait、GPU 0%。判死后 **kill 该 run + 用原 (GROUP_NAME, SEED) 重跑**。
-- **判死阈值（确定值）**：
+- **⚠ 卡死有两种，画像不同，但判据统一用"日志 mtime 静止"**（GPU% 仅辅助，**不要**只靠 GPU=0% 判，会漏判第 2 种）：
+  1. **XLA 线程死锁 ~10% 概率**：所有线程 futex_wait、**GPU 0%**。偶发，与硬件/seed 无关。
+  2. **place_start_goal 病态图死循环（2026-06-23 已修）**：**GPU 97% 满频**（host 同步等 device compute-bound while_loop，非 0%！）、日志 mtime 死。`pcgrl_generator.py:place_start_goal_on_map` 原无界 while_loop 在 generator 造的病态全墙图上死循环；已加 `MAX_PLACE_TRIES=64` 上界 + invalid 图注入端 -inf/奖励端 -1.0 罚分。**修复前提交的 job 才会中招**；新代码（直读源码，PENDING 自动捡到）已不会卡死。详见记忆 `stage4-stall2-place-start-goal-unbounded-whileloop`。
+- 判死后 **kill 该 run + 用原 (GROUP_NAME, SEED, INJ) 重跑**（脚本 `_stage4_run.sh` 直读源码，重跑即用最新代码）。
+- **判死阈值（确定值，对两种卡死都适用）**：
   - **第一个 eval epoch：给足 20 分钟。** 含 XLA 编译，N=3 generator rollout 编译比打分层重
     （打分层实测 eval0=110s；注入路径更重，留足余量，20 min 内别动）。看到 `[DIAG] eval_step=0` 打印即证在跑。
   - **第 2 个 epoch 起：单 epoch 超过 10 分钟无新日志 → 判死锁，kill 重跑。**
@@ -122,14 +125,34 @@ python sfl/train/jaxnav_sfl.py SEED=0 GROUP_NAME=s4-lambda-none WANDB_MODE=onlin
 > Alec 拿 **基线 + 两个端点**（结论骨架）；Henry 拿 **中段两档**（填曲线、可被 Alec 接替）。
 
 ### 3.1 Alec（2 卡）— 18 run · 骨架档
-| 档位 | GROUP_NAME | seeds | run 数 |
-|---|---|---|---|
-| **基线**（最高优先，先跑） | `s4-base` | 0–6 | 7 |
-| exploit 端（λ=inf） | `s4-lambda-inf` | 0–6 | 7 |
-| 甜区候选（λ=1.0）的 **前 4 seed** | `s4-lambda-1_0` | 0–3 | 4 |
-| **小计** | | | **18** |
+| 档位 | GROUP_NAME | seeds | run 数 | 状态 |
+|---|---|---|---|---|
+| **基线**（最高优先，先跑） | `s4-base` | 0–6 | 7 | ✅ **已完成**（见 §3.1.1） |
+| exploit 端（λ=inf） | `s4-lambda-inf` | 0–6 | 7 | 已提交（jobs 3386069–3386075，6/22 晚） |
+| 甜区候选（λ=1.0）的 **前 4 seed** | `s4-lambda-1_0` | 0–3 | 4 | 已提交（s4L1_s0 已 COMPLETED；s1–s3 排队中 3386076–78） |
+| **小计** | | | **18** | |
 
 > Alec 先把 **基线 7 个**跑出来——基线方差塌缩是 go/no-go 的判据底座，必须最早拿到。
+
+#### 3.1.1 ✅ 基线 `s4-base` 结果已落盘（2026-06-22，勿重复提交）
+
+> **重要备查**：baseline `GENERATOR_INJECTION=false`，**不走 generator/Dijkstra 路径**，
+> 不受 [[STAGE4_提速方案.md]] 那个 io_callback×Dijkstra 卡死 bug 影响 → 它**早于注入档、独立成功跑完**。
+> 7 个 run 全在 wandb，无需再提交。wandb project：`gregjones11235-brown-university/multi_robot_ued`。
+
+| seed | _step | runtime(s) | learnability_set_var | lset_mean | ep_return | probe/p_std | saturated | wandb runid |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 750 | 1089 | 0.00074 | 0.2216 | 1.764 | 0.4577 | 0 | run-20260622_040022-dhsvjxng |
+| 1 | 750 | 1718 | 0.00066 | 0.2257 | 1.478 | 0.4574 | 0 | run-20260622_041907-xa784vgc |
+| 2 | 750 | 1760 | 0.00105 | 0.2138 | 1.038 | 0.4528 | 0 | run-20260622_044017-ew38r62t |
+| 3 | 750 | 1726 | 0.00186 | 0.2107 | 1.392 | 0.4601 | 0 | run-20260622_044810-4jmoz3qd |
+| 4 | 750 | 1724 | 0.00256 | 0.1761 | 2.085 | 0.4506 | 0 | run-20260622_051016-pmbkce2q |
+| 5 | 750 | 1745 | 0.00223 | 0.2041 | 1.689 | 0.4530 | 0 | run-20260622_051727-haobis4v |
+| 6 | 750 | 1732 | 0.00133 | 0.2175 | 1.191 | 0.4537 | 0 | run-20260622_053926-abve58f0 |
+
+- 7 个 seed 全部跑满 `_step=750`（=15 eval epoch，符合 §1.5 短跑 1e8 规模），全部正常 finish。
+- 基线 `learnability_set_var` 落在 **6.6e-4 ~ 2.6e-3**（这是注入档要对照"方差是否复活/更大"的基线数值，§5 主判据）。
+- `probe/p_std ≈ 0.45`、`saturated=0` → 基线未饱和（双峰口径正常，见 §5 ⚠ 注）。
 
 ### 3.2 Henry（2 卡）— 17 run · 填充档
 | 档位 | GROUP_NAME | seeds | run 数 |
