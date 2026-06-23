@@ -81,12 +81,16 @@ def log_orthogonality_step(probe_data, update_count, out_dir,
     Args:
       probe_data: 见 PROBE_DATA_CONTRACT（host 侧 np 数组）。
       update_count: 当前训练步（用于横轴/csv 行）。
-      out_dir: 输出目录（追加写 orthogonality_trace.csv）。
+      out_dir: 输出目录（追加写 orthogonality_trace.csv）。**None → 只算 wandb 指标、
+               不落 trace 文件**（STAGE4 阶段 1 暴露：p_std 等诊断指标曾耦合在 SAVE_PATH/out_dir
+               上，未设 SAVE_PATH 的注入档完全拿不到 probe/p_std；解耦后只有"写 trace 文件给
+               总裁决 summarize_trace"才需要 out_dir，wandb 曲线指标无条件可得）。
       threshold: |ρ| 偏相关阈值。
     Returns:
       dict: {wandb_metrics: {...}, report: {...}, saturation: {...}}。
     """
-    os.makedirs(out_dir, exist_ok=True)
+    if out_dir is not None:
+        os.makedirs(out_dir, exist_ok=True)
     gmm_kwargs = gmm_kwargs or {}
 
     sat = _saturation_flags(probe_data["success_rate"], probe_data["num_episodes"])
@@ -104,27 +108,28 @@ def log_orthogonality_step(probe_data, update_count, out_dir,
     rep = orthogonality_report(mat, names=names, threshold=threshold)
     corr = rep["corr"]
 
-    # —— 追加写相关轨迹 csv（每 eval epoch 一行）——
-    trace_path = os.path.join(out_dir, "orthogonality_trace.csv")
-    pair_keys = list(rep["pairwise"].keys())
-    row = {
-        "update_count": int(update_count),
-        "verdict": rep["verdict"],
-        "max_abs_offdiag": round(rep["max_abs_offdiag"], 4),
-        "has_orthogonal_triple": int(rep["has_orthogonal_triple"]),
-        "p_std": round(sat["p_std"], 4),
-        "frac_sat_hi": round(sat["frac_saturated_high"], 4),
-        "frac_sat_lo": round(sat["frac_saturated_low"], 4),
-        "saturated": int(sat["saturated"]),
-    }
-    for k in pair_keys:
-        row[f"rho[{k}]"] = round(rep["pairwise"][k], 4)
-    write_header = not os.path.exists(trace_path)
-    with open(trace_path, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if write_header:
-            w.writeheader()
-        w.writerow(row)
+    # —— 追加写相关轨迹 csv（每 eval epoch 一行）。out_dir=None 时跳过文件、只保留 wandb 指标 ——
+    if out_dir is not None:
+        trace_path = os.path.join(out_dir, "orthogonality_trace.csv")
+        pair_keys = list(rep["pairwise"].keys())
+        row = {
+            "update_count": int(update_count),
+            "verdict": rep["verdict"],
+            "max_abs_offdiag": round(rep["max_abs_offdiag"], 4),
+            "has_orthogonal_triple": int(rep["has_orthogonal_triple"]),
+            "p_std": round(sat["p_std"], 4),
+            "frac_sat_hi": round(sat["frac_saturated_high"], 4),
+            "frac_sat_lo": round(sat["frac_saturated_low"], 4),
+            "saturated": int(sat["saturated"]),
+        }
+        for k in pair_keys:
+            row[f"rho[{k}]"] = round(rep["pairwise"][k], 4)
+        write_header = not os.path.exists(trace_path)
+        with open(trace_path, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(row.keys()))
+            if write_header:
+                w.writeheader()
+            w.writerow(row)
 
     # —— wandb 指标（前缀 probe/，相关随训练步成曲线）——
     wandb_metrics = {

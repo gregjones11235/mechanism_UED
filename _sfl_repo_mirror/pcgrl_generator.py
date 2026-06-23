@@ -1095,7 +1095,18 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
         cat_scores, auc_w, auc_bids = auction_mix_scores(per_est, float(auction_lambda))  # (M,)
         auction_info = {"weights": auc_w, "bids": auc_bids, "per_est": per_est}
     else:
-        cat_scores = jnp.concatenate(all_scores, axis=0)              # (M,) 单信号 fallback
+        # fallback（auction_lambda=None，各 gen 自评不跨 gen auction）：各 gen 用的是**自己**
+        # 信号的原始量级（difficulty 可达数百、pvl/cenie ~O(1)），直接 concat 会让量纲悬殊的 gen
+        # 在 top-K 排序里恒赢/恒输，且使 learnability_set_var 落在原始量纲（阶段 1 实测 none 档
+        # var~1090、scores~154–274），与 auction 档（已 z-score 到 ~O(1)）口径不可比、消融无法横比。
+        # 修复（STAGE4 阶段 1 暴露）：各 gen 的 scores_g 先各自做 per-gen z-score（与 auction 路径
+        # 的 standardize_per_estimator 同口径），再 concat。这样 none 与 auction 档同量纲、可横比，
+        # 且 top-K 不再被原始量级悬殊主导。incomplete/invalid 仍走下方 -inf 通道（z-score 对
+        # 非 finite 位原样保留）。
+        from auction_bid import standardize_per_estimator
+        per_gen_scores = jnp.stack(all_scores, axis=0)                # (N, num_levels_per_gen)
+        per_gen_z = standardize_per_estimator(per_gen_scores)         # (N, ...) 各行 z-score
+        cat_scores = per_gen_z.reshape(-1)                            # (M,) z-score 后拼接
         auction_info = None
 
     # ── [B 注入端过滤] invalid 图（放不下合法起终点）score→-inf，复用下方 incomplete 同款

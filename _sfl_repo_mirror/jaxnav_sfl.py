@@ -1091,7 +1091,10 @@ def main(config):
         # ── V1 正交性探针 + CENIE GMM 重拟（jit 外，host 侧，复用同一份 hidden）──
         # 探针测四信号相关 + CENIE 用探针收集的 hidden 重拟 GMM（写回 gmm_params 供下一 epoch）。
         probe_data = None
-        if (probe_enabled and probe_out_dir is not None) or auction_use_cenie:
+        # probe_data 收集条件解耦 SAVE_PATH（STAGE4 阶段 1 暴露：注入档未设 SAVE_PATH 致 probe_out_dir
+        # =None → 整条 probe 不跑、拿不到 probe/p_std 等饱和诊断）。现只要 probe_enabled 或 cenie 需要
+        # hidden 就收集；落 wandb 指标无条件，落 trace 文件才看 probe_out_dir。
+        if probe_enabled or auction_use_cenie:
             try:
                 rng, probe_rng = jax.random.split(rng)
                 probe_dev = get_probe_signals(probe_rng, runner_state[0].params)
@@ -1100,7 +1103,9 @@ def main(config):
             except Exception as e:
                 print(f"[probe/cenie][step {int(metrics['update_count'])}] hidden 收集异常：{e}")
 
-        if probe_enabled and probe_out_dir is not None and probe_data is not None:
+        # probe/p_std 等 wandb 曲线指标无条件落（注入档/海选档都拿得到，用于判饱和）；
+        # out_dir 传 probe_out_dir（None 时 log_orthogonality_step 只算指标、不写 trace 文件）。
+        if probe_enabled and probe_data is not None:
             try:
                 probe_res = log_orthogonality_step(
                     probe_data, int(metrics["update_count"]), probe_out_dir, threshold=0.5)
