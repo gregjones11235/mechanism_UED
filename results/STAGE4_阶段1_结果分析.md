@@ -100,9 +100,12 @@
 ## 6. 给阶段 2 的具体建议
 
 1. **λ 选择**：带 **λ=1.0（甜区，注入档里 singleton win rate 最高 0.409、var 已 190×）+ λ=inf（exploit 端 + 验 single-winner 是否 mode-collapse）** 进阶段 2。λ=5.0 近等权但 var/win rate 都最弱，**仅留作消融端点不训练**。
-2. **none 档归一化 bug（阶段 1 暴露）**：阶段 2 用 none 做"去 auction"消融前，**先在 runner 给 none 档 score 也加 z-score**，否则量纲不可比、消融无法横比。
+2. **none 档归一化 bug（阶段 1 暴露）✅ 已修（2026-06-23）**：`pcgrl_generator.py:get_generator_set` 的 fallback（λ=none）路径原直接 concat 各 gen 原始量级；现各 gen 先 per-gen z-score（复用 `auction_bid.standardize_per_estimator`）再 concat，与 auction 路径同口径。已 py_compile + Oscar sfl 环境验数值。阶段 2 的 none 消融可与 1.0/inf 横比。
 3. **win rate 黄灯**：阶段 2 必须 ① 跑满 3e8 看注入档是否反超；② 用 CVaR + 100-map 口径作终判（不用 singleton overall_win_rate）；③ 加 target student 周期重评压在线非平稳（设计文档 §2.3 障碍 2）。
-4. **p_std 缺失**：注入路径未落 `probe/p_std`（probe 只在随机海选路径算），注入档无法用 p_std 判饱和。阶段 2 若要监控注入档饱和，需补落注入路径 p_std 或离线对 learnability_set_scores 直方图算。
+4. **p_std 缺失 —— 真根因 = 注入档显式关了 `PROBE_ORTHOGONALITY=false`（非 SAVE_PATH）**：核查 config 发现基线 `PROBE_ORTHOGONALITY=true`（probe 跑、有 p_std），注入档命令把它设成 `false`（probe 整条不跑、无 p_std）。SAVE_PATH 两者都是默认非空，**不是 SAVE_PATH 的锅**。
+   - **阶段 2 的 action（关键）**：注入档命令必须 **`PROBE_ORTHOGONALITY=true`** 才能拿到 p_std 判饱和（见 [STAGE4_阶段2_任务分配.md](../STAGE4_阶段2_任务分配.md) §1.3）。
+   - **附带已修（健壮性，2026-06-23）**：`train_probe.log_orthogonality_step` 支持 out_dir=None（只算 wandb 指标不写 trace）+ `jaxnav_sfl.py` 把 probe 收集/落盘解耦 SAVE_PATH——让"开 probe 但没设 SAVE_PATH"也能出 p_std。但这**不是** p_std 缺失的根因修复，根因是上面那个开关。已 py_compile + 同步 Oscar。
+5. **代码修复同步**：两处修复在 `mechanism_UED/_sfl_repo_mirror/`（pcgrl_generator.py / train_probe.py / jaxnav_sfl.py），阶段 2 开跑前需 `git pull` + `cp _sfl_repo_mirror/*.py sfl/train/` 覆盖进 Oscar 本体（见 [STAGE4_阶段2_任务分配.md](../STAGE4_阶段2_任务分配.md) §1.1）。
 
 ---
 
