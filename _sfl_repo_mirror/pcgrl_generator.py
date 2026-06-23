@@ -713,7 +713,7 @@ def compute_gae(traj, last_val, gamma=0.99, gae_lambda=0.95):
 def gen_ppo_loss(params, network, traj, advantages, returns,
                  n_agents, act_shape, action_dim,
                  clip_eps=0.2, vf_coef=0.5, ent_coef=0.01, norm_adv=True):
-    """generator PPO loss（actor clip + critic MSE + entropy）。
+    """generator PPO loss（actor clip + critic MSE + entropy）—— 单 level 版（保留作单测/参考）。
 
     对轨迹 T 步 vmap re-apply network（每步独立 map_obs/flat_obs）。
     Returns:
@@ -739,6 +739,57 @@ def gen_ppo_loss(params, network, traj, advantages, returns,
     actor_loss = -jnp.minimum(a1, a2).mean()
 
     value_loss = 0.5 * ((values - returns) ** 2).mean()
+
+    total = actor_loss + vf_coef * value_loss - ent_coef * entropy
+    return total, (actor_loss, value_loss, entropy)
+
+
+def gen_ppo_loss_batched(params, network, trajs, advantages, returns,
+                         n_agents, act_shape, action_dim,
+                         clip_eps=0.2, vf_coef=0.5, ent_coef=0.01, norm_adv=True):
+    """[A2 提速·数值等价] 整批 L levels 的 generator PPO loss，消除 nested vmap。
+
+    与「vmap(gen_ppo_loss) over L 个 level 再 .mean()」**逐元素数值等价**，但把 conv 前向
+    从 vmap(L)∘vmap(T)=batch L*T 的怪形状(64*363=23232,cuDNN 无快算法→慢 autotune)摊平成
+    单 batch (L*T,)，让 cuDNN 选到高效算法。等价性保证：
+
+      - conv 逐样本独立 → flatten (L,T)->(L*T) 计算再 reshape 回 (L,T) 数值不变；
+      - norm_adv 仍 **per-level**（沿 T 轴 mean/std，keepdims，不跨 level 全局化）；
+      - actor/value/entropy 先在每 level 内 .mean()(沿 T) → 再跨 level .mean()，
+        等于原「每 level gen_ppo_loss().mean() 再外层 ls.mean()」。
+
+    输入形状：trajs.map_obs (L, T, *obs)，advantages/returns (L, T)，trajs.action (L, T, *act)。
+    Returns: total_loss 标量, (actor_loss, value_loss, entropy) 标量三元组。
+    """
+    L = trajs.map_obs.shape[0]
+    T = trajs.map_obs.shape[1]
+
+    # --- conv 前向：flatten (L,T,...) -> (L*T,...) 单 batch 过网络（make_gen_pi 要单 batch 维）---
+    flat_map = trajs.map_obs.reshape((L * T,) + trajs.map_obs.shape[2:])
+    flat_flat = trajs.flat_obs.reshape((L * T,) + trajs.flat_obs.shape[2:])
+    logits_f, values_f = network.apply(params, flat_map, flat_flat)   # (L*T, A), (L*T,)
+
+    # --- 分布 / log_prob / entropy：全程在 (L*T,) 单 batch 维算，再 reshape 回 (L,T) ---
+    pi = make_gen_pi(logits_f, n_agents, act_shape, action_dim)       # B=L*T
+    act_f = trajs.action.reshape((L * T,) + trajs.action.shape[2:])   # (L*T, *act)
+    new_log_prob = pi.log_prob(act_f).reshape((L * T, -1)).sum(axis=-1).reshape((L, T))
+    entropy_lt = pi.entropy().reshape((L * T, -1)).sum(axis=-1).reshape((L, T))
+    entropy = entropy_lt.mean(axis=1).mean()            # per-level mean(T) → mean(L)
+    values = values_f.reshape((L, T))
+
+    # --- advantage 标准化：per-level（沿 T 轴），keepdims 广播回 (L,T) ---
+    adv = advantages
+    if norm_adv:
+        m = adv.mean(axis=1, keepdims=True)
+        s = adv.std(axis=1, keepdims=True)
+        adv = (adv - m) / (s + 1e-8)
+
+    ratio = jnp.exp(new_log_prob - trajs.log_prob)      # (L, T)
+    a1 = ratio * adv
+    a2 = jnp.clip(ratio, 1 - clip_eps, 1 + clip_eps) * adv
+    actor_loss = (-jnp.minimum(a1, a2)).mean(axis=1).mean()   # per-level mean(T) → mean(L)
+
+    value_loss = (0.5 * ((values - returns) ** 2)).mean(axis=1).mean()
 
     total = actor_loss + vf_coef * value_loss - ent_coef * entropy
     return total, (actor_loss, value_loss, entropy)
@@ -831,16 +882,14 @@ def gen_train_iter(env, network, params, opt_state, optimizer, rng,
     trajs, advs, rets = jax.vmap(_backfill_gae)(trajs, terminal_rew, last_vals)
 
     # 4) PPO 更新（ppo_epochs 次；loss 对 num_levels 条轨迹平均）。
+    #    [A2 提速] 用 gen_ppo_loss_batched 替代 vmap(_per_level over L)——消除 nested vmap，
+    #    conv 前向摊平成单 batch 让 cuDNN 选到快算法。与原 vmap+mean 逐元素数值等价。
     def _epoch(carry, _):
         params, opt_state = carry
         def _loss_fn(p):
-            def _per_level(traj, adv, ret):
-                l, aux = gen_ppo_loss(p, network, traj, adv, ret,
-                                      n_agents, act_shape, action_dim,
-                                      clip_eps, vf_coef, ent_coef)
-                return l, aux
-            ls, auxs = jax.vmap(_per_level)(trajs, advs, rets)
-            return ls.mean(), jax.tree_map(lambda x: x.mean(), auxs)
+            return gen_ppo_loss_batched(p, network, trajs, advs, rets,
+                                        n_agents, act_shape, action_dim,
+                                        clip_eps, vf_coef, ent_coef)
         (loss, aux), grads = jax.value_and_grad(_loss_fn, has_aux=True)(params)
         updates, opt_state = optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)

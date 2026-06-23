@@ -81,8 +81,18 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 @hydra.main(version_base=None, config_path="config", config_name="jaxnav-sfl")
 def main(config):
-    
+
     config = OmegaConf.to_container(config)
+    # [A0 提速·纯工程零数值影响] 持久化编译+autotune 缓存：把 XLA 编译产物(含 autotune
+    #   算法搜索结果)存盘，10-seed sweep 第 2 个 seed 起跳过重复编译/搜索。generator-on
+    #   路径首次编译爆炸(单 generator 45s,N=3+student+auction 叠起来小时级)正是被此缓存摊掉。
+    #   min_compile_time_secs=0 → 连小函数也缓存(我们要缓存的就是那个巨型 train_and_eval_step)。
+    if config.get("COMPILE_CACHE", True):
+        _cache_dir = config.get("COMPILE_CACHE_DIR", os.path.expanduser("~/jax_compile_cache"))
+        jax.config.update("jax_compilation_cache_dir", _cache_dir)
+        jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+        jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
+        print(f"[A0] JAX 持久化编译缓存已开: {_cache_dir}", flush=True)
     run = wandb.init(
         group=config["GROUP_NAME"],
         entity=config["ENTITY"],
@@ -810,7 +820,7 @@ def main(config):
                         * t_config["NUM_ENVS"]
                         * t_config["NUM_STEPS"],
                     "dormancy/": metric["dormancy"],
-                    "env-metrics/": metric["env-metrics"],
+                    # [卡死修复] env-metrics 已移除(每update的Dijkstra致generator地图卡死,纯日志无方法影响)。
                     # "mean_ued_score": metric["mean_ued_score"],
                     **metric["episodic_return_length"],
                     **metric["loss_info"],
@@ -843,10 +853,16 @@ def main(config):
         metric["terminations"] = {k: traj_batch.info[k] for k in ["NumC", "GoalR", "AgentC", "MapC", "TimeO"]}
         metric["terminations"] = jax.tree_map(lambda x: x.sum(), metric["terminations"])
         metric["dormancy"] = dormancy_log
-        metric["env-metrics"] = jax.tree_map(lambda x: x.mean(), jax.vmap(env.get_env_metrics)(start_state))
+        # [卡死修复·零方法影响] 移除 env-metrics。原 `jax.vmap(env.get_env_metrics)(start_state)`
+        #   每 update 对 256 env 各跑一次 dikstra_path(grid_map.py:411 while_loop 迭代到开集为空、
+        #   无提前终止、步数数据依赖地图)。generator 的 PCGRL 迷宫地图让 Dijkstra 迭代爆炸,经
+        #   ordered io_callback 串到每 update 同步点 → student scan 卡死(8h 黑洞真因,见
+        #   STAGE4_提速方案.md §0)。env-metrics 仅 wandb 训练曲线日志,不参与课程/student PPO/
+        #   SOTA 评估,且 get_env_metrics 注释明示"only valid for grid map type"(jaxnav 是连续避障)。
+        #   删除即根除卡死,零数值/方法影响。剥离对照实测:student-scan RUN 70.6s 跑通 vs 带它卡死 15min+。
         metric["mean_lambda_val"] = env_state.rew_lambda.mean()
         jax.experimental.io_callback(callback, None, metric)
-        
+
         # SAMPLE NEW ENVS
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, t_config["NUM_ENVS_TO_GENERATE"])
@@ -886,33 +902,35 @@ def main(config):
         im = Image.frombytes('RGBA', fig.canvas.get_width_height(), fig.canvas.buffer_rgba()) 
         wandb.log({"maps": wandb.Image(im)}, step=epoch)
     
+    # [拆 jit 提速·纯工程零数值影响] 把 generator 段抽成独立 jit 编译单元。
+    #   原因：原 train_and_eval_step 把 N=3 generator(各 363步scan+PPO,Python for 展开 3 份)
+    #   + 50步 student scan + auction + CENIE 全内联进一个巨型 jit，XLA 编译复杂度超线性爆炸
+    #   (实测单 seed 卡编译 >8h 编不完;而单独 jit 的 gen_train_iter 仅 45s)。拆成独立 jit 后
+    #   generator 段单独编译、student 段单独编译,图规模回到可控。
+    #   纯工程:generator 先训→student 后训的顺序与数据流完全不变,数值不变,不碰课程/方法。
+    @jax.jit
+    def gen_phase_jit(student_params, gen_state, learnability_rng, gmm_params):
+        """generator 注入段(独立编译)。返回 (scores, instances, new_gen_state, gen_metrics)。"""
+        return get_generator_set(
+            learnability_rng, student_params, gen_state, gen_optimizer,
+            gen_estimator_ids, gen_env, gen_network, env, network,
+            t_config["HIDDEN_SIZE"], config["ROLLOUT_STEPS"],
+            num_levels_per_gen=gen_num_levels, num_to_save=gen_num_to_save,
+            place_env=gen_place_env, gmm_params=gmm_params,
+            auction_lambda=gen_auction_lambda,
+            gen_outer_steps=gen_outer_steps, ppo_epochs=gen_ppo_epochs,
+            gamma=t_config["GAMMA"], gae_lambda=t_config["GAE_LAMBDA"])
+
+    @jax.jit
+    def learnability_phase_jit(student_params, learnability_rng, gmm_params):
+        """随机海选段(GENERATOR_INJECTION=false,独立编译)。返回 (scores, instances)。"""
+        return get_learnability_set(learnability_rng, student_params, gmm_params)
+
     @partial(jax.jit, static_argnums=())
-    def train_and_eval_step(runner_state, eval_rng, gmm_params=None, gen_state=None):
-        # gmm_params/gen_state 显式穿过 jit 边界（pytree 参数，与 student params 同理）。
-        #   gmm_params: CENIE 的 GMM（None=CENIE 关）。
-        #   gen_state : N 个 generator 的 params/opt_state（None=随机海选）。env/network/
-        #               optimizer 是静态对象，走闭包捕获（gen_env/gen_network/gen_optimizer），
-        #               不作参数；generator_injection 是 Python 静态 bool，False 分支不 trace。
-        learnability_rng, eval_singleton_rng, eval_sampled_rng = jax.random.split(eval_rng, 3)
-        # TRAIN —— 阶段 G：generator 注入 or 随机海选，产同型 (scores, instances)。
-        new_gen_state = gen_state
-        if generator_injection:
-            # 交替训练阶段 G：冻 student（runner_state[0].params）→ 更新 generator →
-            # 产 top-K instances。NUM_TO_SAVE 对齐 buffer 规模；ROLLOUT_STEPS = student
-            # 测 level 难度的 rollout 步数（与 get_learnability_set 海选时一致）。
-            learnabilty_scores, instances, new_gen_state, gen_metrics = get_generator_set(
-                learnability_rng, runner_state[0].params, gen_state, gen_optimizer,
-                gen_estimator_ids, gen_env, gen_network, env, network,
-                t_config["HIDDEN_SIZE"], config["ROLLOUT_STEPS"],
-                num_levels_per_gen=gen_num_levels, num_to_save=gen_num_to_save,
-                place_env=gen_place_env, gmm_params=gmm_params,
-                auction_lambda=gen_auction_lambda,
-                gen_outer_steps=gen_outer_steps, ppo_epochs=gen_ppo_epochs,
-                gamma=t_config["GAMMA"], gae_lambda=t_config["GAE_LAMBDA"])
-        else:
-            learnabilty_scores, instances = get_learnability_set(
-                learnability_rng, runner_state[0].params, gmm_params)
-            gen_metrics = None
+    def train_and_eval_step(runner_state, eval_rng, instances, learnabilty_scores):
+        # [拆 jit] generator/海选段已在外部独立 jit 算好,这里只接 instances/scores 作参数。
+        #   本 jit 现在只含: student 50步 scan + 评估,图规模大幅缩小、编译快。
+        _, eval_singleton_rng, eval_sampled_rng = jax.random.split(eval_rng, 3)
         runner_state_instances = (runner_state, instances)
         runner_state_instances, metrics = jax.lax.scan(train_step, runner_state_instances, None, t_config["EVAL_FREQ"])
         # EVAL
@@ -924,18 +942,7 @@ def main(config):
             # 离线可直接算 var/std/p_std；这里额外落盘 jit 内方差，省得事后重算。
             "learnability_set_var": learnabilty_scores.var(),
         }
-        # STAGE4 §1.3：auction_weights/bids 轨迹（哪个 teacher 何时出价高、λ 怎么调尖锐度）。
-        # gen_metrics 是 jit 内 traced 数组，并进 test_metrics 一并穿出 jit 边界 → wandb.log。
-        # 基线（GENERATOR_INJECTION=false）gen_metrics=None，不落这些键，零回归。
-        if gen_metrics is not None:
-            test_metrics["gen_mean_score"] = gen_metrics["gen_mean_score"]
-            test_metrics["gen_injected"] = gen_metrics["gen_injected"]
-            test_metrics["gen_n_incomplete"] = gen_metrics["gen_n_incomplete"]
-            if "auction_weights" in gen_metrics:
-                # (N,) 数组拆成标量键，wandb 才能各画一条曲线（N=3：difficulty/pvl/cenie）。
-                for _i in range(len(gen_estimator_ids)):
-                    test_metrics[f"auction_weight_{gen_estimator_ids[_i]}"] = gen_metrics["auction_weights"][_i]
-                    test_metrics[f"auction_bid_{gen_estimator_ids[_i]}"] = gen_metrics["auction_bids"][_i]
+        # [拆 jit] gen_metrics 的 wandb 键处理移到 eval loop(host 层)，这里只算核心 test_metrics。
         test_metrics["singleton-test-metrics"] = eval_singleton_runner.run(eval_singleton_rng, runner_state[0].params)
         test_metrics["sampled-test-metrics"] = eval_sampled_runner.run(eval_sampled_rng, runner_state[0].params)
 
@@ -945,7 +952,7 @@ def main(config):
         top_instances = jax.tree_map(lambda x: x.at[-20:].get(), instances)
         _, top_states = jax.vmap(env.set_env_instance)(top_instances)
 
-        return runner_state, (learnabilty_scores.at[-20:].get(), top_states), test_metrics, new_gen_state
+        return runner_state, (learnabilty_scores.at[-20:].get(), top_states), test_metrics
 
     rng, _rng = jax.random.split(rng)
     runner_state = (
@@ -1044,18 +1051,39 @@ def main(config):
     for eval_step in range(int(t_config["NUM_UPDATES"] // t_config["EVAL_FREQ"])):
         start_time = time.time()
         rng, eval_rng = jax.random.split(rng)
-        # gen_state 宿主侧穿入/穿出（与 gmm_params 同模式）：阶段 G 更新后写回，供下轮。
-        runner_state, instances, metrics, gen_state = train_and_eval_step(
-            runner_state, eval_rng, gmm_params, gen_state)
+        # [拆 jit] RNG 一致性：原 train_and_eval_step 内 split(eval_rng,3) 的第 1 份是
+        #   learnability_rng。这里 host 层 split 出同一份喂 generator 段；train_and_eval_step
+        #   仍收同一个 eval_rng,内部 split 第 2/3 份(singleton/sampled)与原版完全一致。
+        learnability_rng, _, _ = jax.random.split(eval_rng, 3)
+        # 阶段 G：generator 注入段 / 随机海选段（独立 jit 编译单元）。
+        if generator_injection:
+            learnabilty_scores, instances, gen_state, gen_metrics = gen_phase_jit(
+                runner_state[0].params, gen_state, learnability_rng, gmm_params)
+        else:
+            learnabilty_scores, instances = learnability_phase_jit(
+                runner_state[0].params, learnability_rng, gmm_params)
+            gen_metrics = None
+        # 阶段 S+EVAL：student 50步 scan + 评估（独立 jit；instances/scores 作参数传入）。
+        runner_state, instances_top, metrics = train_and_eval_step(
+            runner_state, eval_rng, instances, learnabilty_scores)
         # 诊断: 区分编译 vs 运行时。第 0 个 epoch 含编译，第 1 个起纯运行（已编译）。
         jax.block_until_ready(runner_state)
         curr_time = time.time()
         if eval_step <= 1:
-            print(f"[DIAG] eval_step={eval_step} train_and_eval_step 耗时 {curr_time-start_time:.1f}s "
+            print(f"[DIAG] eval_step={eval_step} gen+train+eval 耗时 {curr_time-start_time:.1f}s "
                   f"(stage={config.get('AUCTION_STAGE','-')}, "
                   f"auction={config.get('AUCTION_SCORING')}, cenie={auction_use_cenie}) "
                   f"{'[含编译]' if eval_step==0 else '[纯运行]'}", flush=True)
-        log_buffer(*instances, metrics["update_count"])
+        # [拆 jit] gen_metrics wandb 键 host 层处理（原在 jit 内）。
+        if gen_metrics is not None:
+            metrics["gen_mean_score"] = gen_metrics["gen_mean_score"]
+            metrics["gen_injected"] = gen_metrics["gen_injected"]
+            metrics["gen_n_incomplete"] = gen_metrics["gen_n_incomplete"]
+            if "auction_weights" in gen_metrics:
+                for _i in range(len(gen_estimator_ids)):
+                    metrics[f"auction_weight_{gen_estimator_ids[_i]}"] = gen_metrics["auction_weights"][_i]
+                    metrics[f"auction_bid_{gen_estimator_ids[_i]}"] = gen_metrics["auction_bids"][_i]
+        log_buffer(*instances_top, metrics["update_count"])
         metrics['time_delta'] = curr_time - start_time
         metrics["steps_per_section"] = (t_config["EVAL_FREQ"] * t_config["NUM_STEPS"] * t_config["NUM_ENVS"]) / metrics['time_delta']
         wandb.log(metrics, step=metrics["update_count"])
@@ -1115,7 +1143,7 @@ def main(config):
 
     if config["SAVE_PATH"] is not None:
         params = runner_state[0].params
-        
+
         save_dir = os.path.join(config["SAVE_PATH"], run.name)
         os.makedirs(save_dir, exist_ok=True)
         save_params(params, f'{save_dir}/model.safetensors')

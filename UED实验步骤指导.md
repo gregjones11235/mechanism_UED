@@ -45,6 +45,21 @@
 
 ---
 
+## 0.6 V6 方案 B 转向指针（2026-06-20，载体 minimax→SFL repo、主场 maze→jaxnav、机制升级为多 generator + auction）
+
+> ⚑⚑ **重大方向变更：本文档的"实验执行层"（§3 代码库 / §3.2 环境层级 / §4.0–§4.1 Stage 1 靶子 / §4.4 Stage 4 SOTA 环境 / §7 时间线 / §9 参考文献的库角色）整体停留在旧版（minimax + maze + Craftax/Kinetix），与 2026-06-20 拍板的"方案 B"冲突。下列三处转向以 [方案B_多generator设计.md](方案B_多generator设计.md) + [STAGE4_实验设计.md](STAGE4_实验设计.md) 为准，本文档旧表述保留作历史，遇冲突以方案 B 系列文档为权威。**
+>
+> **三处转向：**
+> 1. **载体库：minimax → SFL repo（`sampling-for-learnability`，jaxued 血统，jax 0.4.38）。** §3.1 仍写"minimax 为主库（Stage 1 起全程）"——已不成立；minimax 降为 Stage 1 maze sanity 的历史基线，方案 B 全部代码在 SFL repo。
+> 2. **主场环境：maze（PerfectMazeXL）→ jaxnav（连续避障，主场）。** §3.2 / §4.4 仍把 Craftax/Kinetix 列为主 SOTA 环境——已改为 jaxnav；Craftax/Kinetix 降为可选扩展。maze 仅作 sanity / 故事对照（演示随机海选末期 learnability 枯竭）。
+> 3. **对标口径：ACCEL maze 8% / PerfectMaze → jaxnav 上 SFL 论文（NeurIPS 2024）那排 baseline（DR/PLR/ACCEL/SFL/PAIRED/NCC），CVaR worst-case + hand-designed test set + 随机 100-map，10 seed rliable IQM。** §4.1.2 的"8% 靶子"已作废为 Stage 1 maze sanity 的旧数字，**不是**方案 B 的对标靶子。详见 [[jaxnav-sota-benchmark-truth]]。
+>
+> **机制升级**：Stage 3 的"N estimator 对固定 buffer 打分 + auction"之上，方案 B 新增"N 个会训练的 PCGRL generator 各被一个异质 estimator 驱动、分工往固定 buffer 注入 level"（分层保收敛、多 generator 提覆盖多样性）。auction 的 λ 现分两层：打分层 `AUCTION_LAMBDA`（已实测三档无差异，负下界）vs generator 层 `GEN_AUCTION_LAMBDA`（方案 B 真 α，由 Stage 4 阶段 1 定）。见 [方案B_多generator设计.md](方案B_多generator设计.md) §6.1。
+>
+> **不受影响（仍准确，无需改）**：§1 研究方案、§2 核心概念（PVL/general-sum/bilevel）、§4.3 异质 estimator + non-IC 机制 + α 轴设计、§4.2 Stage 2 取消论证、§8 设计约束——这些是机制/理论层，与载体和环境无关。
+
+---
+
 ## 1. 研究方案概述
 
 ### 1.1 核心想法
@@ -137,6 +152,8 @@ min-max（零和UED）是bilevel的特例。bilevel 是"真正想优化"的 grou
 
 ### 3.1 代码库
 
+> ⚑V6（2026-06-20，见 §0.6）：本节整节是旧版。**方案 B 主库已改为 SFL repo（`sampling-for-learnability`），minimax 降为 Stage 1 maze sanity 的历史基线。** 下文"minimax 为主库 / PerfectMazeXL 对标 8%"仅作历史保留。
+
 - **主库（自 Stage 1 起全程使用）：minimax**（Jiang et al., arXiv:2311.12716）
   - 模块化双课程设计，纯 JAX、可 jit、多设备，相比旧参考实现约 120× 加速
   - 原生支持多 teacher / 多 student 博弈（Stage 3 直接用，无需自己造轮子）
@@ -149,6 +166,8 @@ min-max（零和UED）是bilevel的特例。bilevel 是"真正想优化"的 grou
 - 评估协议：α-CVaR鲁棒性评估（来自No Regrets/SFL）+ 标准zero-shot解出率/回报
 
 ### 3.2 环境层级
+
+> ⚑V6（见 §0.6）：下表的"SOTA = Craftax/Kinetix"已改为 **jaxnav 为主场 SOTA 环境**（对标 SFL 论文 baseline）；Craftax/Kinetix 降为可选扩展，maze 仅 sanity / 故事对照。下表保留作旧版参考。
 
 | 层级 | 环境 | 用途 | 单卡A100算力 | 说明 |
 |------|------|------|-------------|------|
@@ -178,6 +197,8 @@ min-max（零和UED）是bilevel的特例。bilevel 是"真正想优化"的 grou
 ---
 
 ### 4.1 Stage 1：当前SOTA复现（第1—2周）
+
+> ⚑V6（见 §0.6）：本节的对标靶子是 **maze（minimax PerfectMazeXL，ACCEL 8%）**，已降为 Stage 1 maze sanity 的历史基线。**方案 B 的真正对标靶子是 jaxnav 上 SFL 论文那排 baseline（CVaR + test set + 100map，10 seed），见 [STAGE4_实验设计.md](STAGE4_实验设计.md) §2.1。** 下文 §4.1.2 的 8%/7%/4% 等数字是旧 maze 口径，不是方案 B 靶子。
 
 目标：建立可信的自有基线数字，验证 minimax 管线正确。这是整个项目最重要的基础，后续所有"超过ACCEL"都必须和这组数字比，而非和论文数字比。
 
@@ -325,6 +346,8 @@ min-max（零和UED）是bilevel的特例。bilevel 是"真正想优化"的 grou
 ---
 
 ### 4.4 Stage 4：推进SOTA（第8周起）
+
+> ⚑V6（见 §0.6）：本节把 Craftax+Kinetix 当主 SOTA 战场，已过时。**方案 B 的 Stage 4 主场是 jaxnav**（对标 SFL 论文 baseline，CVaR+test set+100map，10 seed），见 [STAGE4_实验设计.md](STAGE4_实验设计.md)。Craftax/Kinetix 降为可选扩展。下文保留作旧版参考。
 
 目标：把Stage 3最优配置搬到Craftax + Kinetix，实现"超越已发表的ACCEL/PLR"。
 
@@ -581,7 +604,8 @@ UED 方差极大（本项目 Stage 1 已记录 ACCEL 有崩溃 seed，min solved
 | Bilevel Opt. | Hong et al. 2023, arXiv:2007.05170 | general-sum UED的双层优化框架；两时间尺度学习率分离 |
 | Lin et al. 2020 | ICML 2020（nonconvex-concave SGDA） | NCC收敛定理的数学基础；双时间尺度实践依据 |
 | Babaioff et al. | EC 2009, arXiv:0812.2291 | "truthful机制在bandit学习系统中有更高regret"——Gap A的理论依据 |
-| minimax库 | Jiang et al., arXiv:2311.12716 | **主代码库（Stage 1 起全程）**；原生 PerfectMazeXL 评估 + ACCEL/PLR/PAIRED + 多 teacher |
+| SFL repo（`sampling-for-learnability`） | Rutherford et al., NeurIPS 2024（jaxued 血统，jax 0.4.38） | **⚑V6 方案 B 主代码库**：N 异质 generator + auction 全部代码在此；jaxnav 主场环境 + SFL/PLR/ACCEL/PAIRED/NCC baseline 部署 |
+| minimax库 | Jiang et al., arXiv:2311.12716 | ~~主代码库（Stage 1 起全程）~~ ⚑V6 **降为 Stage 1 maze sanity 历史基线**；原生 PerfectMazeXL 评估 + ACCEL/PLR/PAIRED（方案 B 不再用作主库，见 §0.6/§3.1） |
 | JaxUED | Coward et al., arXiv:2403.13091 | ~~备选代码库~~ **已弃用**：maze 为随机撒墙非完美迷宫、无 PerfectMaze/101×101，无法对标 ACCEL 协议（详见 §3.1） |
 
 ---

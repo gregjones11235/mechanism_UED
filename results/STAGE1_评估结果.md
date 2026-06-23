@@ -1,5 +1,7 @@
 # Stage 1 评估结果（minimax / Maze 13×13）
 
+> ⚑ **历史定位（2026-06-20 方案 B 转向后）**：本成绩单是 **Stage 1 maze sanity 的基线数字**（数据本身有效、10 seed 完整）。但 **SOTA 对标已转向 jaxnav + SFL 论文 baseline**（见 [../STAGE4_实验设计.md](../STAGE4_实验设计.md) §2.1 / [../UED实验步骤指导.md](../UED实验步骤指导.md) §0.6）；下文的 maze 8%/PerfectMaze 口径**不是**方案 B 的对标靶子，仅作 maze 基线参考。详见 [[jaxnav-sota-benchmark-truth]]。
+
 > 记录基线 UED 方法在 4 个 held-out 测试迷宫上的零样本泛化。每方法 10 seed。
 > **对标口径（2026-06-19 据 ACCEL 论文原文订正）**：ACCEL 论文（Parker-Holder 2022）里 **8% 那一关是 101×101 PerfectMazeXL，且只测了 ACCEL(8%)/DR(4%)/PLR(4%)，PAIRED 未参加**（见论文 B.5 节）。论文给 PAIRED 标数字的是 **Table 5 的 human-designed maze**（PAIRED 均值 0.39，其中 PerfectMaze-**M**(中号)=0.32±0.06），**PAIRED 从来不是 0**。且论文 maze 训练是 **20k updates**（PAIRED/Minimax 引用 Jiang 2021a 的 ≈30k），我们用 30k。
 

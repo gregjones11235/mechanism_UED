@@ -185,7 +185,10 @@ python sfl/train/jaxnav_sfl.py SEED=0 GROUP_NAME=s4-lambda-none WANDB_MODE=onlin
 
 ## 6. 耗时分析（跑完补，现在写不出来）
 
-> 本阶段是 generator 注入路径，GPU 上**尚无跑满实测**（现有 52min 是旧 auction 打分层路径，
-> 不含 N=3 generator rollout，不能外推）。**第一批 run 出来后**，用真实 epoch 墙钟仿
+> 本阶段是 generator 注入路径（`GENERATOR_INJECTION=true`，扫 `GEN_AUCTION_LAMBDA`），GPU 上**尚无跑满实测**。
+> 现有 52min 是**旧 auction 打分层路径**（job 3363545/46/47：`AUCTION_SCORING=true` 且 `GENERATOR_INJECTION=false`，
+> 扫的是 `AUCTION_LAMBDA` 不是 `GEN_AUCTION_LAMBDA`），不含 N=3 generator rollout，**不能外推墙钟、也不能用来定本阶段的 α**
+> —— 那批已实测三档 sampled_wr AUC/收敛速度 CI 全重叠（打分层口径 auction 无增益，详见 [方案B_多generator设计.md](方案B_多generator设计.md) §6.1）。
+> **第一批 run 出来后**，用真实 epoch 墙钟仿
 > [任务运行时间分析.md](任务运行时间分析.md) 补一份诚实的耗时表（现在写=瞎猜）。
 > —— 这不影响开跑：§1–§5 已完全确定，照着提交即可，墙钟分析是事后补记。

@@ -1,5 +1,7 @@
 # Stage 1 标准运行流程（minimax / SLURM 集群）
 
+> ⚑ **历史定位（2026-06-20 方案 B 转向后）**：本文档是 **Stage 1 maze 基线（minimax + PerfectMazeXL）的执行手册**，对标 ACCEL 8% 仅为 sanity check。**项目主场已转 jaxnav + SFL repo**（见 [UED实验步骤指导.md](UED实验步骤指导.md) §0.6 + [STAGE4_实验设计.md](STAGE4_实验设计.md)）；本流程作 maze 基线复现的历史参考保留。单 run 墙钟以 [任务运行时间分析.md](任务运行时间分析.md) 的 sacct 实测为准（ACCEL~1h / PAIRED~4.1h）。
+
 > 复现 ACCEL / PLR⊥ / PAIRED 在 minimax AMaze 上的基线，最终在 **Maze-PerfectMazeXL (101×101)** 对标
 > 论文靶子：**ACCEL ≈ 8% / PLR⊥ ≈ 4% / PAIRED ≈ 0**（100 episodes 均值，差距 ≤5% 即达标）。
 >

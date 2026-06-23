@@ -173,10 +173,14 @@ generator reward 加一项「和其他 generator 已造关卡的距离」（inte
 
 ## 6. auction 必要性 + bid 标准化修复 ⭐（本轮核心技术产出）
 
-### 6.1 auction 必要性：诚实判定为「待验证消融」，不当既定卖点
-- **旧设计（单 buffer 同质来源）**：auction 只是对同一批 level 不同排序，必要性弱，实测 argmax 就够（future_routes §1.1：λ=∞ vs λ=1.0 性能 CI 重叠）。
-- **新设计（多 generator 异质来源）**：auction 职责变为「在来自不同 generator 的异质 level 混合池上，决定优先回放哪些」。single-winner(argmax) vs fractional(混合) **第一次有实质意义**：fractional 防止打分层把注入层辛苦造出的多样性又压回单一模式。**这是比「排序」强的理由，且直接挂钩 exploration 诉求——但未实测**。
-- → **降级为待验证消融**：`{argmax, fractional, uniform}` 三档对比，数据决定 auction 该不该留。有差→必要性坐实；无差→诚实砍掉用简单 argmax。**前提是先修好 bid 标准化（§6.2）让 λ 能真正扫到 fractional 区**。
+### 6.1 auction 必要性：打分层口径已实测无差异；定 α 移交 Stage4 阶段1（generator-on）
+- **旧设计 / 打分层口径（generator-off，固定 buffer 同质来源）**：auction 只是对同一批 level 不同排序，必要性弱，实测 argmax 就够。
+  **已用 jaxnav 真实数据坐实（2026-06-22，job 3363545/46/47，`AUCTION_SCORING=true` 且 `GENERATOR_INJECTION=false`，{inf,1.0,3.0}×8~9 seed 跑满 3e8）**：
+  三档 sampled_wr AUC（0.926/0.930/0.926）、达 wr≥0.9 收敛速度（393/432/487 upd）、末值 CI **全部重叠**；
+  唯一稳定现象是 argmax 早熟但终点略低、uniform 终点略高，差距 ~1pt，无统计显著。**结论：在固定 buffer 上，auction 加权 vs argmax 无增益。**
+  → 这是一个**诚实的负对照（下界）**：它精确反驳「auction 增益来自加权动作本身」，把增益（若有）归因逼向 generator 注入层。**不能用它给方案 B 定 α —— 它测错了层**（λ 只在 SFL 海选的同质 buffer 上重加权，N 个 generator 没参与）。
+- **新设计 / 真实系统口径（generator-on，多 generator 异质来源）**：auction 职责变为「在来自不同 generator 的异质 level 混合池上，决定优先回放哪些」。single-winner(argmax) vs fractional(混合) **第一次有实质意义**：fractional 防止打分层把注入层辛苦造出的多样性又压回单一模式。**这才是定 α 的正确实验，由 Stage4 阶段1（`GEN_AUCTION_LAMBDA` 主扫描轴、看 learnability 方差结构）回答，见 [STAGE4_实验设计.md](STAGE4_实验设计.md) §1**。
+- → **定位**：打分层 λ 消融（generator-off）= 已完成负下界，论文写诚实消融；generator 层 α（generator-on）= Stage4 阶段1 待出。**两个 λ 不可混淆**（`AUCTION_LAMBDA` vs `GEN_AUCTION_LAMBDA`）。**前提是先修好 bid 标准化（§6.2）让 λ 能真正扫到 fractional 区**。
 
 ### 6.2 bid 标准化的三个确诊 bug（numpy 推导验证，2026-06-20）
 现 `multi_estimator_plr_runner.py:160-197` 的 bid 逻辑有三处 bug：
