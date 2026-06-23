@@ -37,7 +37,12 @@
 
 > 已 `py_compile` 通过 + Oscar sfl 环境验过 z-score 数值正确（各 gen 均值≈0/std≈1、-inf 占位保留）。
 > **代码已同步 Oscar**（2026-06-23，直接 scp 覆盖 `~/sampling-for-learnability/sfl/train/`，旧版备份为 `*.bak_pre_p2fix`，三文件 py_compile 通过）。
-> 若换机器：`cp ../mechanism_UED/_sfl_repo_mirror/*.py sfl/train/`（先 `git pull` 拿最新）。
+> **Henry（换机器/不用 Oscar）覆盖时务必两条都做**（先 `git pull` 拿最新 mechanism_UED）：
+> ```bash
+> cp    ../mechanism_UED/_sfl_repo_mirror/*.py   sfl/train/   # 改过的 .py
+> cp -r ../mechanism_UED/_sfl_repo_mirror/envs   sfl/train/   # ⚠⚠ generator 注入核心依赖，漏了注入档必炸 ModuleNotFoundError: No module named 'envs'
+> ```
+> `envs/`（pcgrl-jax 裁剪版 11 个 .py）是 2026-06-23 新补进仓库的——`models_pcgrl.py:13` 顶层 + `pcgrl_generator.py` 5 处都 `from envs.pcgrl_env import ...`。本地 mirror/envs 与 Oscar 能跑的 `sfl/train/envs` **逐文件 md5 完全一致**（已验），cp 进去即与 Oscar 等价。Henry 分到的 exploit/none 都是注入档，**绝不能漏 envs/**。
 
 ### 1.2 环境（同阶段 1，无变化）
 

@@ -50,8 +50,14 @@ cd sampling-for-learnability
 ```bash
 # 假设 mechanism_UED 已 clone 到 ../mechanism_UED 并 git pull 到最新
 cp ../mechanism_UED/_sfl_repo_mirror/*.py  sfl/train/
+# ⚠⚠ 必须连 envs/ 整个目录一起 cp（generator 注入路径的核心依赖，pcgrl-jax 裁剪版）：
+cp -r ../mechanism_UED/_sfl_repo_mirror/envs  sfl/train/
 # ⚠ cenie_density.py / models_pcgrl.py / sawtooth.py 是 vendored 文件，2026-06-23 才补进仓库，
 #   Henry 若早于此日期 clone 的 mechanism_UED 缺这三个 → 必报 ModuleNotFoundError，先 git pull。
+# ⚠⚠ envs/ 子树（envs/pcgrl_env.py 等 11 个 .py）2026-06-23 才补进仓库：
+#   models_pcgrl.py:13 顶层 `from envs.pcgrl_env import PCGRLObs` + pcgrl_generator.py 5 处都依赖它。
+#   不 cp envs/ → 自检②或注入档训练当场 `ModuleNotFoundError: No module named 'envs'`。
+#   （它能被 import 是因为 jaxnav_sfl.py 在 sfl/train/ 下跑，sfl/train 进 sys.path[0]，故 envs=sfl/train/envs 可解析。）
 ```
 
 **Step 2 — 建环境（jax **0.4.38 血统**，minimax 的 0.5.3 锁不适用本 SFL repo）**
@@ -64,6 +70,10 @@ pip install "jax==0.4.38" "jaxlib==0.4.38" "flax==0.10.2" "optax==0.2.5" "chex==
 # Henry 用自己的 GPU：装对应 CUDA 的 jaxlib（如 jax[cuda12]==0.4.38），不是上面的纯 CPU 轮子。
 # CENIE 隐藏依赖（vendored cenie_density.py 需要，SFL requirements 里没有）：
 pip install scikit-learn joblib threadpoolctl
+# ⚠⚠ envs/（generator 注入依赖）的隐藏依赖——gymnax + Pillow，SFL requirements.txt 里没有！
+#   Oscar 上是 jaxued/jaxmarl 传递装上的，但别赌传递依赖，显式装并锁版本（gymnax API 版本敏感）：
+pip install "gymnax==0.0.9" "Pillow>=10"
+#   不装 → 注入档 import envs 时炸 `ModuleNotFoundError: No module named 'gymnax'`（或 PIL）。
 ```
 
 **Step 3 — 运行前自检（两人各自机器一致）**
