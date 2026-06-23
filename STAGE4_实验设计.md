@@ -67,6 +67,7 @@
 
 ### 2.2 矩阵
 - **训练**：阶段 1 选出的 top λ（1~2 个）配置 × 10 seed，真实规模跑满（NUM_ENVS=256、ROLLOUT_STEPS=1000、TOTAL_TIMESTEPS 跑满）。
+- **⚠ 补档 λ=2.0（2026-06-23 追加，jobid `3403257_[0-9]`）**：阶段 1 只采样了 λ∈{5.0,1.0,inf}+none 四点，"甜区=1.0" 是这三点里 singleton win rate 最高者（0.409），**非沿 λ 轴精搜的极值**。核查 [auction_bid.py](_sfl_repo_mirror/auction_bid.py) `auction_weights` 确认 λ 是 softmax 温度、**λ 轴呈 U 形**：argmax 端 = {λ→0}∪{λ=inf}（λ=0 经 1e-6 clamp 数值上≈inf，**非更温和方向**，不值得加），uniform/软混合端 = 有限大 λ。真正没探过、且方向上可能优于甜区的空白是 **λ∈(1,5) 的软混合侧** → 补 λ=2.0 档（10 seed，3e8 跑满），与 1.0 横比检验"更软混合是否进一步改善 win rate"。挂在 Alec 批、无依赖、同抢 2-GPU 配额。
 - **对标表**：方案 B 候选 + 上面整排 baseline 进同一张 rliable 表，CVaR/test set/100map 三口径。
 - **事后消融**（内生于矩阵，不额外加 run）：
   - 去 auction（λ=none 各自为政）→ 证 auction 混合的增益；

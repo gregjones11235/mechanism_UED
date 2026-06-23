@@ -3,7 +3,7 @@
 > **目标**：跑完 [STAGE4_实验设计.md](STAGE4_实验设计.md) §2「真实规模 + jaxnav SOTA 同表对标」。
 > 阶段 1 已 **GO**（方差复活铁证 + auction 随 λ 调尖锐度，见 [results/STAGE4_阶段1_结果分析.md](results/STAGE4_阶段1_结果分析.md)）。
 > **人力/算力**：Alec 2× A6000 + Henry 2× A6000 = **4 卡并行**。
-> **预计墙钟**：方案 B 候选档训练 ≈ **12 h**（30 run，4 卡并行，见 [任务运行时间分析.md](任务运行时间分析.md) §7.3）；+评测/制表 ≈ 半天 → **端到端约 1 天**。
+> **预计墙钟**：方案 B 候选档训练 ≈ **16 h**（40 run = base+1.0+2.0+inf，4 卡并行，见 [任务运行时间分析.md](任务运行时间分析.md) §7.3；含 λ=2.0 补档）；+评测/制表 ≈ 半天 → **端到端约 1 天**。
 >
 > **生成日期**：2026-06-23。
 > **与阶段 1 的差异**：seed 7→**10**（对齐 baseline rliable 口径）、TOTAL_TIMESTEPS 1e8→**3e8**（15→45 eval epoch 跑满）、
@@ -80,16 +80,19 @@ python sfl/train/jaxnav_sfl.py \
 
 ---
 
-## 2. 实验矩阵（方案 B 候选档：3 训练档 × 10 seed = 30 run）
+## 2. 实验矩阵（方案 B 候选档：4 训练档 × 10 seed = 40 run；含 2026-06-23 补的 λ=2.0）
 
 | 档位 | 注入档参数 | GROUP_NAME | seeds | run 数 | 作用 |
 |---|---|---|---|---|---|
 | **基线** | `GENERATOR_INJECTION=false` | `s4p2-base` | 0–9 | 10 | SFL 随机海选，内部对照（win rate 反超判据锚点） |
 | **甜区 (λ=1.0)** | `GENERATOR_INJECTION=true GEN_AUCTION_LAMBDA=1.0` | `s4p2-lambda-1_0` | 0–9 | 10 | 软混合，阶段 1 注入档 win rate 最高，**主候选** |
+| **软混合 (λ=2.0)** ⭐补 | `GENERATOR_INJECTION=true GEN_AUCTION_LAMBDA=2.0` | `s4p2-lambda-2_0` | 0–9 | 10 | 阶段 1 空白区 (1,5)，比 1.0 更靠 uniform 侧，验"更软混合是否再改善 win rate" |
 | **exploit (λ=inf)** | `GENERATOR_INJECTION=true GEN_AUCTION_LAMBDA=inf` | `s4p2-lambda-inf` | 0–9 | 10 | single-winner，var 上限 + 验 mode-collapse |
-| **小计** | | | | **30** | |
+| **小计** | | | | **40** | |
 
 - **λ=5.0（explore 端）不进阶段 2 训练**：阶段 1 实测它 var 最小、win rate 最低（0.305），无优势，仅作事后消融的 explore 端点保留（阶段 1 数据已够）。
+- **⭐ λ=2.0 补档依据（2026-06-23，jobid `3403257_[0-9]`，已提交挂 Alec 批）**：阶段 1 只采样 λ∈{5.0,1.0,inf}，"甜区=1.0" 只是这三点中 win rate 最高者、非精搜极值。读 [auction_bid.py](_sfl_repo_mirror/auction_bid.py) `auction_weights` 实锤 λ 是 softmax 温度且 **λ 轴 U 形**：λ→0 经 1e-6 clamp 数值≈λ=inf（argmax/exploit 端，**非更温和**，故 λ=0/0.1 不值得加）；有限大 λ 才趋 uniform/软混合。真正空白且方向可能更优的是 **λ∈(1,5) 软混合侧** → 补 λ=2.0。无依赖、同抢 2-GPU 配额，自然在 base/1.0 空隙排队。
+- **none 消融见 §2.1 第 1 点**：若纳入则总 run 数 40→50。
 - **none（去 auction 消融）是否进阶段 2**：见 §2.1 决策。
 
 ### 2.1 ⚠ 待用户确认的两个范围问题
@@ -107,13 +110,16 @@ python sfl/train/jaxnav_sfl.py \
 > 划分原则同阶段 1：每人手上的档能自成对照、基线最优先（win rate 反超的判据锚点）。
 > Alec 拿 **基线 + 甜区（主候选）**；Henry 拿 **exploit 端 + none 消融**。
 
-### 3.1 Alec（2 卡）— 20 run · 骨架档（基线 + 主候选）
+### 3.1 Alec（2 卡）— 30 run · 骨架档（基线 + 主候选 + λ=2.0 补档）
 
 | 档位 | GROUP_NAME | seeds | run 数 | 优先级 |
 |---|---|---|---|---|
 | **基线**（最高优先，先跑） | `s4p2-base` | 0–9 | 10 | ① 最先（反超判据锚点） |
 | 甜区 (λ=1.0) | `s4p2-lambda-1_0` | 0–9 | 10 | ② 主候选 |
-| **小计** | | | **10 波×2卡=5 波** | |
+| 软混合 (λ=2.0) ⭐补 2026-06-23 | `s4p2-lambda-2_0` | 0–9 | 10 | ③ 空白区 (1,5)，jobid `3403257`，与 1.0 横比 |
+| **小计** | | | **30（15 波×2卡）** | |
+
+> ⭐ λ=2.0 补档依据见 §2 表下注（λ 轴 U 形、(1,5) 是真空白）。已 `sbatch --array=0-9 _sfl_stage4_phase2.sh 2.0` 提交，无依赖、同抢 2-GPU 配额。
 
 ### 3.2 Henry（2 卡）— 20 run · exploit + 消融
 
@@ -123,7 +129,7 @@ python sfl/train/jaxnav_sfl.py \
 | none 消融 (λ=none) | `s4p2-lambda-none` | 0–9 | 10 |
 | **小计** | | | **20** |
 
-> 若 §2.1 决定**不跑 none**：Henry 只跑 exploit 10 run，Alec/Henry 共 30 run；此时可把甜区/exploit 的 seed 在两人间再均摊加速。
+> 若 §2.1 决定**不跑 none**：Henry 只跑 exploit 10 run，Alec/Henry 共 40 run（Alec 30 含 λ=2.0 + Henry 10）；此时可把甜区/2.0/exploit 的 seed 在两人间再均摊加速。
 > **接替预案**：同阶段 1 §4——配置纯由 (GROUP_NAME, SEED, λ档) 决定，无跨 run 依赖；Henry 失败时 Alec 照 wandb 缺口补齐。
 
 ### 3.3 每人 2 卡内部排法（同阶段 1）
@@ -219,7 +225,7 @@ python sfl/train/jaxnav_sfl.py \
 1. **核实 baseline 现状**：上 wandb（`gregjones11235-brown-university/multi_robot_ued`）数 DR/PLR(MaxMC)/PLR(PVL)/PLR-Robust/ACCEL(MaxMC)/ACCEL-Robust/SFL/PAIRED/NCC 各有几个 **3e8 跑满 + 10 seed** 的 finished run。
    - 若齐 → 阶段 2 只跑方案 B 候选档（30~40 run，~12~15 h），直接进同表。
    - 若缺 → 列缺口，追加 baseline 重训（每个 ~1 h/run × 10 seed），算力另算（6~9 baseline × 10 seed ≈ +15~22 h，可两人接着方案 B 档后排）。
-2. **确认 none 消融纳不纳入**（§2.1 第 1 点）：纳入则 40 run、不纳入则 30 run。**默认纳入。**
+2. **确认 none 消融纳不纳入**（§2.1 第 1 点）：纳入则 50 run、不纳入则 40 run（均含 2026-06-23 补的 λ=2.0）。**默认纳入。**
 3. 确认评测脚本（CVaR + test set + 100-map）就绪：阶段 2 每个 final checkpoint 要跑评测（轻量，分钟级），见 [STAGE4_实验设计.md](STAGE4_实验设计.md) §2.1 口径。
 
 ---
@@ -230,10 +236,10 @@ python sfl/train/jaxnav_sfl.py \
 |---|---|---|
 | TOTAL_TIMESTEPS | 1e8（15 epoch） | **3e8（45 epoch）** |
 | seed | 7（0–6） | **10（0–9）** |
-| 训练档 | 5 档（base+5.0+1.0+inf+none） | **3 档（base+1.0+inf）** [+none 消融可选] |
+| 训练档 | 5 档（base+5.0+1.0+inf+none） | **4 档（base+1.0+2.0+inf）** [+none 消融可选]（λ=2.0 为 2026-06-23 补档） |
 | SAVE_PATH | 不设 | **必设**（评测要 checkpoint） |
 | 评测口径 | 内部 learnability var + win rate 趋势 | **CVaR + test set + 100-map + rliable 表** |
 | 对标 | 内部随机海选对照 | **外部 baseline 同表** |
 | 单 run 墙钟 | ~0.4 h | ~1.1~1.45 h |
-| 整套墙钟（4 卡） | ~数 h | **~12 h（30run）/ ~15 h（40run）** + 评测半天 |
+| 整套墙钟（4 卡） | ~数 h | **~16 h（40run，含λ=2.0）/ ~20 h（50run 含 none）** + 评测半天 |
 | 判据 | 方差复活 + λ 结构 → go ✅（已达） | win rate 反超 + SOTA 表 |
