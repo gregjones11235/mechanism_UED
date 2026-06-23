@@ -30,15 +30,50 @@
 现已在 `jaxnav_sfl.py` 的 `test_metrics` 字典补落盘（基线 `GENERATOR_INJECTION=false` 时 `gen_metrics=None`，
 不落这些键，**零回归**）。补丁已 py_compile 通过。
 - 新增 wandb 键：`learnability_set_var`、`auction_weight_{difficulty,pvl,cenie}`、`auction_bid_{...}`、`gen_mean_score`、`gen_injected`、`gen_n_incomplete`。
-- **两人必须用同一份打过补丁的 `jaxnav_sfl.py`**（Henry 从 Alec 处同步该文件，别用旧版，否则 auction 曲线拿不到）。
+- **两人必须用同一份打过补丁的 `jaxnav_sfl.py`**（以 `mechanism_UED/_sfl_repo_mirror/` 为准，按 §1.2 Step 1 覆盖进 `sfl/train/`；别用 SFL 本体的旧版，否则 auction 曲线拿不到）。
 
-### 1.2 环境与运行命令（两人各自机器一致）
+### 1.2 从零搭起能跑的仓库（Henry 首次必读：他只有 `mechanism_UED`，没有 SFL 本体）
+
+> **关键背景**：本项目的 Stage4 实现文件（`pcgrl_generator.py` / `auction_bid.py` / `cenie_density.py` /
+> `models_pcgrl.py` / `estimators.py` / `probe_orthogonality.py` / `train_probe.py` / `sawtooth.py` 等）
+> 是**叠加在 SFL 本体之上的新增/vendored 文件**，集中放在 `mechanism_UED/_sfl_repo_mirror/`。
+> 它们**不是**一个能独立运行的仓库——必须先有 SFL 本体（提供 jaxnav 环境 + `sfl/` 包结构），
+> 再把这些文件覆盖进本体的 `sfl/train/`。`mechanism_UED` 只是这层文件 + 实验文档的载体。
+
+**Step 0 — 取 SFL 本体（提供 jaxnav 环境、`sfl/` 包结构）**
 ```bash
-conda activate sfl          # jax 0.4.38 血统（minimax 的 0.5.3 锁不适用 SFL repo）
-cd <sampling-for-learnability 根目录>
-# 自检：JAX 必须认到 GPU，否则秒退别空烧
+git clone https://github.com/amacrutherford/sampling-for-learnability.git
+cd sampling-for-learnability
+```
+
+**Step 1 — 把 `mechanism_UED/_sfl_repo_mirror/` 的文件覆盖进本体的 `sfl/train/`**
+```bash
+# 假设 mechanism_UED 已 clone 到 ../mechanism_UED 并 git pull 到最新
+cp ../mechanism_UED/_sfl_repo_mirror/*.py  sfl/train/
+# ⚠ cenie_density.py / models_pcgrl.py / sawtooth.py 是 vendored 文件，2026-06-23 才补进仓库，
+#   Henry 若早于此日期 clone 的 mechanism_UED 缺这三个 → 必报 ModuleNotFoundError，先 git pull。
+```
+
+**Step 2 — 建环境（jax **0.4.38 血统**，minimax 的 0.5.3 锁不适用本 SFL repo）**
+```bash
+conda create -n sfl python=3.10 -y && conda activate sfl
+pip install -r requirements.txt          # SFL 自带：jaxmarl/jaxued/hydra/pandas
+# requirements.txt 不固定 jax 版本，必须手动钉到本项目血统（否则装到最新 jax 会崩）：
+pip install "jax==0.4.38" "jaxlib==0.4.38" "flax==0.10.2" "optax==0.2.5" "chex==0.1.90" \
+            "distrax==0.1.5" "numpy==1.26.4"
+# Henry 用自己的 GPU：装对应 CUDA 的 jaxlib（如 jax[cuda12]==0.4.38），不是上面的纯 CPU 轮子。
+# CENIE 隐藏依赖（vendored cenie_density.py 需要，SFL requirements 里没有）：
+pip install scikit-learn joblib threadpoolctl
+```
+
+**Step 3 — 运行前自检（两人各自机器一致）**
+```bash
+conda activate sfl
+cd <sampling-for-learnability 根目录>   # 注意：在 SFL 本体根目录跑，不是 mechanism_UED
+# 自检①：JAX 必须认到 GPU，否则秒退别空烧
 python -c "import jax; print(jax.devices())"   # 必须看到 cuda/gpu device
-python -c "import sys; sys.path.insert(0,'sfl/train'); import pcgrl_generator, auction_bid, cenie_density; print('import OK')"
+# 自检②：Stage4 模块能 import（cenie_density 在这里通过 = Henry 报的错已解决）
+python -c "import sys; sys.path.insert(0,'sfl/train'); import pcgrl_generator, auction_bid, cenie_density, models_pcgrl; print('import OK')"
 ```
 
 ### 1.3 单个 run 的命令模板（已含短跑规模，照填即可）
