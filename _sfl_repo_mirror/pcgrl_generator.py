@@ -37,6 +37,64 @@ def pcgrl_map_to_jaxnav(env_map):
     return jnp.where(env_map == PCGRL_EMPTY, 0, 1).astype(jnp.int32)
 
 
+# ============================================================================
+# 正确的 4-邻接 BFS 距离场（根治 jaxmarl component_mask_with_pos 的碎图失效 bug）
+# ----------------------------------------------------------------------------
+# 背景（用户 2026-06-26 抓出，Oscar 实测坐实）：jaxmarl jaxnav_graph_utils.component_mask_with_pos
+#   的魔改 DFS（步数上界 2·h·w + n_visited≥3 脏栈回溯启发式）在中高墙密度图（fill≥0.4）上**系统性
+#   算错连通块**（误判率 54–74%），把墙另一侧的格误标进起点连通块 → place 端把 goal 放到真实不可
+#   达区、valid 仍判 True → 不连通关被放行注入训练（dump inj_00050 #0 即铁证）。
+# 修复：用**固定迭代 H·W 次的并行 BFS 松弛**（数学保证收敛：最长最短路 ≤ 自由格数 ≤ H·W），
+#   100% 正确、jit+vmap 安全、计算量与坏 DFS 同量级（每迭代 4 次移位+min，11×11 廉价）。
+# 一函数根治三处：连通性（place 放 goal + reachable_mask）与测地长度（geodesic）本质同源——
+#   皆取自此距离场。坏函数在本文件调用链中**直接移除**，无重复计算。
+_BFS_UNREACH = jnp.int32(1_000_000)   # 不可达距离哨兵（远大于任何 11×11 真实最短路）
+
+
+def bfs_dist_field(wall, src_xy):
+    """从 src 出发的 4-邻接 BFS 最短距离场（格步数）。jit+vmap 安全，固定 H·W 次迭代。
+
+    Args:
+      wall: (H, W) bool/int，True/1 = 墙（不可通行）。
+      src_xy: (2,) int [x, y]，源格（含边界坐标系，与 map_data 同）。
+    Returns:
+      dist: (H, W) int32，每格到 src 的最短步数；墙格与不可达格 = _BFS_UNREACH。
+    """
+    wall_b = jnp.asarray(wall).astype(bool)
+    H, W = wall_b.shape
+    sx, sy = src_xy[0].astype(jnp.int32), src_xy[1].astype(jnp.int32)
+    # 初始：源格 0，其余 UNREACH；墙格强制 UNREACH（永不被更新）。
+    dist = jnp.full((H, W), _BFS_UNREACH, dtype=jnp.int32)
+    src_is_free = ~wall_b[sy, sx]
+    dist = dist.at[sy, sx].set(jnp.where(src_is_free, jnp.int32(0), _BFS_UNREACH))
+
+    def _relax(d, _):
+        # 4 邻居距离 +1，与自身取 min；墙格钳回 UNREACH。一次迭代把 BFS 波前推进一格。
+        # ⚠ jnp.roll 是**环绕**的：必须屏蔽绕到对边的假邻居（generator map 边界**不保证全墙**，
+        #   实测 dump #0 边界含自由格 → 不屏蔽会让上下/左右边界假连通、误判 goal 可达，这正是
+        #   2026-06-26 接入时单测抓出的 bug）。屏蔽法：把环绕进来的那一行/列置 UNREACH。
+        up    = jnp.roll(d, -1, axis=0).at[-1, :].set(_BFS_UNREACH)   # 来自下方；最后一行的邻居绕到第0行→屏蔽
+        down  = jnp.roll(d,  1, axis=0).at[0, :].set(_BFS_UNREACH)    # 来自上方；第0行的邻居绕到最后一行→屏蔽
+        left  = jnp.roll(d, -1, axis=1).at[:, -1].set(_BFS_UNREACH)   # 来自右方
+        right = jnp.roll(d,  1, axis=1).at[:, 0].set(_BFS_UNREACH)    # 来自左方
+        neigh = jnp.minimum(jnp.minimum(up, down), jnp.minimum(left, right))
+        cand = jnp.minimum(d, neigh + 1)
+        cand = jnp.where(wall_b, _BFS_UNREACH, cand)
+        return cand, None
+
+    dist, _ = jax.lax.scan(_relax, dist, None, length=H * W)
+    return dist
+
+
+def bfs_component_mask(wall, src_xy):
+    """src 的连通块 mask（替换坏的 component_mask_with_pos）：dist < UNREACH 的自由格。
+
+    Returns: (H, W) bool，True = 与 src 4-邻接连通的自由格（含 src 自身）。
+    """
+    dist = bfs_dist_field(wall, src_xy)
+    return dist < _BFS_UNREACH
+
+
 def place_start_goal_on_map(map_obj, jaxnav_map, rng):
     """在给定 jaxnav_map（占用栅格）上放合法 start/goal，复刻 jaxnav Grid-Rand-Poly 的采样逻辑。
 
@@ -82,7 +140,9 @@ def place_start_goal_on_map(map_obj, jaxnav_map, rng):
         start = jnp.array([start_idx % iwidth, start_idx // iwidth])  # [x, y]（内部坐标）
         actual_idx = (start + 1).astype(jnp.int32)                    # 含边界坐标
         if valid_path_check:
-            connected = _graph_utils.component_mask_with_pos(map_data, actual_idx)[1:-1, 1:-1]
+            # [根治 2026-06-26] 改用正确的 BFS 连通块（替换碎图失效的 component_mask_with_pos，
+            #   见 bfs_component_mask docstring）。返回 (H,W) bool，切内部 (H-2,W-2)，转 int 兼容下游。
+            connected = bfs_component_mask(map_data, actual_idx)[1:-1, 1:-1].astype(jnp.int32)
         else:
             connected = 1 - inside_grid                               # 全体自由内部格
         masked_start = connected.at[start[1], start[0]].set(0)        # 排除 start 自身
@@ -116,7 +176,10 @@ def map_to_env_instance(env, env_map, rng, rew_lambda=None):
     jaxnav_map = pcgrl_map_to_jaxnav(env_map)
     start_xy, goal_xy, valid = place_start_goal_on_map(env._map_obj, jaxnav_map, r_sg)
 
-    theta = (jnp.pi / 2) * jax.random.choice(r_th, jnp.arange(4))    # 4 朝向之一，与 barn_test_case 同
+    # 初始朝向：连续全方位 uniform(-π,π)，与 baseline DR(jaxmarl grid_map.py:140) 完全对齐。
+    # （曾误写成离散 (π/2)·choice(arange(4)) 只 4 个朝向，致 student 学不到连续转向、
+    #  测试关 Nav2(θ=180°背朝目标) 全 0；2026-06-25 修复，见 memory generator-theta-discrete-bug。）
+    theta = jax.random.uniform(r_th, (), minval=-jnp.pi, maxval=jnp.pi)
     n = env.num_agents                                              # =1
     agent_pos = start_xy[None, :]                                   # (1, 2)
     agent_theta = theta[None]                                       # (1,)
@@ -503,6 +566,141 @@ def terminal_reward_pvl(env, network, network_params, env_instances,
     return pvl, {"pvl_actor": pvl_actor}
 
 
+
+def terminal_reward_euc(env, network, network_params, env_instances,
+                        rng, hidden_size, rollout_steps, num_levels):
+    """generator terminal reward —— 起终点欧氏距离 euc(关卡内禀, **不依赖 student**, 不可被堆墙操纵)。
+
+    euc = ||agent_pos - goal_pos||_2。起终点由 place_start_goal_on_map 随机放、非 generator 输出,
+    故 generator 摆墙改不了 euc(已核实, STAGE4_phase2 §方向3)。补"长程导航"维度——所有 student-centric
+    信号(difficulty/PVL/CENIE)盲视该维度, 而 test-set 最难关恰是起终点远的长程关。
+    与 geodesic_from_instances 同法取坐标。
+
+    [护栏·选项一 可学性门，2026-06-25] 纯 euc 不看 student p → generator 堆墙拉远起终点不管
+    student 死活 → curriculum-too-hard（injp 实测注入关 p 两极塌缩、可学区 0%）。修复：跑一次
+    student rollout 取 per-level p，euc 乘 gate(p)=exp(-((p-0.5)/sigma)²)：p≈0.5 时 gate≈1、
+    两极 gate→0，把 reward 双边对准可学区。GEN_LEARNGATE=False → 退化纯 euc（旧行为，不跑 rollout）。
+    incomplete level（nep=0）：gate=0（无完整 episode 不知 p，按"不可学"压到 0）。
+    Returns: reward (num_levels,) = euc*gate; info dict（含 success_rate 供 per-level p log）。
+    """
+    pa = env_instances.agent_pos.reshape((num_levels, -1))[:, :2]     # (M,2) [x,y]
+    pb = env_instances.goal_pos.reshape((num_levels, -1))[:, :2]
+    euc = jnp.sqrt(((pa - pb) ** 2).sum(axis=1) + 1e-8)              # (M,)
+    if not GEN_LEARNGATE:
+        # 消融/兼容：退回旧纯 euc，不跑 student rollout（最廉价 estimator）。
+        return euc, {"euc": euc, "success_rate": jnp.full((num_levels,), jnp.nan),
+                     "num_episodes": jnp.zeros((num_levels,), dtype=jnp.int32)}
+    # 可学性门：跑一次 student rollout 取 per-level p（口径同 terminal_reward_difficulty）。
+    traj = student_rollout_on_levels(
+        env, network, network_params, env_instances, rng, hidden_size, rollout_steps,
+        num_levels, emit_hidden=False)
+    succ, nep = _success_from_traj(traj, rollout_steps, env.num_agents, num_levels)
+    sigma = float(GEN_LEARNGATE_SIGMA)
+    gate = jnp.exp(-(((succ - 0.5) / sigma) ** 2))                   # (M,) ∈(0,1]，p≈0.5→1
+    gate = jnp.where(nep > 0, gate, 0.0)                             # incomplete→0（不可学）
+    reward = euc * gate                                              # (M,) 双边对准可学区
+    return reward, {"euc": euc, "gate": gate, "success_rate": succ, "num_episodes": nep}
+
+
+def geodesic_from_instances(env_instances, num_levels):
+    """从 EnvInstance batch 算每关的起→终测地最短路长（格步数，jit+vmap 安全）。
+
+    关卡内禀几何量（只读 map_data + agent_pos + goal_pos），**不依赖 student**，故免疫
+    "generator 堆墙→student 退化→信号偏堆墙"那个闭环（见 STAGE4 §6.3）。复用 jaxnav 现成
+    sfl.util.graph.shortest_path_len（APSP，11×11 廉价）。连续坐标 floor 到格点；map_data
+    1=墙→grid true=墙（shortest_path_len 约定 false=free）。不可达返回 1（其内部约定）。
+
+    Returns: (num_levels,) int 测地步数。
+    """
+    def _one(map_wall, pa_xy, pb_xy):
+        # [根治 2026-06-26] 改用正确 BFS 距离场（替换 sfl.util.graph.shortest_path_len，后者内部第一步
+        #   即 ~component_mask_with_pos，同受碎图失效 bug 污染）。BFS 不可达返 _BFS_UNREACH 大值
+        #   （非残值）——顺带修掉旧"不可达返残值骗过课程/reachable 反推漏判"陷阱（见 geodesic_reachable_mask）。
+        pa = jnp.floor(pa_xy).astype(jnp.int32)            # 连续坐标→格点 (x,y)
+        pb = jnp.floor(pb_xy).astype(jnp.int32)
+        dist = bfs_dist_field(map_wall, pa)                # (H,W) int32；墙/不可达=_BFS_UNREACH
+        return dist[pb[1], pb[0]]
+
+    # EnvInstance: agent_pos (M,1,2) / goal_pos (M,1,2) / map_data (M,H,W)。取 agent0。
+    pa = env_instances.agent_pos.reshape((num_levels, -1))[:, :2]     # (M,2) [x,y]
+    pb = env_instances.goal_pos.reshape((num_levels, -1))[:, :2]
+    wall = (env_instances.map_data == 1)                             # (M,H,W) true=wall
+    return jax.vmap(_one, in_axes=(0, 0, 0))(wall, pa, pb)           # (M,)
+
+
+def geodesic_reachable_mask(env_instances, num_levels):
+    """每关起终点是否**真可达**（bool）。配 geodesic_from_instances 用于"不可达重罚"。
+
+    ⚠ 陷阱（用户 2026-06-25 抓出，Oscar 实测纠正）：原以为 shortest_path_len 不可达返回 1（小值），
+      **实测不可达返回的是残值（如 5），不是 1**——靠 geo 返回值反推可达性不可靠（会漏判）。
+      故改用 **component_mask_with_pos 直接判连通**：终点格是否落在起点的连通块里。这是 place_start_goal
+      放 goal 时用的同一套真连通逻辑（valid_path_check=True），权威可靠。
+
+    不可达关测地课程会误当"超简单关"放行（让 generator 造割裂图漏网）→ 此 mask 标出不可达关供塑形端重罚。
+    Returns: (num_levels,) bool，True=可达。
+    """
+    def _one(map_data, pa_xy, pb_xy):
+        pa = jnp.floor(pa_xy).astype(jnp.int32)              # [x,y] 含边界格点
+        pb = jnp.floor(pb_xy).astype(jnp.int32)
+        # [根治 2026-06-26] 改用正确 BFS 连通块（替换碎图失效的 component_mask_with_pos）。
+        comp = bfs_component_mask(map_data, pa)              # (H,W) bool
+        return comp[pb[1], pb[0]]                            # 终点是否在起点连通块
+
+    pa = env_instances.agent_pos.reshape((num_levels, -1))[:, :2]    # (M,2) [x,y]
+    pb = env_instances.goal_pos.reshape((num_levels, -1))[:, :2]
+    md = env_instances.map_data.astype(jnp.int32)                   # (M,H,W) 0=自由1=墙
+    return jax.vmap(_one, in_axes=(0, 0, 0))(md, pa, pb)            # (M,) bool
+
+
+def _geodesic_anchor_factor(env_instances, num_levels):
+    """测地几何锚定因子 = 测地最短路 / 该 batch 最大测地（归一化到 ~[0,1]，防乘法爆量纲）。
+
+    用作 PVL 的乘性锚（方案丙）：堆墙但起终点近的关测地短→因子小→把 PVL 在那压低，
+    堵死"堆墙刷瞬时 value-loss"捷径。geo 是关卡内禀几何（不读 student），免疫闭环。
+    Returns: (num_levels,) float ∈ ~[0,1]。
+    """
+    geo = geodesic_from_instances(env_instances, num_levels).astype(jnp.float32)  # (M,)
+    # [根治 2026-06-26] BFS 不可达返 _BFS_UNREACH 大值。须排除：否则 geo_max 爆成 1e6 让所有可达关
+    #   锚因子≈0。不可达关：①不计入 geo_max；②锚因子强制 0（不可达关 anchored 分=0，不被选中——
+    #   与 geodesic_reachable_mask + UNREACHABLE_PENALTY 一致，不可达永远不该当"长程好关"）。
+    reachable = geo < (_BFS_UNREACH.astype(jnp.float32))             # (M,) bool
+    geo_valid = jnp.where(reachable, geo, 0.0)                       # 不可达置 0 再求 max
+    geo_max = jnp.maximum(geo_valid.max(), 1.0)                      # 防除零；只含可达关
+    factor = jnp.where(reachable, geo / geo_max, 0.0)               # 不可达锚=0
+    return factor, geo_valid
+
+
+def terminal_reward_anchored(env, network, network_params, env_instances,
+                             rng, hidden_size, rollout_steps, num_levels,
+                             gamma=0.99, gae_lambda=0.95):
+    """generator terminal reward —— 几何锚定 PVL（anchored PVL，方案丙，STAGE4 §6.4，新主力）。
+
+    anchored_pvl = PVL × (geodesic_shortest_path / max_geodesic)
+      = "student 价值损失(regret 代理)" × "这关的几何最优代价(归一)"。
+      **保留 PVL 的价值误差角度**（含 PVL 量），又乘几何锚把堆墙捷径压下去。
+
+    机制（堵死堆墙捷径，恢复 PAIRED 缺失的可达性参照点）：
+      • 堆墙但起终点近的关 → 测地短 → 因子小 → 即使 PVL 高也被压低 → generator **无法靠堆墙刷分**。
+      • 中等墙密度但起终点远、student 绕不出来 → 测地大 + PVL 高 → anchored 大 → **自然被选中**。
+    离线实测（base/l1 ckpt 各 1000 关）：vs 裸 PVL，ρ(fill) 从 +0.35 降到 +0.004（堆墙偏好消除），
+    ρ(euc) 从 +0.24 升到 +0.70（长程信号反增），长程/堆墙近 比值 1.3→4.9，最难关分位 81%→86%。
+    优于方案甲 (1-p)×测地（其 ρ(euc) 仅 0.09，强 student 上 (1-p)→0 信息塌缩）。
+
+    incomplete level（无完整 episode）→ -inf（PVL 内部，对齐其它 estimator 契约）。
+    Returns: reward (num_levels,)；info dict。
+    """
+    from sfl.util.jaxued.jaxued_utils import positive_value_loss
+    traj = student_rollout_on_levels(
+        env, network, network_params, env_instances, rng, hidden_size, rollout_steps,
+        num_levels, emit_hidden=False)
+    adv = _gae_from_traj(traj, gamma, gae_lambda)                   # (T, BATCH_ACTORS)
+    pvl_actor = positive_value_loss(traj["dones"], adv)            # (BATCH_ACTORS,)；incomplete→-inf
+    pvl = pvl_actor.reshape((env.num_agents, num_levels)).mean(axis=0)   # (M,)
+    anchor, geo = _geodesic_anchor_factor(env_instances, num_levels)    # (M,) ∈~[0,1]
+    anchored = pvl * anchor                                        # (M,)；incomplete 的 -inf 透传
+    return anchored, {"pvl": pvl, "geodesic": geo, "anchor_factor": anchor}
+
+
 def terminal_reward_cenie(env, network, network_params, env_instances,
                           rng, hidden_size, rollout_steps, num_levels,
                           gmm_params, probe_hidden_steps=16):
@@ -537,7 +735,10 @@ def terminal_reward_cenie(env, network, network_params, env_instances,
 
 def all_signals_on_levels(env, network, network_params, env_instances, rng,
                           hidden_size, rollout_steps, num_levels, gmm_params=None,
-                          gamma=0.99, gae_lambda=0.95, probe_hidden_steps=16):
+                          gamma=0.99, gae_lambda=0.95, probe_hidden_steps=16,
+                          signal_mode="anchored", prev_bucket_p=None,
+                          alp_num_buckets=6, alp_euc_lo=0.0, alp_euc_hi=16.0,
+                          gate_w_hard=2.0, gate_w_easy=1.0):
     """对一批 level **一次 student rollout** → difficulty/PVL/CENIE 三信号分（组 (3, M)）。
 
     供 auction 出价漏斗用：N 个 estimator 对**全部候选 level**都打分（同一轨迹各算一列），
@@ -564,10 +765,17 @@ def all_signals_on_levels(env, network, network_params, env_instances, rng,
     # difficulty：-(p-0.5)²，incomplete→-inf。
     difficulty = difficulty_match(succ, num_episodes=nep)            # (num_levels,)
 
-    # PVL：GAE → positive_value_loss → per-level。
-    adv = _gae_from_traj(traj, gamma, gae_lambda)
-    pvl_actor = positive_value_loss(traj["dones"], adv)
-    pvl = pvl_actor.reshape((env.num_agents, num_levels)).mean(axis=0)
+    # 第二维信号按 signal_mode 选 (STAGE4_phase2 §方向1/3):
+    #   'pvl'      → 裸 PVL (=第一版注入配置 s4p2-lambda-1_0, 难关CVaR 0.655, 纯方向1扫描基底);
+    #   'anchored' → anchored-PVL = PVL×测地锚 (已证更差0.630且被"堆墙+绕路"组合捷径操纵, 已弃);
+    #   'euc'      → 不在此算 (euc 是几何量, 不依赖 rollout, 见下方 per_est 组装)。
+    if signal_mode in ("anchored", "pvl", "anchored_cenie", "anchored_cenie_gate"):
+        adv = _gae_from_traj(traj, gamma, gae_lambda)
+        pvl_actor = positive_value_loss(traj["dones"], adv)
+        pvl = pvl_actor.reshape((env.num_agents, num_levels)).mean(axis=0)   # 裸 PVL
+        if signal_mode in ("anchored", "anchored_cenie", "anchored_cenie_gate"):
+            _anchor, _geo = _geodesic_anchor_factor(env_instances, num_levels)   # (M,) ∈~[0,1]
+            pvl = pvl * _anchor                                          # ← anchored PVL (乘测地锚)
 
     # CENIE：hidden subsample → cenie_neg_logp → per-level mean，incomplete→-inf。
     hidden = traj["hidden"]                                          # (T, BATCH_ACTORS, H)
@@ -582,8 +790,72 @@ def all_signals_on_levels(env, network, network_params, env_instances, rng,
     cenie = nlp.reshape((env.num_agents, num_levels)).mean(axis=0)
     cenie = jnp.where(nep > 0, cenie, -jnp.inf)
 
-    per_est = jnp.stack([difficulty, pvl, cenie], axis=0)           # (3, num_levels)
-    return per_est, {"success_rate": succ, "num_episodes": nep}
+    _cur_bucket_p = None   # ALP 路径才算；非 ALP 路径返回 None（host 层据此决定是否更新状态）
+    _alp_quota_perlevel = None   # 配额模式才算 per-level ALP bonus；其余路径 None
+    _gate_perlevel = None        # 单边可学性 gate 修正项（host 层加性叠加）；其余路径 None
+    if signal_mode in ("euc", "euc_alp", "euc_cenie_alpquota"):
+        # 方向3/ALP: euc=起终点欧氏距离(内禀几何,不依赖student,不可被堆墙操纵)。
+        #   起终点由 place_start_goal_on_map 随机放、非generator输出 → generator摆墙改不了euc。
+        pa = env_instances.agent_pos.reshape((num_levels, -1))[:, :2]   # (M,2)
+        pb = env_instances.goal_pos.reshape((num_levels, -1))[:, :2]
+        euc = jnp.sqrt(((pa - pb) ** 2).sum(axis=1) + 1e-8)            # (M,)
+    if signal_mode == "euc_alp":
+        # [euc, ALP, cenie]：ALP 顿替 difficulty（ρ(diff,ALP)=0.91 同信号，见 ALP_design_phase2.md）。
+        # ALP=per-level euc 桶配对进步率：|cur_bucket_p[bucket] - prev_bucket_p[bucket]|。
+        # 冷启（prev_bucket_p=None）→ 退化为全哨兵 → ALP 全 0（首 epoch 不竞价，对齐 cenie 冷启）。
+        from estimators import alp_by_euc_bucket, ALP_BUCKET_SENTINEL
+        _prev = prev_bucket_p
+        if _prev is None:
+            _prev = jnp.full((alp_num_buckets,), ALP_BUCKET_SENTINEL, dtype=jnp.float32)
+        alp, _cur_bucket_p = alp_by_euc_bucket(
+            succ, nep, euc, _prev, alp_num_buckets,
+            euc_lo=alp_euc_lo, euc_hi=alp_euc_hi)                       # (M,), (B,)
+        per_est = jnp.stack([euc, alp, cenie], axis=0)                 # (3, M): [euc, ALP, cenie]
+    elif signal_mode == "euc_cenie_alpquota":
+        # 配额调节器（modulation 层）：auction 只 [euc, cenie] 选关（2 维），ALP 作 per-level
+        #   加性 bonus（host 层叠加，见 get_generator_set），按 euc 桶调配额，不进 bid 竞争。
+        #   ALP 仍用 alp_by_euc_bucket 算（per-level，桶 broadcast），从 _ainfo["alp_perlevel"] 传出。
+        from estimators import alp_by_euc_bucket, ALP_BUCKET_SENTINEL
+        _prev = prev_bucket_p
+        if _prev is None:
+            _prev = jnp.full((alp_num_buckets,), ALP_BUCKET_SENTINEL, dtype=jnp.float32)
+        _alp_pl, _cur_bucket_p = alp_by_euc_bucket(
+            succ, nep, euc, _prev, alp_num_buckets,
+            euc_lo=alp_euc_lo, euc_hi=alp_euc_hi)                       # (M,), (B,)
+        per_est = jnp.stack([euc, cenie], axis=0)                      # (2, M): [euc, cenie]（不含 ALP）
+        _alp_quota_perlevel = _alp_pl                                  # host 层叠加 bonus
+    elif signal_mode == "euc":
+        # 方向3: [euc, difficulty, cenie]。
+        # euc 是 finite 的(几何恒有定义); incomplete level 仍由 difficulty/cenie 的 -inf 标记。
+        per_est = jnp.stack([euc, difficulty, cenie], axis=0)          # (3, M): [euc, difficulty, cenie]
+    elif signal_mode == "anchored_cenie":
+        # [结构课程并行 Run B, 2026-06-25] 去 difficulty 的 2 维 auction：[anchored-PVL, cenie]。
+        #   加课程后 difficulty 与课程难度轴冗余/打架(都用 student p/难度轴)→删它,只留 anchored(造什么样
+        #   的难,与课程测地协同) + cenie(探索,与难度轴正交)。pvl 此处已乘测地锚(上方 if 分支)。
+        per_est = jnp.stack([pvl, cenie], axis=0)                      # (2, M): [anchored, cenie]
+    elif signal_mode == "anchored_cenie_gate":
+        # [双向可学性 gate 修正, 2026-06-26 改] auction 仍 [anchored-PVL, cenie] 2 维选关（gate 不进
+        #   竞价），gate 作 per-level 加性修正项走 host 层（仿 euc_cenie_alpquota 的 alp_quota 路径）。
+        #   双向 gate（两个独立单边项，避开 -(p-0.5)² 对称无梯度坑）：
+        #     gate = -W_HARD·relu(0.5-p) - W_EASY·relu(p-0.5)
+        #   W_HARD 压太难(p<0.5)，W_EASY 压太简单(p>0.5)。p=0→-0.5·W_HARD，p=1→-0.5·W_EASY，
+        #   p=0.5→0。W_HARD≠W_EASY 时两极拿不同值故 z(gate) 不塌成常数、保留梯度。
+        #   incomplete（nep==0）置 0 不参与修正（避免污染）。host 层 final=z(bid)+GATE_WEIGHT·z(gate)：
+        #   W_HARD/W_EASY 定两侧相对形状（z 抹绝对量级，只剩两侧比值），GATE_WEIGHT 定总幅度。
+        #   pvl 已乘测地锚（上方 if 分支）。
+        gate = (-gate_w_hard * jnp.maximum(0.0, 0.5 - succ)
+                - gate_w_easy * jnp.maximum(0.0, succ - 0.5))          # (M,) p<0.5罚太难, p>0.5罚太简单
+        gate = jnp.where(nep > 0, gate, 0.0)                           # incomplete 不参与 gate
+        per_est = jnp.stack([pvl, cenie], axis=0)                      # (2, M): [anchored, cenie]（不含 gate）
+        _gate_perlevel = gate                                         # host 层叠加修正项
+    else:
+        # 'anchored' (旧主线): [difficulty, anchored-PVL, cenie];
+        # 'pvl' (纯方向1): [difficulty, 裸PVL, cenie] (=第一版注入, difficulty 是 index 0)。
+        per_est = jnp.stack([difficulty, pvl, cenie], axis=0)          # (3, M)
+    return per_est, {"success_rate": succ, "num_episodes": nep,
+                     "cur_bucket_p": _cur_bucket_p,
+                     "alp_quota_perlevel": _alp_quota_perlevel,
+                     "gate_perlevel": _gate_perlevel}
 
 
 # ============================================================================
@@ -809,9 +1081,129 @@ def gen_ppo_loss_batched(params, network, trajs, advantages, returns,
 GEN_ESTIMATOR_DIFFICULTY = "difficulty"   # -(p-0.5)²，造"刚好能学"（part1）
 GEN_ESTIMATOR_PVL = "pvl"                 # positive value loss，regret 系（part2）
 GEN_ESTIMATOR_CENIE = "cenie"             # GMM 反密度，exploration 主力（part2，需 gmm_params）
-# [卡死修复·C] invalid 图（放不下合法起终点）的固定强负 terminal reward。difficulty=-(p-0.5)²∈
-#   [-0.25,0]，故 -1.0 显著低于任何 valid 图 → 形成清晰"少造 invalid"梯度，量级又不至于炸 PPO。
-GEN_INVALID_PENALTY = -1.0
+GEN_ESTIMATOR_ANCHORED = "anchored"       # (1-p)×测地最短路，参照锚定 regret（STAGE4 §6.4，堵堆墙捷径）
+GEN_ESTIMATOR_EUC = "euc"                 # 起终点欧氏距离, 内禀几何不依赖student(STAGE4_phase2 §方向3)
+# [卡死修复·C] invalid 图（放不下合法起终点）的固定强负 terminal reward（**只作用于 A 训练端的
+#   generator PPO 梯度**；注入端另有 -inf 硬挡，见 get_generator_set）。原 -1.0：difficulty=-(p-0.5)²∈
+#   [-0.25,0] 时够低；但 auction 路径下 terminal 已 z-score 到 ~O(1)，-1.0 会落进分布中段、压不出
+#   "少造 invalid"的清晰梯度。2026-06-26 加强到 -5.0（与 CURRICULUM_UNREACHABLE_PENALTY 同量级），
+#   更强地惩罚 invalid 产出、减轻注入端"合法关不够被迫凑 -inf 图"的压力；-5 仍不至于炸 PPO。
+GEN_INVALID_PENALTY = -5.0
+
+# [护栏·选项一 可学性门调制，STAGE4_phase2 §injp 决定性，2026-06-25]
+#   injp 实测：generator 注入关 p 两极塌缩、可学区 0%（前期 73% p≈0 必死）。真因 = terminal_reward_euc
+#   纯几何不看 student p，generator 堆墙拉远起终点不管 student 死活 → curriculum-too-hard。
+#   修复：euc 乘可学性门 gate(p)=exp(-((p-0.5)/sigma)²)，p≈0.5 时 gate≈1、两极 gate→0，
+#   把 reward 双边对准可学区（既压"太难"也压"太简单"），推 generator 造 student 学得动的关。
+#   GEN_LEARNGATE=False → gate≡1，退化回纯 euc（消融/兼容旧行为）。sigma 越小门越窄越锁 p=0.5。
+GEN_LEARNGATE = True       # 可学性门总开关；False 时 gate≡1（=旧纯 euc，消融对照）
+GEN_LEARNGATE_SIGMA = 0.25 # 门宽：p 偏离 0.5 达 sigma 时 gate≈0.37；0.25 → 可学区 ~[0.25,0.75]
+
+
+# ============================================================================
+# 结构课程（structure curriculum，STAGE4_phase2 §结构课程方案定稿，2026-06-25）
+# ----------------------------------------------------------------------------
+# 用户洞察：generator 输 baseline 的真因 = 课程难度与 student 能力不匹配（generator 塌到
+# 单一难度档=全悬崖）。题眼 = 让难度始终贴 student 能力前沿（先易后难匹配），非 p、非堆墙。
+#
+# 主轴 = 测地绝对长度（geodesic_from_instances，已有；start→goal 最短路格数，关卡内禀几何、
+#   **不依赖 student 瞬时态**，故不会像 p/PVL 在 student 学会后归零失向）。用户看 baseline
+#   step100 图抓出 B 类关（高墙但起终点近=简单）→ 证伪 fill（高 fill≠难），故 fill 仅作反例对照。
+#
+# 事前引导（非事后过滤）：在 generator 的 terminal reward 上加塑形项 -β·relu(struct-thr(t))，
+#   罚的是驱动生成策略本身的 reward（非 buffer 注入端删关）。超档关 reward 被压低 → generator
+#   PPO 梯度推离超档 → 收敛后几乎不再生成超档关（最接近"事前硬引导"的可实现形式）。
+#
+# 固定时间表：thr(t) 随训练进度分段抬升（host 侧按 eval_step 算好标量穿 jit，与 gmm_params 同模式）。
+#   标定档（测地格数，看 mazes/ 真实图，2026-06-25）：thr_easy=5 / thr_mid=10 / thr_hard=22。
+# ============================================================================
+CURRICULUM_ARM_NONE = "none"   # 关闭塑形（= 旧行为，对照 arm）
+CURRICULUM_ARM_GEO = "geo"     # 主轴：测地绝对长度（geodesic_from_instances）
+CURRICULUM_ARM_FILL = "fill"   # 反例对照：墙占比（预期因误杀 B 类高墙近距关而表现差）
+# 默认时间表三档阈值（测地格数；fill arm 时调用方须改传 fill 量纲阈值，见 jaxnav_sfl config）。
+CURRICULUM_THR_EASY = 5.0
+CURRICULUM_THR_MID = 10.0
+CURRICULUM_THR_HARD = 22.0
+CURRICULUM_BETA = 1.0          # 塑形强度；β 越大越接近硬引导（扫 {1,3,10} 定多硬才够推动生成分布）。
+# [不可达重罚，用户 2026-06-25] 测地课程压制"造割裂图"的生成倾向：起终点真不可达(geodesic_reachable_mask
+#   =False)的关，除走 place_start_goal 的事后剔除外，再在塑形端给固定强负罚，让 generator PPO 从生成
+#   策略层学到"造割裂图=重亏"。量级须显著负于任何 valid 关的 base+塑形，又不炸 PPO。
+CURRICULUM_UNREACHABLE_PENALTY = -5.0
+
+
+def fill_ratio_of_map(jaxnav_map):
+    """墙占比 = 墙格数 / 总格数（含边界）。纯逐元素，jit 安全。
+
+    Args:
+      jaxnav_map: (H, W) int 占用栅格（0=自由 1=墙；map_to_env_instance 出的 map_data 口径）。
+    Returns:
+      标量 float ∈[0,1]。
+    反例对照轴（arm-fill）：用户 B 类关证伪它当难度轴（高墙近距关 fill 高却简单）。
+    """
+    return (jaxnav_map == 1).astype(jnp.float32).mean()
+
+
+def fill_ratio_from_instances(env_instances, num_levels):
+    """batch EnvInstance → 每关 fill ratio（vmap fill_ratio_of_map）。
+
+    Returns: (num_levels,) float ∈[0,1]。
+    """
+    walls = (env_instances.map_data == 1).astype(jnp.float32)        # (M,H,W)
+    return walls.reshape((num_levels, -1)).mean(axis=1)              # (M,)
+
+
+def curriculum_threshold(progress, thr_easy=CURRICULUM_THR_EASY,
+                         thr_mid=CURRICULUM_THR_MID, thr_hard=CURRICULUM_THR_HARD):
+    """固定时间表：训练进度 progress∈[0,1] → 当前难度上限 thr(t)（分段常量）。
+
+    分三段（对齐 STAGE4_phase2 标定）：
+      progress ∈ [0,   1/3):  thr_easy   早期只许简单结构（短测地），打牢基础
+      progress ∈ [1/3, 2/3):  thr_mid    中期放开到对角线量级
+      progress ∈ [2/3, 1.0]:  thr_hard   后期解锁到目标关（Nav2/3）难度
+    progress 由 host 侧 eval_step/(总 eval 步) 算出（标量），穿 jit 边界。
+
+    Args:
+      progress: 标量 ∈[0,1]（训练进度）。可为 Python float 或 traced 标量。
+    Returns:
+      thr: 标量 float（当前难度上限）。
+    """
+    p = jnp.asarray(progress, dtype=jnp.float32)
+    return jnp.where(p < (1.0 / 3.0), thr_easy,
+                     jnp.where(p < (2.0 / 3.0), thr_mid, thr_hard))
+
+
+def curriculum_shaping_penalty(struct_value, threshold, beta=CURRICULUM_BETA):
+    """事前引导塑形项 = -β·relu(struct_value - threshold)。达标关=0、超档关<0（线性罚）。
+
+    叠加到 terminal reward 上：超档关被压低 → generator PPO 学到"造超档=亏" → 生成分布被
+    推向当前难度档（先易后难）。β 越大越硬（超档惩罚越重 → 越接近"根本不生成超档关"）。
+
+    Args:
+      struct_value: (M,) 各关的结构难度（测地长度 or fill，按 arm）。
+      threshold: 标量，当前难度上限 thr(t)。
+      beta: 塑形强度。
+    Returns:
+      penalty: (M,) ≤0 的塑形项（达标=0）。
+    """
+    return -beta * jnp.maximum(struct_value - threshold, 0.0)
+
+
+def struct_value_from_instances(env_instances, num_levels, arm):
+    """按 curriculum arm 算每关的结构难度（测地长度 or fill ratio）。
+
+    Args:
+      arm: CURRICULUM_ARM_GEO（测地绝对长度，主轴）/ CURRICULUM_ARM_FILL（墙占比，反例对照）。
+           静态字符串（jit 下走静态分支）。
+    Returns:
+      (num_levels,) float。CURRICULUM_ARM_NONE 不应进此函数（调用方应跳过塑形）。
+    """
+    if arm == CURRICULUM_ARM_GEO:
+        return geodesic_from_instances(env_instances, num_levels).astype(jnp.float32)
+    elif arm == CURRICULUM_ARM_FILL:
+        return fill_ratio_from_instances(env_instances, num_levels)
+    else:
+        raise ValueError(f"未知 curriculum arm={arm}（应为 "
+                         f"{CURRICULUM_ARM_GEO}/{CURRICULUM_ARM_FILL}）")
 
 
 def compute_terminal_reward(estimator_id, student_env, student_network, student_params,
@@ -835,9 +1227,18 @@ def compute_terminal_reward(estimator_id, student_env, student_network, student_
         return terminal_reward_cenie(
             student_env, student_network, student_params, insts, rng,
             hidden_size, student_rollout_steps, num_levels, gmm_params=gmm_params)
+    elif estimator_id == GEN_ESTIMATOR_ANCHORED:
+        return terminal_reward_anchored(
+            student_env, student_network, student_params, insts, rng,
+            hidden_size, student_rollout_steps, num_levels)
+    elif estimator_id == GEN_ESTIMATOR_EUC:
+        return terminal_reward_euc(
+            student_env, student_network, student_params, insts, rng,
+            hidden_size, student_rollout_steps, num_levels)
     else:
         raise ValueError(f"未知 estimator_id={estimator_id}（应为 "
-                         f"{GEN_ESTIMATOR_DIFFICULTY}/{GEN_ESTIMATOR_PVL}/{GEN_ESTIMATOR_CENIE}）")
+                         f"{GEN_ESTIMATOR_DIFFICULTY}/{GEN_ESTIMATOR_PVL}/"
+                         f"{GEN_ESTIMATOR_CENIE}/{GEN_ESTIMATOR_ANCHORED}/{GEN_ESTIMATOR_EUC}）")
 
 
 def gen_train_iter(env, network, params, opt_state, optimizer, rng,
@@ -845,20 +1246,26 @@ def gen_train_iter(env, network, params, opt_state, optimizer, rng,
                    hidden_size, student_rollout_steps, num_levels,
                    estimator_id=GEN_ESTIMATOR_DIFFICULTY, gmm_params=None,
                    place_env=None,
+                   curriculum_arm=CURRICULUM_ARM_NONE, curriculum_thr=None,
+                   curriculum_beta=CURRICULUM_BETA,
                    ppo_epochs=4, gamma=0.99, gae_lambda=0.95,
                    clip_eps=0.2, vf_coef=0.5, ent_coef=0.01):
     """generator 一次完整 PPO 迭代（单 generator，terminal reward 由 estimator_id 决定）。
 
     rollout（造 map + 收轨迹）→ 喂 student 算 terminal reward（difficulty/PVL/CENIE）→
-    回填 → GAE → ppo_epochs 次 full-batch 更新。num_levels 张轨迹各自训。
+    [结构课程] 加塑形项 -β·relu(struct-thr) → 回填 → GAE → ppo_epochs 次更新。
 
     Args:
       estimator_id: 该 generator 的信号源（GEN_ESTIMATOR_*，静态）。CENIE 需 gmm_params。
       gmm_params: CENIE 用的已拟合 GMM（None/valid=False 时 CENIE 返 0）。
       place_env: 放起终点用 jaxnav env（应 valid_path_check=True，§R5）；None 退回 student_env。
                  rollout 仍在 student_env 上（与训练同分布）。
+      curriculum_arm: 结构课程难度轴（CURRICULUM_ARM_NONE/GEO/FILL，静态字符串）。
+                 NONE=关闭塑形（旧行为）；GEO=测地长度主轴；FILL=墙占比反例对照。
+      curriculum_thr: 当前难度上限 thr(t)（host 侧按训练进度算好的标量；arm≠NONE 时必传）。
+      curriculum_beta: 塑形强度 β（越大越接近硬引导）。
     Returns:
-      params, opt_state, metrics(dict: total/actor/value/entropy/mean_reward)。
+      params, opt_state, metrics(dict: total/actor/value/entropy/mean_reward + struct 统计)。
     """
     if place_env is None:
         place_env = student_env
@@ -890,6 +1297,29 @@ def gen_train_iter(env, network, params, opt_state, optimizer, rng,
     #   单调升高（阶段二尤甚）。GEN_INVALID_PENALTY 量级与正常 difficulty 分相当（默认 -1.0）。
     terminal_rew = jnp.where(valids, terminal_rew, GEN_INVALID_PENALTY)
 
+    # [结构课程·事前引导] 塑形项 -β·relu(struct-thr(t))：超档关 reward 被压低 → generator PPO
+    #   学到"造超档=亏" → 生成分布被推向当前难度档（先易后难匹配）。只罚 valid 关（invalid 已
+    #   是固定 -1.0，不再叠塑形，否则双重惩罚污染梯度）。arm=NONE 时跳过（=旧行为，对照）。
+    # [不可达重罚，用户 2026-06-25] geo arm 下不可达关测地返回 1（小值）会被误当达标关放行；
+    #   geodesic_reachable_mask 显式标出 → 给 CURRICULUM_UNREACHABLE_PENALTY 重罚，压制造割裂图。
+    struct_mean = jnp.float32(0.0)
+    frac_over = jnp.float32(0.0)
+    frac_unreach = jnp.float32(0.0)
+    if curriculum_arm != CURRICULUM_ARM_NONE:
+        struct_val = struct_value_from_instances(insts, num_levels, curriculum_arm)  # (M,)
+        penalty = curriculum_shaping_penalty(struct_val, curriculum_thr, curriculum_beta)  # (M,)≤0
+        terminal_rew = jnp.where(valids, terminal_rew + penalty, terminal_rew)
+        # 不可达重罚（geo arm 主治割裂图；fill arm 也复用此安全网，不可达永远该罚）。
+        reachable = geodesic_reachable_mask(insts, num_levels)        # (M,) bool
+        unreach_valid = valids & (~reachable)        # valid(放下了起终点)但起终点不可达=割裂图漏网
+        terminal_rew = jnp.where(unreach_valid, CURRICULUM_UNREACHABLE_PENALTY, terminal_rew)
+        # struct 统计排除不可达关（其 geo=1 是假值，留下会把均值拉低、误导仪表盘）。
+        _reach_f = reachable.astype(jnp.float32)
+        _cnt = jnp.maximum(_reach_f.sum(), 1.0)
+        struct_mean = (struct_val * _reach_f).sum() / _cnt
+        frac_unreach = (valids & (~reachable)).astype(jnp.float32).mean()
+        frac_over = (struct_val > curriculum_thr).astype(jnp.float32).mean()
+
     # 3) 回填 terminal + GAE（per level，vmap）。
     def _backfill_gae(traj, trew, lv):
         traj = assign_terminal_reward(traj, trew)
@@ -920,6 +1350,10 @@ def gen_train_iter(env, network, params, opt_state, optimizer, rng,
         "value_loss": value_l,
         "entropy": ent,
         "mean_terminal_reward": terminal_rew.mean(),
+        # [结构课程仪表盘] 训练侧 struct 统计（arm=NONE 时恒 0）。注入侧的分布指标在 get_generator_set。
+        "gen_struct_value_mean": struct_mean,    # 该 gen 造关测地/fill 均值（已排除不可达关）
+        "gen_frac_over_threshold": frac_over,    # 超档关比例（应随训练→0 证明事前引导生效）
+        "gen_frac_unreachable": frac_unreach,    # 不可达关(割裂图)比例（重罚应使其随训练→0）
     }
     return params, opt_state, metrics
 
@@ -944,7 +1378,7 @@ import functools
 
 
 def make_generator_state(rng, gen_env, gen_network, estimator_ids, gen_lr=2.5e-4,
-                         max_grad_norm=0.5):
+                         max_grad_norm=0.5, alp_num_buckets=6):
     """初始化 N 个 generator 的 (params, opt_state, optimizer, estimator_id)。
 
     各 generator 独立 params/optimizer（防 mode collapse，§4）；共用同一 network 结构。
@@ -977,11 +1411,161 @@ def make_generator_state(rng, gen_env, gen_network, estimator_ids, gen_lr=2.5e-4
         p = init_generator_params(gen_network, gen_env, r)
         params_list.append(p)
         opt_list.append(optimizer.init(p))
+    # ALP（euc 桶配对）跨 epoch 状态：每桶上一 epoch 平均 p（哨兵 -1=无历史）。纯数组，穿 jit。
+    from estimators import ALP_BUCKET_SENTINEL
+    prev_bucket_p = jnp.full((alp_num_buckets,), ALP_BUCKET_SENTINEL, dtype=jnp.float32)
     gen_state = {
         "params": params_list,
         "opt_state": opt_list,
+        "prev_bucket_p": prev_bucket_p,
     }
     return gen_state, optimizer
+
+
+# ============================================================================
+# [大基数分批 / OOM 修复 2026-06-26] chunked 造关 + 分批测信号
+# ----------------------------------------------------------------------------
+# 背景：generator 一次性 vmap 造 num_levels_per_gen 张 level（gen_rollout_batch），
+#   PCGRL 造关 CNN 在 pool=1000/2000 时 RESOURCE_EXHAUSTED（f32[N×181,64,16,16]，
+#   23.8GB）。baseline 海选 5000 关不 OOM 是因它分 5 批（NUM_BATCHES×BATCH_SIZE）。
+#   本块仿 baseline 把"造关 + 测信号"按 GEN_ROLLOUT_CHUNK 分批，峰值显存 = 单 chunk 而非全 pool。
+#
+# 设计原则（零回归）：
+#   - chunk<=0 或 chunk>=n_levels → 调用方走原一次性路径，逐字等价（不进本块）。
+#   - chunk>0 且 <n_levels → Python for 展开 ceil(n/chunk) 批（chunk 数是编译期常量，
+#     在 gen_phase_jit trace 期静态展开），每批独立 sub-rng（从入参 rng 确定性 split），
+#     concat 回完整形状。RNG 从 r_roll/r_score split → same config+seed 可复现。
+#   - 拼回的 insts/valids/per_est/info 形状与一次性路径完全一致，下游 auction/top-K 不动。
+#
+# ⚠ ALP 限制：alp_by_euc_bucket 的 cur_bucket_p 是**全 pool 聚合**（按桶平均 p），
+#   分批会改变桶统计语义。故 ALP signal_mode（euc_alp / euc_cenie_alpquota）下分批不安全，
+#   chunk_all_signals 会 raise（调用方应让这些模式走一次性路径）。目标 bigpool 跑 anchored
+#   模式（[difficulty,anchored,cenie] 全 per-level 独立），分批数值精确等价。
+# ============================================================================
+def _n_chunks(n_levels, chunk):
+    """ceil(n_levels/chunk)，编译期常量（n_levels、chunk 均为 Python int）。"""
+    return (n_levels + chunk - 1) // chunk
+
+
+def _chunk_bounds(n_levels, chunk):
+    """生成 [(lo, hi), ...] 切片边界（Python list，trace 期静态）。末批可能不足 chunk。"""
+    return [(i * chunk, min((i + 1) * chunk, n_levels))
+            for i in range(_n_chunks(n_levels, chunk))]
+
+
+def chunked_gen_rollout_and_bridge(gen_env, gen_network, params, jaxnav_env,
+                                   r_roll, r_inst, n_levels, chunk):
+    """分批造关 + 桥接成 EnvInstance，concat 回 (n_levels,...)。峰值显存 = 单 chunk。
+
+    每批用从 r_roll/r_inst 确定性 split 的独立 sub-rng（批数=ceil(n/chunk) 静态）。
+    与一次性 gen_rollout_batch + gen_batch_to_env_instances 形状/语义等价（仅分批跑 CNN）。
+
+    Returns:
+      insts:  EnvInstance（batch 维 n_levels）。
+      valids: (n_levels,) bool。
+    """
+    bounds = _chunk_bounds(n_levels, chunk)
+    nc = len(bounds)
+    roll_rngs = jax.random.split(r_roll, nc)
+    inst_rngs = jax.random.split(r_inst, nc)
+    insts_parts, valids_parts = [], []
+    for ci, (lo, hi) in enumerate(bounds):
+        sz = hi - lo
+        env_maps_c = gen_rollout_batch(gen_env, gen_network, params, roll_rngs[ci], sz)
+        insts_c, valids_c = gen_batch_to_env_instances(env_maps_c, jaxnav_env, inst_rngs[ci])
+        insts_parts.append(insts_c)
+        valids_parts.append(valids_c)
+    if nc == 1:
+        return insts_parts[0], valids_parts[0]
+    insts = jax.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *insts_parts)
+    valids = jnp.concatenate(valids_parts, axis=0)
+    return insts, valids
+
+
+def chunked_compute_terminal_reward(estimator_id, student_env, student_network,
+                                    student_params, insts, r_score, hidden_size,
+                                    student_rollout_steps, n_levels, chunk,
+                                    gmm_params=None, gamma=0.99, gae_lambda=0.95):
+    """分批 student rollout 测 fallback 信号（compute_terminal_reward），concat 回 (n_levels,).
+
+    每批独立 sub-rng（从 r_score split）。incomplete level 的 -inf 标记原样保留。
+    与一次性 compute_terminal_reward 形状/语义等价。
+    Returns: scores (n_levels,)，info dict（success_rate (n_levels,) concat 回来）。
+    """
+    bounds = _chunk_bounds(n_levels, chunk)
+    nc = len(bounds)
+    score_rngs = jax.random.split(r_score, nc)
+    scores_parts, succ_parts = [], []
+    for ci, (lo, hi) in enumerate(bounds):
+        sz = hi - lo
+        insts_c = jax.tree_map(lambda x, lo=lo, hi=hi: x[lo:hi], insts)
+        sc_c, info_c = compute_terminal_reward(
+            estimator_id, student_env, student_network, student_params, insts_c,
+            score_rngs[ci], hidden_size, student_rollout_steps, sz,
+            gmm_params=gmm_params, gamma=gamma, gae_lambda=gae_lambda)
+        scores_parts.append(sc_c)
+        succ_parts.append(info_c.get("success_rate", jnp.full((sz,), jnp.nan)))
+    if nc == 1:
+        return scores_parts[0], {"success_rate": succ_parts[0]}
+    scores = jnp.concatenate(scores_parts, axis=0)
+    succ = jnp.concatenate(succ_parts, axis=0)
+    return scores, {"success_rate": succ}
+
+
+def chunked_all_signals_on_levels(student_env, student_network, student_params,
+                                  cat_insts, r_auc, hidden_size, student_rollout_steps,
+                                  M, chunk, gmm_params=None, gamma=0.99, gae_lambda=0.95,
+                                  signal_mode="anchored", prev_bucket_p=None,
+                                  gate_w_hard=2.0, gate_w_easy=1.0):
+    """分批 student rollout 测 auction 三信号（all_signals_on_levels），concat 回 (K, M).
+
+    每批独立 sub-rng（从 r_auc split）。per_est 沿 axis=1 concat；info 的 per-level 数组
+    （success_rate/gate_perlevel/alp_quota_perlevel）concat 回 (M,)。
+
+    ⚠ ALP 模式（cur_bucket_p 是全 pool 聚合）分批语义不等价 → 这些模式禁止分批（raise）。
+       目标 bigpool 用 anchored（per-level 独立），分批精确等价。
+    """
+    if signal_mode in ("euc_alp", "euc_cenie_alpquota"):
+        raise ValueError(
+            f"chunked signal path 不支持 ALP signal_mode={signal_mode}"
+            "（cur_bucket_p 全 pool 聚合，分批改语义）；这些模式请设 GEN_ROLLOUT_CHUNK=0 走一次性路径。")
+    bounds = _chunk_bounds(M, chunk)
+    nc = len(bounds)
+    auc_rngs = jax.random.split(r_auc, nc)
+    per_est_parts, succ_parts, gate_parts = [], [], []
+    have_gate = False
+    for ci, (lo, hi) in enumerate(bounds):
+        sz = hi - lo
+        insts_c = jax.tree_map(lambda x, lo=lo, hi=hi: x[lo:hi], cat_insts)
+        per_est_c, info_c = all_signals_on_levels(
+            student_env, student_network, student_params, insts_c, auc_rngs[ci],
+            hidden_size, student_rollout_steps, sz, gmm_params=gmm_params,
+            gamma=gamma, gae_lambda=gae_lambda, signal_mode=signal_mode,
+            prev_bucket_p=prev_bucket_p, gate_w_hard=gate_w_hard, gate_w_easy=gate_w_easy)
+        per_est_parts.append(per_est_c)                  # (K, sz)
+        succ_parts.append(info_c.get("success_rate", jnp.full((sz,), jnp.nan)))
+        _g = info_c.get("gate_perlevel", None)
+        if _g is not None:
+            have_gate = True
+            gate_parts.append(_g)
+        else:
+            gate_parts.append(jnp.zeros((sz,)))
+    if nc == 1:
+        return per_est_parts[0], {
+            "success_rate": succ_parts[0],
+            "cur_bucket_p": None,
+            "alp_quota_perlevel": None,
+            "gate_perlevel": (gate_parts[0] if have_gate else None),
+        }
+    per_est = jnp.concatenate(per_est_parts, axis=1)     # (K, M)
+    succ = jnp.concatenate(succ_parts, axis=0)           # (M,)
+    info = {
+        "success_rate": succ,
+        "cur_bucket_p": None,            # ALP 模式已被 raise 拦截，非 ALP 路径恒 None
+        "alp_quota_perlevel": None,
+        "gate_perlevel": (jnp.concatenate(gate_parts, axis=0) if have_gate else None),
+    }
+    return per_est, info
 
 
 def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
@@ -989,7 +1573,13 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
                       hidden_size, student_rollout_steps,
                       num_levels_per_gen, num_to_save, place_env=None,
                       gmm_params=None, auction_lambda=None,
+                      signal_mode="anchored", auction_weight_factors=None,
+                      alp_quota_coef=0.0, gate_weight=0.0,
+                      gate_w_hard=2.0, gate_w_easy=1.0,
+                      curriculum_arm=CURRICULUM_ARM_NONE, curriculum_thr=None,
+                      curriculum_beta=CURRICULUM_BETA,
                       gen_outer_steps=1, ppo_epochs=4,
+                      gen_rollout_chunk=0, pool_per_gen=0,
                       gamma=0.99, gae_lambda=0.95,
                       clip_eps=0.2, vf_coef=0.5, ent_coef=0.01):
     """交替训练阶段 G：更新 N 个 generator（冻 student）→ 产 top-K instances 注入 buffer。
@@ -1015,7 +1605,13 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
       gen_env, gen_network: PCGRL env + generator network。
       student_env, student_network: jaxnav env + student ActorCriticRNN。
       hidden_size, student_rollout_steps: student rollout 配置。
-      num_levels_per_gen: 每个 generator 造几张 level。
+      num_levels_per_gen: 每个 generator **PPO 训练**用 level 数（gen_train_iter，PPO backprop
+                 持全轨迹 → 显存上限低，保持小如 64）。
+      pool_per_gen: 每个 generator **注入候选池** level 数（造关+测信号，无 PPO backprop，可大如
+                 1000，靠 gen_rollout_chunk 分批控显存）。<=0 → 退回 num_levels_per_gen（零回归）。
+      gen_rollout_chunk: 分批造关/测信号的每批 level 数（仿 baseline NUM_BATCHES）。<=0 或 >= 池规模
+                 → 不分批走一次性路径（零回归）。>0 且 < 池规模 → ceil(池/chunk) 批静态展开。
+                 ⚠ ALP signal_mode（euc_alp/euc_cenie_alpquota）禁止分批（cur_bucket_p 全 pool 聚合）。
       num_to_save: top-K 注入数（= SFL NUM_TO_SAVE，对齐 buffer 规模）。
       place_env: 放起终点的 jaxnav env（应 valid_path_check=True 根除不可解图，§R5）；
                  None 退回 student_env（False，生产慎用——difficulty 信号会激励 reward-hack
@@ -1039,9 +1635,23 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
     opt_list = list(gen_state["opt_state"])
     N = len(estimator_ids)
 
+    # [大基数解耦 + 分批] 区分两个数量级（关键修复，2026-06-26）：
+    #   - num_levels_per_gen：generator **PPO 训练**用的 level 数（gen_train_iter 内 rollout +
+    #     PPO backprop 持全轨迹 + flatten L*T 过 conv→OOM 上限低，应保持小，如 64）。
+    #   - pool_per_gen：**注入候选池**每 gen 造关数（只做 inference 造关 + student 测信号，无
+    #     PPO backprop，可大，如 1000；靠 GEN_ROLLOUT_CHUNK 分批控峰值显存）。
+    #   pool_per_gen<=0 → 退回 num_levels_per_gen（零回归：pool=PPO 数，逐字等价旧行为）。
+    #   ⚠ 旧行为下二者相等，故旧 sbatch 不动数值不变。大基数 sbatch 应设 per_gen 小 + pool 大。
+    gen_rollout_chunk = int(gen_rollout_chunk)
+    pool_per_gen = int(pool_per_gen)
+    _pool_pg = pool_per_gen if pool_per_gen > 0 else num_levels_per_gen
+    # 造关/测信号按 _pool_pg 跑；chunk>0 且 < _pool_pg → 分批（峰值显存=单 chunk，避 OOM）。
+    _pg_chunked = (gen_rollout_chunk > 0) and (gen_rollout_chunk < _pool_pg)
+
     all_insts = []           # 各 generator 造的 EnvInstance（待 concat）
     all_scores = []          # 各 level 的 difficulty 分（待 concat）
     all_valids = []          # 各 level 是否放下了合法起终点（待 concat，B 注入端过滤用）
+    all_succ = []            # [护栏仪表盘] fallback 路径各 gen 的 per-level p（待 concat）
     per_gen_metrics = []
 
     for g in range(N):
@@ -1057,6 +1667,8 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
                 hidden_size, student_rollout_steps, num_levels_per_gen,
                 estimator_id=est_g, gmm_params=gmm_params,
                 place_env=place_env,
+                curriculum_arm=curriculum_arm, curriculum_thr=curriculum_thr,
+                curriculum_beta=curriculum_beta,
                 ppo_epochs=ppo_epochs, gamma=gamma, gae_lambda=gae_lambda,
                 clip_eps=clip_eps, vf_coef=vf_coef, ent_coef=ent_coef)
         params_list[g], opt_list[g] = p, os_
@@ -1065,22 +1677,38 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
         # ── 用更新后的 generator-g 造注入 level（buffer 用 step-G 之后的产物）──
         # 起终点用 place_env（valid_path_check=True 根除不可解图）；rollout 仍 student_env。
         rng, r_roll, r_inst, r_score = jax.random.split(rng, 4)
-        env_maps = gen_rollout_batch(gen_env, gen_network, p, r_roll, num_levels_per_gen)
-        insts, valids_g = gen_batch_to_env_instances(env_maps, place_env, r_inst)
+        if _pg_chunked:
+            # 分批造关 + 桥接（峰值显存=单 chunk，避 PCGRL CNN OOM）。造 _pool_pg 张（注入池规模）。
+            insts, valids_g = chunked_gen_rollout_and_bridge(
+                gen_env, gen_network, p, place_env, r_roll, r_inst,
+                _pool_pg, gen_rollout_chunk)
+        else:
+            env_maps = gen_rollout_batch(gen_env, gen_network, p, r_roll, _pool_pg)
+            insts, valids_g = gen_batch_to_env_instances(env_maps, place_env, r_inst)
         all_insts.append(insts)
         all_valids.append(valids_g)   # [B] 接住 valid，下游把 invalid 图 score→-inf 挤出 buffer
         # fallback（auction_lambda=None）：每 gen 用自己信号评自己 level（part2 行为，消融用）。
         if auction_lambda is None:
-            scores_g, _info = compute_terminal_reward(
-                est_g, student_env, student_network, student_params, insts, r_score,
-                hidden_size, student_rollout_steps, num_levels_per_gen,
-                gmm_params=gmm_params, gamma=gamma, gae_lambda=gae_lambda)
+            if _pg_chunked:
+                # 分批 student rollout 测 fallback 信号（pool 也大，student rollout 同需分批）。
+                scores_g, _info = chunked_compute_terminal_reward(
+                    est_g, student_env, student_network, student_params, insts, r_score,
+                    hidden_size, student_rollout_steps, _pool_pg,
+                    gen_rollout_chunk, gmm_params=gmm_params, gamma=gamma, gae_lambda=gae_lambda)
+            else:
+                scores_g, _info = compute_terminal_reward(
+                    est_g, student_env, student_network, student_params, insts, r_score,
+                    hidden_size, student_rollout_steps, _pool_pg,
+                    gmm_params=gmm_params, gamma=gamma, gae_lambda=gae_lambda)
             all_scores.append(scores_g)
+            # [护栏仪表盘 §injp] fallback 路径也收集 per-level p（difficulty/euc reward 的 info 带
+            #   success_rate）→ 下方 gen_p_* log。auction 路径从 _ainfo 取，这里从各 gen 自评 info 取。
+            all_succ.append(_info.get("success_rate", jnp.full((_pool_pg,), jnp.nan)))
 
-    # ── 拼 N×num_levels_per_gen 张 pool ──
+    # ── 拼 N×_pool_pg 张 pool（_pool_pg=注入池规模，默认=num_levels_per_gen 零回归）──
     cat_insts = jax.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *all_insts) \
         if N > 1 else all_insts[0]
-    M = N * num_levels_per_gen
+    M = N * _pool_pg
 
     # ── 评分漏斗：auction 多 teacher 出价混合（idea 核心）or fallback 单信号（消融）──
     if auction_lambda is not None:
@@ -1088,11 +1716,54 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
         # (3, M) → z-score 抹平量级 → bid → softmax(bid/λ) → 混合 score。决定"现在最该学谁的课程"。
         from auction_bid import mix_scores as auction_mix_scores
         rng, r_auc = jax.random.split(rng)
-        per_est, _ainfo = all_signals_on_levels(
-            student_env, student_network, student_params, cat_insts, r_auc,
-            hidden_size, student_rollout_steps, M, gmm_params=gmm_params,
-            gamma=gamma, gae_lambda=gae_lambda)                       # (3, M)
-        cat_scores, auc_w, auc_bids = auction_mix_scores(per_est, float(auction_lambda))  # (M,)
+        # pool 级测信号：M=N×per_gen 关一次 student rollout 也会 OOM（大 pool）→ 同需分批。
+        #   chunk>0 且 < M 时分批（ALP 模式禁止分批，见 chunked_all_signals_on_levels）。
+        _pool_chunked = (gen_rollout_chunk > 0) and (gen_rollout_chunk < M)
+        if _pool_chunked:
+            per_est, _ainfo = chunked_all_signals_on_levels(
+                student_env, student_network, student_params, cat_insts, r_auc,
+                hidden_size, student_rollout_steps, M, gen_rollout_chunk,
+                gmm_params=gmm_params, gamma=gamma, gae_lambda=gae_lambda,
+                signal_mode=signal_mode,
+                prev_bucket_p=gen_state.get("prev_bucket_p", None),
+                gate_w_hard=gate_w_hard, gate_w_easy=gate_w_easy)  # (K, M)
+        else:
+            per_est, _ainfo = all_signals_on_levels(
+                student_env, student_network, student_params, cat_insts, r_auc,
+                hidden_size, student_rollout_steps, M, gmm_params=gmm_params,
+                gamma=gamma, gae_lambda=gae_lambda, signal_mode=signal_mode,
+                prev_bucket_p=gen_state.get("prev_bucket_p", None),
+                gate_w_hard=gate_w_hard, gate_w_easy=gate_w_easy)  # (3, M)
+        cat_scores, auc_w, auc_bids = auction_mix_scores(
+            per_est, float(auction_lambda), weight_factors=auction_weight_factors)  # (M,)
+        # ── ALP 配额调节器（modulation 层，signal_mode='euc_cenie_alpquota'）──
+        #   auction 只 [euc,cenie] 选关；ALP 作 per-level 加性 bonus 叠在分数上，按 euc 桶调配额：
+        #   进步档(ALP高)的 level 分数被抬→更多进 top-K；饱和档不抬。冷启 ALP=0→bonus=0→退化纯 auction。
+        #   bonus = COEF × z(alp_perlevel)（z 抹量级，与 cat_scores ~O(1) 可比）。加性、独立、不与他维耦合
+        #   ——区别于 bid 层（euc_alp）的乘性权重竞争。
+        _alp_pl = _ainfo.get("alp_quota_perlevel", None)
+        if alp_quota_coef != 0.0 and _alp_pl is not None:
+            _apl = jnp.where(jnp.isfinite(_alp_pl), _alp_pl, 0.0)        # incomplete→0 不污染 z
+            _fin = jnp.isfinite(_alp_pl)
+            _cnt = jnp.maximum(_fin.sum(), 1)
+            _mean = jnp.where(_fin, _apl, 0.0).sum() / _cnt
+            _std = jnp.sqrt(jnp.where(_fin, (_apl - _mean) ** 2, 0.0).sum() / _cnt) + 1e-8
+            _z_alp = jnp.where(_fin, (_apl - _mean) / _std, 0.0)        # (M,) z-score，incomplete=0
+            cat_scores = cat_scores + float(alp_quota_coef) * _z_alp    # 加性 bonus
+        # ── 单边可学性 gate 修正项（host 层，signal_mode='anchored_cenie_gate'）──
+        #   auction 只 [anchored-PVL,cenie] 选关；gate=-relu(0.5-p) 作 per-level 加性修正，
+        #   final = auction_bid + GATE_WEIGHT·z(gate)。z 抹量级（incomplete 已在信号函数置 0，
+        #   z 时再屏蔽非 finite 位）。p<0.5 的太难关被压低分→更难进 top-K（p 越低压越狠）。
+        #   仿 ALPquota 加性叠加，独立不与他维耦合（区别 bid 层乘性竞争）。
+        _gate_pl = _ainfo.get("gate_perlevel", None)
+        if gate_weight != 0.0 and _gate_pl is not None:
+            _gfin = jnp.isfinite(_gate_pl)
+            _gpl = jnp.where(_gfin, _gate_pl, 0.0)                       # incomplete/非finite→0 不污染 z
+            _gcnt = jnp.maximum(_gfin.sum(), 1)
+            _gmean = jnp.where(_gfin, _gpl, 0.0).sum() / _gcnt
+            _gstd = jnp.sqrt(jnp.where(_gfin, (_gpl - _gmean) ** 2, 0.0).sum() / _gcnt) + 1e-8
+            _z_gate = jnp.where(_gfin, (_gpl - _gmean) / _gstd, 0.0)     # (M,) z-score，incomplete=0
+            cat_scores = cat_scores + float(gate_weight) * _z_gate       # 加性修正项
         auction_info = {"weights": auc_w, "bids": auc_bids, "per_est": per_est}
     else:
         # fallback（auction_lambda=None，各 gen 自评不跨 gen auction）：各 gen 用的是**自己**
@@ -1133,10 +1804,16 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
                            0.0)
     top_scores = jnp.where(finite, top_scores_raw, min_finite)
 
+    # ALP 状态写回：euc_alp 路径下 _ainfo["cur_bucket_p"] 非 None → 更新；否则保留旧 prev（非 ALP 模式）。
+    _new_bucket_p = gen_state.get("prev_bucket_p", None)
+    if auction_lambda is not None and _ainfo.get("cur_bucket_p", None) is not None:
+        _new_bucket_p = _ainfo["cur_bucket_p"]
     new_gen_state = {
         "params": params_list,
         "opt_state": opt_list,
     }
+    if _new_bucket_p is not None:
+        new_gen_state["prev_bucket_p"] = _new_bucket_p
     # gen_mean_score 也清洗 -inf（同理防污染）。
     cat_finite = jnp.isfinite(cat_scores)
     gen_mean = jnp.where(jnp.any(cat_finite),
@@ -1153,6 +1830,56 @@ def get_generator_set(rng, student_params, gen_state, optimizer, estimator_ids,
         "gen_mean_score": gen_mean,
         "gen_top_mean_score": top_scores.mean(),
     }
+    # ── [机制判据 log] 注入关(top_insts, 真进 buffer 的)的 fill/euc 分布 (STAGE4_phase2 §方向3) ──
+    #   s4p2A 没存注入关只能 PNG 反推(memory 诊断教训); 这里直接算注入关墙密度+起终点欧氏距离,
+    #   判 buffer 主体是否健康长程(euc大,fill适中) vs 少数堆墙(fill>0.5)。纯几何, 不依赖 student。
+    _inj_md = top_insts.map_data                                  # (k, H, W)
+    _inj_fill = (_inj_md == 1).reshape(_inj_md.shape[0], -1).mean(axis=1)   # (k,)
+    _inj_pa = top_insts.agent_pos.reshape((top_insts.map_data.shape[0], -1))[:, :2]
+    _inj_pb = top_insts.goal_pos.reshape((top_insts.map_data.shape[0], -1))[:, :2]
+    _inj_euc = jnp.sqrt(((_inj_pa - _inj_pb) ** 2).sum(axis=1) + 1e-8)      # (k,)
+    metrics["gen_inj_fill_median"] = jnp.median(_inj_fill)
+    metrics["gen_inj_fill_mean"] = _inj_fill.mean()
+    metrics["gen_inj_fill_hi_frac"] = (_inj_fill > 0.5).mean()    # 堆墙关占注入比例
+    metrics["gen_inj_euc_median"] = jnp.median(_inj_euc)
+    metrics["gen_inj_euc_mean"] = _inj_euc.mean()
+    # ── [结构课程 log] 注入关测地长度分布（课程主轴的注入侧验证，STAGE4_phase2 §结构课程，2026-06-25）──
+    #   euc 是直线距离(可被堆墙绕过)，测地是真实最短路格数=课程难度轴。看课程是否把注入关测地从
+    #   塌缩谱推向 Nav2/3 走廊拓扑(测地 16~22)。geodesic_from_instances 复用 jaxnav APSP，不依赖 student。
+    _inj_geo = geodesic_from_instances(top_insts, top_insts.map_data.shape[0]).astype(jnp.float32)  # (k,)
+    metrics["gen_inj_geo_median"] = jnp.median(_inj_geo)
+    metrics["gen_inj_geo_mean"] = _inj_geo.mean()
+    metrics["gen_inj_geo_perlevel"] = _inj_geo            # (k,) wandb 直方图用（看课程推进结构分布）
+    if curriculum_arm != CURRICULUM_ARM_NONE and curriculum_thr is not None:
+        # 当前难度档 + 注入关超档比例（课程生效则注入关测地应贴 thr 之下，超档比例随训练→0）。
+        metrics["curriculum_threshold"] = jnp.asarray(curriculum_thr, dtype=jnp.float32)
+        _inj_struct = _inj_geo if curriculum_arm == CURRICULUM_ARM_GEO else _inj_fill
+        metrics["gen_inj_frac_over_threshold"] = (_inj_struct > curriculum_thr).astype(jnp.float32).mean()
+    # ── [护栏仪表盘 log] pool 全体 level 的 per-level student p 分布 (STAGE4_phase2 §injp, 2026-06-25) ──
+    #   injp 离线测出注入关 p 两极塌缩(可学区0%)；这里把训练中**实时** per-level p 存进 wandb，
+    #   作仪表盘：看 p 分布是否在可学区(0.2≤p≤0.8) vs 两极。口径对齐 injp。
+    #   auction 路径从 _ainfo 取 pool p；fallback(各gen自评)从 all_succ concat 取。
+    _p_pool = None
+    if auction_lambda is not None and _ainfo.get("success_rate", None) is not None:
+        _p_pool = _ainfo["success_rate"]                            # (M,) auction 路径
+    elif auction_lambda is None and len(all_succ) > 0:
+        _p_pool = jnp.concatenate(all_succ, axis=0)                 # (M,) fallback 路径
+    if _p_pool is not None:
+        _pf = jnp.where(jnp.isfinite(_p_pool), _p_pool, jnp.nan)
+        metrics["gen_p_mean"] = jnp.nanmean(_pf)
+        metrics["gen_p_median"] = jnp.nanmedian(_pf)
+        metrics["gen_p_learnable_frac"] = jnp.mean((_pf >= 0.2) & (_pf <= 0.8))   # 可学区占比
+        metrics["gen_p_extreme_frac"] = jnp.mean((_pf < 0.05) | (_pf > 0.95))     # 两极占比
+        # [自适应课程 2026-06-26] 高 p 占比 = 注入关里 p>0.8 的比例（incomplete 排除：仅 finite 位
+        #   计入分母）。host 层状态机据此判 student 是否学会当前难度档 → 决定升档（升档准则）。
+        _p_finite = jnp.isfinite(_p_pool)
+        _p_hi = jnp.where(_p_finite, (_p_pool > 0.8).astype(jnp.float32), 0.0)
+        metrics["gen_p_high_frac"] = _p_hi.sum() / jnp.maximum(_p_finite.sum(), 1)
+        # [双向滑落退档 2026-06-26] 低 p 占比 = 注入关里 p<0.2 的比例（incomplete 排除，同 high_frac
+        #   口径）。host 层退档状态机据此判 student 是否被当前难度档压垮 → 触发退档（有地板）。
+        _p_lo = jnp.where(_p_finite, (_p_pool < 0.2).astype(jnp.float32), 0.0)
+        metrics["gen_p_low_frac"] = _p_lo.sum() / jnp.maximum(_p_finite.sum(), 1)
+        metrics["gen_p_perlevel"] = _p_pool                        # (M,) 全量，wandb 直方图用
     if auction_info is not None:
         # auction 权重/bid（诊断：看三 teacher 谁出价高=谁的课程当前被选；λ 控 single-winner↔uniform）。
         metrics["auction_weights"] = auction_info["weights"]   # (N,)

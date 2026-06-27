@@ -2,6 +2,16 @@
 Run SFL on JaxNav, both single and multi-agent variations.
 """
 
+# BLAS single-thread (fix#1: root-cause for PROBE_ORTHOGONALITY probe futex deadlock
+# inside the JAX process). fit_visitation_gmm sklearn silhouette_score uses multi-thread
+# OpenBLAS; after JAX fork the BLAS threadpool lock state is undefined, the main thread
+# blocks on futex_wait_queue forever -> GPU 0%% stall. Single-thread BLAS cuts that off
+# (SBATCH is CPUs=1 anyway). Must be set BEFORE importing numpy/jax.
+# See mechanism_UED memory: stage4-phase2-probe-futex-stall.
+import os as _os
+for _v in ("OMP_NUM_THREADS","OPENBLAS_NUM_THREADS","MKL_NUM_THREADS","VECLIB_MAXIMUM_THREADS","NUMEXPR_NUM_THREADS"):
+    _os.environ.setdefault(_v, "1")
+
 import jax
 import jax.experimental
 import jax.numpy as jnp
@@ -366,11 +376,14 @@ def main(config):
                 cenie_by_env = jnp.where(complete_env, cenie_by_env, -jnp.inf)
             else:
                 cenie_by_env = jnp.full_like(difficulty_by_env, -jnp.inf)        # 占位，外层 N<3 不用
+            # [护栏仪表盘 §injp] 透出 per-level 真实 p（海选 pool），与 generator 路径同口径 gen_p_*。
+            #   incomplete(nep=0)→ p 置 nan，下游算占比时排除。
+            p_env_out = jnp.where(nep_env > 0, p_env, jnp.nan)
             return None, (learnability_by_env, env_instances,
-                          difficulty_by_env, pvl_by_env, cenie_by_env)
+                          difficulty_by_env, pvl_by_env, cenie_by_env, p_env_out)
 
         rngs = jax.random.split(rng, config["NUM_BATCHES"])
-        _, (learnability, env_instances, difficulty, pvl, cenie) = jax.lax.scan(
+        _, (learnability, env_instances, difficulty, pvl, cenie, p_pool) = jax.lax.scan(
             _batch_step, None, rngs, config["NUM_BATCHES"])
 
         flat_env_instances = jax.tree_map(lambda x: x.reshape((-1,) + x.shape[2:]), env_instances)
@@ -378,6 +391,7 @@ def main(config):
         difficulty = difficulty.flatten()                                       # (M,)
         pvl = pvl.flatten()                                                      # (M,)
         cenie = cenie.flatten()                                                  # (M,)
+        p_pool = p_pool.flatten()                                                # (M,) 海选 pool 真实 p
 
         # ── 打分：auction 混合 estimator 替代单一 p(1-p)，开关 AUCTION_SCORING ──
         # 向后兼容：默认关→走原 learnability top-K（基线对照不变）；开→auction 混合分 top-K。
@@ -403,7 +417,8 @@ def main(config):
 
         top_1000_instances = jax.tree_map(lambda x: x.at[top_1000].get(), flat_env_instances)
         print('top 1000 instances', top_1000_instances)
-        return score.at[top_1000].get(), top_1000_instances
+        # 第 3 个返回值 p_pool=海选 pool 全体真实 p（与 generator 路径 gen_p_* 同口径，仪表盘用）。
+        return score.at[top_1000].get(), top_1000_instances, p_pool
 
 
     def get_probe_signals(rng, network_params):
@@ -909,8 +924,12 @@ def main(config):
     #   generator 段单独编译、student 段单独编译,图规模回到可控。
     #   纯工程:generator 先训→student 后训的顺序与数据流完全不变,数值不变,不碰课程/方法。
     @jax.jit
-    def gen_phase_jit(student_params, gen_state, learnability_rng, gmm_params):
-        """generator 注入段(独立编译)。返回 (scores, instances, new_gen_state, gen_metrics)。"""
+    def gen_phase_jit(student_params, gen_state, learnability_rng, gmm_params, curriculum_thr):
+        """generator 注入段(独立编译)。返回 (scores, instances, new_gen_state, gen_metrics)。
+
+        curriculum_thr: 当前难度上限标量(host 侧按 eval_step 算,每 epoch 变,故穿 jit 参数;
+                        arm=none 时传 0.0 占位,get_generator_set 内 arm=none 不读它)。
+        """
         return get_generator_set(
             learnability_rng, student_params, gen_state, gen_optimizer,
             gen_estimator_ids, gen_env, gen_network, env, network,
@@ -918,12 +937,20 @@ def main(config):
             num_levels_per_gen=gen_num_levels, num_to_save=gen_num_to_save,
             place_env=gen_place_env, gmm_params=gmm_params,
             auction_lambda=gen_auction_lambda,
+            signal_mode=_auction_signal_mode, auction_weight_factors=_auction_weight_factors,
+            alp_quota_coef=float(config.get("ALP_QUOTA_COEF", 0.0)),
+            gate_weight=float(config.get("GATE_WEIGHT", 0.0)),
+            gate_w_hard=float(config.get("GATE_W_HARD", 2.0)),
+            gate_w_easy=float(config.get("GATE_W_EASY", 1.0)),
+            curriculum_arm=_curriculum_arm, curriculum_thr=curriculum_thr,
+            curriculum_beta=_curriculum_beta,
             gen_outer_steps=gen_outer_steps, ppo_epochs=gen_ppo_epochs,
+            gen_rollout_chunk=gen_rollout_chunk, pool_per_gen=gen_pool_per_gen,
             gamma=t_config["GAMMA"], gae_lambda=t_config["GAE_LAMBDA"])
 
     @jax.jit
     def learnability_phase_jit(student_params, learnability_rng, gmm_params):
-        """随机海选段(GENERATOR_INJECTION=false,独立编译)。返回 (scores, instances)。"""
+        """随机海选段(GENERATOR_INJECTION=false,独立编译)。返回 (scores, instances, p_pool)。"""
         return get_learnability_set(learnability_rng, student_params, gmm_params)
 
     @partial(jax.jit, static_argnums=())
@@ -1006,6 +1033,14 @@ def main(config):
     gen_num_to_save = int(config.get("GEN_NUM_TO_SAVE", config["NUM_TO_SAVE"]))
     gen_outer_steps = int(config.get("GEN_OUTER_STEPS", 1))
     gen_ppo_epochs = int(config.get("GEN_PPO_EPOCHS", 4))
+    # [大基数 OOM 修复 2026-06-26] 注入候选池与 PPO 训练 level 数解耦 + 分批造关/测信号：
+    #   GEN_POOL_PER_GEN：每 gen **注入池**关数（造关+测信号，无 PPO backprop，可大）。
+    #     <=0(默认) → 退回 gen_num_levels（pool=PPO 数，零回归，旧 sbatch 不变）。
+    #   GEN_ROLLOUT_CHUNK：分批每批关数（仿 baseline NUM_BATCHES，峰值显存=单 chunk）。
+    #     <=0(默认) → 不分批走一次性路径（零回归）。大基数时设 250-500（pool/chunk=批数，别太多致编译慢）。
+    #   ⚠ gen_num_levels(PPO) 在 pool 大时仍应保持小（如 64），否则 gen_train_iter PPO backprop OOM。
+    gen_pool_per_gen = int(config.get("GEN_POOL_PER_GEN", 0))
+    gen_rollout_chunk = int(config.get("GEN_ROLLOUT_CHUNK", 0))
     # auction 出价漏斗温度（idea 核心）：N estimator 对整 pool 出价混合决定注入哪些课程。
     # None/"none" → fallback 每 gen 自评（消融）；"inf" → single-winner；有限值 → fractional。
     _gal = config.get("GEN_AUCTION_LAMBDA", 1.0)
@@ -1015,6 +1050,76 @@ def main(config):
         gen_auction_lambda = float("inf")
     else:
         gen_auction_lambda = float(_gal)
+    # ── [护栏 §injp] GEN_LEARNGATE CLI 覆盖：可学性门总开关，用于 on/off 对照实验 ──
+    #   GEN_LEARNGATE 是 pcgrl_generator 模块常量，terminal_reward_euc 在 jit trace 时按 Python
+    #   静态分支读取。运行前 setattr 覆盖 → trace 读到新值 → 生效。CLI: GEN_LEARNGATE=false 关门
+    #   （=纯 euc，护栏前对照基线）；GEN_LEARNGATE_SIGMA=<float> 调门宽。默认沿用模块常量(True/0.25)。
+    if generator_injection:
+        import pcgrl_generator as _pg
+        if "GEN_LEARNGATE" in config:
+            _lg = config["GEN_LEARNGATE"]
+            _lg = (_lg.lower() == "true") if isinstance(_lg, str) else bool(_lg)
+            _pg.GEN_LEARNGATE = _lg
+        if "GEN_LEARNGATE_SIGMA" in config:
+            _pg.GEN_LEARNGATE_SIGMA = float(config["GEN_LEARNGATE_SIGMA"])
+        print(f"[generator] GEN_LEARNGATE={_pg.GEN_LEARNGATE} sigma={_pg.GEN_LEARNGATE_SIGMA}")
+    # ── [结构课程 §结构课程方案定稿 2026-06-25] 事前引导 + 固定时间表 ──
+    #   CURRICULUM_ARM: none(关闭=旧行为) / geo(测地绝对长度,主轴) / fill(墙占比,反例对照)。
+    #   塑形项 -β·relu(struct-thr(t)) 加在 generator terminal reward 上,把生成分布推向当前难度档。
+    #   thr(t) host 侧按 eval_step 算(分三档),作标量穿 gen_phase_jit(与 gmm_params 同模式)。
+    #   arm/beta 是静态(行为分支),thr 每 epoch 变故穿参。none 时 thr 不参与、塑形跳过。
+    _curriculum_arm = str(config.get("CURRICULUM_ARM", "none")).lower()
+    _curriculum_beta = float(config.get("CURRICULUM_BETA", 1.0))
+    # 三档阈值默认 = 测地标定(5/10/22格); fill arm 须在 config 改成 fill 量纲(如 0.30/0.45/0.60)。
+    _curr_thr_easy = float(config.get("CURRICULUM_THR_EASY", 5.0))
+    _curr_thr_mid = float(config.get("CURRICULUM_THR_MID", 10.0))
+    _curr_thr_hard = float(config.get("CURRICULUM_THR_HARD", 22.0))
+    # ── [自适应课程推进 2026-06-26] 由 student 能力(注入关高 p 占比)驱动升档，替换固定时间表 ──
+    #   CURRICULUM_ADAPTIVE=true → 状态机推进(_curr_stage 跨 eval 维护，由 frac(p>0.8) 触发升档)；
+    #   false(默认) → 旧固定时间表(按 eval_step 进度三等分)，保证 arm=none/旧 arm 零回归。
+    #   CURRICULUM_P_THRESHOLD τ: 每 eval 若 frac(p>0.8)>τ 则连续计数+1，连续 2 次超 τ 升一档(单调不退)。
+    _curriculum_adaptive = config.get("CURRICULUM_ADAPTIVE", False)
+    _curriculum_adaptive = (_curriculum_adaptive.lower() == "true") \
+        if isinstance(_curriculum_adaptive, str) else bool(_curriculum_adaptive)
+    _curriculum_p_threshold = float(config.get("CURRICULUM_P_THRESHOLD", 0.6))
+    _curr_thr_by_stage = [_curr_thr_easy, _curr_thr_mid, _curr_thr_hard]
+    # ── [双向滑落退档 2026-06-26] 允许退档但有地板，防 student 在中档轻松时瞬时升 hard 卡死 ──
+    #   CURRICULUM_ALLOW_DEMOTE=true → 在升档基础上加退档：连续 2 次 frac(p<0.2)>τ 且未触地板则降一档。
+    #   地板 floor = max(_max_stage_reached-1, 0)：升过 hard(max=2)则永不退回 easy(地板=mid=1)。
+    #   false(默认) → 单调升档(只升不退，对照组)，保证已实现的单调 arm 零回归。
+    #   升/退两个 streak 独立计数（升看 p>0.8，退看 p<0.2），共用同一 τ。
+    _curriculum_allow_demote = config.get("CURRICULUM_ALLOW_DEMOTE", False)
+    _curriculum_allow_demote = (_curriculum_allow_demote.lower() == "true") \
+        if isinstance(_curriculum_allow_demote, str) else bool(_curriculum_allow_demote)
+    if generator_injection and _curriculum_arm != "none":
+        print(f"[curriculum] arm={_curriculum_arm} beta={_curriculum_beta} "
+              f"thr={_curr_thr_easy}/{_curr_thr_mid}/{_curr_thr_hard} (easy/mid/hard) "
+              f"adaptive={_curriculum_adaptive} tau={_curriculum_p_threshold} "
+              f"allow_demote={_curriculum_allow_demote}", flush=True)
+    # ── 方向1/3 (STAGE4_phase2): auction 信号模式 + difficulty 固定权重 ──
+    # AUCTION_SIGNAL_MODE: 'anchored'(旧,[difficulty,anchored-PVL,cenie]) / 'euc'([euc,difficulty,cenie])
+    _auction_signal_mode = str(config.get("AUCTION_SIGNAL_MODE", "anchored"))
+    # DIFFICULTY_WEIGHT_FACTOR: >1 时放大 difficulty 在 auction 的竞价权重(方向1),
+    #   乘在 auction 自动分配的 difficulty 维权重上再归一化——保留 euc/cenie 相对关系,
+    #   只增强 difficulty(不像绝对覆盖那样拍平另两维)。=1 即不放大(auction 自动)。
+    #   维度顺序: signal_mode='euc' → [euc, difficulty, cenie](difficulty 是 index 1);
+    #            'anchored' → [difficulty, anchored, cenie](difficulty 是 index 0)。
+    _dwf = float(config.get("DIFFICULTY_WEIGHT_FACTOR", 1.0))
+    # ALP_WEIGHT_FACTOR: >1 抬 euc_alp 模式的 ALP 维(index 1)权重（乘 auto w 后归一，作用在 w 层
+    #   不被 z-score 抹平）。f=2.3 让 ALP 追平 euc/cenie(三方均势)，2.5≈0.35(略超)。专给 ALP，
+    #   与 DIFFICULTY_WEIGHT_FACTOR 互斥（euc_alp 模式 difficulty 已被 ALP 顿替，不用后者）。
+    _awf = float(config.get("ALP_WEIGHT_FACTOR", 1.0))
+    import jax.numpy as _jnp_fw
+    if _auction_signal_mode == "euc_alp" and _awf != 1.0:
+        # [euc, ALP, cenie]：抬 ALP(index 1)。
+        _auction_weight_factors = _jnp_fw.array([1.0, _awf, 1.0], dtype=_jnp_fw.float32)
+    elif _dwf != 1.0:
+        if _auction_signal_mode == "euc":
+            _auction_weight_factors = _jnp_fw.array([1.0, _dwf, 1.0], dtype=_jnp_fw.float32)
+        else:
+            _auction_weight_factors = _jnp_fw.array([_dwf, 1.0, 1.0], dtype=_jnp_fw.float32)
+    else:
+        _auction_weight_factors = None
     if generator_injection:
         gen_map_size = int(config.get("GEN_MAP_SIZE", env._map_obj.width))
         gen_max_board_scans = float(config.get("GEN_MAX_BOARD_SCANS", 3.0))
@@ -1044,25 +1149,73 @@ def main(config):
                   "已自动冷启 GMM + 开启每 epoch 重拟（否则 CENIE generator 恒 0）", flush=True)
         print(f"[generator] GENERATOR_INJECTION on: N={len(gen_estimator_ids)} "
               f"estimators={gen_estimator_ids} map_size={gen_map_size} "
-              f"levels/gen={gen_num_levels} outer_steps={gen_outer_steps} "
+              f"levels/gen(PPO)={gen_num_levels} "
+              f"pool/gen={gen_pool_per_gen if gen_pool_per_gen > 0 else gen_num_levels}(eff) "
+              f"rollout_chunk={gen_rollout_chunk} outer_steps={gen_outer_steps} "
               f"place_env.valid_path_check={getattr(gen_place_env._map_obj, 'valid_path_check', '?')}",
               flush=True)
 
-    for eval_step in range(int(t_config["NUM_UPDATES"] // t_config["EVAL_FREQ"])):
+    _total_eval_steps = int(t_config["NUM_UPDATES"] // t_config["EVAL_FREQ"])
+    # ── [自适应课程状态机 2026-06-26] host 层 Python 变量跨 eval 维护，不穿 jit ──
+    #   _curr_stage ∈ {0:easy,1:mid,2:hard} 初始 0；_high_p_streak = frac(p>0.8)>τ 的连续计数。
+    #   每 eval 后更新；连续 2 次超 τ 升一档(单调不退，hard 封顶)；nan/无 p 统计时不升(streak 不+)。
+    _curr_stage = 0
+    _high_p_streak = 0
+    # [双向滑落退档] _max_stage_reached = 曾达到的最高档（地板=max-1）；_low_p_streak = frac(p<0.2)>τ 连续计数。
+    _max_stage_reached = 0
+    _low_p_streak = 0
+    for eval_step in range(_total_eval_steps):
         start_time = time.time()
         rng, eval_rng = jax.random.split(rng)
         # [拆 jit] RNG 一致性：原 train_and_eval_step 内 split(eval_rng,3) 的第 1 份是
         #   learnability_rng。这里 host 层 split 出同一份喂 generator 段；train_and_eval_step
         #   仍收同一个 eval_rng,内部 split 第 2/3 份(singleton/sampled)与原版完全一致。
         learnability_rng, _, _ = jax.random.split(eval_rng, 3)
+        # [结构课程] host 侧按训练进度算当前难度上限 thr(t)，作标量穿 gen_phase_jit。
+        #   progress = eval_step/(总 eval 步-1) ∈[0,1]；分三档(easy/mid/hard)。arm=none 时传 0.0
+        #   占位(get_generator_set 内 arm=none 不读 thr，塑形跳过)。改 thr 不触发重编译(标量参数)。
+        if _curriculum_arm != "none":
+            if _curriculum_adaptive:
+                # 自适应：thr 由状态机档位 _curr_stage 决定（升档逻辑在本 eval 末尾按 frac(p>0.8) 更新）。
+                _curr_thr = _curr_thr_by_stage[_curr_stage]
+            else:
+                # 固定时间表（旧行为，零回归）：按训练进度三等分。
+                _progress = eval_step / max(_total_eval_steps - 1, 1)
+                if _progress < (1.0 / 3.0):
+                    _curr_thr = _curr_thr_easy
+                elif _progress < (2.0 / 3.0):
+                    _curr_thr = _curr_thr_mid
+                else:
+                    _curr_thr = _curr_thr_hard
+        else:
+            _curr_thr = 0.0
         # 阶段 G：generator 注入段 / 随机海选段（独立 jit 编译单元）。
         if generator_injection:
             learnabilty_scores, instances, gen_state, gen_metrics = gen_phase_jit(
-                runner_state[0].params, gen_state, learnability_rng, gmm_params)
+                runner_state[0].params, gen_state, learnability_rng, gmm_params,
+                jnp.float32(_curr_thr))
         else:
-            learnabilty_scores, instances = learnability_phase_jit(
+            learnabilty_scores, instances, _p_pool = learnability_phase_jit(
                 runner_state[0].params, learnability_rng, gmm_params)
-            gen_metrics = None
+            # [护栏仪表盘 §injp] baseline 海选 pool 也算 gen_p_*（与 generator 路径同口径），
+            #   答"baseline 海选关真实 p 分阶段如何"。复用下方 gen_metrics 白名单转发到 wandb。
+            _pf = jnp.where(jnp.isfinite(_p_pool), _p_pool, jnp.nan)
+            gen_metrics = {
+                "gen_p_mean": jnp.nanmean(_pf),
+                "gen_p_median": jnp.nanmedian(_pf),
+                "gen_p_learnable_frac": jnp.mean((_pf >= 0.2) & (_pf <= 0.8)),
+                "gen_p_extreme_frac": jnp.mean((_pf < 0.05) | (_pf > 0.95)),
+                # [自适应课程] 高 p 占比 = p>0.8 占比（incomplete 排除）。baseline 路径也算（同口径），
+                #   保证 adaptive 状态机在 generator/baseline 两路径取键一致。
+                "gen_p_high_frac": (jnp.where(jnp.isfinite(_p_pool),
+                                              (_p_pool > 0.8).astype(jnp.float32), 0.0).sum()
+                                    / jnp.maximum(jnp.isfinite(_p_pool).sum(), 1)),
+                # [双向滑落退档] 低 p 占比 = p<0.2 占比（incomplete 排除，同口径）。baseline 路径也算。
+                "gen_p_low_frac": (jnp.where(jnp.isfinite(_p_pool),
+                                             (_p_pool < 0.2).astype(jnp.float32), 0.0).sum()
+                                   / jnp.maximum(jnp.isfinite(_p_pool).sum(), 1)),
+                "gen_p_perlevel": _p_pool,
+            }
         # 阶段 S+EVAL：student 50步 scan + 评估（独立 jit；instances/scores 作参数传入）。
         runner_state, instances_top, metrics = train_and_eval_step(
             runner_state, eval_rng, instances, learnabilty_scores)
@@ -1076,14 +1229,124 @@ def main(config):
                   f"{'[含编译]' if eval_step==0 else '[纯运行]'}", flush=True)
         # [拆 jit] gen_metrics wandb 键 host 层处理（原在 jit 内）。
         if gen_metrics is not None:
-            metrics["gen_mean_score"] = gen_metrics["gen_mean_score"]
-            metrics["gen_injected"] = gen_metrics["gen_injected"]
-            metrics["gen_n_incomplete"] = gen_metrics["gen_n_incomplete"]
+            # baseline 海选路径只填 gen_p_*（无 gen_mean_score 等 generator 专属键）→ 用 .get 防 KeyError。
+            for _gk in ("gen_mean_score", "gen_injected", "gen_n_incomplete"):
+                if _gk in gen_metrics:
+                    metrics[_gk] = gen_metrics[_gk]
+            # ── [自适应课程状态机更新 2026-06-26] 由本 eval 注入关 p 分布驱动升/退档 ──
+            #   仅 adaptive 模式且课程开启时生效。冷启/全 incomplete → frac 缺失或 nan → 两 streak 都不动。
+            #   升档：连续 2 次 frac(p>0.8)>τ 升一档(hard=2 封顶)，升档后 high_streak 归 0、更新 max_stage。
+            #   退档(仅 ALLOW_DEMOTE=true)：连续 2 次 frac(p<0.2)>τ 且未触地板则降一档，退后 low_streak 归 0。
+            #     地板 floor=max(_max_stage_reached-1,0)：升过 hard 则永不退回 easy(地板=mid)。
+            #   升/退 streak 独立计数；ALLOW_DEMOTE=false 时退档逻辑整段不执行(单调对照组零回归)。
+            if _curriculum_arm != "none" and _curriculum_adaptive:
+                _hpf = gen_metrics.get("gen_p_high_frac", None)
+                _hpf = float(_hpf) if _hpf is not None else float("nan")
+                _lpf = gen_metrics.get("gen_p_low_frac", None)
+                _lpf = float(_lpf) if _lpf is not None else float("nan")
+                metrics["curriculum_high_p_frac"] = _hpf
+                metrics["curriculum_low_p_frac"] = _lpf
+                # —— 升档 —— (nan!=nan → nan 时不计)
+                if _hpf == _hpf and _hpf > _curriculum_p_threshold:
+                    _high_p_streak += 1
+                else:
+                    _high_p_streak = 0
+                if _high_p_streak >= 2 and _curr_stage < (len(_curr_thr_by_stage) - 1):
+                    _curr_stage += 1
+                    _high_p_streak = 0
+                    _max_stage_reached = max(_max_stage_reached, _curr_stage)
+                    print(f"[curriculum] eval_step={eval_step} 升档 → stage={_curr_stage} "
+                          f"thr={_curr_thr_by_stage[_curr_stage]} (frac(p>0.8)={_hpf:.3f}>"
+                          f"{_curriculum_p_threshold})", flush=True)
+                # —— 退档（双向滑落，有地板）——
+                if _curriculum_allow_demote:
+                    if _lpf == _lpf and _lpf > _curriculum_p_threshold:
+                        _low_p_streak += 1
+                    else:
+                        _low_p_streak = 0
+                    _floor = max(_max_stage_reached - 1, 0)
+                    if _low_p_streak >= 2 and _curr_stage > _floor:
+                        _curr_stage -= 1
+                        _low_p_streak = 0
+                        print(f"[curriculum] eval_step={eval_step} 退档 → stage={_curr_stage} "
+                              f"thr={_curr_thr_by_stage[_curr_stage]} (frac(p<0.2)={_lpf:.3f}>"
+                              f"{_curriculum_p_threshold}, floor={_floor})", flush=True)
+                metrics["curriculum_stage"] = _curr_stage
+                metrics["curriculum_max_stage"] = _max_stage_reached
+            # [机制判据 STAGE4_phase2 §方向3] 注入关 fill/euc 分布 → wandb。
+            # [护栏仪表盘 §injp 2026-06-25] gen_p_* = 注入关 per-level student p 分布（可学区/两极占比）；
+            #   验护栏是否把 p 从 injp 的"100%两极"拉回可学区。gen_p_perlevel 是数组→存直方图。
+            for _mk in ("gen_inj_fill_median", "gen_inj_fill_mean", "gen_inj_fill_hi_frac",
+                        "gen_inj_euc_median", "gen_inj_euc_mean",
+                        # [结构课程] 注入关测地长度(课程主轴注入侧验证) + 当前难度档 + 超档比例。
+                        "gen_inj_geo_median", "gen_inj_geo_mean",
+                        "curriculum_threshold", "gen_inj_frac_over_threshold",
+                        "gen_struct_value_mean", "gen_frac_over_threshold", "gen_frac_unreachable",
+                        "gen_p_mean", "gen_p_median", "gen_p_learnable_frac", "gen_p_extreme_frac",
+                        "gen_p_high_frac", "gen_p_low_frac"):
+                if _mk in gen_metrics:
+                    metrics[_mk] = gen_metrics[_mk]
+            if "gen_p_perlevel" in gen_metrics:
+                import numpy as _np
+                _pl = _np.asarray(gen_metrics["gen_p_perlevel"])
+                _pl = _pl[_np.isfinite(_pl)]
+                if _pl.size > 0:
+                    metrics["gen_p_hist"] = wandb.Histogram(_pl)
+            # [结构课程] 注入关测地长度直方图（看课程是否把结构分布推向 Nav2/3 走廊拓扑 16~22）。
+            if "gen_inj_geo_perlevel" in gen_metrics:
+                import numpy as _np
+                _gl = _np.asarray(gen_metrics["gen_inj_geo_perlevel"])
+                _gl = _gl[_np.isfinite(_gl)]
+                if _gl.size > 0:
+                    metrics["gen_inj_geo_hist"] = wandb.Histogram(_gl)
             if "auction_weights" in gen_metrics:
-                for _i in range(len(gen_estimator_ids)):
-                    metrics[f"auction_weight_{gen_estimator_ids[_i]}"] = gen_metrics["auction_weights"][_i]
-                    metrics[f"auction_bid_{gen_estimator_ids[_i]}"] = gen_metrics["auction_bids"][_i]
+                # auction 维名按 signal_mode 取（≠ gen_estimator_ids，后者是 generator reward 信号）：
+                #   euc_alp → [euc, alp, cenie]；euc → [euc, difficulty, cenie]；
+                #   anchored/pvl → [difficulty, <pvl/anchored>, cenie]。否则退回 gen_estimator_ids。
+                if _auction_signal_mode == "euc_alp":
+                    _auc_names = ["euc", "alp", "cenie"]
+                elif _auction_signal_mode == "euc":
+                    _auc_names = ["euc", "difficulty", "cenie"]
+                elif _auction_signal_mode == "pvl":
+                    _auc_names = ["difficulty", "pvl", "cenie"]
+                elif _auction_signal_mode == "anchored":
+                    _auc_names = ["difficulty", "anchored", "cenie"]
+                elif _auction_signal_mode == "anchored_cenie":
+                    _auc_names = ["anchored", "cenie"]      # [结构课程 Run B] 去 difficulty 的 2 维
+                elif _auction_signal_mode == "anchored_cenie_gate":
+                    _auc_names = ["anchored", "cenie"]      # [单边可学性 gate] auction 仍这 2 维（gate 走 host 层）
+                else:
+                    _auc_names = list(gen_estimator_ids)
+                for _i in range(len(_auc_names)):
+                    metrics[f"auction_weight_{_auc_names[_i]}"] = gen_metrics["auction_weights"][_i]
+                    metrics[f"auction_bid_{_auc_names[_i]}"] = gen_metrics["auction_bids"][_i]
         log_buffer(*instances_top, metrics["update_count"])
+        # -- [diag DIAG_DUMP_MAZE] dump injected-level math repr; storage-only, no mechanism change.
+        #   windows by real update_count (multiples of EVAL_FREQ=50, last=2250): early/mid/late x5 frames.
+        try:
+            _uc = int(metrics["update_count"])
+            _windows = {50, 100, 150, 200, 250,
+                        1100, 1150, 1200, 1250, 1300,
+                        2050, 2100, 2150, 2200, 2250}
+            if _uc in _windows:
+                import numpy as _np, os as _os
+                _lrn, _st = instances_top
+                _dd = _os.path.join("_maze_dump", str(config.get("GROUP_NAME", "run")),
+                                   "seed%s" % config.get("SEED", 0))
+                _os.makedirs(_dd, exist_ok=True)
+                _np.savez(
+                    _os.path.join(_dd, "inj_%05d.npz" % _uc),
+                    learnability=_np.asarray(_lrn),
+                    map_data=_np.asarray(_st.map_data),
+                    agent_pos=_np.asarray(_st.pos),
+                    goal_pos=_np.asarray(_st.goal),
+                    theta=_np.asarray(_st.theta),
+                    update_count=_uc,
+                )
+                print("[DIAG_DUMP_MAZE] saved inj_%05d.npz (n=%d) -> %s"
+                      % (_uc, _np.asarray(_st.map_data).shape[0], _dd))
+        except Exception as _e:
+            print("[DIAG_DUMP_MAZE] dump skipped: %s" % _e)
         metrics['time_delta'] = curr_time - start_time
         metrics["steps_per_section"] = (t_config["EVAL_FREQ"] * t_config["NUM_STEPS"] * t_config["NUM_ENVS"]) / metrics['time_delta']
         wandb.log(metrics, step=metrics["update_count"])
