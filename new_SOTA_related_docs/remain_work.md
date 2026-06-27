@@ -124,6 +124,46 @@
 
 > 用户主张：currA 是故意弱化版（pool 3000 vs SFL 5000、超参未调优）。调优空间分析见下一轮记录。
 
+### 5.1 ★adaptive 课程实际轨迹诊断（2026-06-27，B1=resilient-blaze-166）
+
+拉 wandb 档位轨迹（curriculum_stage）发现 **B1 的自适应课程"快速爬顶就再没动"**：
+- 升档路径 `stage 0→1→2`：step 250 升 1、step **350 升到顶档 2**，之后到 2250 **再无变化、零退档**（max_stage 单调）。
+- 即 **stage 0/1 各只停留极短（合计 ~300 步=13%），87% 训练全在 hard 档**。
+- 退档逻辑（ALLOW_DEMOTE=true）"备而未用"：升顶后 frac(p<0.2) 从 0.13→0.03，**从未连续 2 次 >τ=0.6**，离触发退档差一个数量级。
+- **诊断**：升档太易（frac(p>0.8)>0.6 连2次，student 一适应秒升）。"渐进课程"几乎没发生。
+- **副推论**：`mazes/` 里 early/mid/late=step 50/1150/2250 对应档位 = stage 0 / **2 / 2**——mid 和 late 都在 hard 档，结构上不该有本质区别；用户"mid 图里有该归 hard 的关"是正常的（采样时课程已在 hard）。
+
+### 5.2 ★难度结构项候选数据检验（2026-06-27，复用 measure_p1150 范式）
+
+对 B1 注入关重跑 student rollout 测 p_true（n=200 可达关，step1150/2250 两 checkpoint），算各几何量 vs 失败率(1-p) Spearman：
+
+| 几何量 | Spearman(与失败率) | 结论 |
+|---|---|---|
+| detour 绕路比 geo/euc | +0.251 | **有毒相关**：刷分=缩 euc=造短程畸形关（用户已点破 reward-hack），撤 |
+| **geo 测地长度（现有主轴）** | **+0.240** | **唯一干净且有效**：刷分方向=拉长测地=长程导航，无捷径。**保留当主轴** |
+| euc 欧氏距离 | −0.115 | 负相关：起终点越近反而越难（难关=近距离要绕一大圈） |
+| fill 墙占比 | −0.167 | 负（塌缩假象） |
+| sclear/gclear 局部封闭度 | +0.09/−0.02 | **几乎零相关**，撤 |
+
+**两个被否的候选**：①朝向失配角——用户否决（破坏 uniform(-π,π) 朝向先验、制造鲁棒性漏洞，应保持均匀不进难度轴）；②绕路比——用户担心 reward-hack，数据坐实（euc 负相关印证"难关=euc小geo大"，detour 的 hack 方向与难关方向一致=有毒激励）。
+**核心**：所有相关性都弱（≤0.25，p 99% 两极），印证 [[baseline-p-also-bimodal-real-gap-is-diversity]]——真正区分难度的是**结构多样性/拓扑**，单个几何标量都抓不住。→ 不加新几何轴，把劲用在"geo 主轴拆细 + 防退化"。
+**待办（用户提出，未做）**：检验 anchored/cenie **bid** 与 (1-p) 的相关性——bid 是否能当难度轴。anchored 可干净重算（不需 gmm），cenie 需现拟 GMM（注入时 GMM 没落盘，只能近似）。
+
+### 5.3 ★多档 + streak 可配代码改动 + 新 setting 提交（2026-06-27）
+
+**代码改动**（jaxnav_sfl.py，已 scp Oscar + py_compile + 端到端 config 自检 PASS，备份 `.bak_pre_multistage`）：
+- 新增 `CURRICULUM_THR_STAGES` config（**Hydra list 语法 `[5,10,16,22]`**，裸逗号 `5,10,16,22` 会被 Hydra 判歧义报错）：给定则覆盖默认三档 [easy,mid,hard]，状态机 `len(_curr_thr_by_stage)` 已动态、加档无需再改。
+- 新增 `CURRICULUM_STREAK` config（默认 2，零回归）：替换两处硬编码 `>= 2`（升档+退档）。τ↑+streak↑ 逼 student 中间档多停留。
+
+**两个 go/no-go run（2026-06-27 提交，各 seed0，2 GPU 并行 gpu2104）**：
+| job | GROUP | τ | streak | 档 | 作用 |
+|---|---|---|---|---|---|
+| 3455019 | s4-adaptcurr-nogate-4stage-tau0_8-streak3 | 0.8 | 3 | 5/10/16/22 | 主菜：调严+拆档 |
+| 3455020 | s4-adaptcurr-nogate-4stage-tau0_6-streak2 | 0.6 | 2 | 5/10/16/22 | 隔离对照：只拆档不调严 |
+
+**归因三角**：3455019 vs 3455020 隔离"τ/streak 调严"效果；3455020 vs B1(三档) 隔离"档位拆细"效果。判据：看档位轨迹是否在中间档多停留（curriculum_stage）+ CVaR/Nav2 是否改善。
+**⚠ 单 seed go/no-go**，趋势好再补 seed（吸取 §1 单 seed 翻盘教训）。
+
 ---
 
 ## 6. ★SFL 的 p(1−p) 理论怎么论证的（核查原文，2026-06-27）

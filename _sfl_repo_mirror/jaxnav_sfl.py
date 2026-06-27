@@ -1082,7 +1082,22 @@ def main(config):
     _curriculum_adaptive = (_curriculum_adaptive.lower() == "true") \
         if isinstance(_curriculum_adaptive, str) else bool(_curriculum_adaptive)
     _curriculum_p_threshold = float(config.get("CURRICULUM_P_THRESHOLD", 0.6))
-    _curr_thr_by_stage = [_curr_thr_easy, _curr_thr_mid, _curr_thr_hard]
+    # [多档支持 2026-06-27] CURRICULUM_THR_STAGES 给定逗号分隔档位列表（如 "5,10,16,22"）则用它当
+    #   adaptive 状态机的 thr 档表，覆盖默认三档 [easy,mid,hard]。不给（默认 None）→ 退回三档，零回归。
+    #   状态机封顶/退档判断用 len(_curr_thr_by_stage) 已是动态，加档无需再改。仅 adaptive 路径读它
+    #   （line ~1180 _curr_thr_by_stage[_curr_stage]）；固定时间表路径不受影响。
+    #   CLI 传 Hydra list 语法（+CURRICULUM_THR_STAGES=[5,10,16,22]）→ 解析成 list；
+    #   裸逗号 "5,10,16,22" 会被 Hydra 判歧义报错，故约定用方括号 list。也兼容字符串退路。
+    _thr_stages_cfg = config.get("CURRICULUM_THR_STAGES", None)
+    if isinstance(_thr_stages_cfg, (list, tuple)) and len(_thr_stages_cfg) > 0:
+        _curr_thr_by_stage = [float(x) for x in _thr_stages_cfg]
+    elif _thr_stages_cfg is not None and str(_thr_stages_cfg).strip() != "":
+        _curr_thr_by_stage = [float(x) for x in str(_thr_stages_cfg).split(",")]
+    else:
+        _curr_thr_by_stage = [_curr_thr_easy, _curr_thr_mid, _curr_thr_hard]
+    # [streak 可配 2026-06-27] CURRICULUM_STREAK = 连续多少次超 τ 才升/退一档（默认 2，零回归）。
+    #   τ 升、streak 升档难度都加大 → 逼 student 在中间档多停留（防"几百步秒到顶档"）。
+    _curriculum_streak = int(config.get("CURRICULUM_STREAK", 2))
     # ── [双向滑落退档 2026-06-26] 允许退档但有地板，防 student 在中档轻松时瞬时升 hard 卡死 ──
     #   CURRICULUM_ALLOW_DEMOTE=true → 在升档基础上加退档：连续 2 次 frac(p<0.2)>τ 且未触地板则降一档。
     #   地板 floor = max(_max_stage_reached-1, 0)：升过 hard(max=2)则永不退回 easy(地板=mid=1)。
@@ -1093,9 +1108,9 @@ def main(config):
         if isinstance(_curriculum_allow_demote, str) else bool(_curriculum_allow_demote)
     if generator_injection and _curriculum_arm != "none":
         print(f"[curriculum] arm={_curriculum_arm} beta={_curriculum_beta} "
-              f"thr={_curr_thr_easy}/{_curr_thr_mid}/{_curr_thr_hard} (easy/mid/hard) "
+              f"thr_stages={_curr_thr_by_stage} ({len(_curr_thr_by_stage)}档) "
               f"adaptive={_curriculum_adaptive} tau={_curriculum_p_threshold} "
-              f"allow_demote={_curriculum_allow_demote}", flush=True)
+              f"streak={_curriculum_streak} allow_demote={_curriculum_allow_demote}", flush=True)
     # ── 方向1/3 (STAGE4_phase2): auction 信号模式 + difficulty 固定权重 ──
     # AUCTION_SIGNAL_MODE: 'anchored'(旧,[difficulty,anchored-PVL,cenie]) / 'euc'([euc,difficulty,cenie])
     _auction_signal_mode = str(config.get("AUCTION_SIGNAL_MODE", "anchored"))
@@ -1251,7 +1266,7 @@ def main(config):
                     _high_p_streak += 1
                 else:
                     _high_p_streak = 0
-                if _high_p_streak >= 2 and _curr_stage < (len(_curr_thr_by_stage) - 1):
+                if _high_p_streak >= _curriculum_streak and _curr_stage < (len(_curr_thr_by_stage) - 1):
                     _curr_stage += 1
                     _high_p_streak = 0
                     _max_stage_reached = max(_max_stage_reached, _curr_stage)
@@ -1265,7 +1280,7 @@ def main(config):
                     else:
                         _low_p_streak = 0
                     _floor = max(_max_stage_reached - 1, 0)
-                    if _low_p_streak >= 2 and _curr_stage > _floor:
+                    if _low_p_streak >= _curriculum_streak and _curr_stage > _floor:
                         _curr_stage -= 1
                         _low_p_streak = 0
                         print(f"[curriculum] eval_step={eval_step} 退档 → stage={_curr_stage} "
