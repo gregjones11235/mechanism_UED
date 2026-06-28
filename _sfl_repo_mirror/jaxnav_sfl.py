@@ -54,6 +54,7 @@ from cenie_density import init_gmm_params, fit_visitation_gmm, cenie_neg_logp
 from pcgrl_generator import (
     make_pcgrl_env, make_generator_network, make_generator_state, get_generator_set,
     GEN_ESTIMATOR_DIFFICULTY,
+    student_rollout_on_levels, _success_from_traj, geodesic_from_instances,
 )
 
 class Transition(NamedTuple):
@@ -558,6 +559,18 @@ def main(config):
             "hidden_feats": hid, "per_level_index": per_level_index, "n_levels": M,
         }
 
+    # [holdout 掌握度课程 2026-06-28, §5.8] 在固定 holdout 关上跑 student rollout 测 per-level p。
+    #   holdout_insts 形状固定(HOLDOUT_N 关)→ jit 只编译一次。复用 pcgrl_generator 的
+    #   student_rollout_on_levels + _success_from_traj（与 generator 打分同口径）。emit_hidden=False 省显存。
+    _HOLDOUT_N = int(config.get("CURRICULUM_HOLDOUT_N", 32))
+    @jax.jit
+    def eval_holdout_p(network_params, holdout_insts, rng):
+        traj = student_rollout_on_levels(
+            env, network, network_params, holdout_insts, rng,
+            t_config["HIDDEN_SIZE"], config["ROLLOUT_STEPS"], _HOLDOUT_N, emit_hidden=False)
+        succ, nep = _success_from_traj(traj, config["ROLLOUT_STEPS"], env.num_agents, _HOLDOUT_N)
+        return succ, nep   # (N,), (N,)
+
 
     # TRAIN LOOP
     def train_step(runner_state_instances, unused):
@@ -924,11 +937,12 @@ def main(config):
     #   generator 段单独编译、student 段单独编译,图规模回到可控。
     #   纯工程:generator 先训→student 后训的顺序与数据流完全不变,数值不变,不碰课程/方法。
     @jax.jit
-    def gen_phase_jit(student_params, gen_state, learnability_rng, gmm_params, curriculum_thr):
+    def gen_phase_jit(student_params, gen_state, learnability_rng, gmm_params, curriculum_thr, curriculum_thr_lo):
         """generator 注入段(独立编译)。返回 (scores, instances, new_gen_state, gen_metrics)。
 
         curriculum_thr: 当前难度上限标量(host 侧按 eval_step 算,每 epoch 变,故穿 jit 参数;
                         arm=none 时传 0.0 占位,get_generator_set 内 arm=none 不读它)。
+        curriculum_thr_lo: 当前难度**下界**标量(§5.9 双边塑形+筛选层下界用;arm=none/无下界时 0.0)。
         """
         return get_generator_set(
             learnability_rng, student_params, gen_state, gen_optimizer,
@@ -943,6 +957,7 @@ def main(config):
             gate_w_hard=float(config.get("GATE_W_HARD", 2.0)),
             gate_w_easy=float(config.get("GATE_W_EASY", 1.0)),
             curriculum_arm=_curriculum_arm, curriculum_thr=curriculum_thr,
+            curriculum_thr_lo=curriculum_thr_lo, curriculum_beta_lo=_curriculum_beta_lo,
             curriculum_beta=_curriculum_beta,
             gen_outer_steps=gen_outer_steps, ppo_epochs=gen_ppo_epochs,
             gen_rollout_chunk=gen_rollout_chunk, pool_per_gen=gen_pool_per_gen,
@@ -1095,9 +1110,55 @@ def main(config):
         _curr_thr_by_stage = [float(x) for x in str(_thr_stages_cfg).split(",")]
     else:
         _curr_thr_by_stage = [_curr_thr_easy, _curr_thr_mid, _curr_thr_hard]
+    # [难度下界 2026-06-28, §5.9] CURRICULUM_THR_LO_STAGES = 各档**下界** thr_lo 列表（与上界
+    #   CURRICULUM_THR_STAGES 同长）。塑形项改双边 -β_hi·relu(geo-thr_hi)-β_lo·relu(thr_lo-geo)：
+    #   原单边只罚"太难"(上界)、geo<thr_hi 一律零罚 → generator 可躲简单区躺平(seed0 病根,造关
+    #   geo 比 seed1 低 17%、CVaR 崩半)。下界罚"太简单"逼 generator 把每档关卡撑进 [thr_lo,thr_hi]
+    #   窗口。easy 档 thr_lo=0(不设下界,保"先易后难"打基础);中/高档才设 → 用户定 [0,3,8,12]。
+    #   geo 是关卡内禀几何(不读 student),想躲下界罚只能真拉远起终点 → reward-hack 风险低;造长不
+    #   可达已被 BFS+UNREACH_PENALTY 堵死。须 +前缀(Hydra 新 key)。arm=none/未传则全 0(零回归)。
+    _thr_lo_cfg = config.get("CURRICULUM_THR_LO_STAGES", None)
+    if isinstance(_thr_lo_cfg, (list, tuple)) and len(_thr_lo_cfg) > 0:
+        _curr_thr_lo_by_stage = [float(x) for x in _thr_lo_cfg]
+    elif _thr_lo_cfg is not None and str(_thr_lo_cfg).strip() != "":
+        _curr_thr_lo_by_stage = [float(x) for x in str(_thr_lo_cfg).split(",")]
+    else:
+        _curr_thr_lo_by_stage = [0.0] * len(_curr_thr_by_stage)   # 默认全 0 = 无下界 = 旧行为
+    assert len(_curr_thr_lo_by_stage) == len(_curr_thr_by_stage), \
+        f"THR_LO_STAGES({len(_curr_thr_lo_by_stage)}) 须与 THR_STAGES({len(_curr_thr_by_stage)}) 同长"
+    # [下界塑形强度 2026-06-28] β_lo 独立于上界 β。太小会像 difficulty 8% 被 anchored/cenie 淹没,
+    #   故可单独调大(扫 {3,5})。默认 = 上界 β(对称)。须 +前缀。
+    _curriculum_beta_lo = float(config.get("CURRICULUM_BETA_LO", config.get("CURRICULUM_BETA", 1.0)))
     # [streak 可配 2026-06-27] CURRICULUM_STREAK = 连续多少次超 τ 才升/退一档（默认 2，零回归）。
     #   τ 升、streak 升档难度都加大 → 逼 student 在中间档多停留（防"几百步秒到顶档"）。
     _curriculum_streak = int(config.get("CURRICULUM_STREAK", 2))
+    # [|adv| 饱和判据 2026-06-27, §5.7] CURRICULUM_CRITERION = 升档判据信号：
+    #   "p"(默认,零回归)=frac(p>0.8)>τ；"absadv"=mean|adv| 跌破当前档峰值×ratio(梯度榨干=升档)。
+    #   动机:p 判据后期饱和致单调爬坡;|adv| 负反馈无自强化(§5.6/§5.7)。须 +前缀(Hydra 新 key)。
+    _curriculum_criterion = str(config.get("CURRICULUM_CRITERION", "p")).lower()
+    _curriculum_adv_plateau_ratio = float(config.get("CURRICULUM_ADV_PLATEAU_RATIO", 0.6))
+    # [选项B 退档 2026-06-27] CURRICULUM_ADV_DEMOTE_RATIO = mean|adv| 反弹超"本档谷值×ratio"则退档
+    #   (student 被压垮、advantage 飙升)。默认 1.3。须 +前缀(Hydra 新 key)。
+    _curriculum_adv_demote_ratio = float(config.get("CURRICULUM_ADV_DEMOTE_RATIO", 1.3))
+    # [holdout 掌握度判据 2026-06-28, §5.8] CRITERION=holdout 时升降档用"固定难度 holdout 关上的
+    #   真实成功率 p_holdout"。动机:p/|adv| 判据纵向都被污染(p 饱和/|adv| 受 value收敛+generator成熟度),
+    #   而 holdout=各档冻结一批历史注入关(固定不变),student 在其上的 p 就是干净的掌握度,纵向不饱和。
+    #   机制:进档后宽限 GRACE 步(让 generator 在新 thr 造出像样的关)→ 冻结当前注入关 N 个当该档考卷
+    #   → 每 eval step student 在考卷上跑测 p_holdout → >τ_up 连续 streak 升档; <τ_down 连续 streak 退档。
+    #   退档慎重(τ_down 低 + 地板 + 宽限期不判)。须 +前缀(Hydra 新 key)。
+    # GRACE 默认 6:离线标定(§5.8)显示 thr=5 档 p 在 eval#6-8 才稳(0.79→0.88)、geo 也才停止
+    #   从 1.7 剧烈漂到 12.6——前 ~6 帧 generator 远没稳定,必须等稳了再攒考卷,故 GRACE=6(原猜3太短)。
+    _curriculum_holdout_grace = int(config.get("CURRICULUM_HOLDOUT_GRACE", 6))
+    # [攒考卷期 2026-06-28] GRACE(不稳定期)后,分 COLLECT 次收集攒考卷,每次取 N/COLLECT 关。
+    #   ★关键:COLLECT 次之间隔 INTERVAL 帧(不连续)——连续帧 generator 产出高度相关,采样窗太窄;
+    #   隔开让 4 次采样跨更长训练时间、generator 有实质演化、4 批关结构差异大→考卷代表性真提升。
+    #   解耦"等稳定(GRACE)"与"攒考卷"——绝不从 GRACE 不稳定期取关(用户指出连续/单帧/不稳定取关都不对)。
+    #   收集期总长 = GRACE + (COLLECT-1)*INTERVAL + 1 帧。默认 N=32/COLLECT=4/INTERVAL=3(每帧8关)。
+    _curriculum_holdout_collect = int(config.get("CURRICULUM_HOLDOUT_COLLECT", 4))
+    _curriculum_holdout_interval = int(config.get("CURRICULUM_HOLDOUT_INTERVAL", 3))
+    _curriculum_holdout_n = int(config.get("CURRICULUM_HOLDOUT_N", 32))
+    _curriculum_holdout_tau_up = float(config.get("CURRICULUM_HOLDOUT_TAU_UP", 0.8))
+    _curriculum_holdout_tau_down = float(config.get("CURRICULUM_HOLDOUT_TAU_DOWN", 0.3))
     # ── [双向滑落退档 2026-06-26] 允许退档但有地板，防 student 在中档轻松时瞬时升 hard 卡死 ──
     #   CURRICULUM_ALLOW_DEMOTE=true → 在升档基础上加退档：连续 2 次 frac(p<0.2)>τ 且未触地板则降一档。
     #   地板 floor = max(_max_stage_reached-1, 0)：升过 hard(max=2)则永不退回 easy(地板=mid=1)。
@@ -1179,6 +1240,16 @@ def main(config):
     # [双向滑落退档] _max_stage_reached = 曾达到的最高档（地板=max-1）；_low_p_streak = frac(p<0.2)>τ 连续计数。
     _max_stage_reached = 0
     _low_p_streak = 0
+    # [|adv| 饱和判据 2026-06-27] 当前档进入以来的 mean|adv| 峰值（升档检测基线）+ 谷值（退档反弹基线）。
+    #   每档进入时 peak=-inf/trough=+inf 重置。升档看跌破峰值×0.7，退档看反弹超谷值×1.3（选项B）。
+    _stage_adv_peak = float("-inf")
+    _stage_adv_trough = float("inf")
+    # [holdout 掌握度课程 2026-06-28] _steps_in_stage = 进入当前档后经过的 eval 数（数宽限期）；
+    #   _holdout_insts/_holdout_valid = 各档冻结的考卷关(dict stage->EnvInstance/掩码)，宽限后填入。
+    _steps_in_stage = 0
+    _holdout_insts = {}       # stage(int) -> EnvInstance（HOLDOUT_N 关，冻结后不变）
+    _holdout_geo = {}         # stage(int) -> per-level 测地（诊断用）
+    _holdout_collect_buf = {} # stage(int) -> list[EnvInstance 片段]（攒考卷期跨帧累积，冻结后清）
     for eval_step in range(_total_eval_steps):
         start_time = time.time()
         rng, eval_rng = jax.random.split(rng)
@@ -1193,22 +1264,27 @@ def main(config):
             if _curriculum_adaptive:
                 # 自适应：thr 由状态机档位 _curr_stage 决定（升档逻辑在本 eval 末尾按 frac(p>0.8) 更新）。
                 _curr_thr = _curr_thr_by_stage[_curr_stage]
+                _curr_thr_lo = _curr_thr_lo_by_stage[_curr_stage]   # [下界] 同档取下界
             else:
                 # 固定时间表（旧行为，零回归）：按训练进度三等分。
                 _progress = eval_step / max(_total_eval_steps - 1, 1)
                 if _progress < (1.0 / 3.0):
                     _curr_thr = _curr_thr_easy
+                    _curr_thr_lo = _curr_thr_lo_by_stage[0]
                 elif _progress < (2.0 / 3.0):
                     _curr_thr = _curr_thr_mid
+                    _curr_thr_lo = _curr_thr_lo_by_stage[min(1, len(_curr_thr_lo_by_stage)-1)]
                 else:
                     _curr_thr = _curr_thr_hard
+                    _curr_thr_lo = _curr_thr_lo_by_stage[-1]
         else:
             _curr_thr = 0.0
+            _curr_thr_lo = 0.0
         # 阶段 G：generator 注入段 / 随机海选段（独立 jit 编译单元）。
         if generator_injection:
             learnabilty_scores, instances, gen_state, gen_metrics = gen_phase_jit(
                 runner_state[0].params, gen_state, learnability_rng, gmm_params,
-                jnp.float32(_curr_thr))
+                jnp.float32(_curr_thr), jnp.float32(_curr_thr_lo))
         else:
             learnabilty_scores, instances, _p_pool = learnability_phase_jit(
                 runner_state[0].params, learnability_rng, gmm_params)
@@ -1261,31 +1337,159 @@ def main(config):
                 _lpf = float(_lpf) if _lpf is not None else float("nan")
                 metrics["curriculum_high_p_frac"] = _hpf
                 metrics["curriculum_low_p_frac"] = _lpf
-                # —— 升档 —— (nan!=nan → nan 时不计)
-                if _hpf == _hpf and _hpf > _curriculum_p_threshold:
-                    _high_p_streak += 1
+                # [|adv| 饱和判据 2026-06-27, §5.7] CRITERION=absadv 时升档改用 mean|adv| 平台检测：
+                #   动机(§5.6): p 判据后期饱和(p盲)致课程退化成单调爬坡。|adv|=梯度幅度,负反馈(学会→
+                #   |adv|降→升档),无自我强化(区别于 CENIE 当判据的正反馈),无绝对阈值问题(用相对峰值)。
+                #   升档条件: mean|adv| 跌破"当前档进入以来峰值 × ADV_PLATEAU_RATIO"连续 streak 次 = 榨干。
+                #   _stage_adv_peak 升档后重置(新档重新积峰)。CRITERION=p(默认)时本块不执行,零回归。
+                _adv_mean = gen_metrics.get("gen_absadv_mean", None)
+                _adv_mean = float(_adv_mean) if _adv_mean is not None else float("nan")
+                metrics["curriculum_absadv_mean"] = _adv_mean
+                _use_adv = (_curriculum_criterion == "absadv")
+                _use_holdout = (_curriculum_criterion == "holdout")
+                # ── [holdout 掌握度判据 2026-06-28, §5.8] 三段式 + 间隔收集 ─────────────
+                #   _steps_in_stage 每 eval +1,进档后分三段:
+                #   ① [1, GRACE]  不稳定期:generator 适应新 thr。啥都不做。**绝不从此段取关**。
+                #   ② 攒考卷期:从 GRACE+1 起,每隔 INTERVAL 帧收一次、共 COLLECT 次,每次取 N/COLLECT 关。
+                #      ★间隔(非连续):4 次采样跨更长时间、generator 有演化、考卷结构更多样。第 COLLECT 次
+                #      收完(=_collect_end 帧)攒满 N 关 → 冻结成考卷。收集帧在 GRACE+1+k*INTERVAL(k=0..C-1)。
+                #   ③ 评估期:student 在冻结考卷上跑 → p_holdout → 判升降档。考卷冻结后不变(纵向干净)。
+                _holdout_up = False; _holdout_down = False
+                if _use_holdout:
+                    _steps_in_stage += 1
+                    metrics["curriculum_steps_in_stage"] = _steps_in_stage
+                    _grace_end = _curriculum_holdout_grace
+                    # 收集帧偏移(相对 GRACE 结束):0, INTERVAL, 2*INTERVAL, ...(共 COLLECT 个)。
+                    _off = _steps_in_stage - _grace_end - 1   # >=0 时在攒考卷阶段
+                    _collect_end = _grace_end + 1 + (_curriculum_holdout_collect - 1) * _curriculum_holdout_interval
+                    _is_collect_frame = (_off >= 0
+                                         and _off % _curriculum_holdout_interval == 0
+                                         and _off // _curriculum_holdout_interval < _curriculum_holdout_collect)
+                    # 段②收集帧:从注入关取 ceil(N/COLLECT) 个累积(本档尚未冻结时)。
+                    if _is_collect_frame and (_curr_stage not in _holdout_insts):
+                        _per_frame = (_curriculum_holdout_n + _curriculum_holdout_collect - 1) // _curriculum_holdout_collect
+                        _M_inj = int(jax.tree_util.tree_leaves(instances)[0].shape[0])
+                        _take = min(_per_frame, _M_inj)
+                        _frag = jax.tree_util.tree_map(lambda x: x[:_take], instances)
+                        _holdout_collect_buf.setdefault(_curr_stage, []).append(_frag)
+                    # 收满(到 _collect_end 帧)且仍未冻:从累积 buf 取前 N 个冻结成考卷。
+                    if (_curr_stage not in _holdout_insts) and _holdout_collect_buf.get(_curr_stage) \
+                       and (_steps_in_stage >= _collect_end):
+                        _cat = jax.tree_util.tree_map(
+                            lambda *xs: jnp.concatenate(xs, axis=0), *_holdout_collect_buf[_curr_stage])
+                        _avail = int(jax.tree_util.tree_leaves(_cat)[0].shape[0])
+                        if _avail >= _curriculum_holdout_n:
+                            _hi = jax.tree_util.tree_map(lambda x: x[:_curriculum_holdout_n], _cat)
+                        else:   # 不足 N(注入池太小)循环 pad 到恰好 N(jit 形状固定)
+                            _reps = (_curriculum_holdout_n + _avail - 1) // _avail
+                            _hi = jax.tree_util.tree_map(
+                                lambda x: jnp.concatenate([x] * _reps, axis=0)[:_curriculum_holdout_n], _cat)
+                        _holdout_insts[_curr_stage] = _hi
+                        _holdout_collect_buf.pop(_curr_stage, None)   # 冻结后清累积 buf
+                        _geo = np.asarray(geodesic_from_instances(_hi, _curriculum_holdout_n))
+                        _holdout_geo[_curr_stage] = _geo
+                        _gf = _geo[np.isfinite(_geo)]
+                        print(f"[curriculum] eval_step={eval_step} 冻结档{_curr_stage}考卷 "
+                              f"N={_curriculum_holdout_n}(攒自{_curriculum_holdout_collect}帧×隔{_curriculum_holdout_interval}) "
+                              f"geo中位={np.median(_gf):.1f} geo幅[{_gf.min():.0f},{_gf.max():.0f}]", flush=True)
+                    # 有考卷则评估 p_holdout(每 eval 都评,含考卷刚冻那帧)。
+                    _p_holdout = float("nan")
+                    if _curr_stage in _holdout_insts:
+                        rng, _hrng = jax.random.split(rng)
+                        _hsucc, _hnep = eval_holdout_p(
+                            runner_state[0].params, _holdout_insts[_curr_stage], _hrng)
+                        _hsucc = np.asarray(_hsucc); _hnep = np.asarray(_hnep)
+                        _hv = _hnep > 0
+                        if _hv.sum() > 0:
+                            _p_holdout = float(_hsucc[_hv].mean())
+                    metrics["curriculum_p_holdout"] = _p_holdout
+                    # 升/退信号:仅评估期(考卷已冻)且 p_holdout 有效才判。
+                    if (_curr_stage in _holdout_insts) and (_p_holdout == _p_holdout):
+                        _holdout_up = (_p_holdout > _curriculum_holdout_tau_up)
+                        _holdout_down = (_p_holdout < _curriculum_holdout_tau_down)
+                # [数据采集 2026-06-27] 维护当前档 |adv| 峰值 + 谷值（选项B退档用）。每档进入时
+                #   peak=-inf/trough=+inf 重置，本档内随 eval 更新。升档看跌破峰值×0.7、退档看反弹超谷值×1.3。
+                if _use_adv and _adv_mean == _adv_mean:   # finite 才更新
+                    _stage_adv_peak = max(_stage_adv_peak, _adv_mean)
+                    _stage_adv_trough = min(_stage_adv_trough, _adv_mean)
+                metrics["curriculum_adv_peak"] = _stage_adv_peak
+                metrics["curriculum_adv_trough"] = _stage_adv_trough
+                # [数据采集] 当前 |adv| 相对本档峰值/谷值的比值（定制档间阈值的直接依据，按 step 落盘）。
+                if _use_adv and _adv_mean == _adv_mean and _stage_adv_peak > 0:
+                    metrics["curriculum_adv_over_peak"] = _adv_mean / _stage_adv_peak
+                if _use_adv and _adv_mean == _adv_mean and 0 < _stage_adv_trough < float("inf"):
+                    metrics["curriculum_adv_over_trough"] = _adv_mean / _stage_adv_trough
+                # —— 升档 ——
+                if _use_holdout:
+                    # holdout: p_holdout>τ_up（宽限期内 _holdout_up 恒 False，不计）。
+                    if _holdout_up:
+                        _high_p_streak += 1
+                    else:
+                        _high_p_streak = 0
+                elif _use_adv:
+                    # |adv| 平台：当前 < 峰值×ratio = 该档梯度榨干（峰值未建立 peak=-inf 不触发）。
+                    _plateau = (_adv_mean == _adv_mean and _stage_adv_peak > 0
+                                and _adv_mean < _curriculum_adv_plateau_ratio * _stage_adv_peak)
+                    if _plateau:
+                        _high_p_streak += 1
+                    else:
+                        _high_p_streak = 0
                 else:
-                    _high_p_streak = 0
+                    # p 判据（默认，零回归）: frac(p>0.8)>τ。(nan!=nan → nan 时不计)
+                    if _hpf == _hpf and _hpf > _curriculum_p_threshold:
+                        _high_p_streak += 1
+                    else:
+                        _high_p_streak = 0
                 if _high_p_streak >= _curriculum_streak and _curr_stage < (len(_curr_thr_by_stage) - 1):
                     _curr_stage += 1
                     _high_p_streak = 0
+                    _low_p_streak = 0                 # 升档后退档计数清零（避免跨档残留）
+                    _stage_adv_peak = float("-inf")   # 新档重置 |adv| 峰值
+                    _stage_adv_trough = float("inf")  # 新档重置 |adv| 谷值
+                    _steps_in_stage = 0               # [holdout] 新档重置宽限计数（触发重新宽限+冻考卷）
                     _max_stage_reached = max(_max_stage_reached, _curr_stage)
+                    _crit_str = (f"p_holdout>{_curriculum_holdout_tau_up}" if _use_holdout
+                                 else f"|adv|={_adv_mean:.3f}<{_curriculum_adv_plateau_ratio}×peak"
+                                 if _use_adv else f"frac(p>0.8)={_hpf:.3f}>{_curriculum_p_threshold}")
                     print(f"[curriculum] eval_step={eval_step} 升档 → stage={_curr_stage} "
-                          f"thr={_curr_thr_by_stage[_curr_stage]} (frac(p>0.8)={_hpf:.3f}>"
-                          f"{_curriculum_p_threshold})", flush=True)
+                          f"thr={_curr_thr_by_stage[_curr_stage]} ({_crit_str})", flush=True)
                 # —— 退档（双向滑落，有地板）——
                 if _curriculum_allow_demote:
-                    if _lpf == _lpf and _lpf > _curriculum_p_threshold:
-                        _low_p_streak += 1
+                    if _use_holdout:
+                        # holdout: p_holdout<τ_down（宽限期内 _holdout_down 恒 False，不判退）。
+                        if _holdout_down:
+                            _low_p_streak += 1
+                        else:
+                            _low_p_streak = 0
+                    elif _use_adv:
+                        # [选项B 2026-06-27] |adv| 谷值反弹：当前 > 本档谷值×DEMOTE_RATIO = student 被
+                        #   当前档压垮、大量关从"快会"变"做不到"致 advantage 飙升 = 退档。用谷值(非峰值)做
+                        #   参照→天然滞后于进档冲击(进档 |adv| 跳高不会立刻误退,要先学出谷再判反弹)。
+                        _rebound = (_adv_mean == _adv_mean and 0 < _stage_adv_trough < float("inf")
+                                    and _adv_mean > _curriculum_adv_demote_ratio * _stage_adv_trough)
+                        if _rebound:
+                            _low_p_streak += 1
+                        else:
+                            _low_p_streak = 0
                     else:
-                        _low_p_streak = 0
+                        # p 判据退档（默认，零回归）。
+                        if _lpf == _lpf and _lpf > _curriculum_p_threshold:
+                            _low_p_streak += 1
+                        else:
+                            _low_p_streak = 0
                     _floor = max(_max_stage_reached - 1, 0)
                     if _low_p_streak >= _curriculum_streak and _curr_stage > _floor:
                         _curr_stage -= 1
                         _low_p_streak = 0
+                        _high_p_streak = 0            # 退档后升档计数清零
+                        _stage_adv_peak = float("-inf")   # 回到旧档也重置峰/谷（重新积累本档基线）
+                        _stage_adv_trough = float("inf")
+                        _steps_in_stage = 0               # [holdout] 退档也重宽限（旧档考卷已冻,宽限内仅不判,会复用旧考卷）
+                        _dem_str = (f"p_holdout<{_curriculum_holdout_tau_down}" if _use_holdout
+                                    else f"|adv|={_adv_mean:.3f}>{_curriculum_adv_demote_ratio}×trough"
+                                    if _use_adv else f"frac(p<0.2)={_lpf:.3f}>{_curriculum_p_threshold}")
                         print(f"[curriculum] eval_step={eval_step} 退档 → stage={_curr_stage} "
-                              f"thr={_curr_thr_by_stage[_curr_stage]} (frac(p<0.2)={_lpf:.3f}>"
-                              f"{_curriculum_p_threshold}, floor={_floor})", flush=True)
+                              f"thr={_curr_thr_by_stage[_curr_stage]} ({_dem_str}, floor={_floor})", flush=True)
                 metrics["curriculum_stage"] = _curr_stage
                 metrics["curriculum_max_stage"] = _max_stage_reached
             # [机制判据 STAGE4_phase2 §方向3] 注入关 fill/euc 分布 → wandb。
@@ -1296,9 +1500,18 @@ def main(config):
                         # [结构课程] 注入关测地长度(课程主轴注入侧验证) + 当前难度档 + 超档比例。
                         "gen_inj_geo_median", "gen_inj_geo_mean",
                         "curriculum_threshold", "gen_inj_frac_over_threshold",
+                        # [§5.9 双边下界] 当前下界 + 不及下界比例 + 候选池 geo 分位/供给量(反推精准下界)。
+                        "curriculum_threshold_lo", "gen_frac_under_lo",
+                        "gen_pool_geo_mean", "gen_pool_geo_p10", "gen_pool_geo_p25",
+                        "gen_pool_geo_p50", "gen_pool_geo_p75",
+                        "gen_pool_frac_geo_ge_3", "gen_pool_frac_geo_ge_5",
+                        "gen_pool_frac_geo_ge_8", "gen_pool_frac_geo_ge_10",
+                        "gen_pool_frac_geo_ge_12", "gen_pool_frac_geo_ge_16",
                         "gen_struct_value_mean", "gen_frac_over_threshold", "gen_frac_unreachable",
                         "gen_p_mean", "gen_p_median", "gen_p_learnable_frac", "gen_p_extreme_frac",
-                        "gen_p_high_frac", "gen_p_low_frac"):
+                        "gen_p_high_frac", "gen_p_low_frac",
+                        # [诊断仪表盘 2026-06-27] per-level 裸PVL/mean|adv| 全过程标量（§5.6 信号区分度）。
+                        "gen_pvl_mean", "gen_pvl_median", "gen_absadv_mean", "gen_absadv_median"):
                 if _mk in gen_metrics:
                     metrics[_mk] = gen_metrics[_mk]
             if "gen_p_perlevel" in gen_metrics:
@@ -1307,6 +1520,16 @@ def main(config):
                 _pl = _pl[_np.isfinite(_pl)]
                 if _pl.size > 0:
                     metrics["gen_p_hist"] = wandb.Histogram(_pl)
+            # [诊断仪表盘 2026-06-27] 裸PVL/mean|adv| per-level 直方图（与 gen_p_hist 同口径，无损分桶）。
+            #   离线分析(get_p.py 范式)按 step + 课程升降档对照这两量全过程演化（§5.6 信号区分度待办）。
+            for _pk, _hk in (("gen_pvl_perlevel", "gen_pvl_hist"),
+                             ("gen_absadv_perlevel", "gen_absadv_hist")):
+                if _pk in gen_metrics and gen_metrics[_pk] is not None:
+                    import numpy as _np
+                    _arr = _np.asarray(gen_metrics[_pk])
+                    _arr = _arr[_np.isfinite(_arr)]
+                    if _arr.size > 0:
+                        metrics[_hk] = wandb.Histogram(_arr)
             # [结构课程] 注入关测地长度直方图（看课程是否把结构分布推向 Nav2/3 走廊拓扑 16~22）。
             if "gen_inj_geo_perlevel" in gen_metrics:
                 import numpy as _np
@@ -1314,6 +1537,15 @@ def main(config):
                 _gl = _gl[_np.isfinite(_gl)]
                 if _gl.size > 0:
                     metrics["gen_inj_geo_hist"] = wandb.Histogram(_gl)
+            # [§5.9 反推精准下界] 候选池(全 3000 关)geo 分布直方图。注入后只有 60 关、且 top-K by
+            #   score 有选择偏置；候选池才是 generator 真实产出，反推合理 thr_lo 必须看它。
+            #   滤掉 BFS 不可达大值(_BFS_UNREACH，远超正常 geo)防直方图被拉爆。
+            if "gen_pool_geo_perlevel" in gen_metrics:
+                import numpy as _np
+                _gp = _np.asarray(gen_metrics["gen_pool_geo_perlevel"])
+                _gp = _gp[_np.isfinite(_gp) & (_gp < 200)]   # <200 滤不可达大值(11×11 正常 geo≤~40)
+                if _gp.size > 0:
+                    metrics["gen_pool_geo_hist"] = wandb.Histogram(_gp)
             if "auction_weights" in gen_metrics:
                 # auction 维名按 signal_mode 取（≠ gen_estimator_ids，后者是 generator reward 信号）：
                 #   euc_alp → [euc, alp, cenie]；euc → [euc, difficulty, cenie]；
@@ -1328,6 +1560,8 @@ def main(config):
                     _auc_names = ["difficulty", "anchored", "cenie"]
                 elif _auction_signal_mode == "anchored_cenie":
                     _auc_names = ["anchored", "cenie"]      # [结构课程 Run B] 去 difficulty 的 2 维
+                elif _auction_signal_mode == "absadv_anchored_cenie":
+                    _auc_names = ["absadv", "anchored", "cenie"]  # [两侧夹击 §5.7] |adv|+anchored+cenie 3 维
                 elif _auction_signal_mode == "anchored_cenie_gate":
                     _auc_names = ["anchored", "cenie"]      # [单边可学性 gate] auction 仍这 2 维（gate 走 host 层）
                 else:
