@@ -1,0 +1,6 @@
+provider: deepinfra
+base_url: https://api.deepinfra.com/v1/openai
+# DeepInfra-hosted embedding model (OpenAI-compatible /embeddings endpoint).
+model: Qwen/Qwen3-Embedding-0.6B
+llm_type: embedding
+embedding_size: 1024
