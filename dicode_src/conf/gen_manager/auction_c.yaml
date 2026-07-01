@@ -1,0 +1,61 @@
+# conf/gen_manager/auction_c.yaml
+# C-arm auction config: N=3 HETEROGENEOUS flagship Proposers, auction top-k.
+# Isolates "+heterogeneous base gain" on top of the mechanism (vs A-arm same-model).
+#
+# Bases (2026-06-30, verified callable on DeepInfra, all emit <docstring> for the design task):
+#   - Qwen/Qwen3.5-397B-A17B   (Alibaba)      think=False 17s
+#   - deepseek-ai/DeepSeek-V4-Pro (DeepSeek)  think=False 13s
+#   - zai-org/GLM-5.2          (Zhipu)        think=False  4s
+# Latest open-source flagships, quality-comparable (satisfies the Self-MoA quality-vs-diversity
+# constraint, v1_experiment.md §8.1). think=False (instruct behaviour): faster + preserves diversity
+# (§8.1 finding: thinking/high-alignment reduces ensemble diversity, exactly what the auction needs).
+# The thinking-vs-instruct comparison is a separate ablation (§8.3), not baked in here.
+#
+# LLM roles (task_generator/env_generator/critic/embedding) are set on the command line like the
+# repro script, to avoid a Hydra "Multiple values" conflict.
+
+defaults:
+  - default
+
+auction: true
+auction_k: 10
+
+# v2: persona-differentiated proposers (方法设计_v2.md §2, prompt设计稿_v2.md).
+# personas is a SEPARATE list, paired to proposers BY INDEX (persona decoupled from model,
+# user decision 2026-06-30 — lets us later test same-model-diff-persona / diff-model-same-persona).
+# Persona<->model binding by model strength (web-verified 2026-06-30):
+#   Qwen3.5-397B  = breadth    (widest knowledge coverage, least likely to tunnel on one chain)
+#   DeepSeek-V4   = ambitious  (strongest reasoning/long-horizon planning; narrow world-knowledge
+#                               is moot because game knowledge is injected via KNOWLEDGE BASE)
+#   GLM-5.2       = feasible   (best real-world agentic calibration + native structured output)
+# Each persona name -> prompts.persona_<name> module (see prompts block in default.yaml).
+personas:
+  - breadth      # <-> proposers[0] = Qwen3.5-397B
+  - ambitious    # <-> proposers[1] = DeepSeek-V4-Pro
+  - feasible     # <-> proposers[2] = GLM-5.2
+
+proposers:
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3.5-397B-A17B
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: deepseek-ai/DeepSeek-V4-Pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: zai-org/GLM-5.2
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false

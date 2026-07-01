@@ -257,3 +257,31 @@
 - **子模块 = ② Contest 受约束**：仅在**同一成就内**用温和奖励梯度激励努力强度 → 拿 ② 的「引导努力」红利，但虚张激励被价格层客观锚**封顶**，不吃「赢者通吃放大错误」的毒。
 - **Fallback = v1 客观 top-k**：若 tâtonnement 不收敛/无均衡，退回 v1（永远能跑）→ 正好让 v1 成为 v2 的安全网（又一个 v1/v2 同步跑的理由）。
 - **VCG**：保留为抗操纵零件（自报值进价格前的诚实约束），非核心。
+
+---
+
+## 8. Proposer 底座选型 + thinking-vs-instruct 探索点（2026-06-30，deep-research 对抗验证）★
+
+### 8.1 ★关键发现：thinking 模型对多 LLM 协作可能是错配（deep-research，18条3-vote验证）
+触发问题：多 LLM 协作用 thinking 还是 non-thinking 效果好？6角度26源112claim→25验证→**18确认**。结论对本方法有实质影响：
+
+1. **thinking/强 reasoning 让协作受益更少，不是更多**（high, 3-0）：MAD/debate 仅在「模型弱+任务难」时有用；模型越强 debate 增益越小，甚至系统性降准确率（sycophancy/误差放大）。源 arXiv:2505.22960 / 2502.08788 / 2509.05396。
+2. **★最致命：强+高对齐模型→多样性塌缩**（high, 3-0, ACL2026 arXiv:2604.18005）：「更强、高度对齐的模型产生**递减的边际多样性**，尽管 per-sample 质量更高」；塌缩**主要来自交互结构非模型能力不足**。→ 直击命门：C 档卖点=proposer 间分歧/互补覆盖(auction Coverage 要有东西可选)，而三个强 thinking 模型可能给**高质量但高度相似**的提案→Coverage 无互补可挖→C 档优势消失。
+3. **异质底座是对的杠杆**（high, arXiv:2602.03794）：2异质≈16同质;同质 N≈4 饱和,异质能到 N≈8。→ 我做 C 档(异质底座)方向**对**,赢因是**谱系不同非用了thinking**。
+4. **Self-MoA 约束**（high, arXiv:2502.00674）：混不同模型非无脑更好,存在**质量vs多样性 Pareto**——只有混入模型**质量相近**时多样性才正收益;混弱模型拉低池子反害。→ 三底座要**质量相近**。
+5. **诚实边界**：**无任何 source 直接做过 thinking vs instruct 头对头对照**;以上全是「能力/对齐→多样性」趋势**推断**非实测。
+
+### 8.2 ★天然优势（可写 intro）：independent-propose ≠ debate
+arXiv:2604.18005 说多样性塌缩「主要来自**交互结构**」。本方法**恰好规避**——N proposer **独立 dream、不共享中间结果**（方法设计§2.1）= interaction 之前的 independent ideation，正是文献建议的保多样性结构。**故本方法不是 debate（会塌多样性），是 independent-propose-then-auction（保多样性）**——相对 MAD/debate 的天然结构优势。
+
+### 8.3 ★探索点：thinking-vs-instruct 做成消融（填文献空白）
+8.1-5 是**有争议、无直接实测**的问题(文献 open question 第1条明列：「无 source 测过 thinking ensemble vs instruct ensemble under matched compute」)。**我有现成 N-Proposer 框架,跑两版 C 档(全Thinking / 全Instruct)即填补此空白=可能独立小贡献点**。
+- 预期(据 8.1-2 推断):Instruct 版多样性更高→auction 互补信号更强→C 档优势更明显;Thinking 版质量高但趋同→auction 没东西可选。**若实测反转(thinking 更好)亦是发现**。
+- 成本提醒:thinking 慢且贵(proposer 只出 NL 描述不需 reasoning,thinking token 纯浪费);此点也支持 default 用 instruct。
+
+### 8.4 Proposer 底座选型（2026-06-30 DeepInfra 实测核实 + 用户拍板）
+**核实**:之前拟选(Qwen3-235B/DeepSeek-V3.1/GLM-4.6)已**非最新梯队**;DeepInfra 当前开源旗舰=Qwen3.5-397B-A17B / DeepSeek-V4-Pro / GLM-5.2 / Kimi-K2.6 / MiniMax-M2.7。
+- **用户拍板 C 档 = 三个最新开源旗舰(全中国谱系)**：`Qwen3.5-397B-A17B` + `DeepSeek-V4-Pro` + `GLM-5.2`。质量最高且相近(满足 8.1-4 Self-MoA 约束)。
+- **A 档** = N×同一模型(persona 异质);**B 档** = 单 FM 基线(=DiCode)。
+- ⚠️**limitation(写论文)**：三底座同为中国实验室谱系,训练数据/对齐范式可能有共性→异质性或不如跨国谱系。须论证「底座架构/训练谱系仍足够不同」或在消融里量化 proposer 间真实分歧(用 auction 的 Coverage 互补度当代理指标)。
+- 复现锚点(防「换强模型作弊」指控)由 **B 档=DiCode 同款 Qwen3-235B-Thinking** 守住;C 档换最新旗舰是「异质增益」的额外卖点,非作弊(B<A<C 隔离归因)。

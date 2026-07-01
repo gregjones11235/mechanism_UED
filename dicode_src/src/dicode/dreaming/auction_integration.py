@@ -21,6 +21,38 @@ import re
 from auction.craftax_achievements import ALL_ACHIEVEMENTS
 from auction.proposal import Proposal
 
+# --- AmbitionGain data source: global_agent_profile (skill_*) -> target_gap ------------------
+
+
+def profile_to_target_gap(global_agent_profile: dict | None) -> dict[str, float]:
+    """Convert DiCode's global_agent_profile into the AmbitionGain target_gap map.
+
+    global_agent_profile has keys like ``skill_collect_wood`` with values in 0..100 (the student's
+    success rate on that achievement on the TARGET Craftax env, see gen_manager
+    _format_global_agent_profile / online_evaluation.py). AmbitionGain wants
+        target_gap[achievement] = 1 - SR_on_target   in [0,1]
+    so an achievement the student aces (SR~100) -> gap 0, one it fails (SR~0) -> gap 1.
+
+    Missing / unknown skills are omitted (AmbitionGain treats missing as gap 0). Values are clamped
+    to [0,1]. Returns {} if the profile is absent (AmbitionGain then contributes 0 everywhere).
+    """
+    if not global_agent_profile:
+        return {}
+    gap: dict[str, float] = {}
+    for key, value in global_agent_profile.items():
+        if not key.startswith("skill_"):
+            continue
+        name = key[len("skill_"):].lower()
+        if name not in ALL_ACHIEVEMENTS:
+            continue
+        try:
+            sr = float(value) / 100.0  # skill_* values are 0..100
+        except (TypeError, ValueError):
+            continue
+        sr = min(1.0, max(0.0, sr))
+        gap[name] = 1.0 - sr
+    return gap
+
 # Matches the "Relevant Achievements:" line and captures everything until the next "...:" header
 # or blank line. Achievements may wrap across lines (see paper p85 "Completed Achievements" wrap).
 _RELEVANT_RE = re.compile(

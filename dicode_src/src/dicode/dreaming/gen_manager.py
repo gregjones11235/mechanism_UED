@@ -660,7 +660,42 @@ class TaskGenerator:
 			self.config.prompts.ablation
 		)
 
+		# v2 auction: per-proposer persona prompts, paired to self.proposer_llms BY INDEX
+		# (config.personas is a separate list decoupled from config.proposers). Each entry maps
+		# persona name "foo" -> prompt module config.prompts["persona_foo"]. Absent / shorter than
+		# proposer_llms -> those proposers fall back to the shared evolve_mastered_prompt (baseline
+		# persona-less behaviour, so N=1 or no-personas == unchanged).
+		self.persona_prompts = self._load_persona_prompts()
+
 		self.task_num_counter = self._initialize_task_counter()
+
+	def _load_persona_prompts(self) -> list | None:
+		"""Load the persona prompt module for each proposer (by index), or None if unconfigured.
+
+		Returns a list aligned with self.proposer_llms: entry i is the imported prompt module for
+		proposer i's persona, or self.evolve_mastered_prompt if proposer i has no persona. Returns
+		None entirely if config.personas is absent (pure baseline / non-persona auction).
+		"""
+		personas_cfg = self.config.get("personas", None)
+		if not personas_cfg:
+			return None
+		prompts_map = self.config.prompts
+		modules = []
+		for i in range(len(self.proposer_llms)):
+			if i < len(personas_cfg) and personas_cfg[i]:
+				key = f"persona_{personas_cfg[i]}"
+				module_path = prompts_map.get(key, None)
+				if module_path is None:
+					raise KeyError(
+						f"persona '{personas_cfg[i]}' (proposer {i}) has no prompt module "
+						f"'{key}' in config.prompts. Add it to conf/gen_manager/default.yaml."
+					)
+				modules.append(importlib.import_module(module_path))
+			else:
+				# No persona for this proposer -> shared baseline prompt.
+				modules.append(self.evolve_mastered_prompt)
+		print(f"[auction] Loaded personas: {list(personas_cfg)} (paired to proposers by index).")
+		return modules
 
 	def _initialize_task_counter(self) -> int:
 		"""Finds the highest task number from the archive to avoid overwriting."""
@@ -804,31 +839,51 @@ class TaskGenerator:
 		"""
 		# Lazy import keeps the auction dependency out of the baseline path / module import.
 		from auction.selectors import GreedyTopKSelector, SelectionContext
-		from .auction_integration import parsed_response_to_proposal
+		from .auction_integration import parsed_response_to_proposal, profile_to_target_gap
 
 		print(
 			f"[auction] Generating descriptions for {len(mastered_tasks)} parents "
 			f"x {len(self.proposer_llms)} proposers..."
 		)
 
-		# Build the same per-parent prompts as evolve_mastered.
-		user_prompts, parent_sets, example_sets = self._build_mastered_prompts(
-			mastered_tasks, global_agent_profile
-		)
-		if not user_prompts:
-			print("Could not generate any prompts. Skipping task generation.")
-			return []
+		# Archive family tally is computed once and fed to whichever proposer is the Breadth
+		# persona (its template references {ARCHIVE_FAMILY_COVERAGE}; others ignore it).
+		archive_family_coverage = self._compute_archive_family_coverage()
 
-		system_prompt = self._build_system_prompt(self.evolve_mastered_prompt)
-
-		# Stage A: each Proposer independently dreams a description for every parent.
+		# Stage A: each Proposer independently dreams a description for every parent, USING ITS OWN
+		# persona prompt (system + user). self.persona_prompts[i] is proposer i's persona module,
+		# or None (-> shared baseline prompt for all, i.e. unchanged behaviour).
 		proposals = []
 		# parallel bookkeeping so a winning proposal maps back to its parent/example set.
 		parent_of: dict[str, list[str]] = {}
 		example_of: dict[str, list[str]] = {}
 		parsed_of: dict[str, dict] = {}
+		parent_sets: list[list[str]] = []
+		example_sets: list[list[str]] = []
 		pid_counter = 0
 		for proposer_idx, proposer in enumerate(self.proposer_llms):
+			# Pick this proposer's persona prompt module (fall back to baseline if no personas).
+			if self.persona_prompts is not None:
+				module = self.persona_prompts[proposer_idx]
+			else:
+				module = self.evolve_mastered_prompt
+
+			# Build per-persona prompts: system from the persona module, user from the same module
+			# (Breadth's user template additionally consumes the archive family tally).
+			system_prompt = self._build_system_prompt(module)
+			user_prompts, p_sets, e_sets = self._build_mastered_prompts(
+				mastered_tasks,
+				global_agent_profile,
+				prompt_module=module,
+				archive_family_coverage=archive_family_coverage,
+			)
+			if not user_prompts:
+				print("Could not generate any prompts. Skipping task generation.")
+				return []
+			# parent/example sets are identical across proposers (same parents); keep the first.
+			if not parent_sets:
+				parent_sets, example_sets = p_sets, e_sets
+
 			# Temporarily route _query_and_parse_responses through this proposer.
 			prev_llm = self.llm
 			self.llm = proposer
@@ -857,12 +912,72 @@ class TaskGenerator:
 			print("[auction] No proposals produced. Skipping.")
 			return []
 
-		# Stage C: auction selects complementary top-k (v1 = greedy submodular Coverage).
+		# Stage B: bid signal sources.
+		#  - AmbitionGain: target_gap from the student's current skill profile (no extra LLM calls).
+		#  - Endorsement: cross-ratings from one round of Proposers rating each other's proposals.
+		#  - Learnability: each candidate proxies its PARENT task's stored learnability (official
+		#    DiCode p*(1-p), read from the archive; no extra rollout — auction_integration note).
+		target_gap = profile_to_target_gap(global_agent_profile)
+		cross_ratings = None
+		if len(self.proposer_llms) > 1 and getattr(self.config, "auction_endorsement", True):
+			cross_ratings = self._run_cross_rating(proposals, global_agent_profile)
+		parent_learnability = self._build_parent_learnability(proposals)
+
+		context = SelectionContext(
+			target_gap=target_gap or None,
+			cross_ratings=cross_ratings,
+			parent_learnability=parent_learnability or None,
+			w_cov=float(getattr(self.config, "auction_w_cov", 1.0)),
+			w_end=float(getattr(self.config, "auction_w_end", 1.0)),
+			w_amb=float(getattr(self.config, "auction_w_amb", 1.0)),
+			w_lrn=float(getattr(self.config, "auction_w_lrn", 1.0)),
+		)
+
+		# Stage C: auction selects complementary top-k (greedy submodular: Coverage + endorsement
+		# + ambition + learnability).
 		if k is None:
 			k = len(mastered_tasks)
 		selector = GreedyTopKSelector()
-		winners = selector.select(proposals, k, SelectionContext())
-		print(f"[auction] Selected {len(winners)}/{len(proposals)} proposals (k={k}).")
+		winners = selector.select(proposals, k, context)
+		print(
+			f"[auction] Selected {len(winners)}/{len(proposals)} proposals (k={k}). "
+			f"bid weights cov/end/amb/lrn={context.w_cov}/{context.w_end}/{context.w_amb}/{context.w_lrn}, "
+			f"endorsement={'on' if cross_ratings else 'off'}, "
+			f"ambition_skills={len(target_gap)}, learnable_parents={len(parent_learnability)}."
+		)
+
+		# --- Detailed bid-voice logging (方法设计_v2.md §3.5: watch for a term drowned/dominating).
+		# Pure reporting; does not affect selection. Reports WEIGHTED contribution + share per term,
+		# per winner AND aggregated, plus which persona/proposer got selected.
+		try:
+			from auction.selectors import bid_breakdown
+
+			bd = bid_breakdown(winners, context, all_proposals=proposals)
+			av = bd["avg_share"]
+			to = bd["totals"]
+			print(
+				f"[auction][voice] session={session_idx} avg per-winner share "
+				f"cov={av['cov']:.1%} end={av['end']:.1%} amb={av['amb']:.1%} lrn={av['lrn']:.1%} "
+				f"| totals cov={to['cov']:.3f} end={to['end']:.3f} amb={to['amb']:.3f} lrn={to['lrn']:.3f} "
+				f"| by_proposer={bd['by_proposer']}"
+			)
+			# Flag pathologies: a term contributing <5% (drowned) or >70% (dominating) on average.
+			for term in ("cov", "end", "amb", "lrn"):
+				s = av[term]
+				if s < 0.05:
+					print(f"[auction][voice][WARN] '{term}' share {s:.1%} < 5% — near-drowned (check w_{term}).")
+				elif s > 0.70:
+					print(f"[auction][voice][WARN] '{term}' share {s:.1%} > 70% — dominating (check w_{term}).")
+			# Per-winner one-liners (compact; proposer + parent + weighted terms + shares).
+			for w in bd["per_winner"]:
+				sh = w["shares"]
+				print(
+					f"[auction][voice]   {w['proposal_id']} <{w['proposer_id']}> parent={w['parent_task_id']} "
+					f"cov={w['cov']:.3f}({sh['cov']:.0%}) end={w['end']:.3f}({sh['end']:.0%}) "
+					f"amb={w['amb']:.3f}({sh['amb']:.0%}) lrn={w['lrn']:.3f}({sh['lrn']:.0%}) total={w['total']:.3f}"
+				)
+		except Exception as e:  # logging must never break the run
+			print(f"[auction][voice] breakdown logging failed (non-fatal): {e}")
 
 		# Rebuild the (parsed, parent, example) triplets for the winners and organize as usual.
 		win_parsed = [parsed_of[w.proposal_id] for w in winners]
@@ -872,10 +987,108 @@ class TaskGenerator:
 			win_parsed, win_parents, win_examples, session_idx, "mastered"
 		)
 
+	def _run_cross_rating(
+		self, proposals: list, global_agent_profile: dict | None = None
+	) -> dict[str, dict[str, float]]:
+		"""One round of Endorsement: each Proposer rates the OTHER Proposers' proposals in [0,1].
+
+		Returns cross_ratings[rater_proposer_id][proposal_id] = score. A Proposer never rates its own
+		proposals (enforced downstream by endorsement_scores exclude_self, and here we simply skip
+		them in the prompt). This is the multi-FM "market" signal a single FM cannot produce; a
+		proposal endorsed by the majority of the OTHER models scores high, filtering idiosyncratic
+		proposals. Cost = N LLM calls per round (one batched rating call per proposer).
+
+		v2 (prompt设计稿_v2.md §4): NEUTRAL 3-criteria rubric (solvable-now / well-targeted /
+		useful-toward-mastery) with the student profile injected, so ratings are stabler and account
+		for the student's current level. Deliberately NO persona voice for raters (avoids a
+		"hard-proposer systematically down-votes safe levels" bias; heterogeneity comes from the
+		different base models).
+
+		Robust to parse failures: any proposal a rater doesn't score just gets no vote from that rater
+		(endorsement_scores averages over the votes that exist).
+		"""
+		import json
+
+		profile_str = self._format_global_agent_profile(global_agent_profile)
+		rater_prompt_sys = (
+			"You are an expert reviewer on a curriculum-design team for a Craftax RL agent. Other "
+			"designers proposed the candidate training levels below (NOT your own). Score each on how "
+			"good a NEXT training level it is for THIS agent right now, using THREE explicit criteria, "
+			"then give one overall score.\n\n"
+			"Criteria (judge each, then combine into one overall score):\n"
+			"  1. SOLVABLE-NOW: can the current agent plausibly complete it? (unsolvable/way-too-hard -> low)\n"
+			"  2. WELL-TARGETED: is it aimed at a skill the agent is ready to learn (not already "
+			"mastered, not hopelessly far)? (mistargeted -> low)\n"
+			"  3. USEFUL-TOWARD-MASTERY: does clearing it move the agent toward mastering full Craftax "
+			"(a real stepping stone, not a distractor)? (distracting -> low)\n\n"
+			"Here is the agent's current performance profile (use it for criteria 1 & 2):\n"
+			f"<agent_profile>\n{profile_str}\n</agent_profile>\n\n"
+			"Return ONLY a JSON object mapping each proposal id to its OVERALL score in [0,1], e.g. "
+			"{\"prop_s1_3\": 0.7, \"prop_s1_5\": 0.2}. No other text."
+		)
+
+		cross_ratings: dict[str, dict[str, float]] = {}
+		for rater_idx, rater in enumerate(self.proposer_llms):
+			rater_id = f"proposer_{rater_idx}"
+			# Show only the OTHER proposers' proposals to this rater.
+			others = [p for p in proposals if p.proposer_id != rater_id]
+			if not others:
+				continue
+			listing = "\n\n".join(
+				f"[id: {p.proposal_id}]\n{p.docstring[:1200]}" for p in others
+			)
+			user = (
+				f"Rate the following {len(others)} candidate levels on the three criteria and return "
+				f"ONLY the JSON object of id -> overall score in [0,1].\n\n{listing}"
+			)
+			prev_llm = self.llm
+			self.llm = rater
+			try:
+				resp = self.llm.query(rater_prompt_sys, [user])
+			finally:
+				self.llm = prev_llm
+
+			content = (resp[0].get("content") or "") if resp else ""
+			scores: dict[str, float] = {}
+			# Extract the first JSON object in the response.
+			match = re.search(r"\{.*\}", content, re.DOTALL)
+			if match:
+				try:
+					raw = json.loads(match.group(0))
+					valid_ids = {p.proposal_id for p in others}
+					for pid, sc in raw.items():
+						if pid in valid_ids:
+							try:
+								v = float(sc)
+							except (TypeError, ValueError):
+								continue
+							scores[pid] = min(1.0, max(0.0, v))
+				except json.JSONDecodeError:
+					pass
+			if scores:
+				cross_ratings[rater_id] = scores
+			print(f"[auction] cross-rating: {rater_id} scored {len(scores)}/{len(others)} others.")
+
+		return cross_ratings if cross_ratings else None
+
 	def _build_mastered_prompts(
-		self, mastered_tasks: list[str], global_agent_profile: dict | None
+		self,
+		mastered_tasks: list[str],
+		global_agent_profile: dict | None,
+		prompt_module=None,
+		archive_family_coverage: str | None = None,
 	) -> tuple[list[str], list[list[str]], list[list[str]]]:
-		"""Builds the per-parent user prompts exactly as evolve_mastered does (extracted for reuse)."""
+		"""Builds the per-parent user prompts.
+
+		Args:
+			prompt_module: which prompt module supplies user_prompt. Defaults to the shared
+				evolve_mastered_prompt (baseline). For v2 personas, pass that proposer's persona
+				module so its persona-specific user_prompt template is used.
+			archive_family_coverage: only the Breadth persona's user_prompt has an
+				{ARCHIVE_FAMILY_COVERAGE} placeholder; pass the pre-computed tally string for it.
+				Other personas' templates don't reference it, so it's harmlessly ignored.
+		"""
+		module = prompt_module or self.evolve_mastered_prompt
 		user_prompts: list[str] = []
 		parent_sets: list[list[str]] = []
 		example_sets: list[list[str]] = []
@@ -891,22 +1104,86 @@ class TaskGenerator:
 			example_sets.append(task_examples)
 			example_str = self._format_file_mastered_task([mastered_task])
 			task_performance_str = self._get_task_performance_str(mastered_task)
-			if self.config.mode != "reward":
-				user_prompts.append(
-					self.evolve_mastered_prompt.user_prompt.format(
-						MASTERED_TASK=example_str,
-						TASK_PERFORMANCE_CONTEXT=task_performance_str,
-						GLOBAL_AGENT_PROFILE=global_profile_str,
-					)
-				)
-			else:
-				user_prompts.append(
-					self.evolve_mastered_prompt.user_prompt.format(
-						MASTERED_TASK=example_str,
-						GLOBAL_AGENT_PROFILE=global_profile_str,
-					)
-				)
+			# Provide every field any persona template might reference; _safe_format only
+			# substitutes the ones actually present in this module's template.
+			fields = {
+				"MASTERED_TASK": example_str,
+				"TASK_PERFORMANCE_CONTEXT": task_performance_str,
+				"GLOBAL_AGENT_PROFILE": global_profile_str,
+				"ARCHIVE_FAMILY_COVERAGE": archive_family_coverage or "",
+			}
+			user_prompts.append(self._safe_format(module.user_prompt, fields))
 		return user_prompts, parent_sets, example_sets
+
+	def _compute_archive_family_coverage(self) -> str:
+		"""Tally how many archive levels teach each skill family (for the Breadth persona).
+
+		Scans every archive node's docstring, parses its 'Relevant Achievements', maps each to a
+		family (COMBAT/GATHER/CRAFT/EXPLORE), and counts a family once per level that touches it.
+		Returns a compact string like 'COMBAT: 12 | GATHER: 3 | CRAFT: 8 | EXPLORE: 1'. Pure code,
+		zero LLM. Empty archive -> all zeros.
+		"""
+		from auction.craftax_achievements import FAMILIES, family_of
+		from .auction_integration import parse_relevant_achievements
+
+		counts = {fam: 0 for fam in FAMILIES}
+		for _node, data in self.archive.graph.nodes(data=True):
+			desc = data.get("description", "") or ""
+			achs = parse_relevant_achievements(desc)
+			if not achs:
+				continue
+			fams_here = {family_of(a) for a in achs}
+			for fam in fams_here:
+				counts[fam] += 1
+		return " | ".join(f"{fam}: {counts[fam]}" for fam in FAMILIES)
+
+	def _build_parent_learnability(self, proposals: list) -> dict[str, float]:
+		"""Map each candidate's parent_task_id -> that parent's stored learnability p*(1-p).
+
+		Official DiCode learnability is a TRAINING by-product: a task's p (success rate) is measured
+		while it trains, and learnability = p*(1-p) is stored on its archive node
+		(update_node_learnability -> 'learnability_score'; falls back to 'priority_score'). A fresh
+		candidate has no p of its own, so its Learnability bid proxies its PARENT's stored value.
+		Parents never trained (e.g. seeds) are omitted -> Learnability contributes 0 for those.
+		Pure archive read, no GPU / no rollout.
+		"""
+		result: dict[str, float] = {}
+		parent_ids = {p.parent_task_id for p in proposals if p.parent_task_id}
+		for pid in parent_ids:
+			try:
+				if not self.archive.graph.has_node(pid):
+					continue
+				node = self.archive.graph.nodes[pid]
+			except Exception:
+				continue
+			val = node.get("learnability_score", None)
+			if val is None:
+				val = node.get("priority_score", None)
+			if val is None:
+				continue
+			try:
+				result[pid] = float(val)
+			except (TypeError, ValueError):
+				continue
+		return result
+
+	@staticmethod
+	def _safe_format(template: str, fields: dict) -> str:
+		"""str.format that only substitutes placeholders actually present in the template.
+
+		A persona user_prompt may reference a subset of fields (e.g. Breadth uses
+		ARCHIVE_FAMILY_COVERAGE, others don't; reward-mode omits TASK_PERFORMANCE_CONTEXT). Passing
+		a superset of fields to str.format is fine (extra kwargs ignored), but a template field with
+		no matching kwarg raises KeyError — here every known field is always supplied, so this is a
+		thin wrapper that also tolerates literal braces defensively.
+		"""
+		try:
+			return template.format(**fields)
+		except KeyError as e:
+			# A template referenced an unknown field: fill it blank and retry (robustness).
+			missing = str(e).strip("'")
+			fields = {**fields, missing: ""}
+			return template.format(**fields)
 
 	def _get_valid_parent_statuses(self) -> list[str]:
 		"""Returns the list of task statuses that are valid for selecting examples."""

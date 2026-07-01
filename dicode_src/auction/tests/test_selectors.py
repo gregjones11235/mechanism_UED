@@ -13,6 +13,7 @@ from auction.selectors import (
     GreedyTopKSelector,
     SelectionContext,
     assembled_marginal_bid,
+    bid_breakdown,
 )
 
 
@@ -50,6 +51,63 @@ def test_already_covered_changes_choice():
     # if archive already covers defeat_archer, a gives 0 new -> b wins
     ctx = SelectionContext(already_covered=frozenset({"defeat_archer"}))
     assert GreedyTopKSelector().select([a, b], 1, ctx)[0].proposal_id == "b"
+
+
+# ---------------------------------------------------------------------------
+# bid_breakdown: the "voice" reporting helper (§3.5 drowned/dominating watch)
+# ---------------------------------------------------------------------------
+
+def test_bid_breakdown_shares_sum_to_one_and_match_totals():
+    # Two disjoint deep achievements; add endorsement + ambition + learnability signals.
+    a = _p("a", {"defeat_archer"}, proposer="proposer_0")       # tier -> cov weight 8
+    b = _p("b", {"collect_wood"}, proposer="proposer_1")        # cov weight 1
+    winners = [a, b]
+    ratings = {"proposer_0": {"b": 0.4}, "proposer_1": {"a": 0.8}}
+    from auction.craftax_achievements import ALL_ACHIEVEMENTS
+    gap = {x: 0.0 for x in ALL_ACHIEVEMENTS}
+    gap["defeat_archer"] = 0.5
+    ctx = SelectionContext(
+        cross_ratings=ratings,
+        target_gap=gap,
+        parent_learnability={"task_0": 0.2},
+    )
+    bd = bid_breakdown(winners, ctx, all_proposals=winners)
+    # every winner's four shares sum to 1 (when total>0)
+    for w in bd["per_winner"]:
+        assert abs(sum(w["shares"].values()) - 1.0) < 1e-9
+    # per-winner weighted terms sum to that winner's total
+    for w in bd["per_winner"]:
+        assert abs((w["cov"] + w["end"] + w["amb"] + w["lrn"]) - w["total"]) < 1e-9
+    # aggregate total equals sum of per-winner totals
+    assert abs(bd["totals"]["total"] - sum(w["total"] for w in bd["per_winner"])) < 1e-9
+    # by_proposer counts each persona once here
+    assert bd["by_proposer"] == {"proposer_0": 1, "proposer_1": 1}
+
+
+def test_bid_breakdown_coverage_uses_selection_order():
+    # Two winners cover the SAME achievement; the second (in order) must get 0 marginal coverage.
+    a = _p("a", {"defeat_archer"}, proposer="p0")
+    a2 = _p("a2", {"defeat_archer"}, proposer="p1")  # redundant coverage
+    bd = bid_breakdown([a, a2], SelectionContext(), all_proposals=[a, a2])
+    assert bd["per_winner"][0]["cov"] > 0.0
+    assert bd["per_winner"][1]["cov"] == 0.0  # already covered by the first -> marginal 0
+
+
+def test_bid_breakdown_weights_scale_contributions():
+    a = _p("a", {"defeat_archer"}, proposer="p0")
+    base = bid_breakdown([a], SelectionContext(w_cov=1.0), all_proposals=[a])
+    scaled = bid_breakdown([a], SelectionContext(w_cov=3.0), all_proposals=[a])
+    assert abs(scaled["per_winner"][0]["cov"] - 3.0 * base["per_winner"][0]["cov"]) < 1e-9
+
+
+def test_bid_breakdown_no_signals_all_coverage():
+    # With no endorsement/ambition/learnability, all voice goes to Coverage.
+    a = _p("a", {"defeat_archer"}, proposer="p0")
+    bd = bid_breakdown([a], SelectionContext(), all_proposals=[a])
+    assert bd["avg_share"]["cov"] == 1.0
+    assert bd["avg_share"]["end"] == 0.0
+    assert bd["avg_share"]["amb"] == 0.0
+    assert bd["avg_share"]["lrn"] == 0.0
 
 
 # ---------------------------------------------------------------------------

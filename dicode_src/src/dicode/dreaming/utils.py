@@ -70,6 +70,18 @@ def get_codet5_embeddings(texts):
 	return embeddings
 
 
+def _as_1d(vec) -> np.ndarray:
+	"""Coerce an embedding to a 1-D float array.
+
+	The embedding API (Qwen3-Embedding via DeepInfra) occasionally returns an embedding that is
+	nested / not strictly 1-D (e.g. shape (1, D) or a list-of-lists), which makes scipy's cosine
+	raise "Input vector should be 1-D." and crashes the whole evolution worker mid-run (observed on
+	both the auction C-arm and the vanilla-DiCode baseline — an upstream fragility, not auction-
+	specific). Flattening to 1-D makes cosine/L1/L2/Linf robust to that.
+	"""
+	return np.asarray(vec, dtype=float).ravel()
+
+
 def distances_from_embeddings(
 	query_embedding: np.ndarray,
 	embeddings: list[np.ndarray],
@@ -83,8 +95,9 @@ def distances_from_embeddings(
 		"Linf": spatial.distance.chebyshev,
 	}
 
+	q = _as_1d(query_embedding)
 	distances = [
-		distance_metrics[distance_metric](query_embedding, embedding) for embedding in embeddings
+		distance_metrics[distance_metric](q, _as_1d(embedding)) for embedding in embeddings
 	]
 	return distances
 

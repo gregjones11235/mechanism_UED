@@ -154,3 +154,50 @@ ACHIEVEMENT_DEPTH: dict[str, int] = {
 def depth_of(achievement: str) -> int:
     """Coarse tech-tree depth tier (1=early .. 4=deepest) for an achievement name."""
     return ACHIEVEMENT_DEPTH[achievement]
+
+
+# --- Skill families (for Proposer-Breadth coverage) ----------------------------------------
+#
+# Four coarse families (方法设计_v2.md §2.3, DiCode Figure 3). Used ONLY as the
+# {ARCHIVE_FAMILY_COVERAGE} tally fed to the Breadth persona so it can target the
+# under-represented family. NOT an authoritative craftax constant.
+#
+# Mapped by name PREFIX with a few explicit exceptions (some names don't fit a clean prefix):
+#   COMBAT  : defeat_*, damage_*
+#   GATHER  : collect_*, eat_*, drink_*
+#   CRAFT   : make_*, place_*, enchant_*
+#   EXPLORE : enter_*, find_*, open_*, cast_*, learn_*, fire_*, and survival misc (wake_up)
+FAMILIES: tuple[str, ...] = ("COMBAT", "GATHER", "CRAFT", "EXPLORE")
+
+_FAMILY_EXCEPTIONS: dict[str, str] = {
+    "wake_up": "EXPLORE",      # survival misc — group with exploration/other
+    "fire_bow": "EXPLORE",     # using the bow (ranged action), not crafting/combat-kill
+    "find_bow": "EXPLORE",
+    "drink_potion": "GATHER",  # consuming a resource
+    "enchant_sword": "CRAFT",
+    "enchant_armour": "CRAFT",
+    "damage_necromancer": "COMBAT",
+}
+
+
+def family_of(achievement: str) -> str:
+    """Coarse skill family (COMBAT/GATHER/CRAFT/EXPLORE) for an achievement name."""
+    if achievement in _FAMILY_EXCEPTIONS:
+        return _FAMILY_EXCEPTIONS[achievement]
+    if achievement.startswith("defeat_") or achievement.startswith("damage_"):
+        return "COMBAT"
+    if achievement.startswith("collect_") or achievement.startswith("eat_") or achievement.startswith("drink_"):
+        return "GATHER"
+    if achievement.startswith("make_") or achievement.startswith("place_") or achievement.startswith("enchant_"):
+        return "CRAFT"
+    # enter_/find_/open_/cast_/learn_/fire_ -> exploration & magic & interaction
+    return "EXPLORE"
+
+
+ACHIEVEMENT_FAMILY: dict[str, str] = {name: family_of(name) for name in ALL_ACHIEVEMENTS}
+
+# Sanity: every achievement maps to exactly one of the four families.
+assert set(ACHIEVEMENT_FAMILY.values()) <= set(FAMILIES), (
+    f"unexpected family label: {set(ACHIEVEMENT_FAMILY.values()) - set(FAMILIES)}"
+)
+assert len(ACHIEVEMENT_FAMILY) == NUM_ACHIEVEMENTS

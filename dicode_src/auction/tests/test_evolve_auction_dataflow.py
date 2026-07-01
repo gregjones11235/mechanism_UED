@@ -114,3 +114,53 @@ def test_single_proposer_k_full_is_baseline_like():
     proposals, winners, *_ = _reimplement_auction_dataflow(out, mastered, k=len(mastered))
     assert len(proposals) == 3
     assert len(winners) == 3  # nothing dropped
+
+
+# --- Prove Endorsement & AmbitionGain are WIRED (they change selection, not dead 0) ----------
+
+def _build_proposals(specs):
+    """specs: list of (pid, proposer_id, [achievements]). Returns list[Proposal]."""
+    from auction.proposal import Proposal
+    return [Proposal(pid, pr, "task_0", _docstring(a), "r", frozenset(x.lower() for x in a))
+            for pid, pr, a in specs]
+
+
+def test_endorsement_changes_winner():
+    from auction.selectors import GreedyTopKSelector, SelectionContext
+    # Two proposals with IDENTICAL coverage (so Coverage alone can't separate them);
+    # endorsement must break the tie toward the endorsed one.
+    props = _build_proposals([
+        ("p_a", "proposer_0", ["COLLECT_WOOD"]),
+        ("p_b", "proposer_1", ["COLLECT_WOOD"]),
+    ])
+    # proposer_2 endorses p_a strongly, p_b weakly
+    ratings = {"proposer_2": {"p_a": 0.9, "p_b": 0.1}}
+    ctx = SelectionContext(cross_ratings=ratings, w_cov=1.0, w_end=10.0, w_amb=0.0)
+    winners = GreedyTopKSelector().select(props, 1, ctx)
+    assert winners[0].proposal_id == "p_a"  # endorsement decided it
+
+
+def test_ambition_changes_winner():
+    from auction.selectors import GreedyTopKSelector, SelectionContext
+    # Two proposals, identical-weight coverage; ambition (target gap) should pick the one
+    # covering the achievement the student is failing.
+    props = _build_proposals([
+        ("p_mastered", "proposer_0", ["COLLECT_WOOD"]),      # student aces this -> gap 0
+        ("p_needed", "proposer_1", ["COLLECT_DRINK"]),        # same depth tier 1, same weight
+    ])
+    target_gap = {"collect_wood": 0.0, "collect_drink": 1.0}  # student fails collect_drink
+    ctx = SelectionContext(target_gap=target_gap, w_cov=1.0, w_end=0.0, w_amb=10.0)
+    winners = GreedyTopKSelector().select(props, 1, ctx)
+    assert winners[0].proposal_id == "p_needed"  # ambition decided it
+
+
+def test_all_three_terms_off_equals_pure_coverage():
+    from auction.selectors import GreedyTopKSelector, SelectionContext
+    props = _build_proposals([
+        ("p1", "proposer_0", ["COLLECT_WOOD"]),
+        ("p2", "proposer_1", ["DEFEAT_ARCHER"]),  # deeper -> higher coverage weight
+    ])
+    # no endorsement, no ambition -> pure Coverage -> deeper achievement wins
+    ctx = SelectionContext(w_end=1.0, w_amb=1.0)  # but no data sources supplied
+    winners = GreedyTopKSelector().select(props, 1, ctx)
+    assert winners[0].proposal_id == "p2"  # DEFEAT_ARCHER (weight 8) beats COLLECT_WOOD (weight 1)

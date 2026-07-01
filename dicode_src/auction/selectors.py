@@ -10,6 +10,7 @@ The bid combined here is:
     bid_marginal(x | selected) = w_cov * coverage_gain(x | selected)      # SUBMODULAR (set-dependent)
                                + w_end * endorsement[x]                   # MODULAR (per-proposal)
                                + w_amb * ambition_gain(x)                 # MODULAR (per-proposal)
+                               + w_lrn * learnability_gain(x)             # MODULAR (per-proposal)
 
 DISCIPLINE (v1_experiment.md §7.5): every bid term is submodular or modular, NEVER supermodular.
 submodular + non-negative modular = submodular, so the WHOLE marginal bid is submodular and greedy
@@ -28,6 +29,7 @@ from .ambition import ambition_gain
 from .coverage import DEFAULT_WEIGHTS, coverage_gain
 from .craftax_achievements import ALL_ACHIEVEMENTS
 from .endorsement import CrossRatings, endorsement_scores
+from .learnability import learnability_gain
 from .pricing import PriceState
 from .proposal import Proposal
 
@@ -40,16 +42,21 @@ class SelectionContext:
     already_covered: achievements the archive already covers (only credit NEW coverage).
     cross_ratings:  Proposer cross-rating matrix for Endorsement (None → endorsement term = 0).
     target_gap:     {achievement: 1 - student_SR_on_target} for AmbitionGain (None → term = 0).
-    w_cov/w_end/w_amb: bid term weights (dev default 1/1/1; sensitivity ablation later).
+    parent_learnability: {parent_task_id: p*(1-p)} for Learnability (None → term = 0). Official
+        DiCode p (training success rate), read from the archive; a candidate proxies its parent's
+        learnability (dicode-learnability-p-is-training-byproduct).
+    w_cov/w_end/w_amb/w_lrn: bid term weights (dev default 1/1/1/1; sensitivity ablation later).
     """
 
     weights: Mapping[str, float] = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     already_covered: frozenset[str] = frozenset()
     cross_ratings: CrossRatings | None = None
     target_gap: Mapping[str, float] | None = None
+    parent_learnability: Mapping[str, float] | None = None
     w_cov: float = 1.0
     w_end: float = 1.0
     w_amb: float = 1.0
+    w_lrn: float = 1.0
 
 
 class Selector:
@@ -84,7 +91,12 @@ class GreedyTopKSelector(Selector):
                 if context.target_gap is not None
                 else 0.0
             )
-            modular[p.proposal_id] = context.w_end * endorse[p.proposal_id] + context.w_amb * amb
+            lrn = learnability_gain(p, context.parent_learnability)
+            modular[p.proposal_id] = (
+                context.w_end * endorse[p.proposal_id]
+                + context.w_amb * amb
+                + context.w_lrn * lrn
+            )
 
         selected: list[Proposal] = []
         remaining = list(proposals)
@@ -151,11 +163,103 @@ class WalrasianSelector(Selector):
             already_covered=context.already_covered,
             cross_ratings=context.cross_ratings,
             target_gap=context.target_gap,
+            parent_learnability=context.parent_learnability,
             w_cov=context.w_cov,
             w_end=context.w_end,
             w_amb=context.w_amb,
+            w_lrn=context.w_lrn,
         )
         return GreedyTopKSelector().select(proposals, k, priced_ctx)
+
+
+def bid_breakdown(
+    winners: list[Proposal],
+    context: SelectionContext,
+    *,
+    all_proposals: list[Proposal] | None = None,
+) -> dict:
+    """Per-winner + aggregate breakdown of the four WEIGHTED bid contributions.
+
+    Recomputes, for each winner IN THE ORDER IT WAS SELECTED, the four weighted terms
+    (w_cov*coverage_marginal, w_end*endorsement, w_amb*ambition, w_lrn*learnability). Coverage is
+    submodular so its marginal depends on what was already selected; we replay the greedy order so
+    the reported Coverage contribution matches what actually drove the pick. The modular terms
+    (end/amb/lrn) are order-independent.
+
+    This is a PURE REPORTING helper — it does not affect selection. Use it to answer "is any bid
+    term drowned out / dominating?" (方法设计_v2.md §3.5, [[difficulty-bid-drowned-equals-learnability]]).
+
+    Args:
+        winners: the selected proposals, in selection order (GreedyTopKSelector returns this order).
+        context: the same SelectionContext used for selection (weights + signals).
+        all_proposals: optional full candidate pool; if given, endorsement is computed against it
+            (matches selection). Falls back to `winners` if None.
+
+    Returns:
+        {
+          "per_winner": [ {proposal_id, proposer_id, parent_task_id,
+                           cov, end, amb, lrn,          # WEIGHTED contributions
+                           total, shares: {cov,end,amb,lrn}}, ... ],
+          "totals": {cov, end, amb, lrn, total},        # summed weighted contributions over winners
+          "avg_share": {cov, end, amb, lrn},            # mean per-winner share (the "voice" metric)
+          "weights": {cov, end, amb, lrn},
+          "by_proposer": {proposer_id: n_winners},      # did any persona get systematically dropped?
+        }
+    """
+    endorse_pool = all_proposals if all_proposals is not None else winners
+    endorse = (
+        endorsement_scores(endorse_pool, context.cross_ratings)
+        if context.cross_ratings is not None
+        else {}
+    )
+
+    per_winner = []
+    running: list[Proposal] = []
+    tot = {"cov": 0.0, "end": 0.0, "amb": 0.0, "lrn": 0.0}
+    share_sum = {"cov": 0.0, "end": 0.0, "amb": 0.0, "lrn": 0.0}
+    by_proposer: dict[str, int] = {}
+
+    for w in winners:
+        cov = context.w_cov * coverage_gain(
+            w, running, context.weights, already_covered=context.already_covered
+        )
+        end = context.w_end * float(endorse.get(w.proposal_id, 0.0))
+        amb = (
+            context.w_amb * ambition_gain(w, context.target_gap)
+            if context.target_gap is not None
+            else 0.0
+        )
+        lrn = context.w_lrn * learnability_gain(w, context.parent_learnability)
+        total = cov + end + amb + lrn
+        shares = (
+            {k: (v / total) for k, v in (("cov", cov), ("end", end), ("amb", amb), ("lrn", lrn))}
+            if total > 0
+            else {"cov": 0.0, "end": 0.0, "amb": 0.0, "lrn": 0.0}
+        )
+        per_winner.append(
+            {
+                "proposal_id": w.proposal_id,
+                "proposer_id": w.proposer_id,
+                "parent_task_id": w.parent_task_id,
+                "cov": cov, "end": end, "amb": amb, "lrn": lrn,
+                "total": total, "shares": shares,
+            }
+        )
+        for k, v in (("cov", cov), ("end", end), ("amb", amb), ("lrn", lrn)):
+            tot[k] += v
+            share_sum[k] += shares[k]
+        by_proposer[w.proposer_id] = by_proposer.get(w.proposer_id, 0) + 1
+        running.append(w)
+
+    n = max(1, len(winners))
+    grand = tot["cov"] + tot["end"] + tot["amb"] + tot["lrn"]
+    return {
+        "per_winner": per_winner,
+        "totals": {**tot, "total": grand},
+        "avg_share": {k: share_sum[k] / n for k in ("cov", "end", "amb", "lrn")},
+        "weights": {"cov": context.w_cov, "end": context.w_end, "amb": context.w_amb, "lrn": context.w_lrn},
+        "by_proposer": by_proposer,
+    }
 
 
 def assembled_marginal_bid(
@@ -176,4 +280,10 @@ def assembled_marginal_bid(
         else 0.0
     )
     amb = ambition_gain(candidate, context.target_gap) if context.target_gap is not None else 0.0
-    return context.w_cov * cov + context.w_end * endorse + context.w_amb * amb
+    lrn = learnability_gain(candidate, context.parent_learnability)
+    return (
+        context.w_cov * cov
+        + context.w_end * endorse
+        + context.w_amb * amb
+        + context.w_lrn * lrn
+    )

@@ -8,6 +8,17 @@ defaults:
 
 tags: []
 
+# --- Auction (multi-FM) method switches. Declared here (default OFF) so Hydra struct mode
+# --- accepts command-line overrides without crashing. auction=false == DiCode baseline. ---
+auction: false        # route ②description layer through evolve_mastered_auction
+auction_k: null       # #descriptions to keep after the auction (null -> #parents, fair budget)
+proposers: null       # list of N Proposer LLM configs; null -> reuse task_generator as sole proposer
+auction_endorsement: true   # run one round of Proposer cross-rating for the Endorsement bid term
+auction_w_cov: 1.0    # bid weight: Coverage (complementary achievement coverage, submodular)
+auction_w_end: 1.0    # bid weight: Endorsement (cross-rating agreement, modular)
+auction_w_amb: 1.0    # bid weight: AmbitionGain (depth x target-gap, modular)
+auction_w_lrn: 1.0    # bid weight: Learnability (parent's official p*(1-p), modular; balances depth bias)
+
 num_generations: 5
 num_examples: 6
 num_parents: 1
@@ -30,3 +41,8 @@ prompts:
   evolve_mastered: "dicode.dreaming.prompts.dicode.evolve"
   evolve_mastered_r: "dicode.dreaming.prompts.cl_.evolve_mastered_r"
   ablation: "dicode.dreaming.prompts.dicode.ablation"
+  # v2 persona-differentiated proposer prompts (auction only). Keyed by persona name used in
+  # gen_manager.personas; each reuses DiCode's hardcore blocks, differs only in role/guiding principle.
+  persona_ambitious: "dicode.dreaming.prompts.dicode.persona_ambitious"
+  persona_feasible: "dicode.dreaming.prompts.dicode.persona_feasible"
+  persona_breadth: "dicode.dreaming.prompts.dicode.persona_breadth"

@@ -73,17 +73,34 @@ class LLM:
 		else:
 			raise ValueError(f"Provider {self.provider} not supported")
 
+	def _thinking_off_extra_body(self) -> dict[str, Any]:
+		"""Per-model OFFICIAL way to turn reasoning OFF (verified on DeepInfra 2026-06-30).
+
+		The old approach appended a Qwen-only ' /no_think' suffix to the prompt — that is a
+		Qwen soft-switch and does NOT cleanly disable thinking on DeepSeek / GLM (it just
+		pollutes the prompt with unrecognized text). Each vendor has its own official switch:
+		  - Qwen3.x / GLM (zai): chat_template_kwargs {"enable_thinking": false}
+		  - DeepSeek:            reasoning_effort "none"
+		Empirically verified on DeepInfra: reasoning_content goes 4594->0 (Qwen3.5), 551->0 (GLM-5.2),
+		and DeepSeek-V4-Pro is non-thinking by default (param accepted, no side effect).
+		Unknown models fall back to reasoning_effort:"none" (DeepInfra doc: no-op on non-reasoning models).
+		"""
+		m = self.model.lower()
+		if "deepseek" in m:
+			return {"reasoning_effort": "none"}
+		if "qwen" in m or "glm" in m or "zai" in m:
+			return {"chat_template_kwargs": {"enable_thinking": False}}
+		# Safe default: DeepInfra states reasoning params are no-ops on non-reasoning models.
+		return {"reasoning_effort": "none"}
+
 	async def _query_local_gen(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
-		if self.think:
-			messages = [
-				{"role": "system", "content": system_prompt},
-				{"role": "user", "content": user_prompt},
-			]
-		else:
-			messages = [
-				{"role": "system", "content": system_prompt},
-				{"role": "user", "content": user_prompt + " /no_think"},
-			]
+		# Prompt text is identical whether or not thinking is on — thinking is toggled via the
+		# per-model official extra_body switch below, NOT by polluting the user prompt.
+		messages = [
+			{"role": "system", "content": system_prompt},
+			{"role": "user", "content": user_prompt},
+		]
+		extra_body = {} if self.think else self._thinking_off_extra_body()
 
 		try:
 			chat_completion = await self.client.chat.completions.create(
@@ -92,6 +109,7 @@ class LLM:
 				max_tokens=self.max_tokens,
 				temperature=self.temperature,
 				top_p=self.top_p,
+				extra_body=extra_body,
 			)
 
 			return {
