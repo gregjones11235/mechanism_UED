@@ -923,6 +923,21 @@ class TaskGenerator:
 			cross_ratings = self._run_cross_rating(proposals, global_agent_profile)
 		parent_learnability = self._build_parent_learnability(proposals)
 
+		# Ability-gate (2026-07-02, v1_experiment.md §10.9): compute the deepest tier the student may
+		# be pushed toward NOW from its tier mastery. AmbitionGain then soft-discounts gap on tiers
+		# beyond it, so ambitious can't out-bid feasible on tiers the student can't reach. Gated only
+		# when there is a target_gap (a student profile) AND the gate is enabled (default on).
+		from auction.craftax_achievements import reachable_ceiling as _reachable_ceiling
+
+		ability_gate_on = bool(getattr(self.config, "auction_ability_gate", True))
+		mastery_threshold = float(getattr(self.config, "auction_mastery_threshold", 0.70))
+		overreach_decay = float(getattr(self.config, "auction_overreach_decay", 0.3))
+		ceiling = (
+			_reachable_ceiling(target_gap, threshold=mastery_threshold)
+			if (ability_gate_on and target_gap)
+			else None
+		)
+
 		context = SelectionContext(
 			target_gap=target_gap or None,
 			cross_ratings=cross_ratings,
@@ -931,7 +946,15 @@ class TaskGenerator:
 			w_end=float(getattr(self.config, "auction_w_end", 1.0)),
 			w_amb=float(getattr(self.config, "auction_w_amb", 1.0)),
 			w_lrn=float(getattr(self.config, "auction_w_lrn", 1.0)),
+			reachable_ceiling=ceiling,
+			overreach_decay=overreach_decay,
 		)
+		if ceiling is not None:
+			print(
+				f"[auction][gate] session={session_idx} reachable_ceiling=tier{ceiling} "
+				f"(mastery_threshold={mastery_threshold}, overreach_decay={overreach_decay}); "
+				f"ambition gap on tiers >{ceiling} soft-discounted."
+			)
 
 		# Stage C: auction selects complementary top-k (greedy submodular: Coverage + endorsement
 		# + ambition + learnability).
@@ -1093,6 +1116,10 @@ class TaskGenerator:
 		parent_sets: list[list[str]] = []
 		example_sets: list[list[str]] = []
 		global_profile_str = self._format_global_agent_profile(global_agent_profile)
+		# Prompt-side ability gate (per-student, same for every parent this session): the hard rule
+		# "don't target a tier above the student's reachable ceiling". Mirrors the bid-side gate
+		# (SelectionContext.reachable_ceiling) so the LLM and the auction agree on what's out of reach.
+		ability_gate_str = self._format_ability_gate_directive(global_agent_profile)
 
 		for mastered_task in mastered_tasks:
 			task_examples = self.selector.select_similar_desc_tasks(
@@ -1111,9 +1138,64 @@ class TaskGenerator:
 				"TASK_PERFORMANCE_CONTEXT": task_performance_str,
 				"GLOBAL_AGENT_PROFILE": global_profile_str,
 				"ARCHIVE_FAMILY_COVERAGE": archive_family_coverage or "",
+				"ABILITY_GATE": ability_gate_str,
 			}
 			user_prompts.append(self._safe_format(module.user_prompt, fields))
 		return user_prompts, parent_sets, example_sets
+
+	def _format_ability_gate_directive(self, global_agent_profile: dict | None) -> str:
+		"""Build the prompt-side ability-gate: per-tier mastery + the hard 'don't overreach' rule.
+
+		This is the prompt-half of the ability gate (the bid-half is ambition.py's reachable_ceiling
+		discount). It tells the LLM, in plain terms: the student has consolidated up to tier C; you
+		MAY design toward tier C (its learnable frontier) but MUST NOT set Relevant Achievements from
+		a tier deeper than C, because the student cannot reach those yet — such levels will fail,
+		be discarded, and starve the tiers the student is actually ready to consolidate
+		(v1_experiment.md §10.9 root cause). The threshold is configurable (auction_mastery_threshold,
+		default 0.70). Absent profile / gate disabled => empty string (persona's own guidance stands).
+		"""
+		if not bool(getattr(self.config, "auction_ability_gate", True)):
+			return ""
+		from .auction_integration import profile_to_target_gap
+
+		target_gap = profile_to_target_gap(global_agent_profile)
+		if not target_gap:
+			return ""
+		from auction.craftax_achievements import (
+			reachable_ceiling as _reachable_ceiling,
+			tier_mastery as _tier_mastery,
+		)
+
+		threshold = float(getattr(self.config, "auction_mastery_threshold", 0.70))
+		mastery = _tier_mastery(target_gap)
+		ceiling = _reachable_ceiling(target_gap, threshold=threshold)
+		pct = int(round(threshold * 100))
+		lines = [
+			"==========================",
+			"CRITICAL: STUDENT ABILITY GATE (HARD CONSTRAINT — overrides ambition)",
+			"==========================",
+			"Per-tier mastery of the student right now (mean success over the tier's achievements):",
+		]
+		for tier in sorted(mastery):
+			m = mastery[tier] * 100.0
+			status = "MASTERED" if mastery[tier] >= threshold else "NOT yet consolidated"
+			lines.append(f"  - TIER {tier}: {m:.0f}%  ({status})")
+		lines += [
+			"",
+			f"The student's REACHABLE CEILING is TIER {ceiling}: it has consolidated every tier "
+			f"below {ceiling} to >= {pct}%, so TIER {ceiling} is its current learnable frontier.",
+			"",
+			"HARD RULE (must obey, regardless of your persona):",
+			f"  1. Your task's `Relevant Achievements` MUST NOT include any achievement from a tier "
+			f"DEEPER than TIER {ceiling}. Those are out of the student's reach now; such a level will "
+			f"fail and be discarded, and it starves the tier the student is actually ready to learn.",
+			f"  2. You MAY target TIER {ceiling} (the frontier) or below. If you scaffold a deeper "
+			f"context, the *goal* achievements you require must still be at TIER {ceiling} or shallower.",
+			f"  3. Do NOT 'aim deep and hope': a tier is unlocked only after the tier below it reaches "
+			f">= {pct}%. Respect the ladder one rung at a time.",
+			"",
+		]
+		return "\n".join(lines)
 
 	def _compute_archive_family_coverage(self) -> str:
 		"""Tally how many archive levels teach each skill family (for the Breadth persona).
@@ -1281,31 +1363,63 @@ class TaskGenerator:
 	def _format_global_agent_profile(self, evaluation_feedback: dict | None) -> str:
 		"""Formats the global evaluation metrics into a string for the LLM prompt.
 
+		Grouped by tech-tree DEPTH TIER (1 early .. 4 deepest), and — critically — showing EVERY
+		achievement including those the student CANNOT do yet (SR 0 / absent from the eval feed).
+
+		WHY show the zeros (2026-07-02, v1_experiment.md §10.9 成因B-1): the old formatter filtered
+		to ``value > 0``, so the deep skills the student completely fails (gnomish_mines, orc, ...)
+		vanished from the profile. The ambitious persona then had no evidence "these are 0%" and,
+		optimistically, kept targeting them — drifting the curriculum above the student's reach.
+		Listing the 0%/unattempted skills explicitly, per tier, gives the prompt-gate the ground truth
+		it needs to enforce "don't push above the tier the student hasn't consolidated". Mirrors the
+		bid-side ability-gate (ambition.py reachable_ceiling) so both gates see the same picture.
+
 		Args:
-			evaluation_feedback: Dictionary of skill metrics from the agent's
-				evaluation on the full Craftax game.
+			evaluation_feedback: Dictionary of skill metrics from the agent's evaluation on the full
+				Craftax game (keys like ``skill_collect_wood`` in 0..100). Missing keys => treated 0.
 
 		Returns:
-			A formatted string describing the agent's skill profile.
+			A formatted per-tier string describing the agent's skill profile.
 		"""
 		if not evaluation_feedback:
 			return "No overall performance evaluation is available for the agent yet."
 
-		context_str = "This is the agent's *general* skill profile from the full Craftax game:\n"
+		from auction.craftax_achievements import DEPTH_TIERS
 
-		# Filter to only show skills with non-zero success rates
-		skill_lines = [
-			f"- {key}: {value:.2f}%"
-			for key, value in evaluation_feedback.items()
-			if key.startswith("skill_") and value > 0
-		]
-		if skill_lines:
-			context_str += (
-				"Its average performance on key skills was:\n" + "\n".join(skill_lines) + "\n"
-			)
-		else:
-			context_str += "No skills were mastered in the global evaluation.\n"
+		# Pull each achievement's SR from the feed (skill_<name> in 0..100); absent => 0.0 (the
+		# student has not demonstrated it — an unmastered skill, NOT something to hide).
+		sr_by_name: dict[str, float] = {}
+		for key, value in evaluation_feedback.items():
+			if not key.startswith("skill_"):
+				continue
+			name = key[len("skill_"):].lower()
+			try:
+				sr_by_name[name] = float(value)
+			except (TypeError, ValueError):
+				continue
 
+		context_str = (
+			"This is the agent's *general* skill profile from the full Craftax game, grouped by "
+			"tech-tree depth tier (tier 1 = early .. tier 4 = deepest). Success rates are % over the "
+			"held-out evaluation. Skills marked (NOT YET) are ones the agent essentially cannot do "
+			"yet (0%). Use this to judge which tier the agent has consolidated and which is still "
+			"out of reach.\n"
+		)
+		tier_labels = {
+			1: "TIER 1 (early: wood/stone basics, survival)",
+			2: "TIER 2 (mid: iron/coal/furnace, torches, first descent)",
+			3: "TIER 3 (late: diamond gear, deeper floors, gnome/orc combat, magic)",
+			4: "TIER 4 (deepest: fire/ice realms, graveyard, elementals, necromancer, knights)",
+		}
+		for tier in sorted(DEPTH_TIERS):
+			names = sorted(DEPTH_TIERS[tier])
+			srs = [sr_by_name.get(n, 0.0) for n in names]
+			mean_sr = sum(srs) / len(srs) if srs else 0.0
+			context_str += f"\n{tier_labels[tier]} — mean success {mean_sr:.1f}%:\n"
+			for n in names:
+				sr = sr_by_name.get(n, 0.0)
+				tag = "  (NOT YET)" if sr <= 0.0 else ""
+				context_str += f"  - {n}: {sr:.2f}%{tag}\n"
 		return context_str
 
 

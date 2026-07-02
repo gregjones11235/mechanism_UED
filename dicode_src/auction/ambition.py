@@ -19,7 +19,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .craftax_achievements import ALL_ACHIEVEMENTS, depth_of
+from .craftax_achievements import (
+    ALL_ACHIEVEMENTS,
+    depth_of,
+    tier_overreach_factor,
+)
 from .proposal import Proposal
 
 
@@ -37,8 +41,10 @@ def ambition_gain(
     target_gap: Mapping[str, float],
     *,
     use_depth_weight: bool = True,
+    reachable_ceiling: int | None = None,
+    overreach_decay: float = 0.3,
 ) -> float:
-    """AmbitionGain(proposal) = sum over its achievements of target_gap[a] * depth_weight[a].
+    """AmbitionGain(proposal) = sum over its achievements of target_gap[a] * depth_weight[a] * reach.
 
     Args:
         proposal: the candidate.
@@ -47,14 +53,28 @@ def ambition_gain(
         use_depth_weight: if True, weight each gap by the achievement's depth tier so that a gap
             on a deep late-game achievement counts more than the same gap on an early one. This is
             the "dependency-chain depth x target gap" of §2.3. If False, depth is ignored (pure gap).
+        reachable_ceiling: the deepest tier the student can currently be pushed toward
+            (craftax_achievements.reachable_ceiling). If given, gap on achievements STRICTLY DEEPER
+            than the ceiling is soft-discounted by ``overreach_decay ** (tier - ceiling)`` — the
+            ability-gate that stops ambitious out-bidding feasible on tiers the student can't reach
+            (v1_experiment.md §10.9). None => no gate (legacy behaviour, all tiers full weight).
+        overreach_decay: geometric decay per tier beyond the ceiling (0.3 => 1 over -> 0.30). Only
+            used when reachable_ceiling is not None. In [0,1); 0 would be a hard zero-out.
 
     Returns:
-        A non-negative scalar. Per-proposal independent => modular.
+        A non-negative scalar. Still per-proposal independent (ceiling is a fixed student-state
+        scalar, not a function of the selected set) => MODULAR, so the assembled bid stays
+        submodular and the (1-1/e) greedy guarantee is preserved.
     """
     _validate_gap(target_gap)
     total = 0.0
     for a in proposal.achievements:
         gap = target_gap.get(a, 0.0)
         w = float(depth_of(a)) if use_depth_weight else 1.0
-        total += gap * w
+        reach = (
+            tier_overreach_factor(depth_of(a), reachable_ceiling, decay=overreach_decay)
+            if reachable_ceiling is not None
+            else 1.0
+        )
+        total += gap * w * reach
     return total

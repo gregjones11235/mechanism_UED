@@ -43,6 +43,7 @@ _USER_FIELDS = dict(
     TASK_PERFORMANCE_CONTEXT="tp",
     GLOBAL_AGENT_PROFILE="gp",
     ARCHIVE_FAMILY_COVERAGE="afc",
+    ABILITY_GATE="ag",
 )
 _PERSONAS = {
     "ambitious": "persona_ambitious.py",
@@ -117,6 +118,12 @@ def test_archive_field_only_in_breadth():
     assert "ARCHIVE_FAMILY_COVERAGE" in _load(_PERSONAS["breadth"]).user_prompt
     assert "ARCHIVE_FAMILY_COVERAGE" not in _load(_PERSONAS["ambitious"]).user_prompt
     assert "ARCHIVE_FAMILY_COVERAGE" not in _load(_PERSONAS["feasible"]).user_prompt
+
+
+def test_ability_gate_placeholder_in_all_personas():
+    # The prompt-side ability gate must be injected into every persona's user_prompt (2026-07-02).
+    for name, f in _PERSONAS.items():
+        assert "{ABILITY_GATE}" in _load(f).user_prompt, f"{name} missing ABILITY_GATE placeholder"
 
 
 def test_personas_are_distinct():

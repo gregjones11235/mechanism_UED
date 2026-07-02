@@ -151,6 +151,7 @@ World:
 user_prompt = """
 **REMINDER: You are the AMBITIOUS designer. Generate a new, creative task description (NOT code) that pushes the agent ONE meaningful step DEEPER, with prerequisites scaffolded so it stays solvable.**
 
+{ABILITY_GATE}
 Here is the description of the trained task:
 <trained_task>
 {MASTERED_TASK}

@@ -57,6 +57,26 @@ class SelectionContext:
     w_end: float = 1.0
     w_amb: float = 1.0
     w_lrn: float = 1.0
+    # reachable_ceiling: the deepest depth tier the student can currently be pushed toward
+    # (craftax_achievements.reachable_ceiling, from tier mastery vs mastery_threshold). When set,
+    # AmbitionGain soft-discounts gap on achievements STRICTLY DEEPER than this tier by
+    # overreach_decay**(tier-ceiling) — the ability-gate that stops ambitious out-bidding feasible
+    # on tiers the student can't reach (v1_experiment.md §10.9). None => no gate (legacy behaviour).
+    # This is a fixed student-state scalar (not set-dependent), so AmbitionGain stays MODULAR and the
+    # assembled bid stays submodular ⇒ (1-1/e) greedy guarantee preserved.
+    reachable_ceiling: int | None = None
+    overreach_decay: float = 0.3
+    # normalize_terms: rescale each bid term to a comparable [0,1] scale (per-pool max-normalization)
+    # BEFORE applying weights, so w_* express real preference, not accidental scale dominance.
+    # WHY: the four terms have wildly different natural magnitudes — Coverage (depth-weighted set
+    # cover, ~1-8/level), AmbitionGain (Σ gap*depth, ~tens/level), Endorsement ([0,1]), Learnability
+    # (p*(1-p) in [0,0.25]). At equal weights the biggest-magnitude term (Ambition) dominates and the
+    # smallest (Learnability) is drowned — measured live: amb 55-71% share, lrn 0.1-0.8% (job 3591148,
+    # [[difficulty-bid-drowned-equals-learnability]] redux). Normalizing each term by its per-pool max
+    # makes equal weights mean equal voice. The Coverage divisor is a POOL CONSTANT (max single-proposal
+    # marginal over the pool), so scaled Coverage stays submodular ⇒ (1-1/e) greedy guarantee preserved.
+    # Set False to reproduce the old raw-magnitude behaviour (e.g. for ablation).
+    normalize_terms: bool = True
 
 
 class Selector:
@@ -78,25 +98,53 @@ class GreedyTopKSelector(Selector):
             return []
         k = min(k, len(proposals))
 
-        # Precompute the modular (per-proposal, set-independent) part of the bid.
+        # Precompute per-proposal RAW modular terms (set-independent).
         endorse = (
             endorsement_scores(proposals, context.cross_ratings)
             if context.cross_ratings is not None
             else {p.proposal_id: 0.0 for p in proposals}
         )
-        modular = {}
-        for p in proposals:
-            amb = (
-                ambition_gain(p, context.target_gap)
+        raw_amb = {
+            p.proposal_id: (
+                ambition_gain(
+                    p,
+                    context.target_gap,
+                    reachable_ceiling=context.reachable_ceiling,
+                    overreach_decay=context.overreach_decay,
+                )
                 if context.target_gap is not None
                 else 0.0
             )
-            lrn = learnability_gain(p, context.parent_learnability)
-            modular[p.proposal_id] = (
-                context.w_end * endorse[p.proposal_id]
-                + context.w_amb * amb
-                + context.w_lrn * lrn
+            for p in proposals
+        }
+        raw_lrn = {p.proposal_id: learnability_gain(p, context.parent_learnability) for p in proposals}
+
+        # Per-pool max-normalization divisors (POOL CONSTANTS ⇒ Coverage stays submodular).
+        # A term whose pool-max is 0 contributes nothing; divisor 1.0 keeps it at 0 (no div-by-zero).
+        def _div(vals):
+            m = max(vals, default=0.0)
+            return m if m > 0 else 1.0
+
+        if context.normalize_terms:
+            n_end = _div(endorse.values())
+            n_amb = _div(raw_amb.values())
+            n_lrn = _div(raw_lrn.values())
+            # Coverage divisor = max single-proposal marginal against the EMPTY set (pool constant).
+            n_cov = _div(
+                coverage_gain(p, [], context.weights, already_covered=context.already_covered)
+                for p in proposals
             )
+        else:
+            n_end = n_amb = n_lrn = n_cov = 1.0
+
+        modular = {
+            p.proposal_id: (
+                context.w_end * (endorse[p.proposal_id] / n_end)
+                + context.w_amb * (raw_amb[p.proposal_id] / n_amb)
+                + context.w_lrn * (raw_lrn[p.proposal_id] / n_lrn)
+            )
+            for p in proposals
+        }
 
         selected: list[Proposal] = []
         remaining = list(proposals)
@@ -106,7 +154,7 @@ class GreedyTopKSelector(Selector):
                 cov = coverage_gain(
                     cand, selected, context.weights, already_covered=context.already_covered
                 )
-                bid = context.w_cov * cov + modular[cand.proposal_id]
+                bid = context.w_cov * (cov / n_cov) + modular[cand.proposal_id]
                 if best_bid is None or bid > best_bid:
                     best, best_bid = cand, bid
             assert best is not None
@@ -213,6 +261,33 @@ def bid_breakdown(
         else {}
     )
 
+    # Recompute the SAME per-pool normalization divisors the selector used, so the reported
+    # contributions/shares match what actually drove selection (else the voice log misleads).
+    def _div(vals):
+        m = max(vals, default=0.0)
+        return m if m > 0 else 1.0
+
+    if context.normalize_terms:
+        n_end = _div(endorse.values()) if endorse else 1.0
+        n_amb = _div(
+            ambition_gain(
+                p,
+                context.target_gap,
+                reachable_ceiling=context.reachable_ceiling,
+                overreach_decay=context.overreach_decay,
+            )
+            if context.target_gap is not None
+            else 0.0
+            for p in endorse_pool
+        )
+        n_lrn = _div(learnability_gain(p, context.parent_learnability) for p in endorse_pool)
+        n_cov = _div(
+            coverage_gain(p, [], context.weights, already_covered=context.already_covered)
+            for p in endorse_pool
+        )
+    else:
+        n_end = n_amb = n_lrn = n_cov = 1.0
+
     per_winner = []
     running: list[Proposal] = []
     tot = {"cov": 0.0, "end": 0.0, "amb": 0.0, "lrn": 0.0}
@@ -222,14 +297,21 @@ def bid_breakdown(
     for w in winners:
         cov = context.w_cov * coverage_gain(
             w, running, context.weights, already_covered=context.already_covered
-        )
-        end = context.w_end * float(endorse.get(w.proposal_id, 0.0))
+        ) / n_cov
+        end = context.w_end * float(endorse.get(w.proposal_id, 0.0)) / n_end
         amb = (
-            context.w_amb * ambition_gain(w, context.target_gap)
+            context.w_amb
+            * ambition_gain(
+                w,
+                context.target_gap,
+                reachable_ceiling=context.reachable_ceiling,
+                overreach_decay=context.overreach_decay,
+            )
+            / n_amb
             if context.target_gap is not None
             else 0.0
         )
-        lrn = context.w_lrn * learnability_gain(w, context.parent_learnability)
+        lrn = context.w_lrn * learnability_gain(w, context.parent_learnability) / n_lrn
         total = cov + end + amb + lrn
         shares = (
             {k: (v / total) for k, v in (("cov", cov), ("end", end), ("amb", amb), ("lrn", lrn))}
@@ -279,7 +361,16 @@ def assembled_marginal_bid(
         if context.cross_ratings is not None
         else 0.0
     )
-    amb = ambition_gain(candidate, context.target_gap) if context.target_gap is not None else 0.0
+    amb = (
+        ambition_gain(
+            candidate,
+            context.target_gap,
+            reachable_ceiling=context.reachable_ceiling,
+            overreach_decay=context.overreach_decay,
+        )
+        if context.target_gap is not None
+        else 0.0
+    )
     lrn = learnability_gain(candidate, context.parent_learnability)
     return (
         context.w_cov * cov

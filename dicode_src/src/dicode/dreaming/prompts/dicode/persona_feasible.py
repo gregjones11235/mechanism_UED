@@ -143,6 +143,7 @@ World:
 user_prompt = """
 **REMINDER: You are the FEASIBILITY-FIRST designer. Generate a new, creative task description (NOT code) aimed at a skill the agent is READY to consolidate (SR roughly 20%-70%), clearly solvable now.**
 
+{ABILITY_GATE}
 Here is the description of the trained task:
 <trained_task>
 {MASTERED_TASK}

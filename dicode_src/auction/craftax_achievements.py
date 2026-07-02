@@ -17,6 +17,8 @@ developed/tested offline. If craftax ever bumps the enum, re-run the verificatio
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 # (name, value) in enum order. Names are the lowercase enum members = the wandb skill_* suffix.
 _ACHIEVEMENTS_ORDERED: tuple[tuple[str, int], ...] = (
     ("collect_wood", 0),
@@ -154,6 +156,103 @@ ACHIEVEMENT_DEPTH: dict[str, int] = {
 def depth_of(achievement: str) -> int:
     """Coarse tech-tree depth tier (1=early .. 4=deepest) for an achievement name."""
     return ACHIEVEMENT_DEPTH[achievement]
+
+
+# --- Student per-tier mastery & "reachable ceiling" (ability-gate, 2026-07-02) --------------
+#
+# Shared by BOTH the ambition bid-gate (ambition.py: discount gap on unreachable tiers) and the
+# prompt-gate (persona prompts: "don't target above the reachable tier"). Defining the ceiling in
+# ONE place keeps the two gates logically consistent — a tier the prompt forbids is the same tier
+# the bid discounts.
+#
+# Rationale (v1_experiment.md §10.9): ambitious systematically drifts the curriculum to tier-3
+# before the student has consolidated tier-2, crowding out feasible's learnable levels. The gate
+# anchors ambition to the student's ability: it may probe ONE tier beyond mastery (the learnable
+# frontier) but gap on tiers further out is discounted / forbidden.
+
+MASTERY_THRESHOLD_DEFAULT: float = 0.70  # a tier counts as "mastered" at >= this mean SR
+
+
+def tier_mastery(
+    target_gap: Mapping[str, float],
+    *,
+    missing_is_mastered: bool = False,
+) -> dict[int, float]:
+    """Mean *mastery* (1 - gap) per depth tier, from the AmbitionGain target_gap map.
+
+    target_gap[a] = 1 - student_SR_on_target in [0,1] (see auction_integration.profile_to_target_gap).
+    So mastery of achievement a = 1 - target_gap[a].
+
+    ★ missing_is_mastered (default False): how to treat an achievement ABSENT from target_gap when
+    averaging over the FULL tier membership. This is a real correctness fork (2026-07-02):
+      - False (default, SAFE for the gate): absent => NOT measured => NOT mastered (gap 1.0,
+        mastery 0.0). A tier the eval never reported reads as unmastered, so reachable_ceiling stays
+        conservative and won't wave through an out-of-reach tier just because it's missing. This is
+        the same "absent = (NOT YET), don't hide it" philosophy as the profile formatter.
+      - True (legacy / lenient): absent => gap 0 => mastery 1.0. Only correct when the caller has
+        already guaranteed every achievement is present (the real Craftax held-out eval emits all 67,
+        including 0.00). Use only for that guaranteed-complete case.
+
+    Returns {tier: mean_mastery in [0,1]} for tiers 1..4.
+    """
+    default_gap = 0.0 if missing_is_mastered else 1.0
+    out: dict[int, float] = {}
+    for tier, names in DEPTH_TIERS.items():
+        total = 0.0
+        for a in names:
+            total += 1.0 - float(target_gap.get(a, default_gap))
+        out[tier] = total / len(names) if names else 1.0
+    return out
+
+
+def reachable_ceiling(
+    target_gap: Mapping[str, float],
+    *,
+    threshold: float = MASTERY_THRESHOLD_DEFAULT,
+    missing_is_mastered: bool = False,
+) -> int:
+    """The deepest tier the student is allowed to be *pushed toward* right now.
+
+    Walk tiers shallow->deep: the student may target up to (and including) the first tier whose
+    ALL shallower tiers are mastered (mean mastery >= threshold). Concretely, the ceiling is the
+    shallowest not-yet-mastered tier — the student's current learnable frontier — capped at the
+    deepest tier. Everything strictly deeper than the ceiling is "unreachable" (gap discounted by
+    the bid gate, forbidden by the prompt gate).
+
+    Examples (threshold 0.70):
+      t1=0.9,t2=0.4,...           -> ceiling 2  (t1 mastered, t2 is the frontier)
+      t1=0.9,t2=0.8,t3=0.3,...    -> ceiling 3
+      all >= 0.70                 -> ceiling 4  (may aim at the deepest tier)
+      t1=0.5,...                  -> ceiling 1  (not even tier-1 solid; stay at tier-1)
+    """
+    mastery = tier_mastery(target_gap, missing_is_mastered=missing_is_mastered)
+    max_tier = max(DEPTH_TIERS)
+    for tier in sorted(DEPTH_TIERS):
+        if mastery.get(tier, 0.0) < threshold:
+            return tier
+    return max_tier
+
+
+def tier_overreach_factor(
+    tier: int,
+    ceiling: int,
+    *,
+    decay: float = 0.3,
+) -> float:
+    """Soft-decay multiplier applied to a bid signal for a tier vs the reachable ceiling.
+
+    tier <= ceiling  -> 1.0 (within reach, no penalty).
+    tier  > ceiling  -> decay ** (tier - ceiling)  (each tier beyond the ceiling shrinks the signal
+                        geometrically). With decay=0.3: 1 tier over -> 0.30, 2 over -> 0.09.
+
+    This is the "soft weakening" chosen over a hard zero (2026-07-02 user decision): ambition keeps
+    a small, shrinking voice on deep tiers (it should still probe the frontier, per the
+    competition-drives-niche selling point) but can no longer out-bid feasible's learnable levels
+    on tiers the student cannot reach.
+    """
+    if tier <= ceiling:
+        return 1.0
+    return float(decay) ** (tier - ceiling)
 
 
 # --- Skill families (for Proposer-Breadth coverage) ----------------------------------------

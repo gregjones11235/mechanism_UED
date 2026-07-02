@@ -285,3 +285,184 @@ arXiv:2604.18005 说多样性塌缩「主要来自**交互结构**」。本方�
 - **A 档** = N×同一模型(persona 异质);**B 档** = 单 FM 基线(=DiCode)。
 - ⚠️**limitation(写论文)**：三底座同为中国实验室谱系,训练数据/对齐范式可能有共性→异质性或不如跨国谱系。须论证「底座架构/训练谱系仍足够不同」或在消融里量化 proposer 间真实分歧(用 auction 的 Coverage 互补度当代理指标)。
 - 复现锚点(防「换强模型作弊」指控)由 **B 档=DiCode 同款 Qwen3-235B-Thinking** 守住;C 档换最新旗舰是「异质增益」的额外卖点,非作弊(B<A<C 隔离归因)。
+
+---
+
+## 9. 中段 checkpoint 评测：C 档(auction) vs baseline，step 9900/10200/10300/10400（2026-07-01）★
+
+### 9.1 评测设定（DiCode 官方口径，已核对论文原文）
+- **口径**：论文 §4.1 + Fig2 + Appendix A.3——完整 Craftax，固定 **1024 个 held-out 程序生成世界**，报 **mean episode return**（DiCode 终值 48.33，最强 baseline 41.54）。student 观测的任务条件向量=**multi-hot 成就编码**（论文 §3 原文），即我们的 `conditioning_type=one_hot`（67 维）——两 run 与论文同口径，对标干净。
+- **入口**：`experiments/training/eval_checkpoints.py`（新写，复用官方 `online_evaluation.run_session_evaluation`→`craftax_evaluation.main`；`num_envs=1024, num_steps=8192`）。**同 seed(0) → 两档看同一批 1024 held-out 世界 → 严格配对对比**。
+- ⚠️坑修复：官方独立脚本 `online_evaluation.main` 写死 `embedding_size=1024`（embedding 模型维），在 one-hot 训练下会让 obs 维错(base+1024 vs ckpt base+67)导致 restore 崩；已改按 conditioning_type 判断 → one-hot 用 67。日志确认 `emb_size used for dummy env = 67`。
+- step 语义：`'step'=global_update_step`（每 session +100，总 15300=2e9÷1024÷128）；评测点在训练 ~65-68%（中段，非终局）。
+- 取 step 逻辑：两档 ckpt 目录**共同存在**且 ≤C档当时最新(10400)的交集。10100 因 baseline 滚动窗口(max10+keep300)挤出，剔除保对称。最终 4 点：9900/10200/10300/10400。
+
+### 9.2 结果：mean_return（同 seed 同 held-out 世界）
+
+| step  | baseline | C 档(auction) | 差 (C−base) |
+|-------|----------|---------------|-------------|
+| 9900  | 42.05    | 40.44         | −1.61       |
+| 10200 | 43.94    | 41.33         | −2.61       |
+| 10300 | 44.29    | 40.14         | −4.15       |
+| 10400 | 44.58    | 40.94         | −3.64       |
+| **均值** | **43.71** | **40.71**   | **−3.00**   |
+
+### 9.3 结论：C 档在中段系统性落后 baseline ~3 分（诚实负结果）
+1. **baseline 复现健康**：稳定上升 42.0→44.6，已超论文最强 baseline 41.54，向 48.33 逼近。
+2. **C 档全程低 ~3 分且无上升趋势**（40~41 波动）；auction 此刻**无增益反拖累**。
+
+### 9.4 差在哪（skill 分解，step 10400，base vs C）
+| skill | base | C档 | 说明 |
+|-------|------|-----|------|
+| make_iron_armour   | 34.2 | 16.2 | 中后段铁装备链 |
+| make_iron_sword    | 68.7 | 54.1 | 同上 |
+| collect_iron       | 89.1 | 83.1 | |
+| defeat_orc_mage    | 73.9 | 57.5 | 战斗中段 |
+| enter_gnomish_mines| 17.7 | 4.6  | 深层探索 |
+
+C 档在**中后段工具链(铁装备)+深层探索(gnomish mines)**明显更弱——正是需要「长程、有前置依赖课程」才练得出的能力。说明 **auction 造的课程没能把 student 推进到深层技能**。与已知隐患一致：竞争压力未回生成层(三必要条件缺第③)、by_proposer 曾坍缩 ambitious 垄断 → 课程质量没起来。
+
+### 9.5 必须声明的 caveat（勿过度解读）
+- **单 seed**、仅 4 个相邻中段 step、训练 ~68% 未到终局；趋势可能变。
+- 差值(配对同 seed 同世界)可信度 > 均值绝对水平。
+- 这是中段快照，非最终 48.33 对标结论；C 档要翻盘需课程质量在后段起来（当前无此迹象）。
+
+### 9.6 操作记录（可复用）
+- 评测走"暂停 baseline 腾 GPU"(配额 2 并发)；按《训练暂停处理规范.md》：scancel→备份 task_graph.graphml→清 orbax tmp→重交 eval；eval 完重交 baseline 无损续跑(11100 ckpt)。删最新半写 ckpt 续跑对性能无损(LR 随 opt_state 精确恢复)。
+- 结果 JSON：`/oscar/scratch/jzhu223/dicode_outputs/eval_step10400/{base,carm}/eval_*_seed0.json`（含全 67 skill）。
+
+---
+
+## 10. C 档(auction) vs baseline(单FM DiCode) 全程性能分析（2026-07-02 重写，前版多处基于污染数据已作废）★★★
+
+> 本章经多轮质疑逐层纠错重写。**唯一有效标准 = 官方 held-out mean_return（1024 未见 Craftax 世界，对标 48.33）**；跨 run 比较**必须用真实训练步对齐**（见 §10.2 污染）。之前用"各自训练关 sr / 同 label step / 结构多样性"等做的判断全部作废。数据源：wandb `evaluation/mean_return` + per-skill（官方 held-out）+ ckpt eval 交叉验证。
+
+### 10.1 决定性污染：C 档 step 标签虚高 1900（欠费崩溃所致）
+DeepInfra 初始只充 $5，欠费在早期反复打断两个 run。**baseline 打断时已存有 ckpt（disk 最早 step 300）→ 正确恢复**（`Restoring...step 3000` + `VERIFICATION opt count 96000`）。**C 档打断时首个 ckpt 还没落盘 → 每次 `No RL agent checkpoint, Starting from scratch` 重来，但 wandb step 计数照累加**。最终 job 3593784 从"标签 step 1900 的全新模型"起连续训练到 11300（`Global:` 从 2200 连续 +100，无跳变）。
+- **精确偏移 = 1900 个 global update**（日志明写 resume 标签，非估算；seed training 那 300 步 1900→2200 也是真实训练）。
+- **∴ C 档任意 label step N 的 ckpt = 真实训练 N−1900 步。** 评测用的 label 10400 = **真实 8500 步 = 总进度 55.6%**（总目标 15300）。C 档 wandb 最新真实步 9300 = 61%；baseline = 74%。**两者都远未到 DiCode 深层成就(tier3/4)的发力期(80-100%)。**
+- **LR 未受污染**（曾误判，已更正）：LR schedule 的 count = optax 内部 step，只随真实更新累加，不含虚标签（ppo_tr.py:143）。scratch 新模型从 count=0、LR 满值 2e-4 正确退火。**C 档权重与 LR 同步正确，唯一错是 step 标签。** 详见《训练暂停处理规范.md》附录 A。
+
+### 10.2 auction 机制本身健康（推翻"坍缩"旧担忧）
+- **by_proposer 三 proposer 全程共存不坍缩**：p1 主导(~5.4/16)、p2(~2.8)、p0 最弱(~1.84，5/44 session 中标 0)——被边缘化的是 proposer_0 非 proposer_2。无 persona 被逐出。
+- **bid 四项均衡**：全程 lrn 36% / end 33% / amb 20% / cov 10%（cov 结构性最弱，仅 1 次 WARN）。无任一项归零或 >70% 主导。
+- **无崩溃/不可解**；task 编译失败率 ~30%（baseline ~29%，**两者相同**，是 DiCode「LLM 造 Craftax 关」固有特性，非 C 档劣势）。
+- **proposer 一直在瞄深层**：中期 73% 的关瞄准 tier-3，auction 也给深层关更高 learnability（tier3=0.099 > tier1=0.059）。**ambitious 有发挥，生成层没失灵。**
+
+### 10.3 全程 held-out 曲线（官方标准 + 真实步对齐）
+两 run 起点对等（都从 scratch + seed training，wandb step200 held-out≈11-12，几乎相同）。真实步对齐后：
+| 真实step | baseline | C档 | 形态 |
+|---|---|---|---|
+| 300-600 | 14-18 | 14-18 | 起步持平 |
+| 700-2100 | 18-22 | 21-33 | **C 档飙升领先 +6~+12** |
+| 2200-3900 | 27-37 | 34-37 | C 档仍领先，收窄 |
+| ~3900(反超点) | — | — | baseline 追平 |
+| 4600-8500 | 38-43 | 37-41 | baseline 小幅领先 −1~−3 |
+| 8900 | 41.4 | 41.4 | 收敛同一区间 |
+
+**形状 = "C 档陡升早饱和 vs baseline 匀速持续爬"**：C 档 real 2200 就冲到 35（baseline 要 real 3000+ 才到），然后 real 2200→8900 只涨 6 分（近躺平）；baseline 从 27 匀速爬到 42（涨 15 分不停）。**C 档不是变差，是先到天花板等 baseline。**
+
+### 10.4 ★公平比较结论（同真实步，绝对成就数）
+把 mean_return 换算成"平均每 episode 多解锁几个成就"（Σ达成率差/100）。**同真实步、公平区间(real 5000-9300)平均**：
+| tier | baseline 领先(成就/episode) |
+|---|---|
+| tier-1 | +0.262 |
+| tier-2 | +0.382 |
+| tier-3 | **+0.096（几乎打平）** |
+| **合计** | **+0.74 个成就/episode（≈mean_return +1.07）** |
+
+- **平移前(同 label，不公平) baseline 领先 +1.65 成就/−3.6 分；平移后(公平)缩到 +0.74/−1.07** —— **约一半表观落后是"C 档少训 1900 步"的假象，不是机制差。**
+- 剩余 +0.74 不是 trivial(约 1 个成就)但也不大，**集中在 tier-1/tier-2 基础技能（iron 链 make_iron_armour/sword/gnomish_mines）；tier-3 深层几乎打平(+0.096)**。
+- **极不稳定**：逐点抖动 ±1 成就(real 9000 处 C 档反超 −1.05，9300 又 +1.49 = eval 噪声)；但差距未持续扩大(real5000→8000 稳定 +0.7~1.1)。
+- tier-3 斜率两者持平(base +0.70/1k vs C +0.64/1k)，C 档 **tier-2 后段斜率 +1.40/1k 是 baseline(+0.66) 两倍**——C 档仍在快速补 tier-2，未跑偏。
+
+### 10.5 综合判断（当前最可信，仍非定论）
+1. **auction 无明显劣势**：公平对齐后仅落后 ~0.74 成就(基础技能)，**tier-3/tier-4 打平**；**early 阶段有确凿样本效率优势**(用一半真实步就到 baseline 双倍步数才到的 tier-2 水平)。
+2. **共同天花板 = tier-2 ~70% + tier-3 ~12%**，两方法都突破不了，是 RL student 能力墙/Craftax 深层难度，非 auction 过错。反馈到生成层(促分化)解决不了此墙(proposer 已在瞄深层、student 学不动)。
+3. **评在最不利时点**：C 档仅真实 55-61% 进度，tier-2 还在陡升、tier-3/4(DiCode 真正战场)两者都才 12%/0% 未发力。**用当前数据判 auction 好坏为时过早；"C 档押注深层、后期赢 tier-3"是合理但未兑现的假设(tier-3 斜率目前持平，无反超迹象)。**
+
+### 10.6 待跟进
+- **唯一能定论深层战场胜负的方式**：两 run 都跑到接近终局(15300)，同真实步比 tier-3/tier-4。C 档现 61%。
+- 该 C 档 run step 标签永久污染(LR 正确但标签错位)，只能靠"真实步=label−1900"平移分析；若要发论文级干净数据，需从头重跑不中断的 C 档(额度已充足)。
+- 数据脚本：wandb 取数见记忆 [[wandb-fetch-eval-curves-local]]；曲线/tier JSON 在 scratchpad(`_wandb_curves.json`/`_skill_tiers.json`)；graphml 分析(目标 tier/学习率)脚本在 Oscar。
+
+### 10.7 ★被反超的最终根因：课程目标漂移到 tier-3，铁器链因灾难性遗忘倒退（2026-07-02）
+用 graphml（C 档造关的目标 tier 随 session）+ wandb（铁器链成就 held-out 斜率）双证据定位到根因。
+
+**(a) C 档一直造铁器链，但目标 tier 中期漂移到 tier-3**（graphml，IRON-chain 关占比 by session band）：
+| session 段 | 铁器链关占比 | 目标 tier 分布 |
+|---|---|---|
+| s1-10 (early领先) | 66% | **t2=72%**（纯 tier-2 目标）|
+| s11-25 (追平区) | 87% | t2=35%, **t3=65%** |
+| s26-45 (被反超) | 92% | t2=24%, **t3=72%** |
+| s46+ (最新) | 85% | t2=25%, t3=60% |
+- early 用**纯 tier-2 关**冲高 → tier-2 held-out 早早领先（=early +6~12 来源）。
+- 中期 ambitious 倾向让**目标升到 tier-3**（gnomish mines/orc），铁器链从"主菜"沦为深层关的**前置配料**。reasoning 里明确写 "Deep Bottleneck Hypothesis" 攻 gnomish/orc。
+
+**(b) 铁器链核心成就 held-out 实际在倒退**（wandb，斜率 real 5000→9300/1k）：
+| 成就 | baseline 斜率 | C档 斜率 |
+|---|---|---|
+| make_iron_sword | +3.62 | +2.14 |
+| make_iron_armour | +2.71 | +0.41 |
+| make_iron_pickaxe | +0.50 | **−0.68（倒退）** |
+| collect_iron | +1.05 | **−0.12（倒退）** |
+- baseline 四个全稳升；C 档停滞或**倒退**。（注：之前"tier-2 均值斜率 +1.40 在追"是被 tier-2 里饱和浅成就拉高的假象，拆到铁器链核心成就是退的。）
+
+**根因机制**：C 档中后期 72% 关瞄 tier-3，student 在深层关**大量失败（sr≈0，连进不去 mines/打不过 orc）**→ 走不到"打铁"那步→独立干净的铁器链关供给不足→**student 对铁器链既没练透又因长期不在纯铁器情境训练而遗忘/退化（RL 灾难性遗忘）**。baseline 单 FM 课程更保守、持续供给独立 tier-2 关，把铁器链稳稳练上去，于是反超。
+
+**定性结论**：被反超**不在 auction 选择机制**（机制全程健康），而在 **proposer 课程"难度锚点太激进"**——ambitious 倾向让课程过早把目标升到 student 还够不着的 tier-3，导致 tier-2 未练透就被遗忘。这**正面印证** UED 核心命题：课程必须锚在 student 的 learnable band，跳太快有害。
+
+**注（2026-07-02 用户决定）**：当前 C 档 run（auctionC_s0_v1）因 step 标签污染 + 上述课程缺陷，将被**弃用重跑**（额度已充足），用改进后的方法从头跑干净 run。本章所有 C 档数据仅作诊断依据，不作最终性能结论。改进方向见 §11。
+
+### 10.8 ★★最终根因（公平 session 对齐 + baseline 对照，收敛结论，2026-07-02）
+前面 §10.7 及多轮探索中的若干中间假设经公平对照后**修正/推翻**，最终收敛如下。
+
+**方法论修正**：跨 run 公平对齐**必须用 session 号**（每 session 恒 100 update = 真实训练进度代理），**不能用 label step**（C 档 label 因崩溃继承虚标签 1900 且中间有跳变，session 8→9 从 step1000 跳到 3000，故"真实=label−1900"只是粗近似）。之前按 label/四分位混算的分箱不可比。
+
+**公平对照（baseline vs C 档，相同 session band）**：
+| session | tier3占比 base/C | 学不会率 base/C | tier2占比 base/C |
+|---|---|---|---|
+| A 早期(s1-10) | 5% / 16% | 4% / 2% | 65% / 72% |
+| B(s11-20) | 16% / 62% | 18% / 20% | **83% / 38%** |
+| C(s21-35) | 48% / 73% | 25% / 24% | 51% / 25% |
+| D(s36-50) | 61% / 62% | **44% / 32%** | 38% / 25% |
+| E(s51+) | 60% / 61% | 28% / 27% | 39% / 24% |
+
+**被推翻的中间假设（都不成立）**：
+1. ❌"可学关被 ambition/breadth 的 bid 压制落选"——日志中标 bid 明细显示 **feasible(proposer_2) 中标率不降反升(前期20%→反超区34%)，且 lrn 是最强中标驱动项(反超区 59% 中标关由 lrn 主导)**。可学关赢得了 auction，没被压落选。
+2. ❌"ambitious 灌垃圾深层关/课程质量差"——C 档学不会率**不比 baseline 高**(B:20vs18, C:24vs25)，D 段甚至更低(32vs44)。C 档 tier3 关质量不差。
+3. ❌"C 档灾难性遗忘/课程失控是独有病"——baseline 同样 tier3 冲到 60%、学不会率 D 段 44%(比 C 档还高)。深层难关两个方法都大量造。
+
+**成立的根因 = tier 份额配比过早上移**：C 档在 B/C 段(session 11-35)tier3 占比显著高于 baseline(62% vs 16%、73% vs 48%)，**tier2 巩固份额被挤**(B 段 tier2 仅 38% vs baseline 83%)。baseline B 段**死磕 tier2(83%)**把它练透 → tier2 held-out 持续上涨 → 最终反超。**不是学不会、不是可学关落选，是 tier2(held-out 主力得分层)的巩固份额被 tier3 过早挤占。**
+
+**机制源头**：auction 的 **Coverage(深层权重 tier1-4 = 1/2/4/8×) + AmbitionGain(gap×depth 偏深)** 两项(占一半 bid 权重)系统性把 archive 的 tier 重心比单 FM 更早上移。即使每个关单独合格、feasible 也能中标，**群体配比**偏向深层。
+
+**改进方向（有据）**：不是调单个 bid 权重(feasible 已能中标)，而是**控制 archive 的 tier 份额配比**——在 student 掌握 tier2 前维持足够 tier2 份额(如 baseline B 段)。候选：per-tier 配额 / 降低 Coverage 深层权重倾斜 / 按 student 当前能力动态设定可造最深 tier。详见 §11 讨论。
+
+**诚实边界**：held-out 真实差距本就小(公平对齐仅 +0.74 成就/episode，两者终值都收敛 ~41)；上述份额差是**当前数据下最站得住的差异解释**，但 C 档仅 55-61% 进度、tier3/4 未发力，最终胜负仍需干净重跑验证。
+
+### 10.9 ★★★根因精确化 + §10.8 假设#2 修正（2026-07-02，按 proposer 拆中标关）
+用户点破：§10.8 排除"ambitious 灌垃圾关"用错了标准——**"垃圾关"应按 student 当前相对难度定义**：对 B 阶段(session 11-20)的 student，tier3 关就是垃圾关(学不会、浪费训练份额)，与其"绝对质量"无关。据此拆 B 阶段中标关的 proposer 来源(日志 winner bid 明细的 `<proposer_X>` + amb_raw 作深浅代理)：
+
+**B 阶段(s11-20) 50 个中标关按 proposer**：
+| proposer | 中标数(占比) | 高amb(深层)关 | lrn_raw均 |
+|---|---|---|---|
+| **ambitious** | **30 (60%)** | **19 个深层** | 0.66 |
+| feasible | 13 (26%) | 1 (几乎全浅可学) | 0.88 |
+| breadth | 7 (14%) | 2 | 0.89 |
+
+**证据**：
+- **B 段深层(tier3)关几乎 100% 来自 ambitious**(19/30，feasible 仅 1、breadth 2)。
+- **ambitious 独占 60% 中标名额**(top-10 里约 6 个)，把 feasible 的 tier2 可学关(amb 低、lrn_raw 0.88、10/13 高可学)挤到仅 26% 份额。
+- breadth 中标从 A 段 15 萎缩到 B 段 7，进一步让 ambitious 独大。
+- C 反超区(s21-35)同样：ambitious 43(54%) vs feasible 27(34%)，深层关 29/43 来自 ambitious。
+
+**§10.8 假设#2 修正**：❌"ambitious 灌垃圾关不成立(学不会率不比 baseline 高)" → ✅ **成立**。按 student 相对难度，ambitious 在 B/C 段灌入深层关(对当前 student=垃圾关)、独占多数中标名额，正是 tier2 巩固份额被挤、held-out 被反超的直接机制。之前用"绝对学不会率"排除是错的标准。(注：feasible 的可学关本身没被压落选——它 lrn 主导能中标——但 top-10 名额被 ambitious 占去大半，feasible 拿不到更多份额。两者不矛盾：可学关"能中标"≠"中标够多"。)
+
+**精确根因**：不是笼统"tier 份额上移"，而是 **ambitious proposer 中期靠 amb+cov bid 独占 ~60% 中标名额、灌入对当前 student 过深的关，挤掉 feasible 的可学 tier2 关份额**。auction top-k 是固定 10 名额的零和竞争，ambitious 赢得多→feasible 必然少。
+
+**改进方向(精确化)**：核心是**限制单 persona(尤其 ambitious)的中标份额** 或 **按 student 当前能力动态压制"超前"的关**。候选：
+- **per-proposer 中标配额**(如每 persona 最多 k/3)——保证 feasible 的可学关有保底份额；
+- **动态难度闸**：按 student 当前 tier 掌握度，压制超出其能力 1 档以上的关的 bid(把"是否超前"作为 gate 而非让 amb 无上限加分)；
+- **让 amb bid 随 student 能力自适应**：student 未掌握 tier2 时，tier3 的 amb 增益应被打折(gap 大但"够不着"应扣分，而非现在的 gap 大就高分)。
+这与项目"竞争驱动异质 teacher 分化"卖点相容：配额/难度闸让三 persona 沿难度轴分工(feasible 守巩固、ambitious 探边界)，而非 ambitious 单方通吃。

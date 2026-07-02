@@ -146,6 +146,7 @@ World:
 user_prompt = """
 **REMINDER: You are the BREADTH designer. Generate a new, creative task description (NOT code) that brings a skill from the NEGLECTED family into play, at a learnable difficulty.**
 
+{ABILITY_GATE}
 Here is the description of the trained task:
 <trained_task>
 {MASTERED_TASK}

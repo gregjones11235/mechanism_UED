@@ -18,6 +18,12 @@ auction_w_cov: 1.0    # bid weight: Coverage (complementary achievement coverage
 auction_w_end: 1.0    # bid weight: Endorsement (cross-rating agreement, modular)
 auction_w_amb: 1.0    # bid weight: AmbitionGain (depth x target-gap, modular)
 auction_w_lrn: 1.0    # bid weight: Learnability (parent's official p*(1-p), modular; balances depth bias)
+# Ability gate (2026-07-02, v1_experiment.md §10.9): anchor ambition to the student's reach so it
+# can't out-bid feasible on tiers the student hasn't consolidated. Both prompt-side (persona
+# ABILITY_GATE directive) and bid-side (ambition gap soft-discount above the reachable ceiling).
+auction_ability_gate: true         # master switch for the ability gate (false -> legacy, no gate)
+auction_mastery_threshold: 0.70    # a tier is "mastered" at >= this mean SR; ceiling = first below
+auction_overreach_decay: 0.3       # geometric gap discount per tier beyond ceiling (1 over -> 0.30)
 
 num_generations: 5
 num_examples: 6

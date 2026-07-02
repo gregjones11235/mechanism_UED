@@ -54,6 +54,58 @@ def test_already_covered_changes_choice():
 
 
 # ---------------------------------------------------------------------------
+# Term normalization: rescue a small-magnitude term (Learnability) from being drowned
+# (job 3591148: amb 55-71% share, lrn 0.1-0.8% at equal weights due to scale mismatch)
+# ---------------------------------------------------------------------------
+
+def test_normalization_rescues_drowned_learnability():
+    from auction.craftax_achievements import ALL_ACHIEVEMENTS
+    # Two candidates with SAME coverage/ambition (so those don't decide), differing ONLY in
+    # Learnability. Ambition is huge (many deep achievements w/ gap) so raw lrn (<=0.25) is dwarfed.
+    achs = frozenset(list(ALL_ACHIEVEMENTS)[:1])
+    lo = Proposal("lo", "p0", "parent_lo", "d", "r", achs)
+    hi = Proposal("hi", "p1", "parent_hi", "d", "r", achs)  # identical coverage
+    gap = {a: 1.0 for a in ALL_ACHIEVEMENTS}                # huge ambition for both, equal
+    parent_lrn = {"parent_lo": 0.0, "parent_hi": 0.25}      # hi is in the learnable band, lo is not
+
+    # RAW: ambition dominates; lrn difference (0 vs 0.25) is negligible vs ambition (~tens).
+    # Both have identical ambition/coverage, so lrn SHOULD be the tiebreaker even raw — but its
+    # weighted magnitude is tiny. Normalized makes lrn a full [0,1] term ⇒ 'hi' clearly wins.
+    ctx_norm = SelectionContext(target_gap=gap, parent_learnability=parent_lrn, normalize_terms=True)
+    winner = GreedyTopKSelector().select([lo, hi], 1, ctx_norm)[0]
+    assert winner.proposal_id == "hi"  # learnability now has real voice
+
+    # Under normalization, with a strong w_lrn, learnability share must be non-trivial (not <1%).
+    bd = bid_breakdown([hi], SelectionContext(
+        target_gap=gap, parent_learnability=parent_lrn, w_lrn=1.0, normalize_terms=True,
+    ), all_proposals=[lo, hi])
+    assert bd["per_winner"][0]["shares"]["lrn"] > 0.05  # rescued from the <5% drowned zone
+
+
+def test_normalization_preserves_submodular_coverage_pick():
+    # Normalizing Coverage by a pool constant must NOT change the complementary-vs-redundant logic.
+    a = _p("a", {"defeat_archer"})
+    a_dup = _p("a2", {"defeat_archer"})
+    b = _p("b", {"defeat_necromancer"})
+    sel = GreedyTopKSelector().select([a, a_dup, b], k=2, context=SelectionContext(normalize_terms=True))
+    ids = {p.proposal_id for p in sel}
+    assert ids == {"a", "b"} or ids == {"a2", "b"}  # still complementary, never {a, a2}
+
+
+def test_normalize_terms_off_reproduces_raw():
+    # normalize_terms=False must give byte-identical behaviour to the pre-fix raw magnitudes.
+    from auction.craftax_achievements import ALL_ACHIEVEMENTS
+    achs = frozenset(list(ALL_ACHIEVEMENTS)[:1])
+    p = Proposal("x", "p0", "par", "d", "r", achs)
+    gap = {a: 1.0 for a in ALL_ACHIEVEMENTS}
+    ctx = SelectionContext(target_gap=gap, parent_learnability={"par": 0.25}, normalize_terms=False)
+    bd = bid_breakdown([p], ctx, all_proposals=[p])
+    # raw ambition contribution equals ambition_gain unchanged (divisor 1.0)
+    from auction.ambition import ambition_gain
+    assert abs(bd["per_winner"][0]["amb"] - ambition_gain(p, gap)) < 1e-9
+
+
+# ---------------------------------------------------------------------------
 # bid_breakdown: the "voice" reporting helper (§3.5 drowned/dominating watch)
 # ---------------------------------------------------------------------------
 
