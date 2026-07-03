@@ -79,7 +79,7 @@ def test_ceiling_lenient_empty_is_deepest():
 
 
 def test_ceiling_stuck_at_tier1():
-    # tier-1 not consolidated (mastery 0.5 < 0.70) => ceiling is tier 1.
+    # tier-1 not consolidated (mastery 0.5 < 0.60 default) => ceiling is tier 1.
     assert reachable_ceiling(_gap_all(0.5)) == 1
 
 
@@ -105,7 +105,7 @@ def test_ceiling_threshold_configurable():
 
 
 def test_default_threshold_constant():
-    assert MASTERY_THRESHOLD_DEFAULT == 0.70
+    assert MASTERY_THRESHOLD_DEFAULT == 0.60
 
 
 # --- tier_overreach_factor ---------------------------------------------------------------------

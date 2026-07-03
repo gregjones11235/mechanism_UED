@@ -344,6 +344,86 @@ def bid_breakdown(
     }
 
 
+def pool_breakdown(
+    winners: list[Proposal],
+    all_proposals: list[Proposal],
+    context: SelectionContext,
+) -> list[dict]:
+    """Per-candidate bid breakdown for the FULL pool (winners + losers), for offline auction replay.
+
+    Unlike bid_breakdown (winners only, coverage replayed in selection order), this scores EVERY
+    candidate with a single common reference so rows are directly comparable for ranking/replay:
+      - the four terms use the SAME per-pool normalization divisors the selector used;
+      - Coverage is the STANDALONE gain (marginal vs the empty set) — a candidate's raw coverage
+        competitiveness before any greedy interaction, so losers and winners sit on one scale.
+    A row's ``total`` is therefore the candidate's *entry* bid, not its realized marginal (which for
+    winners depends on pick order). That is exactly what a counterfactual replay needs: apply a new
+    ambition discount to ``amb`` and re-rank the whole pool. Each row carries ``selected`` so the
+    replay can compare the new top-k against what v1 actually chose.
+
+    Returns a list of dicts (one per candidate), sorted by ``total`` descending:
+        {proposal_id, proposer_id, parent_task_id, selected: bool,
+         cov, end, amb, lrn, total}   # WEIGHTED contributions (same normalization as selection)
+    """
+    won = {w.proposal_id for w in winners}
+    endorse = (
+        endorsement_scores(all_proposals, context.cross_ratings)
+        if context.cross_ratings is not None
+        else {}
+    )
+
+    def _div(vals):
+        m = max(vals, default=0.0)
+        return m if m > 0 else 1.0
+
+    if context.normalize_terms:
+        n_end = _div(endorse.values()) if endorse else 1.0
+        n_amb = _div(
+            ambition_gain(
+                p, context.target_gap,
+                reachable_ceiling=context.reachable_ceiling,
+                overreach_decay=context.overreach_decay,
+            )
+            if context.target_gap is not None else 0.0
+            for p in all_proposals
+        )
+        n_lrn = _div(learnability_gain(p, context.parent_learnability) for p in all_proposals)
+        n_cov = _div(
+            coverage_gain(p, [], context.weights, already_covered=context.already_covered)
+            for p in all_proposals
+        )
+    else:
+        n_end = n_amb = n_lrn = n_cov = 1.0
+
+    rows: list[dict] = []
+    for p in all_proposals:
+        cov = context.w_cov * coverage_gain(
+            p, [], context.weights, already_covered=context.already_covered
+        ) / n_cov
+        end = context.w_end * float(endorse.get(p.proposal_id, 0.0)) / n_end
+        amb = (
+            context.w_amb * ambition_gain(
+                p, context.target_gap,
+                reachable_ceiling=context.reachable_ceiling,
+                overreach_decay=context.overreach_decay,
+            ) / n_amb
+            if context.target_gap is not None else 0.0
+        )
+        lrn = context.w_lrn * learnability_gain(p, context.parent_learnability) / n_lrn
+        rows.append(
+            {
+                "proposal_id": p.proposal_id,
+                "proposer_id": p.proposer_id,
+                "parent_task_id": p.parent_task_id,
+                "selected": p.proposal_id in won,
+                "cov": cov, "end": end, "amb": amb, "lrn": lrn,
+                "total": cov + end + amb + lrn,
+            }
+        )
+    rows.sort(key=lambda r: r["total"], reverse=True)
+    return rows
+
+
 def assembled_marginal_bid(
     candidate: Proposal,
     selected: list[Proposal],

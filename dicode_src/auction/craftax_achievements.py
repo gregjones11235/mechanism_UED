@@ -170,7 +170,7 @@ def depth_of(achievement: str) -> int:
 # anchors ambition to the student's ability: it may probe ONE tier beyond mastery (the learnable
 # frontier) but gap on tiers further out is discounted / forbidden.
 
-MASTERY_THRESHOLD_DEFAULT: float = 0.70  # a tier counts as "mastered" at >= this mean SR
+MASTERY_THRESHOLD_DEFAULT: float = 0.60  # a tier counts as "mastered" at >= this mean SR
 
 
 def tier_mastery(

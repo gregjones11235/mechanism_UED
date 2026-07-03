@@ -630,6 +630,7 @@ class TaskGenerator:
 		selector: TaskSelector,
 		config,
 		proposer_llms: list[LLM] | None = None,
+		modeler_llm: LLM | None = None,
 	):
 		"""Initializes the TaskGenerator.
 
@@ -639,6 +640,8 @@ class TaskGenerator:
 		    config: The Hydra configuration object.
 		    proposer_llms: Optional list of N heterogeneous Proposer LLMs for the auction
 		        (multi-FM) method. If None, behaviour is the unchanged single-FM DiCode baseline.
+		    modeler_llm: Optional GLM LLM for the v5-debate MODELER (cooperative-fill method). If None,
+		        the modeler path is off and behaviour is the unchanged v4 auction / baseline.
 
 		"""
 		self.llm = task_generator_llm
@@ -647,6 +650,12 @@ class TaskGenerator:
 		self.archive = archive
 		self.selector = selector
 		self.config = config
+		# v5-debate: the modeler is built lazily on first use (needs the per-run StudentProfileLog).
+		self.modeler_llm = modeler_llm
+		self._modeler = None  # auction.modeler.Modeler, lazily constructed in evolve_mastered_coop
+		self._profile_log = None  # auction.student_profile_log.StudentProfileLog, lazily constructed
+		# Rotating turn order for the cooperative sequential-fill method (advances once per session).
+		self._coop_turn_offset = 0
 		if config.mode != "reward":
 			self.evolve_mastered_prompt = importlib.import_module(
 				self.config.prompts.evolve_mastered
@@ -930,8 +939,8 @@ class TaskGenerator:
 		from auction.craftax_achievements import reachable_ceiling as _reachable_ceiling
 
 		ability_gate_on = bool(getattr(self.config, "auction_ability_gate", True))
-		mastery_threshold = float(getattr(self.config, "auction_mastery_threshold", 0.70))
-		overreach_decay = float(getattr(self.config, "auction_overreach_decay", 0.3))
+		mastery_threshold = float(getattr(self.config, "auction_mastery_threshold", 0.60))
+		overreach_decay = float(getattr(self.config, "auction_overreach_decay", 0.4))
 		ceiling = (
 			_reachable_ceiling(target_gap, threshold=mastery_threshold)
 			if (ability_gate_on and target_gap)
@@ -999,6 +1008,22 @@ class TaskGenerator:
 					f"cov={w['cov']:.3f}({sh['cov']:.0%}) end={w['end']:.3f}({sh['end']:.0%}) "
 					f"amb={w['amb']:.3f}({sh['amb']:.0%}) lrn={w['lrn']:.3f}({sh['lrn']:.0%}) total={w['total']:.3f}"
 				)
+			# FULL candidate pool (winners + LOSERS), for offline auction replay / counterfactual
+			# bid analysis. Each row = a candidate ENTRY bid (coverage vs empty set, same normalization
+			# as selection), tagged sel/rej. Winner-only logging lacked this: with the whole 36-candidate
+			# pool we can re-rank under a different ambition discount and see which picks change (2026-07-02).
+			from auction.selectors import pool_breakdown
+
+			pool = pool_breakdown(winners, proposals, context)
+			print(f"[auction][pool] session={session_idx} n_candidates={len(pool)} n_selected={len(winners)}")
+			for r in pool:
+				flag = "sel" if r["selected"] else "rej"
+				print(
+					f"[auction][pool]   [{flag}] {r['proposal_id']} <{r['proposer_id']}> "
+					f"parent={r['parent_task_id']} "
+					f"cov={r['cov']:.3f} end={r['end']:.3f} amb={r['amb']:.3f} lrn={r['lrn']:.3f} "
+					f"total={r['total']:.3f}"
+				)
 		except Exception as e:  # logging must never break the run
 			print(f"[auction][voice] breakdown logging failed (non-fatal): {e}")
 
@@ -1009,6 +1034,208 @@ class TaskGenerator:
 		return self._organize_data(
 			win_parsed, win_parents, win_examples, session_idx, "mastered"
 		)
+
+	def _ensure_modeler(self):
+		"""Lazily build the StudentProfileLog + Modeler (v5-debate). Returns the Modeler or None."""
+		if self.modeler_llm is None:
+			return None
+		if self._modeler is None:
+			from auction.modeler import Modeler
+			from auction.student_profile_log import StudentProfileLog
+
+			recent_k = int(getattr(self.config, "modeler_recent_k", 6))
+			self._profile_log = StudentProfileLog()
+			self._modeler = Modeler(
+				self.modeler_llm, self.archive, self._profile_log, recent_k=recent_k
+			)
+			print("[modeler] Modeler + StudentProfileLog initialised (GLM diagnostic agent).")
+		return self._modeler
+
+	def evolve_mastered_coop(
+		self,
+		session_idx: int,
+		mastered_tasks: list[str],
+		global_agent_profile: dict | None = None,
+	) -> list[dict]:
+		"""v5-debate COOPERATIVE-FILL method (v5_design.md 方案A): modeler diagnosis + sequential fill.
+
+		Flow per session:
+		  1. Record the student's current held-out profile into the time-series log.
+		  2. MODELER (GLM) diagnoses the student's current state + recommends a level TYPE per parent.
+		  3. For EACH parent, the proposers write levels IN TURN (order rotates each session). The
+		     second proposer sees what the first already made ({PEER_ALREADY_MADE}) and covers a
+		     different valuable TYPE — cooperative, not competitive. BOTH levels are kept (no auction
+		     culling, like baseline). With a single proposer this is just "modeler-guided ambitious".
+
+		Returns the same _organize_data structure as evolve_mastered / _auction, so downstream code
+		(code generation, injection) is unchanged.
+		"""
+		from .auction_integration import parsed_response_to_proposal  # noqa: F401 (parity import)
+
+		modeler = self._ensure_modeler()
+		# 1. record profile snapshot for the time series (idempotent per session).
+		if self._profile_log is not None:
+			self._profile_log.record(session_idx, global_agent_profile)
+
+		# 2. modeler diagnosis (once per session). parent_context = short parent descriptions.
+		parent_context = {}
+		for pid in mastered_tasks:
+			detail = self._modeler.view.level_detail(pid) if modeler else {}
+			parent_context[pid] = detail.get("description", "") or ""
+		guidance = (
+			modeler.diagnose(session_idx, mastered_tasks, parent_context)
+			if modeler
+			else {"student_states": {}, "guidance_per_parent": {}}
+		)
+		if modeler:
+			states = guidance.get("student_states", {})
+			print(
+				f"[modeler] session={session_idx} diagnosed {len(states)} skills; "
+				f"guidance for {len(guidance.get('guidance_per_parent', {}))} parents."
+			)
+
+		# 3. sequential fill with rotating turn order.
+		n_prop = len(self.proposer_llms)
+		order = [(self._coop_turn_offset + i) % n_prop for i in range(n_prop)]
+		self._coop_turn_offset = (self._coop_turn_offset + 1) % max(n_prop, 1)
+
+		# Per-parent record of what earlier proposers already produced this round (for PEER_ALREADY_MADE).
+		peer_made: dict[str, list[str]] = {pid: [] for pid in mastered_tasks}
+
+		all_parsed: list[dict] = []
+		all_parents: list[list[str]] = []
+		all_examples: list[list[str]] = []
+
+		for turn_i, proposer_idx in enumerate(order):
+			proposer = self.proposer_llms[proposer_idx]
+			module = (
+				self.persona_prompts[proposer_idx]
+				if self.persona_prompts is not None
+				else self.evolve_mastered_prompt
+			)
+			# Build per-parent extra fields (modeler guidance + peer-so-far + turn order).
+			extra: dict[str, dict] = {}
+			for pid in mastered_tasks:
+				peer_txt = (
+					"\n---\n".join(peer_made[pid]) if peer_made[pid] else "(you are first this round)"
+				)
+				extra[pid] = {
+					"MODELER_GUIDANCE": modeler.render_guidance_for_parent(guidance, pid)
+					if modeler
+					else "(no modeler)",
+					"PEER_ALREADY_MADE": peer_txt,
+					"REFERENCE_LEVEL": self._coop_reference_text(guidance, pid),
+					"MY_TURN_ORDER": f"You are proposer {turn_i + 1} of {n_prop} this round.",
+				}
+
+			system_prompt = self._build_system_prompt(module)
+			user_prompts, p_sets, e_sets = self._build_mastered_prompts(
+				mastered_tasks,
+				global_agent_profile,
+				prompt_module=module,
+				extra_fields_per_parent=extra,
+			)
+			if not user_prompts:
+				continue
+
+			prev_llm = self.llm
+			self.llm = proposer
+			try:
+				parsed_responses = self._query_and_parse_responses(system_prompt, user_prompts)
+			finally:
+				self.llm = prev_llm
+
+			for local_i, parsed in enumerate(parsed_responses):
+				all_parsed.append(parsed)
+				all_parents.append(p_sets[local_i] if local_i < len(p_sets) else [])
+				all_examples.append(e_sets[local_i] if local_i < len(e_sets) else [])
+				# Record this proposal so the NEXT proposer sees it (peer awareness).
+				pid = p_sets[local_i][0] if local_i < len(p_sets) and p_sets[local_i] else None
+				if pid is not None:
+					desc = (parsed.get("description") or "") if isinstance(parsed, dict) else ""
+					peer_made[pid].append(f"[proposer_{proposer_idx}] {desc}")
+
+		if not all_parsed:
+			print("[coop] No proposals produced. Skipping.")
+			return []
+
+		# Optional QUALITY SELECTION (v5_design.md §8). coop_select_k=null -> keep all (变种0, 不筛);
+		# coop_select_k=K -> select K from the candidate pool by a NON-competitive bid (default 方案A:
+		# AmbitionGain + Learnability; Coverage/Endorsement off, see §8.2). Aligns v5y's per-round
+		# retained count to baseline's for a clean comparison. Nothing competitive (no cross-rating).
+		select_k = getattr(self.config, "coop_select_k", None)
+		if select_k is not None and len(all_parsed) > int(select_k):
+			all_parsed, all_parents, all_examples = self._coop_select(
+				all_parsed, all_parents, all_examples, int(select_k), session_idx, global_agent_profile
+			)
+
+		print(
+			f"[coop] session={session_idx}: {len(all_parsed)} levels kept from {n_prop} proposer(s) "
+			f"(turn order {order}); selection={'top-%d' % int(select_k) if select_k is not None else 'none (all kept)'}."
+		)
+		return self._organize_data(
+			all_parsed, all_parents, all_examples, session_idx, "mastered"
+		)
+
+	def _coop_select(
+		self, all_parsed, all_parents, all_examples, k, session_idx, global_agent_profile
+	):
+		"""Select k candidates from the coop pool by AmbitionGain+Learnability (v5_design.md §8.2 方案A).
+
+		Reuses the auction GreedyTopKSelector with Coverage/Endorsement weights = 0 (so it reduces to a
+		modular AmbitionGain + Learnability top-k). NON-competitive: no cross-rating. Returns the three
+		parallel lists filtered to the winners, preserving order. Bid weights are config-overridable
+		(coop_w_amb / coop_w_lrn), defaulting to 1/1.
+		"""
+		from auction.selectors import GreedyTopKSelector, SelectionContext
+		from .auction_integration import parsed_response_to_proposal, profile_to_target_gap
+
+		# Build Proposal objects with a stable index id so we can map winners back to the lists.
+		proposals = []
+		for i, parsed in enumerate(all_parsed):
+			parent = all_parents[i][0] if i < len(all_parents) and all_parents[i] else ""
+			proposals.append(
+				parsed_response_to_proposal(
+					parsed, proposal_id=f"coop_s{session_idx}_{i}", proposer_id="coop", parent_task_id=parent
+				)
+			)
+		target_gap = profile_to_target_gap(global_agent_profile)
+		parent_learnability = self._build_parent_learnability(proposals)
+		context = SelectionContext(
+			target_gap=target_gap or None,
+			cross_ratings=None,  # NON-competitive: no endorsement in coop
+			parent_learnability=parent_learnability or None,
+			w_cov=float(getattr(self.config, "coop_w_cov", 0.0)),   # 方案A: Coverage OFF (§8.2)
+			w_end=0.0,                                              # Endorsement OFF (non-competitive)
+			w_amb=float(getattr(self.config, "coop_w_amb", 1.0)),
+			w_lrn=float(getattr(self.config, "coop_w_lrn", 1.0)),
+			reachable_ceiling=None,  # v4 already retired the ability gate; do not revive it
+		)
+		winners = GreedyTopKSelector().select(proposals, k, context)
+		win_idx = sorted(int(w.proposal_id.rsplit("_", 1)[1]) for w in winners)
+		print(
+			f"[coop][select] session={session_idx} kept {len(win_idx)}/{len(all_parsed)} "
+			f"(w_amb={context.w_amb}, w_lrn={context.w_lrn}, w_cov={context.w_cov}); "
+			f"ambition_skills={len(target_gap)}, learnable_parents={len(parent_learnability)}."
+		)
+		return (
+			[all_parsed[i] for i in win_idx],
+			[all_parents[i] for i in win_idx],
+			[all_examples[i] for i in win_idx],
+		)
+
+	def _coop_reference_text(self, guidance: dict, parent_id: str) -> str:
+		"""Render the modeler-recommended reference level body for a parent, or '' if none."""
+		if self._modeler is None:
+			return ""
+		g = (guidance.get("guidance_per_parent") or {}).get(parent_id) or {}
+		ref = g.get("reference_level_id") or ""
+		if not ref:
+			return ""
+		detail = self._modeler.view.level_detail(ref)
+		if not detail:
+			return ""
+		return f"[reference level {ref}]\n{detail.get('description', '')}"
 
 	def _run_cross_rating(
 		self, proposals: list, global_agent_profile: dict | None = None
@@ -1058,7 +1285,7 @@ class TaskGenerator:
 			if not others:
 				continue
 			listing = "\n\n".join(
-				f"[id: {p.proposal_id}]\n{p.docstring[:1200]}" for p in others
+				f"[id: {p.proposal_id}]\n{p.docstring}" for p in others
 			)
 			user = (
 				f"Rate the following {len(others)} candidate levels on the three criteria and return "
@@ -1100,6 +1327,7 @@ class TaskGenerator:
 		global_agent_profile: dict | None,
 		prompt_module=None,
 		archive_family_coverage: str | None = None,
+		extra_fields_per_parent: dict[str, dict] | None = None,
 	) -> tuple[list[str], list[list[str]], list[list[str]]]:
 		"""Builds the per-parent user prompts.
 
@@ -1110,16 +1338,19 @@ class TaskGenerator:
 			archive_family_coverage: only the Breadth persona's user_prompt has an
 				{ARCHIVE_FAMILY_COVERAGE} placeholder; pass the pre-computed tally string for it.
 				Other personas' templates don't reference it, so it's harmlessly ignored.
+			extra_fields_per_parent: v5-debate coop path — {parent_id: {FIELD: value}} extra template
+				fields (MODELER_GUIDANCE / PEER_ALREADY_MADE / REFERENCE_LEVEL / MY_TURN_ORDER) merged
+				into the fields dict for that parent. _safe_format ignores any a template doesn't use,
+				so non-coop personas are unaffected. Defaults to None (unchanged v4 behaviour).
 		"""
 		module = prompt_module or self.evolve_mastered_prompt
 		user_prompts: list[str] = []
 		parent_sets: list[list[str]] = []
 		example_sets: list[list[str]] = []
 		global_profile_str = self._format_global_agent_profile(global_agent_profile)
-		# Prompt-side ability gate (per-student, same for every parent this session): the hard rule
-		# "don't target a tier above the student's reachable ceiling". Mirrors the bid-side gate
-		# (SelectionContext.reachable_ceiling) so the LLM and the auction agree on what's out of reach.
-		ability_gate_str = self._format_ability_gate_directive(global_agent_profile)
+		# NOTE (v3, 2026-07-02): the prompt-side ability gate is GONE. Persona templates no longer
+		# carry an {ABILITY_GATE} placeholder — over-reach control is bid-side only (ambition.py's
+		# reachable_ceiling discount), matching baseline's plain evolve prompt (no tier constraint).
 
 		for mastered_task in mastered_tasks:
 			task_examples = self.selector.select_similar_desc_tasks(
@@ -1138,64 +1369,18 @@ class TaskGenerator:
 				"TASK_PERFORMANCE_CONTEXT": task_performance_str,
 				"GLOBAL_AGENT_PROFILE": global_profile_str,
 				"ARCHIVE_FAMILY_COVERAGE": archive_family_coverage or "",
-				"ABILITY_GATE": ability_gate_str,
+				# Only ambitious's template references this; _safe_format drops it for the others.
+				"PARENT_CHILD_HISTORY": self._format_parent_child_history(mastered_task),
+				# v5 coop fields default to empty; the coop path overrides per parent below.
+				"MODELER_GUIDANCE": "",
+				"PEER_ALREADY_MADE": "",
+				"REFERENCE_LEVEL": "",
+				"MY_TURN_ORDER": "",
 			}
+			if extra_fields_per_parent and mastered_task in extra_fields_per_parent:
+				fields.update(extra_fields_per_parent[mastered_task])
 			user_prompts.append(self._safe_format(module.user_prompt, fields))
 		return user_prompts, parent_sets, example_sets
-
-	def _format_ability_gate_directive(self, global_agent_profile: dict | None) -> str:
-		"""Build the prompt-side ability-gate: per-tier mastery + the hard 'don't overreach' rule.
-
-		This is the prompt-half of the ability gate (the bid-half is ambition.py's reachable_ceiling
-		discount). It tells the LLM, in plain terms: the student has consolidated up to tier C; you
-		MAY design toward tier C (its learnable frontier) but MUST NOT set Relevant Achievements from
-		a tier deeper than C, because the student cannot reach those yet — such levels will fail,
-		be discarded, and starve the tiers the student is actually ready to consolidate
-		(v1_experiment.md §10.9 root cause). The threshold is configurable (auction_mastery_threshold,
-		default 0.70). Absent profile / gate disabled => empty string (persona's own guidance stands).
-		"""
-		if not bool(getattr(self.config, "auction_ability_gate", True)):
-			return ""
-		from .auction_integration import profile_to_target_gap
-
-		target_gap = profile_to_target_gap(global_agent_profile)
-		if not target_gap:
-			return ""
-		from auction.craftax_achievements import (
-			reachable_ceiling as _reachable_ceiling,
-			tier_mastery as _tier_mastery,
-		)
-
-		threshold = float(getattr(self.config, "auction_mastery_threshold", 0.70))
-		mastery = _tier_mastery(target_gap)
-		ceiling = _reachable_ceiling(target_gap, threshold=threshold)
-		pct = int(round(threshold * 100))
-		lines = [
-			"==========================",
-			"CRITICAL: STUDENT ABILITY GATE (HARD CONSTRAINT — overrides ambition)",
-			"==========================",
-			"Per-tier mastery of the student right now (mean success over the tier's achievements):",
-		]
-		for tier in sorted(mastery):
-			m = mastery[tier] * 100.0
-			status = "MASTERED" if mastery[tier] >= threshold else "NOT yet consolidated"
-			lines.append(f"  - TIER {tier}: {m:.0f}%  ({status})")
-		lines += [
-			"",
-			f"The student's REACHABLE CEILING is TIER {ceiling}: it has consolidated every tier "
-			f"below {ceiling} to >= {pct}%, so TIER {ceiling} is its current learnable frontier.",
-			"",
-			"HARD RULE (must obey, regardless of your persona):",
-			f"  1. Your task's `Relevant Achievements` MUST NOT include any achievement from a tier "
-			f"DEEPER than TIER {ceiling}. Those are out of the student's reach now; such a level will "
-			f"fail and be discarded, and it starves the tier the student is actually ready to learn.",
-			f"  2. You MAY target TIER {ceiling} (the frontier) or below. If you scaffold a deeper "
-			f"context, the *goal* achievements you require must still be at TIER {ceiling} or shallower.",
-			f"  3. Do NOT 'aim deep and hope': a tier is unlocked only after the tier below it reaches "
-			f">= {pct}%. Respect the ladder one rung at a time.",
-			"",
-		]
-		return "\n".join(lines)
 
 	def _compute_archive_family_coverage(self) -> str:
 		"""Tally how many archive levels teach each skill family (for the Breadth persona).
@@ -1363,64 +1548,94 @@ class TaskGenerator:
 	def _format_global_agent_profile(self, evaluation_feedback: dict | None) -> str:
 		"""Formats the global evaluation metrics into a string for the LLM prompt.
 
-		Grouped by tech-tree DEPTH TIER (1 early .. 4 deepest), and — critically — showing EVERY
-		achievement including those the student CANNOT do yet (SR 0 / absent from the eval feed).
-
-		WHY show the zeros (2026-07-02, v1_experiment.md §10.9 成因B-1): the old formatter filtered
-		to ``value > 0``, so the deep skills the student completely fails (gnomish_mines, orc, ...)
-		vanished from the profile. The ambitious persona then had no evidence "these are 0%" and,
-		optimistically, kept targeting them — drifting the curriculum above the student's reach.
-		Listing the 0%/unattempted skills explicitly, per tier, gives the prompt-gate the ground truth
-		it needs to enforce "don't push above the tier the student hasn't consolidated". Mirrors the
-		bid-side ability-gate (ambition.py reachable_ceiling) so both gates see the same picture.
+		v4 (2026-07-03): REVERTED to the plain DiCode baseline formatter — a flat list of the skills
+		the agent has *demonstrated* (SR > 0), NO tier grouping, NO explicit 0% listing, NO tier
+		semantic labels. Rationale: the v2/v3 per-tier formatter (which listed every achievement and
+		labelled which depth tier each belongs to, e.g. "TIER 3: diamond gear / gnome-orc combat /
+		magic") was a KNOWLEDGE LEAK — it handed the LLM Craftax's depth structure that baseline never
+		gets. To keep the C-arm comparable to baseline AND to make curriculum shape emerge from the
+		mechanism + the student's own training feedback (not from injected priors), we give the same
+		neutral profile baseline gives. The ambitious persona instead learns "what failed from here"
+		from the prior-children training outcomes ({PARENT_CHILD_HISTORY}), a real feedback signal, not
+		an injected depth map.
 
 		Args:
 			evaluation_feedback: Dictionary of skill metrics from the agent's evaluation on the full
-				Craftax game (keys like ``skill_collect_wood`` in 0..100). Missing keys => treated 0.
+				Craftax game (keys like ``skill_collect_wood`` in 0..100).
 
 		Returns:
-			A formatted per-tier string describing the agent's skill profile.
+			A formatted string describing the agent's demonstrated skill profile.
 		"""
 		if not evaluation_feedback:
 			return "No overall performance evaluation is available for the agent yet."
 
-		from auction.craftax_achievements import DEPTH_TIERS
-
-		# Pull each achievement's SR from the feed (skill_<name> in 0..100); absent => 0.0 (the
-		# student has not demonstrated it — an unmastered skill, NOT something to hide).
-		sr_by_name: dict[str, float] = {}
-		for key, value in evaluation_feedback.items():
-			if not key.startswith("skill_"):
-				continue
-			name = key[len("skill_"):].lower()
-			try:
-				sr_by_name[name] = float(value)
-			except (TypeError, ValueError):
-				continue
-
-		context_str = (
-			"This is the agent's *general* skill profile from the full Craftax game, grouped by "
-			"tech-tree depth tier (tier 1 = early .. tier 4 = deepest). Success rates are % over the "
-			"held-out evaluation. Skills marked (NOT YET) are ones the agent essentially cannot do "
-			"yet (0%). Use this to judge which tier the agent has consolidated and which is still "
-			"out of reach.\n"
-		)
-		tier_labels = {
-			1: "TIER 1 (early: wood/stone basics, survival)",
-			2: "TIER 2 (mid: iron/coal/furnace, torches, first descent)",
-			3: "TIER 3 (late: diamond gear, deeper floors, gnome/orc combat, magic)",
-			4: "TIER 4 (deepest: fire/ice realms, graveyard, elementals, necromancer, knights)",
-		}
-		for tier in sorted(DEPTH_TIERS):
-			names = sorted(DEPTH_TIERS[tier])
-			srs = [sr_by_name.get(n, 0.0) for n in names]
-			mean_sr = sum(srs) / len(srs) if srs else 0.0
-			context_str += f"\n{tier_labels[tier]} — mean success {mean_sr:.1f}%:\n"
-			for n in names:
-				sr = sr_by_name.get(n, 0.0)
-				tag = "  (NOT YET)" if sr <= 0.0 else ""
-				context_str += f"  - {n}: {sr:.2f}%{tag}\n"
+		context_str = "This is the agent's *general* skill profile from the full Craftax game:\n"
+		skill_lines = [
+			f"- {key[len('skill_'):]}: {value:.2f}%"
+			for key, value in evaluation_feedback.items()
+			if key.startswith("skill_") and value > 0
+		]
+		if skill_lines:
+			context_str += (
+				"Its success rates on the skills it has shown are:\n" + "\n".join(skill_lines) + "\n"
+			)
+		else:
+			context_str += "No skills have been demonstrated in the global evaluation yet.\n"
 		return context_str
+
+	def _format_parent_child_history(self, mastered_task: str) -> str:
+		"""Levels already evolved FROM this parent + their trained SR (ambitious persona only).
+
+		v4 (2026-07-03): the real feedback signal that replaces the injected tier map. For the parent
+		task being evolved, list its children in the archive and each child's last trained success
+		rate. A child whose SR stayed near zero marks a direction that FAILED from here — the student
+		could not reach the situation that level required (the tier2->tier3 "dependency collapse":
+		experiment_design.md §11.7 E). The ambitious persona uses this to re-aim shallower / scaffold
+		rather than re-issue an unlearnable reach. Only ambitious's user_prompt has the
+		{PARENT_CHILD_HISTORY} placeholder; the other personas' _safe_format silently drops this field.
+		"""
+		import json as _json
+
+		g = getattr(self.archive, "graph", None)
+		if g is None or not g.has_node(mastered_task):
+			return "No levels have been evolved from this parent yet."
+		from .auction_integration import parse_relevant_achievements
+
+		K = 10  # show the last K trained-SR readings per child (v3c ph-length: p90=10, K=10 fully
+		# shows 90% of children; the rest are truncated to their most recent 10 sessions — enough to
+		# read the current trend without dumping ancient early history).
+		lines: list[str] = []
+		for child in g.successors(mastered_task):
+			data = g.nodes[child]
+			ph = data.get("performance_history")
+			try:
+				ph = _json.loads(ph) if isinstance(ph, str) else (ph or [])
+			except (TypeError, ValueError):
+				ph = []
+			# full SR sequence over sessions (skip records with no sr)
+			srs = [r.get("sr") for r in ph if isinstance(r, dict) and r.get("sr") is not None]
+			if not srs:
+				continue
+			achs = parse_relevant_achievements(data.get("description", "") or "")
+			goal = ", ".join(sorted(achs)) if achs else "unspecified goal"
+			shown = srs[-K:]
+			seq = ", ".join(f"{s * 100:.0f}%" for s in shown)
+			prefix = "..., " if len(srs) > K else ""
+			# Report the raw trained-SR TIME SERIES (oldest->newest), NO verdict. The proposer reads
+			# the trend itself: a direction still climbing from zero is being learned (not failed);
+			# only one flat near zero across sessions is genuinely unlearnable from here. Handing it a
+			# hard "FAILED"/"learned" label (as v2/v3 did on the last reading alone) mis-flags a
+			# late-blooming direction whose early readings are still 0 — see experiment_design.md §11.7.
+			lines.append(
+				f"  - child targeting [{goal}]: trained SR per session (oldest->newest) = [{prefix}{seq}]"
+			)
+		if not lines:
+			return "No levels have been evolved from this parent yet."
+		return (
+			"Levels already evolved from this parent, and how the agent trained on each across "
+			"sessions. Each is a TIME SERIES of trained success rate (oldest first). Read the trend "
+			"yourself — do not judge a direction on a single low reading:\n" + "\n".join(lines)
+		)
 
 
 	def _format_task_performance_context(self, task_profile: dict) -> str:
@@ -1923,10 +2138,31 @@ class GenManager:
 			]
 			print(f"[auction] Built {len(proposer_llms)} Proposer LLMs.")
 
+		# Optional MODELER LLM for v5-debate (config.gen_manager.modeler). Absent -> modeler path off.
+		modeler_llm = None
+		modeler_cfg = self.config.get("modeler", None)
+		if modeler_cfg:
+			modeler_llm = LLM(
+				provider=modeler_cfg.provider,
+				base_url=modeler_cfg.base_url,
+				model=modeler_cfg.model,
+				llm_type=modeler_cfg.llm_type,
+				max_tokens=modeler_cfg.max_tokens,
+				temperature=modeler_cfg.temperature,
+				top_p=modeler_cfg.top_p,
+				think=modeler_cfg.get("think", False),
+			)
+			print(f"[modeler] Built MODELER LLM ({modeler_cfg.model}).")
+
 		self.archive = TaskArchive(self.config)
 		self.selector = TaskSelector(self.archive, embedding_model, self.config)
 		self.task_generator = TaskGenerator(
-			task_designer, self.archive, self.selector, self.config, proposer_llms=proposer_llms
+			task_designer,
+			self.archive,
+			self.selector,
+			self.config,
+			proposer_llms=proposer_llms,
+			modeler_llm=modeler_llm,
 		)
 		self.env_generator = EnvGenerator(env_coder, self.archive, self.config)
 
@@ -1956,9 +2192,17 @@ class GenManager:
 
 		if not self.config_.ablation:
 			if dict_of_tasks.get("mastered"):
-				# Auction (multi-FM) method when enabled; otherwise unchanged single-FM baseline.
+				# v5-debate COOP (modeler + sequential fill) when enabled; else v4 auction; else
+				# unchanged single-FM baseline.
+				use_modeler = bool(self.config.get("auction_modeler", False))
 				use_auction = bool(self.config.get("auction", False))
-				if use_auction:
+				if use_modeler:
+					mastered_results = self.task_generator.evolve_mastered_coop(
+						self.session_idx,
+						dict_of_tasks["mastered"],
+						global_agent_profile,
+					)
+				elif use_auction:
 					mastered_results = self.task_generator.evolve_mastered_auction(
 						self.session_idx,
 						dict_of_tasks["mastered"],

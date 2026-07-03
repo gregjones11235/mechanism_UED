@@ -1,0 +1,58 @@
+# conf/gen_manager/auction_c_v5yA.yaml
+# v5-debate 方案A "合作补位式 + 质量筛选" (对照 Y-A). Same as v5y (2 coop proposers + GLM modeler)
+# but ADDS a non-competitive quality selection: each round's 24 candidates -> keep top-18 by
+# AmbitionGain + Learnability (Coverage/Endorsement OFF) — drops the ~25% worst candidates, sitting
+# between 不筛 (24) and baseline (12). See v5_design.md §8.2 (变种 A).
+#
+# vs auction_c_v5y.yaml (变种 0, 不筛): ONLY difference is coop_select_k + coop_w_* below.
+# The 不筛 run (v5y, 24 all kept) and this 方案A run (24->12) share ALL other settings.
+
+defaults:
+  - default
+
+# v5 coop switch: routes evolve_tasks -> evolve_mastered_coop (modeler + sequential fill).
+auction_modeler: true
+# auction=false: NOT the v4 competitive top-k auction; coop selection is non-competitive (§8.2).
+auction: false
+modeler_recent_k: 6
+
+# --- 方案A quality selection (v5_design.md §8.2) ---
+coop_select_k: 18      # keep top-18 of the 24 candidates each round (drops ~25% worst)
+coop_w_amb: 1.0        # AmbitionGain: gap x depth (depth pressure)
+coop_w_lrn: 1.0        # Learnability: p*(1-p) (keep the learnable, drop too-hard/too-easy)
+coop_w_cov: 0.0        # Coverage OFF: breadth is handled by the 2-proposer division of labour
+
+# Both proposers use the COOPERATIVE ambitious persona (paired by index).
+personas:
+  - ambitious_coop   # <-> proposers[0] = DeepSeek-V4-Pro (thinking on, strongest reasoning)
+  - ambitious_coop   # <-> proposers[1] = Qwen3.5-397B    (heterogeneous partner)
+
+proposers:
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: deepseek-ai/DeepSeek-V4-Pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # both proposers NO-THINK for symmetry (they alternate turn order); heterogeneity
+                     #  comes from the model itself. Reasoning is the MODELER's job (think=true below).
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3.5-397B-A17B
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # symmetric with proposer[0]
+
+# MODELER: GLM-5.2 (native structured output + calibration — best for the diagnostic role).
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 32768
+  temperature: 0.4
+  top_p: 0.95
+  think: true        # MODELER is the reasoning-heavy role; thinking helps diagnosis most.

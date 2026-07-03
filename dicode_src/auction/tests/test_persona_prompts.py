@@ -43,7 +43,7 @@ _USER_FIELDS = dict(
     TASK_PERFORMANCE_CONTEXT="tp",
     GLOBAL_AGENT_PROFILE="gp",
     ARCHIVE_FAMILY_COVERAGE="afc",
-    ABILITY_GATE="ag",
+    PARENT_CHILD_HISTORY="pch",
 )
 _PERSONAS = {
     "ambitious": "persona_ambitious.py",
@@ -120,10 +120,20 @@ def test_archive_field_only_in_breadth():
     assert "ARCHIVE_FAMILY_COVERAGE" not in _load(_PERSONAS["feasible"]).user_prompt
 
 
-def test_ability_gate_placeholder_in_all_personas():
-    # The prompt-side ability gate must be injected into every persona's user_prompt (2026-07-02).
+def test_parent_child_history_field_only_in_ambitious():
+    # v4 (2026-07-03): prior-children training feedback is ambitious-only (it is the sole deep-relaunch
+    # persona; breadth/feasible do not target depth and don't need it).
+    assert "PARENT_CHILD_HISTORY" in _load(_PERSONAS["ambitious"]).user_prompt
+    assert "PARENT_CHILD_HISTORY" not in _load(_PERSONAS["breadth"]).user_prompt
+    assert "PARENT_CHILD_HISTORY" not in _load(_PERSONAS["feasible"]).user_prompt
+
+
+def test_no_ability_gate_placeholder_in_any_persona():
+    # v3 (2026-07-02): the prompt-side ability gate is REMOVED. No persona template should carry an
+    # {ABILITY_GATE} placeholder — over-reach control is bid-side only (matches baseline's plain
+    # evolve prompt, which has no tier/ceiling constraint).
     for name, f in _PERSONAS.items():
-        assert "{ABILITY_GATE}" in _load(f).user_prompt, f"{name} missing ABILITY_GATE placeholder"
+        assert "{ABILITY_GATE}" not in _load(f).user_prompt, f"{name} still has ABILITY_GATE placeholder"
 
 
 def test_personas_are_distinct():

@@ -93,6 +93,23 @@ class LLM:
 		# Safe default: DeepInfra states reasoning params are no-ops on non-reasoning models.
 		return {"reasoning_effort": "none"}
 
+	def _thinking_on_extra_body(self) -> dict[str, Any]:
+		"""Per-model OFFICIAL way to turn reasoning ON (mirror of _thinking_off_extra_body).
+
+		IMPORTANT: an empty extra_body does NOT enable thinking on DeepSeek-V4-Pro — that model is
+		non-thinking BY DEFAULT (see _thinking_off_extra_body note), so think=True must send the
+		explicit vendor switch or reasoning silently stays off:
+		  - DeepSeek:            reasoning_effort "high"
+		  - Qwen3.x / GLM (zai): chat_template_kwargs {"enable_thinking": true}
+		Unknown models: send nothing (native default), matching prior behaviour.
+		"""
+		m = self.model.lower()
+		if "deepseek" in m:
+			return {"reasoning_effort": "high"}
+		if "qwen" in m or "glm" in m or "zai" in m:
+			return {"chat_template_kwargs": {"enable_thinking": True}}
+		return {}
+
 	async def _query_local_gen(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
 		# Prompt text is identical whether or not thinking is on — thinking is toggled via the
 		# per-model official extra_body switch below, NOT by polluting the user prompt.
@@ -100,7 +117,7 @@ class LLM:
 			{"role": "system", "content": system_prompt},
 			{"role": "user", "content": user_prompt},
 		]
-		extra_body = {} if self.think else self._thinking_off_extra_body()
+		extra_body = self._thinking_on_extra_body() if self.think else self._thinking_off_extra_body()
 
 		try:
 			chat_completion = await self.client.chat.completions.create(

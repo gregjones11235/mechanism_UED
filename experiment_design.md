@@ -466,3 +466,138 @@ DeepInfra 初始只充 $5，欠费在早期反复打断两个 run。**baseline �
 - **动态难度闸**：按 student 当前 tier 掌握度，压制超出其能力 1 档以上的关的 bid(把"是否超前"作为 gate 而非让 amb 无上限加分)；
 - **让 amb bid 随 student 能力自适应**：student 未掌握 tier2 时，tier3 的 amb 增益应被打折(gap 大但"够不着"应扣分，而非现在的 gap 大就高分)。
 这与项目"竞争驱动异质 teacher 分化"卖点相容：配额/难度闸让三 persona 沿难度轴分工(feasible 守巩固、ambitious 探边界)，而非 ambitious 单方通吃。
+
+---
+
+## 11. ability-gate 方法迭代 v2→v3：从"硬禁令饿死 tier-3"到"纯 bid 层软折扣"（2026-07-02）
+
+> 本章记录基于 §10.9 改进方向的两次实跑迭代(v2→v3)+对 v1 中标结构的精确反事实推演。当前在跑 = **v3c**(run `dicode-auctionC-s0-v3c`, dir `auctionC_s0_v3c`, job `dicode-aucC-s0-v3c`)。v1/v2/v3/v3b run 均已废弃(见下)。
+
+### 11.1 v1→v2 实际改动 = ability-gate 双层(bid 软折扣 + prompt 硬禁令)
+persona 三分工(breadth/ambitious/feasible)是 **v1 就有的**(§10 全程分析的就是 v1 的三 persona)，**非 v2 新增**。v1、v2、v3 跑的是同一个 `gen_manager=auction_c` config、同一份 `~/dicode_auction` 代码。v2 相对 v1 真正新增 3 处：
+1. **bid 层 ability-gate 软折扣**：AmbitionGain 对深于 `reachable_ceiling` 的成就 ×`decay^(tier-ceiling)`(v2: decay=0.3)。ceiling **每 session 从 student 实时 mastery 动态算**(取最浅的未掌握 tier)，非静态锁定。代码 `craftax_achievements.reachable_ceiling` + `ambition.tier_overreach_factor`。
+2. **prompt 层 ability-gate 硬禁令**：`_format_ability_gate_directive` 往每个 persona 注入 "HARD RULE: MUST NOT target a tier deeper than ceiling"。**这是 v2 的病灶(见 11.2)**。
+3. profile formatter 加 `(NOT YET)` 标注 0% 技能。
+mastery_threshold=0.70 / overreach_decay=0.3(defaults 在 `conf/gen_manager/default.yaml`)。
+
+### 11.2 ★v2 诊断：prompt 硬禁令把 tier-3 供给饿死(held-out 数据 + tier 分解)
+v2(run `auctionC_s0_v2`, restore@1500 干净续跑)跑到 real step 4278 时对齐 baseline：
+| 维度 | 结论 |
+|---|---|
+| **整体 mean_return** | v2 落后 −2~−3(step 2442 起被反超，比 v1 的 real 3900 反超点大幅提前) |
+| **tier-1+2 only** | v2 vs baseline **基本打平**(early 甚至 v2 领先 +0.8~1.7，中段 ±0.5 噪声内) |
+| **tier-3** | v2 held-out 仅 baseline 的 **~61%**，斜率仅 **~60%** — **落后几乎 100% 来自 tier-3** |
+| **tier-2 mastery** | v2 到 step4278 仍仅 65.4%(<0.7)；baseline 到 step6348 才首破 0.7 |
+| **ceiling 轨迹** | v2 gate 从 session 14→38 **全程卡 tier2 从未解锁 tier3**(因 tier2 mastery 一直 <0.7 阈值) |
+
+**根因链**：prompt 硬禁令(MUST NOT 深于 ceiling)+ ceiling 因 threshold=0.7 太高一直卡 tier2 → **从 session 14 起硬禁止 proposer 造 tier-3 目标关** → tier-3 供给被掐死 → student 缺 tier-3 训练 → tier-3 held-out 爬不起来。**而 baseline(无 gate)在 tier-2 才 65% 时就大量混 tier-3，tier-3 陡升且 tier-2 没垮 → 领先。**
+
+**关键教训**：v1 病是"tier-3 **过度**挤占 tier-2"，v2 的 gate **矫枉过正**成"tier-3 **归零**"。baseline 证明 **"tier-2 半熟(~65%)时混合 tier-3" 是甜点区**——tier-2/tier-3 有共享依赖链(打钻石/进 sewers 要先熟练铁器链)，混着练顺带巩固 tier-2，不是零和。
+
+### 11.3 ★v1 feasible proposer 精确诊断：分工正确，病在名额零和(非 feasible 造错)
+用 v1 完整中标日志(`dicode-aucC-s0-3593784.out`，500 winner，逐候选 `<proposer_X> cov/end/amb/lrn/total`，覆盖 session 1-99)按 proposer 拆中标关深浅(amb_raw 作深浅代理，amb 高=深关)：
+
+**feasible(proposer_2) 中标关 amb_raw 分布**：
+| 阶段 | feasible 中标 | mean_amb | amb≥1.0(深关) |
+|---|---|---|---|
+| A s1-10 | 10 | 0.237 | 0% |
+| B s11-20 | 13 | 0.330 | 0% |
+| **C s21-35(反超区)** | 27 | 0.314 | **0%** |
+| D s36-50 | 20 | 0.233 | 0% |
+
+对照 ambitious(proposer_1) mean_amb ≈ 0.61-0.68(2 倍)、深关 16-20%。**feasible 全程守 tier-2(深关 0%)，反超区也没堕落成造 tier-3——persona 分工清晰稳定。**
+
+**但 graphml 真实 goal-tier 分布(全部中标关)**：
+| 阶段 | 总中标 | tier-1 | tier-2 | tier-3 |
+|---|---|---|---|---|
+| A s1-10 | 50 | 6 | **36(72%)** | 8 |
+| B s11-20 | 50 | 0 | 19(38%) | **31(62%)** |
+| **C s21-35(反超区)** | 80 | 1 | **21(26%)** | **58(72%)** |
+| D s36-50 | 70 | 11 | 16(23%) | 43(61%) |
+
+**精确结论**：feasible **造对了 tier-2 关，但只拿到反超区 ~34% 中标名额**(27/80)，撑不起 archive 的 tier-2 供给。剩 2/3 名额被 ambitious(43 关，大量 tier-3)+breadth 抢走 → **archive tier-2 份额仅 26%、tier-3 达 72%** → student 反超区大量训 tier-3(学不动)、tier-2 巩固份额被挤 → 被 baseline 反超。**病不在"feasible 造错"，在"auction 10 名额零和竞争里 feasible 的 tier-2 关中标不够多"。**(呼应 §10.9：可学关"能中标"≠"中标够多"。)
+
+### 11.4 ★v3 方法定型：删 prompt 硬禁令，只留 bid 层软折扣(参数从 v1 反事实模拟定)
+**用户决策(2026-07-02)**：prompt 层能力门**完全删除**(不是软化)。依据 = baseline 的原版 evolve prompt(`prompts/dicode/evolve.py`)**无任何 tier/ceiling 约束**；C 档要与 baseline 公平对比 + 让 over-reach 控制成为纯 **mechanism 信号**(auction bid)而非手工 prompt 规则(强化"竞争驱动课程"卖点)。改动：
+1. **prompt 层**：三个 persona 模板删 `{ABILITY_GATE}` 占位符，`_format_ability_gate_directive` 整个函数删除。**v3 相对 v1，prompt/persona 层完全一致；唯一机制差异 = bid 层多了 reachable_ceiling 软折扣**(一个筛选/打分层差异)。
+2. **bid 层参数**(仅生效于选择端)：`mastery_threshold 0.70→0.60`、`overreach_decay 0.30→0.40`。
+
+**参数值来自 v1 task_graph 反事实模拟**(非拍脑袋)——用 v1 每 session 真实 student mastery 轨迹(graphml `performance_history`)算 ceiling，重放折扣效果：
+- **threshold 0.60**：tier-3 首次进入可达 ~session 15(64% session 可达)，避开最脆弱的 s11-14 窗口，接近 baseline 混合密度。0.50 → tier-3 从 s10 全面可达 = 重演 v1"B 段 tier-3 挤爆 tier-2"病灶；0.70 → 到 s23 才可达(偏晚)。
+- **decay 0.40**：只在 tier-3 可达前的早期窗口起压制。把深关 amb bid 压到 ~0.34。0.30→0.26(删 prompt 后偏狠)；0.50→0.45(bid 成唯一刹车时偏松)。
+
+**机制仍成立**：ceiling 是 student 状态标量非选中集函数 → bid 仍 submodular → (1-1/e) 贪心保证不破。
+
+### 11.5 全候选池 `[auction][pool]` 日志(v3c 新增，供离线 auction 重放)
+v1 的 `[auction][voice]` 只记 10 个 winner，**无落选的 26 个候选** → 无法完整重放 top-k 竞争(只能 winner 内部重排下界推演)。v3c 新增 `selectors.pool_breakdown` + `[auction][pool]` 日志：**每 session 打全部 36 候选**(winner+loser)，标 `[sel]`/`[rej]` + 四项加权 bid + total(coverage 用 vs 空集的 entry bid，同 selection 归一化，全池可比排名)。**这样 v3c 后续可完整重放 auction**，精确验证核心假设：bid 软折扣是否把 ambitious 的 tier-3 关(amb×0.4)压到落选、从而让 feasible 的 tier-2 关翻身中标、tier-2 archive 份额回升。⚠️对已跑完的 v1 无法追溯补(v1 .out 永久只有 winner)。
+
+### 11.6 run 版本谱系(避免混淆)
+- **v1**(`auctionC_s0_v1`)：step 标签 +1900 污染 + tier-drift 课程缺陷；双层 gate 均**无**(纯 v1 auction)。诊断依据，非最终结论。中标日志在 `dicode-aucC-s0-3593784.out`。
+- **v2**(`auctionC_s0_v2`)：双层 ability-gate(bid 0.3 + prompt 硬禁令)，thr=0.7。**tier-3 饿死，废弃。**
+- **v3 / v3b**：v3 删 prompt 硬禁令但保留占位符填空字符串；发现占位符残留多一空行 + 该与 baseline(无占位符)对齐 → v3b 删占位符。均已废弃(prompt 微瑕/wandb run 复用问题)。
+- **v3c**(当前在跑)：prompt 层占位符+函数彻底删、bid thr=0.60/decay=0.40、+全候选池 pool 日志。job 3628894，从 scratch，与 baseline(`repro_s0_v1`)公平对比。
+
+### 11.7 ★v3c 早期实测(real 0-3800)：早期领先回归，但进入平台且总成就进度落后 v1(2026-07-03)
+v3c 跑到 real ~3800(过了 v1 反超点 3900 前夜)的多维观察。**结论未定**(才 ~25% 进度)，但已有几个明确信号+一个关键机制发现。
+
+**(A) baseline 官方复现成功**：baseline 完整训完(step 15300)，官方 held-out mean_return **最终 47.02 / tail-5 平均 46.69**，对标论文 48.33 = **97% 复现**。取自 wandb `evaluation/mean_return`(训练时每 eval step 在 1024 held-out 上评，即官方口径)。
+
+**(B) 早期领先回归 v1 水平(删硬禁令成功)**：三方同真实步对齐 mean_return —
+| real_step | v3c-base | v1-base |
+|---|---|---|
+| 1300-2100 | +7~+12(陡升) | +10~+13 |
+| ~3565 | +1.0(仍领先) | +2 |
+
+对比 v2 同期仅 +1.8(被 prompt 硬禁令压平) → **v3c 恢复到 +9~12，≈v1**。样本效率优势找回。
+
+**(C) ★但最近 400 步进入平台/微回落(小窗口斜率才看得出)**：⚠️**方法教训**——用"近1000步"大窗口算斜率会得出"tier-2 +78/tier-3 +35 仍健康爬升"的**过度乐观**结论；改用 200/400 步小窗口(eval 间隔 ~102 步)，真相是最近 4 个 eval 点(real 3259→3667)三条线都在 3259 见顶后横盘/微降：tier-3 134→121、mean_ret 35.75→34.64。**当前准确说法=平台期，非持续上涨。样本少(4点)，尚不能区分"喘息"vs"停滞"。**
+
+**(D) ★同真实步 v3c 各 tier 成就进度 vs v1**(@real 3800)：
+| tier | v3c 合计 | v1 合计 | diff | 关键成就 |
+|---|---|---|---|---|
+| tier-1 | 1415 | 1396 | **+19** | 基础技能 v3c 更稳(defeat_skeleton/zombie/place_stone 均高) |
+| tier-2 | 1046.5 | 1053.7 | **−7.2** | v3c: make_iron_**pickaxe** +16.5(前段)；v1: make_iron_**sword** −7.4/**armour** −6.3(后段) |
+| tier-3 | 121 | 169 | **−48(v3c 仅 v1 的 72%)** | orc_solider 42%vs55%, orc_mage 14%vs39% |
+
+**★关键模式=tier-2 后段与 tier-3 依赖耦合**：v3c 铁器链**前段(pickaxe)领先**但**后段(sword/armour)落后 v1**。iron_sword/armour 依赖更深场景(打够铁/进够深)，与 tier-3 探索共享路径 → v1 靠激进喂 tier-3 顺带把铁器后段磨上去；v3c 软折扣压低 tier-3 供给，连带损失 tier-2 后段。**"压 tier-3 保 tier-2"不是干净取舍——tier-2 后段会被牵连。** 故 v3c 目前三 tier 综合成就进度**落后 v1**(tier-1 略胜换不回 tier-2 后段+tier-3 的失分)。
+
+**(E) ★★★核心机制发现=父→子跨 tier learnability 崩塌普遍存在(边级分析，公平对齐后)**：
+⚠️**先前版本用了不公平对照(已更正)**：baseline 取全流程终局 p(跑完 150+ session)、v3c 取早期 s35，被用户点破。**公平口径=两者都截到 session≤35**，专看 **tier2→tier3 边**：
+| 口径 | baseline(s≤35) | v3c(s≤35) |
+|---|---|---|
+| 子关**刚造出**first-p | 父0.53→子**0.06** (暴跌61%) | 父0.58→子**0.04** (暴跌68%) |
+| 子关 s≤35 最后 p | 父0.76→子**0.20** | 父0.81→子**0.05** |
+
+**结论修正**：
+1. **崩塌是普遍的、且造关时无法避免**——两者新造的 tier3 子关 first-p 都只有 4-6%(baseline 0.06 / v3c 0.04，几乎一样)。父关(tier2)可学≠子关(tier3)可学是 DiCode 用父关 p 代理 learnability 的固有现象，**非 auction 引入、非 v3c 独有**。
+2. **真正差异在"崩塌之后能不能磨起来"**：同截到 s35，baseline 的 tier3 子关从 0.06 **磨到 0.20**(+0.14)，v3c **钉在 0.05**(没动)。**先前"baseline 崩塌较轻(0.19 vs 0.05)"是对照假象——同期起始一样惨(0.06 vs 0.04)，差异全在事后磨没磨起来。**
+
+**(F) ★★★重新定性=突破口在"崩塌后的磨"，不在"造关时预判避开"(用户拍板 2026-07-03)**：
+- ⚠️**先前突破口方向(预判子关会不会崩、避开崩塌边)可能反了**：数据说崩塌**避不开**(first-p 都 4-6%)，tier3 子关刚造出来 student 必然不会。
+- **真问题=崩塌后 v3c 磨不动(0.05→0.05)，baseline 磨得动(0.06→0.20)**。待验证的机制假设：baseline 到 s35 已把 tier3 关反复选中训练(供给足→磨的次数够)；v3c 软折扣少选 tier3 关→磨的次数不足→钉在 0.05。**若成立，方向=保证崩塌后的深关有足够训练量磨上去，而非避开它们**——即 v3c 软折扣压 tier3 供给是**反效果**(既没磨够量、这批关又需要更多磨)。
+- **但 baseline "如何提高 tier3" 尚未实证**(上一版"重复大量训练 orc_mage 113 次"是推测)——(H) 待查：baseline 的 tier3 held-out 上升，到底靠"同一关反复训"、"造更多不同 tier3 关广度覆盖"、还是"student 在 tier2 关里顺带练到 tier3 技能"？这决定突破口的精确形态。
+- **"竞争驱动异质 teacher"卖点仍可能发力**，但发力点从"预判避开"改为"更聪明地分配崩塌后深关的训练预算/顺序"——具体形态待 (H) 定。
+- ⚠️与当前 v3c 软折扣的关系：软折扣是"按 tier 深度打折"的粗粒度代理，真正该做的是"按预判子关可学性"的细粒度门。v3c 软折扣压少了 tier3 边(19 vs 102)且子关更惨(p=0.05<baseline 0.19)——**可能既没磨够量、又没筛对质**。故方向不是"加配额压 tier-3"，是把 gate 从 tier-深度代理升级为子关可学性预判。
+
+**(G) 当前净判断**：v3c 早期领先回归(删硬禁令成功✓)，但 real 3259 后进入平台，同期总成就进度落后 v1/baseline(tier-2 后段+tier-3 受软折扣牵连)。**"删 prompt 硬禁令"确证有效**。方向不再是"加配额压 tier-3"，而是聚焦"崩塌后的深关如何高效磨"(见 (H)(I))。8h 监控(bf746bd8, 覆盖 real ~5500)看平台是喘息还是停滞、是否重蹈 v1 反超。
+
+**(H) ★baseline 提高 tier3 的真实机制=漏斗形(广撒试探→少数 goal 深磨)，实证(2026-07-03)**：
+沿 baseline graphml 追踪每个 tier3 关的训练次数(performance_history 长度)与 p 轨迹：
+- **广撒为主**：293 个 tier3 关，**训练次数中位数=1**(178 关只训 1 次)、均值 3.1。大部分关造出来训一次就弃。
+- **少数深磨且磨得动**：被训≥10 次的 28 关，p 轨迹几乎全**磨升**——orc_mage(s25 创建)训 16 次 **p 0.03→0.77**、orc_solider 训 18 次 **0.08→0.66**、diamond 训 14 次 0.23→0.78。**崩塌起始(p=3-14%)靠反复训练能磨到 60-78%。**
+- **goal 极度集中**：只碰 8/23 种 tier3 goal；**orc_mage 一个 goal 吃 117 关/423 次训练**、diamond 74 关/296 次。其余 tier3 goal(troll/sewers/magic…)几乎没碰。
+- **修正**：先前"reactor orc_mage 113 次"不准——是**同一 goal 反复造新关+各训几次**的组合，非单关磨 113 次。**机制=先广撒探哪些 tier3 goal 值得投→再对少数(orc/diamond)集中训练预算深磨。** v3c 磨不动(0.05→0.05)=软折扣既没让它广撒试探、也没对任一 goal 集中深磨，无关积累够次数。
+
+**(I) ★★baseline 的天花板局限=窄深收敛，tier3 覆盖<一半、tier4 全空(2026-07-03，用户观察)**：
+baseline 跑满 15300 步的最终成就覆盖(held-out SR 阈值)：
+| tier | 成就总数 | >1%碰到 | >10%解锁 | >50%掌握 |
+|---|---|---|---|---|
+| tier-1 | 16 | 16 | 15 | 15 |
+| tier-2 | 16 | 15 | 15 | 13 |
+| **tier-3** | 23 | **8** | **6** | **3** |
+| **tier-4** | 12 | **0** | **0** | **0** |
+
+- **tier-3 只碰 8/23(35%)、解锁 6/23、掌握仅 3/23**。且 3 个"掌握"畸形集中：orc_solider 92%/orc_mage 82%/drink_potion 81%——就是 (H) 里深磨的那几个 goal。**其余 15 个 tier3 成就(gnome/lizard/troll/magic/diamond 装备/进 sewers-vault)基本 0%。**
+- **tier-4 完全归零(0/12)**：火/冰领域、墓地、亡灵法师、骑士等最深内容一步没进。
+- **★核心洞察=mean_return 奖励"深度掌握少数关"，不奖励广度**。baseline 单 FM 朝 return 梯度走→收敛到"死磕 orc 一条线"的**窄深(deep-narrow)局部最优**。47 分是靠 tier1/2 全解锁+tier3 死磕 orc 堆出来的，探索前沿(tier3 剩余 15 个+tier4)全空。
+- **★★这是 C 档的真正卖点定位**：C 档有 **breadth persona**(造被忽略技能族的关)+**ambitious**(推前沿)+auction **Coverage bid**(奖励覆盖新成就)→理论上能对抗单 FM 的窄深收敛、把 tier3 剩余成就甚至 tier4 撬开。**即使 mean_return 打平，"同 return 下探索覆盖更广"也是更有论文价值的故事(呼应 UED open-endedness)。** ⚠️前提待验证：(a) v3c 当前 tier3 覆盖广度是否真比 baseline 同期广(还是也在死磕 orc)；(b) tier4 是否是 PPO-GTrXL student 的绝对能力墙(若 student 学不动,广度优势只能在 tier3 剩余 15 个成就体现)。

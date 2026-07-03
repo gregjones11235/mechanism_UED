@@ -20,6 +20,27 @@ defaults:
 auction: true
 auction_k: 10
 
+# v4 (2026-07-03): ability gate FULLY REMOVED (both layers). v3 already dropped the prompt-side ban;
+# v4 also drops the bid-side soft-discount. Rationale: the gate's whole job was to stop ambitious
+# out-bidding on tiers the student "can't reach" — but the prior-children SR TIME SERIES now gives
+# ambitious a real, per-direction reachability signal (rising vs flat-near-zero), so it self-limits
+# from feedback instead of from a tier-mastery ceiling. A global tier ceiling was too blunt anyway
+# (it starved late-blooming directions whose early SR is 0). auction_ability_gate=false makes the
+# selector pass reachable_ceiling=None -> AmbitionGain applies no overreach discount (ambition.py:75).
+auction_ability_gate: false
+
+# v4 (2026-07-03): ENDORSEMENT REMOVED. The v3c logs ([auction][pool], 792 candidates incl 572
+# rejected) show endorsement is a trust-everyone signal with no discriminative power and, worse,
+# ANTI-correlated with quality: 60% of candidates got >=0.7, median 0.765, while genuinely good
+# proposals were rated low (e.g. prop_s43_12: amb=1.00/lrn=1.00/cov=0.73 but end=0.222) — raters
+# penalise ambitious/differentiated levels as "risky". It duplicated learnability/coverage rather
+# than adding orthogonal info, and pushed toward CONVERGENCE, the opposite of the niche-specialisation
+# we want. Dropping it also saves N cross-rating LLM calls/session. auction_endorsement=false skips
+# cross-rating -> cross_ratings=None -> endorsement bid term = 0 (selectors.py:104); w_end=0 makes it
+# explicit in the weight log. Selection now = Coverage + AmbitionGain + Learnability.
+auction_endorsement: false
+auction_w_end: 0.0
+
 # v2: persona-differentiated proposers (方法设计_v2.md §2, prompt设计稿_v2.md).
 # personas is a SEPARATE list, paired to proposers BY INDEX (persona decoupled from model,
 # user decision 2026-06-30 — lets us later test same-model-diff-persona / diff-model-same-persona).
@@ -50,7 +71,13 @@ proposers:
     max_tokens: 32768
     temperature: 0.6
     top_p: 0.95
-    think: false
+    # v4 (2026-07-03): thinking ON for ambitious ONLY. It must read prior-children SR TIME SERIES and
+    # judge rising-vs-flat trends (persona_ambitious + _format_parent_child_history) — a reasoning task
+    # where no-think DeepSeek tends to shortcut to the last reading. VERIFIED on DeepInfra that
+    # think=True -> reasoning_effort:"high" actually yields reasoning_content (empty extra_body does
+    # NOT; V4-Pro is non-think by default). breadth/feasible stay think:false to keep ensemble
+    # diversity (§8.1). Multi-variable vs v3c accepted (user: prioritise SOTA over clean ablation).
+    think: true
   - provider: deepinfra
     base_url: https://api.deepinfra.com/v1/openai
     model: zai-org/GLM-5.2
