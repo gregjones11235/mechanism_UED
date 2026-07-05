@@ -54,11 +54,27 @@ class _FakeProfileLog:
         return [{"achievement": n} for n in self._f]
 
 
-class _FakeGM:
-    def __init__(self, archive, notebook, profile_log):
-        self.archive = archive
+class _FakeTG:
+    """Stand-in for gen_manager.task_generator, which is where the siege notebook + profile log
+    actually live (see gen_manager.TaskGenerator)."""
+    def __init__(self, notebook, profile_log):
         self._siege_notebook = notebook
         self._profile_log = profile_log
+
+
+class _FakeGM:
+    """Fake GenManager. By default it mirrors the REAL structure: the notebook + profile log hang off
+    a nested ``task_generator`` (not off the GM itself). Pass ``hoisted=True`` to instead attach them
+    directly to the GM (the pre-2026-07-05 forward-compat fallback path)."""
+    def __init__(self, archive, notebook, profile_log, hoisted=False):
+        self.archive = archive
+        if hoisted:
+            # legacy/forward-compat: attrs on the GM itself, no task_generator.
+            self._siege_notebook = notebook
+            self._profile_log = profile_log
+        else:
+            # real structure: attrs live on gen_manager.task_generator.
+            self.task_generator = _FakeTG(notebook, profile_log)
 
 
 class _DM:
@@ -222,3 +238,36 @@ def test_forgetting_family_split_flags_low_peak_combat(tmp_path):
     flagged = {f["achievement"] for f in log.forgetting_candidates()}  # family-split defaults
     assert "defeat_zombie" in flagged        # combat: peak 18 >= 15, drop 12 >= 10 -> forgetting
     assert "make_iron_pickaxe" not in flagged  # gear: peak 18 < 40 -> below its bar, not flagged
+
+
+# ---- BUGFIX regression (2026-07-05): notebook + profile log live on gen_manager.task_generator ----
+# The v6-OLD run read them off gen_manager directly, so rehearsal silently no-op'd for the whole run.
+# These pin the holder resolution so a future refactor that moves the attrs can't silently re-break it.
+
+def test_reads_notebook_from_task_generator_not_gm(tmp_path):
+    """REAL structure: notebook + plog hang off gen_manager.task_generator, and gen_manager itself has
+    NO _siege_notebook attr. Rehearsal must still find them and fire. This is the exact shape that made
+    the v6-OLD run produce zero rehearsal rescues."""
+    nb = _notebook_with_protected(tmp_path, ["defeat_gnome_warrior", "place_torch"])
+    arch = _FakeArchive()
+    arch.add_level("lvl_torch_a", "Relevant Achievements: PLACE_TORCH")
+    arch.add_level("lvl_torch_b", "Relevant Achievements: PLACE_TORCH")
+    gm = _FakeGM(arch, nb, _FakeProfileLog(["place_torch"]))  # default: attrs on .task_generator
+    assert not hasattr(gm, "_siege_notebook")  # guard: GM itself must NOT carry the notebook
+    assert hasattr(gm.task_generator, "_siege_notebook")
+    out = append_rehearsal_tasks(gm, _Cfg(_DM(per=2)), list(SIEGE_BATCH))
+    assert out[:16] == SIEGE_BATCH
+    assert len(out) - 16 == 2  # rehearsal actually fired (the bug: this was 0)
+
+
+def test_hoisted_fallback_still_works(tmp_path):
+    """Forward-compat: if a future version hoists the attrs onto the GM (no task_generator), the
+    fallback branch must still resolve them."""
+    nb = _notebook_with_protected(tmp_path, ["defeat_gnome_warrior", "place_torch"])
+    arch = _FakeArchive()
+    arch.add_level("lvl_torch_a", "Relevant Achievements: PLACE_TORCH")
+    arch.add_level("lvl_torch_b", "Relevant Achievements: PLACE_TORCH")
+    gm = _FakeGM(arch, nb, _FakeProfileLog(["place_torch"]), hoisted=True)
+    assert not hasattr(gm, "task_generator")
+    out = append_rehearsal_tasks(gm, _Cfg(_DM(per=2)), list(SIEGE_BATCH))
+    assert len(out) - 16 == 2

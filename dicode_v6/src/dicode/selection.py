@@ -116,7 +116,14 @@ def append_rehearsal_tasks(
     protected skill is forgetting, or no active level teaches a forgetting skill — so the baseline /
     v5y path is byte-for-byte unchanged.
     """
-    notebook = getattr(gen_manager, "_siege_notebook", None)
+    # BUGFIX (2026-07-05): the siege notebook + profile log live on the TaskGenerator
+    # (gen_manager.task_generator), NOT on the GenManager itself — that is where _ensure_modeler
+    # constructs and apply_llm_update mutates them. The original code read them off gen_manager
+    # directly, so getattr always returned None and rehearsal silently no-op'd for the ENTIRE v6-OLD
+    # run (0 rehearsal log lines, 0 rescues) despite a non-empty protected_set on disk. Resolve the
+    # holder first; fall back to gen_manager for forward-compat if the attr is ever hoisted up.
+    holder = getattr(gen_manager, "task_generator", None) or gen_manager
+    notebook = getattr(holder, "_siege_notebook", None)
     if notebook is None:
         # siege off / v5y path — stay byte-for-byte silent (no log) so baseline output is unchanged.
         return siege_batch
@@ -139,7 +146,7 @@ def append_rehearsal_tasks(
     # Trigger: which protected skills are CURRENTLY FORGETTING (SR peaked then dropped). Rehearsal
     # fires ONLY if this is non-empty (user 2026-07-04).
     forgetting: set[str] = set()
-    plog = getattr(gen_manager, "_profile_log", None)
+    plog = getattr(holder, "_profile_log", None)
     if plog is not None:
         try:
             # §2⑥ family-split thresholds from the notebook's config-resolved SiegeThresholds, so a

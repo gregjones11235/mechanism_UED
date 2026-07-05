@@ -16,8 +16,9 @@ def make_evaluate(config, env, env_params):
 	num_envs = config.evaluation.num_envs
 	num_steps = config.evaluation.num_steps
 	def evaluate(train_state, rng):
+		action_dim = env.action_space(env_params).n  # v6 problem-2: width of the behaviour action histogram
 		network = ActorCriticTransformer(
-			action_dim=env.action_space(env_params).n,
+			action_dim=action_dim,
 			activation=config.training.activation,
 			hidden_layers=config.training.hidden_layers,  # Mapping layer_size to hidden_layers
 			encoder_size=config.training.embed_size,  # Mapping embedding_size to encoder_size/embed_size
@@ -80,6 +81,10 @@ def make_evaluate(config, env, env_params):
 		accumulated_reward = jnp.zeros((num_envs,), dtype=jnp.float32)
 		accumulated_length = jnp.zeros((num_envs,), dtype=jnp.float32)
 		done_prev = jnp.zeros((num_envs,), dtype=jnp.bool_)
+		# v6 problem-2 (behaviour fingerprint): per-env action histogram over the episode, accumulated
+		# only while the env is unfinished (active_mask), exactly like reward/length. Appended as the LAST
+		# carry element so every existing final_carry[...] index below is unchanged.
+		accumulated_action_hist = jnp.zeros((num_envs, action_dim), dtype=jnp.float32)
 
 		init_runner_state = (
 			train_state,
@@ -95,6 +100,7 @@ def make_evaluate(config, env, env_params):
 			accumulated_length,
 			accumulated_stats,
 			rng,
+			accumulated_action_hist,
 		)
 
 		# --------------------------
@@ -116,6 +122,7 @@ def make_evaluate(config, env, env_params):
 				acc_length,
 				acc_stats,
 				rng,
+				acc_action_hist,
 			) = carry
 
 			# ... (Copy logic from make_train's _env_step) ...
@@ -188,6 +195,12 @@ def make_evaluate(config, env, env_params):
 			new_acc_reward = acc_reward + (reward * active_mask)
 			new_acc_length = acc_length + (1 * active_mask).astype(jnp.int32)
 
+			# 2b. v6 problem-2: accumulate the action histogram, masked to unfinished envs (same active_mask
+			# used for reward/length, so an env's counts freeze at its termination step). one_hot(action)
+			# is [num_envs, action_dim]; multiply by the per-env active_mask column.
+			action_onehot = jax.nn.one_hot(action, acc_action_hist.shape[1], dtype=jnp.float32)
+			new_acc_action_hist = acc_action_hist + action_onehot * active_mask[:, None]
+
 			# 3. Accumulate Info/Achievements
 			# We iterate over every key in 'info' (Achievements, discount, etc.)
 			# If info contains {k: v}, we do: acc[k] += v * active_mask
@@ -217,6 +230,7 @@ def make_evaluate(config, env, env_params):
 				new_acc_length,
 				new_acc_stats,
 				rng,
+				new_acc_action_hist,
 			), _
 
 		(final_carry), _ = jax.lax.scan(
@@ -234,6 +248,9 @@ def make_evaluate(config, env, env_params):
 		# Helper arrays where Unfinished = NaN (for min/max/median)
 		rewards_for_stats = jnp.where(finished_mask, final_raw_rewards, jnp.nan)
 		lengths_for_stats = jnp.where(finished_mask, final_raw_lengths, jnp.nan)
+		# v6 problem-2: finished-episode lengths with unfinished ZEROED (not NaN), so multihotᵀ·length
+		# sums only real winning episodes' steps without NaN contamination.
+		lengths_for_behav = jnp.where(finished_mask, final_raw_lengths, 0.0).astype(jnp.float32)
 
 		# --- A. Basic Statistics ---
 		def get_stats(data_array, name):
@@ -279,6 +296,16 @@ def make_evaluate(config, env, env_params):
 			# count[deep]/total. POPPED alongside the other _cooc_* keys before wandb logging.
 			metrics["_cooc_total"] = count_finished
 
+			# v6 problem-2 (behaviour fingerprint): group the per-env action histogram + episode length by
+			# WHICH deep achievement each finished episode reached. multihot[:,i] selects the envs that won
+			# achievement i, so multihotᵀ · action_hist sums those winners' action histograms per skill,
+			# and multihotᵀ · length sums their episode lengths. Column order == cooc_names_static (same as
+			# _cooc_*); action column order == craftax Action enum (BehaviorFingerprintLog.ACTION_NAMES).
+			# POPPED by run_session_evaluation before wandb logging (big arrays, not scalars).
+			final_action_hist = final_carry[13]                          # [num_envs, action_dim]
+			metrics["_behav_action"] = multihot.T @ final_action_hist    # [num_ach, action_dim]
+			metrics["_behav_steps"] = multihot.T @ lengths_for_behav     # [num_ach]
+
 		return metrics
 
 	# Return the jittable evaluate() plus the STATIC co-occurrence column labels (jit-external), so the
@@ -314,6 +341,13 @@ def main(config, rng, train_state=None, eval_embedding=None):
 	# caller (run_session_evaluation) can feed _cooc_count / _cooc_matrix into CooccurrenceLog by name.
 	if "_cooc_count" in metrics:
 		metrics["_cooc_names"] = cooc_names
+	# v6 problem-2: attach the STATIC action column labels for _behav_action. Rows of _behav_* use the
+	# same cooc_names order (achievements); columns use craftax Action enum order. BehaviorFingerprintLog
+	# remaps by these names, so a future action-enum reorder can't silently misalign the histogram.
+	if "_behav_action" in metrics:
+		from auction.behavior_fingerprint_log import ACTION_NAMES
+		metrics["_behav_action_names"] = list(ACTION_NAMES)
+		metrics["_behav_names"] = cooc_names  # row labels (achievements), same as cooc
 	return metrics
 
 

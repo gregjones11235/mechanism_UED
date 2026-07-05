@@ -180,6 +180,7 @@ class Modeler:
         notebook_text: str,
         combat_targets: list[str] | None = None,
         cooc_hint: str = "",
+        behav_hint: str = "",
     ) -> dict:
         """Run the SIEGE modeler: v5 diagnosis PLUS a proposed siege-notebook update.
 
@@ -205,6 +206,7 @@ class Modeler:
             notebook_text=notebook_text,
             combat_targets=combat_targets or [],
             cooc_hint=cooc_hint,
+            behav_hint=behav_hint,
         )
         try:
             resp = self.llm.query(system_prompt, [user_prompt])
@@ -590,6 +592,11 @@ THE STYLE NOTE (§3.1 — this is the transferable SELF-STYLE, the whole point o
   hard for the student right now, which prerequisite is the live bottleneck, and the concrete tactic
   that is (or should be) working — positioning, gear-up timing, pulling one enemy at a time, escape/
   kite, dark-floor lighting, resource routing. It is the "HOW I beat it", not the "what it is".
+- GROUND IT IN REAL BEHAVIOUR when you can: if the user message includes a REAL-SUCCESS BEHAVIOUR block
+  (the action mix / pacing of the episodes where the student ACTUALLY won this or a related wall), the
+  style_note must reflect what the student really did — e.g. "wins are ~84 steps, heavy PLACE_STONE +
+  low combat -> a mining/craft route, not a fight" — NOT a tactic you merely imagine. When a target has
+  no behaviour data yet (solved too rarely), fall back to mechanics-based know-how and say so tersely.
 - This is the ONE field that carries style forward. The skill/links/SR fields are just a ledger; the
   style_note is the reusable strategy a later, similar wall inherits. If you leave it blank, that
   hard-won know-how is lost — so always write it for an active focus.
@@ -608,15 +615,20 @@ def build_siege_modeler_user_prompt(
     notebook_text: str,
     combat_targets: list[str],
     cooc_hint: str = "",
+    behav_hint: str = "",
 ) -> str:
     """Siege user prompt = the v5 user prompt PLUS the previous journal page + the combat-target list
-    + (optionally) the (c) real-trajectory co-occurrence evidence.
+    + (optionally) the (c) real-trajectory co-occurrence evidence + (problem-2) the winning-episode
+    behaviour fingerprint.
 
     ``combat_targets`` is the set of COMBAT-family achievement names, given so the modeler can prefer a
     combat wall as the focus. (This is a category label, not a course-chain prior — see §3.2.)
     ``cooc_hint`` is the (c) co-occurrence text (v6_design.md §3.8): which skills the student actually
     co-reaches when it succeeds at a deep skill — empty when support is too sparse (phased fallback to
     (b) mechanics only).
+    ``behav_hint`` (problem-2) is the behaviour fingerprint: HOW the student acted (action mix / pacing)
+    in the episodes where it won a deep skill — evidence for grounding the style_note in real actions
+    instead of an imagined tactic. Empty when solved too rarely (same phased fallback).
     """
     base = build_modeler_user_prompt(session_idx, evidence, parent_ids, parent_context)
     # Drop the base prompt's final "output JSON now" line — we re-issue a siege-aware instruction.
@@ -627,6 +639,9 @@ def build_siege_modeler_user_prompt(
     cooc_block = (
         f"{cooc_hint.strip()}\n\n" if cooc_hint and cooc_hint.strip() else ""
     )
+    behav_block = (
+        f"{behav_hint.strip()}\n\n" if behav_hint and behav_hint.strip() else ""
+    )
 
     return (
         f"{base_body}\n\n"
@@ -636,6 +651,7 @@ def build_siege_modeler_user_prompt(
         "COMBAT achievement names (fights), listed so you can prefer a stuck fight as the focus:\n"
         f"  {combat_line}\n\n"
         f"{cooc_block}"
+        f"{behav_block}"
         "Now output the STRICT JSON object with THREE top-level keys: student_states, "
         "guidance_per_parent, AND siege_update (a \"foci\" list of up to 3 hard walls, each with its "
         "prereq_tree). Pick or keep real hard walls (never easy/mastered skills), and backtrack each "

@@ -656,6 +656,7 @@ class TaskGenerator:
 		self._profile_log = None  # auction.student_profile_log.StudentProfileLog, lazily constructed
 		self._siege_notebook = None  # auction.siege_notebook.SiegeNotebook (v6), lazy iff config.siege
 		self._cooc_log = None  # auction.cooccurrence_log.CooccurrenceLog (v6 §3.8 c), lazy iff config.siege
+		self._behav_log = None  # auction.behavior_fingerprint_log.BehaviorFingerprintLog (v6 problem-2), lazy iff config.siege
 		# Rotating turn order for the cooperative sequential-fill method (advances once per session).
 		self._coop_turn_offset = 0
 		if config.mode != "reward":
@@ -1081,6 +1082,13 @@ class TaskGenerator:
 
 				self._cooc_log = CooccurrenceLog()
 				print("[siege] CooccurrenceLog initialised (cross-session (c) co-occurrence).")
+				# v6 problem-2: the behaviour fingerprint log — HOW the student behaves in the episodes
+				# it wins (action mix / pacing), fed by the same held-out eval and read by the modeler to
+				# ground the style_note in real actions instead of imagined tactics. Lazy alongside (c).
+				from auction.behavior_fingerprint_log import BehaviorFingerprintLog
+
+				self._behav_log = BehaviorFingerprintLog()
+				print("[siege] BehaviorFingerprintLog initialised (problem-2 winning-episode behaviour).")
 		return self._modeler
 
 	def evolve_mastered_coop(
@@ -1126,11 +1134,13 @@ class TaskGenerator:
 			num_snapshots = len(self._profile_log.recent(10_000)) if self._profile_log else 0
 			combat_targets = self._combat_target_names()
 			cooc_hint = self._render_cooccurrence_hint()
+			behav_hint = self._render_behavior_hint()  # v6 problem-2: winning-episode action fingerprint
 			guidance = modeler.diagnose_siege(
 				session_idx, mastered_tasks, parent_context,
 				notebook_text=self._siege_notebook.render_for_prompt(),
 				combat_targets=combat_targets,
 				cooc_hint=cooc_hint,
+				behav_hint=behav_hint,
 			)
 			# log #3 (user 2026-07-05): capture the LLM's RAW proposal BEFORE the B-layer folds it, so
 			# the log shows what the model asked for vs. what the hard constraints actually allowed.
@@ -1376,6 +1386,37 @@ class TaskGenerator:
 		return (
 			"REAL-TRAJECTORY CO-OCCURRENCE (from the student's own held-out successes — use this to "
 			"pick the prereq chain from what it ACTUALLY strings together, not what you imagine):\n"
+			+ "\n".join(lines)
+		)
+
+	def _render_behavior_hint(self) -> str:
+		"""v6 problem-2: the behaviour-fingerprint text for the siege modeler — HOW the student behaves
+		in the episodes it WINS (action mix / pacing), so the style_note reflects what actually worked
+		rather than an imagined tactic. For the current focus + a few deep combat targets with enough
+		winning-episode support. Empty (prompt omits it) when the log is absent or every target is solved
+		too rarely to trust — the same phased fallback as the (c) hint. Bounded to a few lines."""
+		log = getattr(self, "_behav_log", None)
+		if log is None:
+			return ""
+		targets: list[str] = []
+		focus = self._siege_notebook.focus if self._siege_notebook else None
+		if focus:
+			targets.append(focus)
+		for name in self._combat_target_names():
+			if name != focus:
+				targets.append(name)
+		lines = []
+		for name in targets:
+			hint = log.render_fingerprint_hint(name)
+			if hint:
+				lines.append(f"  - {hint}")
+			if len(lines) >= 5:  # keep the prompt bounded
+				break
+		if not lines:
+			return ""
+		return (
+			"REAL-SUCCESS BEHAVIOUR (how the student ACTUALLY acted in the episodes it won — write the "
+			"style_note to match this real action mix / pacing, not a tactic you merely imagine):\n"
 			+ "\n".join(lines)
 		)
 

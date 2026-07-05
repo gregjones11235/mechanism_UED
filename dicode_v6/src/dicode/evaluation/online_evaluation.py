@@ -83,7 +83,16 @@ def run_session_evaluation(
 	cooc_matrix = evaluation_metrics.pop("_cooc_matrix", None)
 	cooc_names = evaluation_metrics.pop("_cooc_names", None)
 	cooc_total = evaluation_metrics.pop("_cooc_total", None)  # v6 §3.8 SR-guard denominator
-	cooc_log = getattr(gen_manager, "_cooc_log", None)
+	# v6 problem-2 (behaviour fingerprint): pop the per-skill action/step totals over winning episodes
+	# BEFORE the wandb log too (big arrays). Same lifecycle as _cooc_*: only present when siege on.
+	behav_action = evaluation_metrics.pop("_behav_action", None)
+	behav_steps = evaluation_metrics.pop("_behav_steps", None)
+	behav_names = evaluation_metrics.pop("_behav_names", None)
+	behav_action_names = evaluation_metrics.pop("_behav_action_names", None)
+	# the notebook + these logs live on gen_manager.task_generator (NOT gen_manager itself — the same
+	# holder distinction that the rehearsal bug tripped over on 2026-07-05). Resolve it once.
+	holder = getattr(gen_manager, "task_generator", None) or gen_manager
+	cooc_log = getattr(holder, "_cooc_log", None)
 	if cooc_log is not None and cooc_count is not None and cooc_matrix is not None:
 		try:
 			import numpy as np
@@ -97,6 +106,29 @@ def run_session_evaluation(
 			print(f"  - [cooc] accumulated co-occurrence for session {current_session_idx}.")
 		except Exception as e:  # noqa: BLE001 - co-occurrence must never break evaluation
 			print(f"  - [cooc] skipped ({type(e).__name__}: {e}).")
+
+	# v6 problem-2: accumulate the behaviour fingerprint (per-skill action/step totals over winning
+	# episodes) into the BehaviorFingerprintLog on the SAME holder. reached_counts == cooc_count (the #
+	# winning episodes per achievement), reused so the two logs share one denominator source.
+	behav_log = getattr(holder, "_behav_log", None)
+	if (
+		behav_log is not None and behav_action is not None
+		and behav_steps is not None and cooc_count is not None
+	):
+		try:
+			import numpy as np
+			behav_log.add_session(
+				current_session_idx,
+				np.asarray(behav_action).astype(float).tolist(),   # [num_ach, action_dim]
+				np.asarray(behav_steps).astype(float).tolist(),    # [num_ach]
+				np.asarray(cooc_count).astype(int).tolist(),       # reached counts == cooc count
+				names=behav_names,
+				action_names=behav_action_names,
+				total=(int(np.asarray(cooc_total)) if cooc_total is not None else None),
+			)
+			print(f"  - [behav] accumulated behaviour fingerprint for session {current_session_idx}.")
+		except Exception as e:  # noqa: BLE001 - fingerprint must never break evaluation
+			print(f"  - [behav] skipped ({type(e).__name__}: {e}).")
 
 	if config.use_wandb:
 		eval_log_data = {"session": current_session_idx, "global_env_steps": global_env_steps}
