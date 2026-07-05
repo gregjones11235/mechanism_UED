@@ -1,0 +1,70 @@
+# conf/gen_manager/auction_c_v6.yaml
+# v6 = v5y coop 机制 (方案A: modeler + 2 ambitious-coop proposers 顺序补位) 原样保留,
+#       只改 PROVIDER 省钱 (v6模型省钱策略.md)。IDEA/机制零改动,这轮纯成本优化。
+#
+# Provider 切换 (v6模型省钱策略.md §1, GLM 留 DeepInfra 用户决定 2026-07-04):
+#   - DeepSeek-V4-Pro : DeepInfra -> DeepSeek 官方 (out -66%, TTFB 最快, 有缓存)。铁定做。
+#   - Qwen3.5-397B    : DeepInfra -> 阿里国际站 dashscope-intl (out -40%)。
+#   - GLM-5.2 modeler : 留 DeepInfra (bigmodel.cn 折算美元反贵 ~30%, 用户拍板不切)。
+#
+# ⚠️ 切换后硬验证 (v6模型省钱策略.md §6 待办, 跑前必做):
+#   1. model 名: 官方 API 的 model id 与 DeepInfra 的 HF 路径格式不同 —— 下方标 [待核] 的
+#      必须登录官方站自查实时 model id 后替换 (占位值可能报 404/model_not_found)。
+#   2. thinking 真关掉: 2 proposer think=false, 换 provider 后 grep reasoning_content 应为空 /
+#      out token 无异常暴涨 (官方 endpoint 对 extra_body 开关的支持未必和 DeepInfra vLLM 一致)。
+#   3. api_key 来源: llm.py v6 新增 deepseek/dashscope provider 分支各读自己的 env var
+#      (DEEPSEEK_API_KEY / DASHSCOPE_API_KEY), NOT DEEPINFRA_API_KEY。sbatch 须 export 这两个 key。
+#
+# 环境隔离 (editable-pth-overrides-dir-copy-use-pythonpath): sbatch 必 PYTHONPATH 前置 dicode_v6,
+#   禁 pip install -e (会污染正在跑的 v5)。
+
+defaults:
+  - default
+
+# --- v5y coop 机制原样保留 (与 auction_c_v5y.yaml 一致) ---
+auction_modeler: true
+auction: false
+modeler_recent_k: 6
+
+personas:
+  - ambitious_coop   # <-> proposers[0] = DeepSeek-V4 (换官方后仍是同权重模型, think off)
+  - ambitious_coop   # <-> proposers[1] = Qwen3.5-397B (换阿里国际站后仍是同权重模型, think off)
+
+proposers:
+  # proposer[0]: DeepSeek-V4-Pro -> DeepSeek 官方 API。out 省 66%。
+  - provider: deepseek
+    base_url: https://api.deepseek.com/v1
+    model: deepseek-v4-pro          # ✅ 实测确认 (Oscar 2026-07-04, /v1/models 返回
+                                    #   ['deepseek-v4-flash','deepseek-v4-pro']); 对应 DeepInfra 的
+                                    #   DeepSeek-V4-Pro 权重。
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # 与 v5y 一致: 两 proposer 对称 no-think。⚠️实测: DeepSeek官方 v4-pro 默认
+                     #   thinking ON(与 DeepInfra 相反!), 只有 llm.py 的 {"thinking":{"type":
+                     #   "disabled"}} 能真关(reasoning_effort:none 会 400)。已在 v6 llm.py 按
+                     #   provider=='deepseek' 分派修正。
+  # proposer[1]: Qwen3.5-397B -> 阿里百炼 美国(弗吉尼亚) dashscope-us (人民币计价, Oscar延迟极低)。
+  - provider: dashscope
+    base_url: https://dashscope-us.aliyuncs.com/compatible-mode/v1
+    model: qwen3.5-397b-a17b        # ✅实测确认 (Oscar 2026-07-04, /models 返回); 正是 v5 用的
+                                    #   Qwen3.5-397B 原型, 精确对齐 (非 qwen3.5-plus 泛化别名)。
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # 与 proposer[0] 对称; 异质性来自模型本身。✅实测: enable_thinking:false 真关
+                     #   (reasoning OFF, content 正常), llm.py provider=='dashscope' 已发此开关。
+
+# MODELER: GLM-5.2 留 DeepInfra (用户决定 2026-07-04, GLM 官方折算美元反贵 ~30%)。
+# 与 v5y 完全一致,不动。
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 32768
+  temperature: 0.4
+  top_p: 0.95
+  think: true

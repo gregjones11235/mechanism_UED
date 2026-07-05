@@ -1,0 +1,34 @@
+# conf/gen_manager/auction_c_v5x.yaml
+# v5-debate 方案A "合作补位式", 对照 X: 1 ambitious-coop proposer + 1 GLM modeler (NO competition).
+# The control for 对照Y — same modeler, but a single proposer (no peer, no turn rotation, no
+# complementary fill). X vs Y isolates whether a SECOND cooperative proposer helps. See v5_design.md.
+
+defaults:
+  - default
+
+auction_modeler: true
+auction: false
+modeler_recent_k: 6
+
+personas:
+  - ambitious_coop   # single proposer = DeepSeek-V4-Pro
+
+proposers:
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: deepseek-ai/DeepSeek-V4-Pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: true
+
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 32768
+  temperature: 0.4
+  top_p: 0.95
+  think: false

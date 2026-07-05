@@ -1,0 +1,44 @@
+# conf/gen_manager/auction_a.yaml
+# A-arm auction config: N=3 SAME-model Proposers (Qwen3-235B-Thinking), auction top-k.
+# Isolates "the mechanism itself" (model fixed = DiCode same model). For C-arm, swap the three
+# proposer models to heterogeneous bases (Qwen / DeepSeek / GLM).
+#
+# Inherits everything from default.yaml, then turns the auction ON and declares 3 proposers.
+# Persona diversity (A-arm) would be injected via per-proposer system-prompt variation; for the
+# go/no-go we keep them identical (just verifies N proposers wire up + auction selects + injects).
+
+# Inherit default.yaml only; the 4 LLM roles (task_generator/env_generator/critic/embedding)
+# are set on the command line exactly like the reproduction script (gen_manager/llm@...=deepinfra),
+# to avoid a Hydra "Multiple values" conflict from re-declaring them here.
+defaults:
+  - default
+
+auction: true
+auction_k: 10        # keep up to 10 winners per cycle (matches DiCode num_generation_tasks)
+
+# N=3 Proposers. All DeepInfra Qwen3-235B-Thinking (A-arm: same base). Fields mirror deepinfra.yaml.
+proposers:
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3-235B-A22B-Thinking-2507
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: true
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3-235B-A22B-Thinking-2507
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: true
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3-235B-A22B-Thinking-2507
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: true

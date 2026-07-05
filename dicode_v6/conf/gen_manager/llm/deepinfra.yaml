@@ -1,0 +1,11 @@
+provider: deepinfra
+base_url: https://api.deepinfra.com/v1/openai
+# DiCode paper (Table 5) uses the Thinking FP8 variant — DeepInfra serves it natively.
+model: Qwen/Qwen3-235B-A22B-Thinking-2507
+llm_type: generation
+max_tokens: 32768
+temperature: 0.6
+top_p: 0.95
+# think=true: this IS a reasoning model; keep thinking on and skip the Qwen-local
+# "/no_think" suffix that _query_local_gen would otherwise append.
+think: true

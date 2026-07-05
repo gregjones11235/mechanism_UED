@@ -1,0 +1,12 @@
+provider: together
+base_url: https://api.together.xyz/v1
+# Together serves the Instruct variant (no Thinking variant on Together as of 2026-06).
+# For faithful DiCode reproduction switch to the Thinking variant on DeepInfra/Novita.
+model: Qwen/Qwen3-235B-A22B-Instruct-2507-FP8
+llm_type: generation
+max_tokens: 32768
+temperature: 0.6
+top_p: 0.95
+# think=true: skip the Qwen-local "/no_think" suffix that _query_local_gen would
+# otherwise append (that token is meaningless to a hosted Instruct endpoint).
+think: true

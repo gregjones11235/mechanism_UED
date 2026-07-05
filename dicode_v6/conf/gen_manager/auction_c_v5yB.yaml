@@ -1,0 +1,56 @@
+# conf/gen_manager/auction_c_v5yB.yaml
+# v5-debate 方案A "合作补位式 + 质量筛选" — STRONGER selection (对照 Y-B). Same as v5yA but keeps
+# top-12 of the 24 candidates (vs v5yA's 18) → per-round retained count = baseline's 12 (strict
+# equal-yield comparison). Isolates selection STRENGTH: v5yB(12) vs v5yA(18) vs (killed v5y 不筛 24).
+# See v5_design.md §8.2.
+#
+# vs auction_c_v5yA.yaml: ONLY difference is coop_select_k (12 vs 18). All else identical.
+
+defaults:
+  - default
+
+# v5 coop switch: routes evolve_tasks -> evolve_mastered_coop (modeler + sequential fill).
+auction_modeler: true
+# auction=false: NOT the v4 competitive top-k auction; coop selection is non-competitive (§8.2).
+auction: false
+modeler_recent_k: 6
+
+# --- 方案A quality selection (v5_design.md §8.2), STRONG variant ---
+coop_select_k: 12      # keep top-12 of the 24 candidates each round (= baseline yield; strict)
+coop_w_amb: 1.0        # AmbitionGain: gap x depth (depth pressure)
+coop_w_lrn: 1.0        # Learnability: p*(1-p) (keep the learnable, drop too-hard/too-easy)
+coop_w_cov: 0.0        # Coverage OFF: breadth is handled by the 2-proposer division of labour
+
+# Both proposers use the COOPERATIVE ambitious persona (paired by index).
+personas:
+  - ambitious_coop   # <-> proposers[0] = DeepSeek-V4-Pro
+  - ambitious_coop   # <-> proposers[1] = Qwen3.5-397B
+
+proposers:
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: deepseek-ai/DeepSeek-V4-Pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # both proposers NO-THINK for symmetry; reasoning is the MODELER's job
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3.5-397B-A17B
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # symmetric with proposer[0]
+
+# MODELER: GLM-5.2 (native structured output + calibration — best for the diagnostic role).
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 32768
+  temperature: 0.4
+  top_p: 0.95
+  think: true        # MODELER is the reasoning-heavy role; thinking helps diagnosis most.

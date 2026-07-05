@@ -1,0 +1,131 @@
+# conf/gen_manager/auction_c_v6siege.yaml
+# v6 SIEGE = the v6 method (Focused Milestone-Chain Curriculum, v6_design.md §3) on top of the v5y
+# coop mechanism + the v6 cost-saving providers. This is the METHOD run; auction_c_v6.yaml is the
+# pure provider-switch control (v5y mechanism unchanged) — keep them separate so "provider switch"
+# and "siege mechanism" stay independent variables.
+#
+# Contents below are a VERBATIM copy of auction_c_v6.yaml (same providers + v5y coop mechanism), plus
+# the single `siege: true` switch — mirroring how auction_c_v5yA copies auction_c_v5y (no same-group
+# Hydra inheritance; each gen_manager config is self-contained under `- default`).
+#
+# What siege: true turns on (all purely additive; siege: false == byte-for-byte v5y coop):
+#   1. A persistent SiegeNotebook (auction/siege_notebook.py) in the run cwd (survives resume) — the
+#      modeler's cross-session siege journal (§3.5): up to 3 parallel foci (§2.6) / each focus's prereq
+#      chain / verified chains (success experience, deduped-by-target & combat-vs-enabler categorised,
+#      §2.5) / protected set. B-layer code enforces every hard constraint (SR-computed mastery flags,
+#      §3.2 scope, per-focus anti-thrash stall/retire, EARLY-TRAINING maturity gate, the §2.6 expand
+#      gate, and §2① incremental success-experience recording).
+#   2. The modeler runs diagnose_siege instead of diagnose: same v5 diagnosis PLUS a proposed notebook
+#      update (a "foci" list, each focus + its prereq_tree). Depth inferred from SR + mechanics (§3.3).
+#   3. proposers get a SIEGE_DIRECTIVE naming the focus + still-unmastered links they must NOT compress
+#      into Completed (§3.4 prompt-side), and a hard code gate (completed_gate.py) pulls any illegally-
+#      compressed unmastered link back into Relevant (§3.4 code backstop).
+#
+#   4. (c) per-episode achievement co-occurrence (v6_design.md §3.8): the held-out eval collects a
+#      per-env achievement multi-hot -> cross-session-accumulated count/cooc arrays + total finished
+#      episodes (SR denominator). The siege modeler is fed "when the student BEAT a deep skill, which
+#      prereqs did it actually co-reach (with its empirical SR)", grounding the prereq chain in real
+#      trajectories. Guarded by a RELATIVE SR threshold (MIN_SR=3%, user 2026-07-05): trusted only once
+#      the deep skill is solved often enough; otherwise the modeler falls back to (b) mechanics.
+#
+# Mastery flags for the siege links still come from the held-out AGGREGATE per-skill SR; (c) only
+# enriches the modeler's prereq-chain reasoning (additive, no-op until a deep skill's SR clears MIN_SR).
+
+defaults:
+  - default
+
+# --- v5y coop mechanism (unchanged from auction_c_v6.yaml) ---
+auction_modeler: true
+auction: false
+modeler_recent_k: 8
+
+# --- v6 SIEGE switch (the ONE addition over auction_c_v6) ---
+siege: true
+
+# --- v6 coop QUALITY SELECTION: PURE-LEARNABILITY top-k (user 2026-07-05) ---
+# v5 evidence (v5yA, 24->18) showed a WEAK positive from a light coop cull; v6 adopts it but drops
+# AmbitionGain's depth pressure. Rationale: AmbitionGain = gap x DEPTH_WEIGHT systematically favours
+# DEEP levels, which would cull the SHALLOW prereq-chain levels the siege course exists to protect.
+# In v6 the "push deeper" job is owned by the SIEGE focus + completed_gate (which force the full
+# prereq chain to stay in Relevant), so topk should ONLY judge "is this learnable right now", not
+# "is this ambitious". Hence w_amb=0, w_lrn=1. NOTE: rehearsal levels are IMMUNE to this cull — they
+# are APPENDED at the training-sampling stage from the archive (append_rehearsal_tasks), a different
+# stage from generation-time _coop_select which only ever sees the freshly-proposed 24 (v6_design.md
+# §8.3).
+coop_select_k: 18      # keep top-18 of the 24 candidates each round (drops ~25% least-learnable)
+coop_w_amb: 0.0        # AmbitionGain OFF (depth pressure lives in the siege focus, not the cull)
+coop_w_lrn: 1.0        # Learnability: p*(1-p) — keep the learnable, drop too-hard/too-easy
+coop_w_cov: 0.0        # Coverage OFF: breadth is handled by the 2-proposer division of labour
+
+# --- v6 SIEGE B-layer thresholds (user 2026-07-05: every hard-coded knob is now config-tunable) ---
+# These override auction/siege_notebook.py's module-constant defaults via SiegeThresholds.from_config.
+# Any key you delete falls back to that documented default, so this block is safe to trim. Values here
+# ARE the current defaults — spelled out so the highest-leverage knobs are visible and sweepable.
+#
+#   ★ Highest-leverage: siege_mastered_sr gates compression; siege_maturity_* gates whether a siege
+#     ever opens at all. If the student's real ceiling on hard skills is low, an 80% bar means NO link
+#     ever "consolidates" — lower these to match reality.
+#   ★ user 2026-07-05 (2nd round): CONQUERED is NO LONGER a one-shot SR-threshold retire gate
+#     (conquered != saturated). A focus records success experience INCREMENTALLY (every +record_delta_pp
+#     rise, deduped-by-target, combat vs enabler categorised) and retires only on STALL. So there is no
+#     siege_conquered_sr anymore. Saturated is a HIGH bar (80) for BOTH combat and gear (a combat skill
+#     at 40% is still a wall worth attacking, not saturated — a human expert beats a hard boss near 100%).
+#   ★ user 2026-07-05 (3rd round): up to siege_max_focus parallel walls; a new one may open only once an
+#     existing focus reaches siege_focus_expand_sr (cross-achievement assist).
+siege_mastered_sr: 70.0            # SR (%) at/above which a LINK is CONSOLIDATED (may compress into
+                                   #   Completed). user 2026-07-05: 70 (independent of saturated — this
+                                   #   judges a prereq link, saturated judges a focus candidate).
+siege_unmastered_sr: 20.0          # SR (%) at/below which a link is UNMASTERED (forbidden in Completed)
+siege_saturated_sr: 80.0           # SR (%) at/above which a skill is too easy to be a FOCUS (scope rule)
+siege_maturity_min_snapshots: 4    # fewer eval snapshots than this => too early to open any siege
+siege_maturity_min_mastered: 20    # real v5 curve: 15(tier1)+~5(tier2) at SR>=50 = burst->plateau knee
+siege_maturity_skill_sr: 50.0      # a skill counts toward "maturity" once its SR is at/above this
+siege_focus_min_stall_sessions: 10 # min consecutive stalled sessions before a focus retires
+siege_focus_improve_pp: 3.0        # SR gain (percentage points) that counts as "the focus improved"
+siege_max_focus: 3                 # max parallel siege foci (§2.6, user 2026-07-05)
+siege_focus_expand_sr: 50.0        # a focus must reach this SR before a NEW parallel focus may open
+siege_record_delta_pp: 10.0        # min SR rise vs last record to (re)write a success-experience entry
+# §2⑥ family-split rehearsal FORGETTING prefilter: combat milestones peak LOW (~15%), so they get a
+# low peak/drop bar (else a forgetting combat milestone would never be flagged); gear/gather/explore
+# keep the higher bar. This is what makes "everything recorded as success experience can be rehearsed".
+siege_forgetting_min_peak: 40.0        # non-combat: peaked >= this to be a rehearsal candidate
+siege_forgetting_drop_pp: 20.0         # non-combat: fell >= this off its peak to count as forgetting
+siege_forgetting_combat_min_peak: 15.0 # combat: low peak bar (matches the combat record floor)
+siege_forgetting_combat_drop_pp: 10.0  # combat: a 10pp slip off a low plateau is already a real slide
+
+personas:
+  - ambitious_coop   # <-> proposers[0] = DeepSeek-V4 (DeepSeek 官方, think off)
+  - ambitious_coop   # <-> proposers[1] = Qwen3.5-397B (阿里 dashscope-us, think off)
+
+proposers:
+  # proposer[0]: DeepSeek-V4-Pro -> DeepSeek 官方 API。out 省 66%。
+  - provider: deepseek
+    base_url: https://api.deepseek.com/v1
+    model: deepseek-v4-pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # DeepSeek官方 v4-pro 默认 thinking ON; llm.py 按 provider=='deepseek' 发
+                     #  {"thinking":{"type":"disabled"}} 真关 (reasoning_effort:none 会 400)。
+  # proposer[1]: Qwen3.5-397B -> 阿里百炼 美国(弗吉尼亚) dashscope-us (人民币, Oscar延迟极低)。
+  - provider: dashscope
+    base_url: https://dashscope-us.aliyuncs.com/compatible-mode/v1
+    model: qwen3.5-397b-a17b
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # llm.py provider=='dashscope' 发 enable_thinking:false 真关。
+
+# MODELER: GLM-5.2 留 DeepInfra (用户决定 2026-07-04)。与 v5y/v6 完全一致。
+# 攻坚模式下走 modeler.diagnose_siege (同一 LLM, 只是 prompt 多了 siege 规划 + 笔记读写)。
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 32768
+  temperature: 0.4
+  top_p: 0.95
+  think: true
