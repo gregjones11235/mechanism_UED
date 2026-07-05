@@ -105,6 +105,8 @@ graphml 逐关证据(session 73):
   其加速。平摊 23 个 tier3(v5 的病)→ 每个风格都残缺 → 都卡 ~10%。
 - **可验证**:攻克顺序靠后的战斗类 tier3,其 held-out SR 爬升应更快(风格迁移的信号)。这是 v6
   论文的核心论点。
+- **★风格的物理载体 = 笔记的 `style_note` 字段(§3.5)**:这套"动态策略"本质是文字性经验,必须有字段承接
+  才能跨 session/跨目标迁移。见 §3.5 的 style_note 实现——没有它,H1 的"沉淀风格"在数据结构层面是空的。
 
 ### 3.2 攻坚单位与排序:战斗目标 + 自适应回溯的攻坚树
 
@@ -211,13 +213,37 @@ graphml 逐关证据(session 73):
 须跨 session 累积才稳;② 攻透一个难关(含回溯子目标)跨很多 session,须记住"正在攻哪个/到链条哪一环/
 哪些环已固化",否则东一榔头西一棒退回 v5 平摊病;③ H1 的"自我风格"本就依赖记忆生长。
 
-**笔记四块内容 + 随 session 怎么变**:
+**笔记五块内容 + 随 session 怎么变**:
 | 笔记块 | 内容 | 更新规则 |
 |---|---|---|
 | **当前攻坚焦点** | 正在攻哪个战斗难关 | 攻破/放弃才换,否则保持——**保证聚焦不漂移** |
 | **焦点的前置依赖树** | 回溯出的链条 + 每环 student 掌握状态 | 每 session 用新 SR + (c)共现**增量更新每环"已固化/未掌握"标记** |
-| **已验证链条库** | 攻破并固化的链条(技能组成 + 验证证据) | 只增(攻破一个加一条),供复用为 tier4 地基(§3.6) |
+| **★自我风格心得(style_note)** | 每个焦点的**攻坚 know-how 文字**("怎么打赢的/难在哪/什么策略管用"——走位、gear-up 时机、拉怪、逃生) | 每 session **无门槛**更新(focus active + LLM 写了新非空 note 即覆盖旧的;空则保留旧的→心得跨 session 累积生长) |
+| **已验证链条库** | 攻破并固化的链条(技能组成 + 验证证据 + **该链的 style_note**) | 只增/dedup-by-target(攻破一个加/更新一条),供复用为 tier4 地基(§3.6) |
 | **protected set** | 强制 rehearsal 的技能(§3.6 固化) | 攻破验证后加入 |
+
+**★★★ style_note 是 H1"自我风格"的物理载体(用户 2026-07-05,补上核心缺口)**:此前笔记只存骨架
+(skill/links/category/SR),H1 说的"可迁移风格"(走位/gear-up/拉怪/逃生这类**动态策略经验**)**没有任何字段
+承接**——modeler 每 session 脑内想的攻坚经验用完即弃。这是"核心卖点无数据载体"的设计-实现落差。**修复=给
+notebook 加自由文字 `style_note` 字段**,让 modeler 每 session 写下攻坚心得。落地五处:①modeler siege
+prompt schema 加 style_note + 要求"精简致密、每字有用、不漏重点、随理解精炼、留空则丢失 know-how";
+②`_validate_siege`/`_normalise_proposal` 保留该字段(含 legacy 形式);③`_merge_style_notes` 每 session 把新非空
+note 贴到 active focus(无门槛,只覆盖非空→累积);④`_upsert_experience` 写进 verified_chains(dedup-by-target,
+非空才覆盖);⑤`render_for_prompt` 三处渲染(active focus 的 style-so-far / milestone 的 style: / enabler 的
+note:)喂回下一轮。**对装备类同样生效**(category 只是标签不阻断)。不截断(信任 prompt 要求的精简)。181 单测绿。
+
+**★心得 vs rehearsal 两套独立机制(易混淆,用户 2026-07-05 澄清)**:
+- **style_note 心得**:**每 siege session 无条件**注入 modeler prompt(gen_manager 唯一条件=`siege_active`,无遗忘门槛)→ **指导 modeler(teacher)的每一次攻坚决策**。这是全程持续生效的。
+- **rehearsal(§3.6)**:**仅当检测到 FORGETTING** 才触发 → 给 **student(RL网络)**追加复习关防遗忘。
+- 两者不同触发/不同对象/完全独立:心得是"每次都指导 teacher",rehearsal 是"遗忘时才救 student"。
+
+**★style_note 是"铁镐困境"的修复(用户 2026-07-05 厘清)**:v6 首跑(job 3653226)观察到 siege 30 session
+卡在 make_iron_pickaxe(SR 32-58% 震荡、卡 47%、focus 反复退役重开、从没推进到 tier3 战斗、H1 上不了场)。
+病根**不是**独立的"退役死循环 bug",而是**攻坚经验用完即弃→student 学一点忘一点→SR 永远稳不下来**。→
+style_note 让 modeler 带着积累心得连续指导攻坚 → SR 应单调爬升而非震荡 → 铁镐真正攻透→退役→focus 推进到
+战斗类(H1 上场)→ 死循环自愈。**修好病根=症状自愈,不需额外的退役冷却代码**。★方法论教训:不能用"无心得
+时的历史震荡轨迹"去推测"有心得后的行为"(那是循环论证);笔记有效则那条轨迹本就不会发生。验证 run =
+job 3658849(DiCode-v6siege-style,新代码带 style_note,旧 3653226 已杀防重启污染)。
 
 **★A+B 混合的维护方式(用户拍板)** —— 代码保证硬约束 + 骨架,LLM 负责判断:
 - **代码保证(B,防漂移兜底)**:笔记的 schema/存盘(跨 session resume,像 StudentProfileLog 存 JSON)、

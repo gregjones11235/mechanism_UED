@@ -191,7 +191,7 @@ class Modeler:
         in code by SiegeNotebook, this is the soft ask).
 
         Returns the v5 schema PLUS:
-          "siege_update": {"foci": [{"skill", "prereq_tree":[{"skill","role"},...]}, ...]}
+          "siege_update": {"foci": [{"skill", "prereq_tree":[{"skill","role"},...], "style_note"}, ...]}
         The CODE (SiegeNotebook.apply_llm_update) owns every mastery flag and every hard constraint;
         this is only the LLM's *proposal*.
         """
@@ -242,6 +242,13 @@ class Modeler:
         if not isinstance(raw_su, dict):
             return {"foci": []}
 
+        def _style(raw_focus) -> str:
+            # §3.1 self-style note: the LLM's free-text attack insight for this target — HOW the wall is
+            # being cracked / what's hard / what strategy works. This is the transferable "style"
+            # H1 is about; the骨架 fields (skill/links/SR) are the ledger, this is the know-how.
+            # No length cap (user 2026-07-05): the prompt asks for tight prose, so trust it not to bloat.
+            return str(raw_focus.get("style_note", ""))
+
         foci = []
         seen: set[str] = set()
         # multi-focus form takes precedence when present.
@@ -253,11 +260,19 @@ class Modeler:
                 if not isinstance(skill, str) or not skill.strip() or skill.lower() in seen:
                     continue
                 seen.add(skill.lower())
-                foci.append({"skill": skill.lower(), "prereq_tree": _clean_tree(f.get("prereq_tree"))})
+                foci.append({
+                    "skill": skill.lower(),
+                    "prereq_tree": _clean_tree(f.get("prereq_tree")),
+                    "style_note": _style(f),
+                })
         # legacy single-focus form (still emitted by the current prompt).
         focus = raw_su.get("focus")
         if isinstance(focus, str) and focus.strip() and focus.lower() not in seen:
-            foci.append({"skill": focus.lower(), "prereq_tree": _clean_tree(raw_su.get("prereq_tree"))})
+            foci.append({
+                "skill": focus.lower(),
+                "prereq_tree": _clean_tree(raw_su.get("prereq_tree")),
+                "style_note": _style(raw_su),
+            })
         return {"foci": foci}
 
     def _validate(self, raw: dict, parent_ids: list[str]) -> dict:
@@ -561,13 +576,27 @@ a solid SR before a slot frees for another). Emit a "foci" LIST:
   "siege_update": {
     "foci": [
       { "skill": "<a hard-wall skill you are attacking (a real stuck skill, NEVER an easy/mastered one)>",
-        "prereq_tree": [ { "skill": "<a prerequisite skill>", "role": "<short role note>" }, ... ] },
+        "prereq_tree": [ { "skill": "<a prerequisite skill>", "role": "<short role note>" }, ... ],
+        "style_note": "<the transferable attack know-how for THIS wall — see below>" },
       ...  // up to 3 walls; keep the ones from your journal you still want, add at most a new one
     ]
   }
 Keep the walls from the journal you still want (list them again); drop one by omitting it. To attack
 just one wall, emit a single-element "foci" list. (A legacy single "focus"+"prereq_tree" is still
 accepted and treated as a one-wall list.) Output STRICT JSON only.
+
+THE STYLE NOTE (§3.1 — this is the transferable SELF-STYLE, the whole point of the siege):
+- ``style_note`` is your running, cross-session know-how for cracking THIS wall: what actually makes it
+  hard for the student right now, which prerequisite is the live bottleneck, and the concrete tactic
+  that is (or should be) working — positioning, gear-up timing, pulling one enemy at a time, escape/
+  kite, dark-floor lighting, resource routing. It is the "HOW I beat it", not the "what it is".
+- This is the ONE field that carries style forward. The skill/links/SR fields are just a ledger; the
+  style_note is the reusable strategy a later, similar wall inherits. If you leave it blank, that
+  hard-won know-how is lost — so always write it for an active focus.
+- WRITE IT TIGHT: terse, dense, every word earns its place — but drop NO key point. Prefer 1-3 compact
+  clauses of concrete tactics over prose. Update it as understanding grows (the journal shows your
+  previous note as "style-so-far"; refine it, don't restate it). No fluff, no game-lore, no restating
+  the skill name.
 """
 
 

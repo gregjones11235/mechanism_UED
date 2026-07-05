@@ -264,6 +264,7 @@ def _empty_focus(skill: str, session_idx: int, sr: float | None) -> dict:
         "stall_sessions": 0,
         "last_recorded_sr": None,    # §2① no success-experience recorded for it yet
         "prereq_tree": [],           # backtracked chain, filled by the LLM proposal + code flags
+        "style_note": "",            # §3.1 self-style: LLM free-text attack know-how for this wall
     }
 
 
@@ -485,6 +486,24 @@ class SiegeNotebook:
             for f in foci if isinstance(f.get("skill"), str)
         )
 
+    def _merge_style_notes(self, proposed_foci: list[dict]) -> None:
+        """§3.1: copy each proposed focus's fresh ``style_note`` onto the matching ACTIVE focus dict.
+
+        Only non-empty notes overwrite (a session where the LLM says nothing new keeps the prior note,
+        so know-how accumulates rather than being blanked). Matching is by skill name, so this naturally
+        follows the same dedup-by-target rule as the experience log."""
+        if not proposed_foci:
+            return
+        by_skill = {
+            str(pf.get("skill", "")).lower(): str(pf.get("style_note", "")).strip()
+            for pf in proposed_foci
+            if isinstance(pf, dict) and pf.get("skill")
+        }
+        for foc in self._nb.get("foci", []):
+            note = by_skill.get(str(foc.get("skill", "")).lower())
+            if note:
+                foc["style_note"] = note
+
     def _record_experience(self, session_idx: int, latest_profile: dict[str, float]) -> None:
         """§2① + §2.5: incrementally record/UPDATE each active focus's success experience.
 
@@ -516,7 +535,10 @@ class SiegeNotebook:
                 if isinstance(link.get("skill"), str)
             ]
             category = "combat_milestone" if family_of(skill.lower()) == "COMBAT" else "enabler"
-            self._upsert_experience(session_idx, skill.lower(), links, sr, category)
+            self._upsert_experience(
+                session_idx, skill.lower(), links, sr, category,
+                style_note=str(foc.get("style_note", "")),
+            )
             foc["last_recorded_sr"] = sr
             # protect the recorded target AND its consolidated links so rehearsal (§3.6) keeps them.
             protect = {skill.lower()} | {l.lower() for l in links if l}
@@ -527,11 +549,16 @@ class SiegeNotebook:
             )
 
     def _upsert_experience(
-        self, session_idx: int, target: str, links: list[str], sr: float, category: str
+        self, session_idx: int, target: str, links: list[str], sr: float, category: str,
+        style_note: str = "",
     ) -> None:
-        """Insert or, if ``target`` already recorded, UPDATE its verified_chains entry (dedup by target)."""
+        """Insert or, if ``target`` already recorded, UPDATE its verified_chains entry (dedup by target).
+
+        ``style_note`` (§3.1) is the transferable attack know-how. On UPDATE it is overwritten only when
+        the new note is non-empty, so a silent session keeps the prior know-how instead of erasing it."""
         chains = self._nb.setdefault("verified_chains", [])
         evidence = f"held-out SR {sr}% (recorded at s{session_idx})"
+        note = str(style_note or "").strip()
         for c in chains:
             if isinstance(c, dict) and str(c.get("target", "")).lower() == target:
                 # update in place: keep first_recorded_sr, refresh the rest, merge links.
@@ -541,6 +568,8 @@ class SiegeNotebook:
                 merged_links = list(dict.fromkeys([*c.get("links", []), *links]))
                 c["links"] = merged_links
                 c["evidence"] = evidence
+                if note:  # keep prior know-how if this session added none
+                    c["style_note"] = note
                 return
         chains.append({
             "target": target,
@@ -550,6 +579,7 @@ class SiegeNotebook:
             "last_recorded_sr": sr,
             "last_recorded_session": session_idx,
             "evidence": evidence,
+            "style_note": note,
         })
 
     # ---- the one public write path: apply an LLM-proposed update through B-layer rules ----------
@@ -592,6 +622,11 @@ class SiegeNotebook:
         # 1. existing links: flags come from data, not the model.
         self._refresh_link_flags(latest_profile)
 
+        # 1b. §3.1 self-style: fold this session's fresh notes onto the EXISTING active foci first, so
+        #     _record_experience carries the LATEST know-how into verified_chains (not last session's).
+        #     A newly-opened focus is merged again in step 6 (it isn't active yet here).
+        self._merge_style_notes(proposed.get("foci") or [])
+
         # 2. §2① incremental success-experience recording (replaces the old conquered-retire gate).
         self._record_experience(session_idx, latest_profile)
 
@@ -619,6 +654,12 @@ class SiegeNotebook:
         # 5. attach each accepted focus's prereq_tree (code owns every mastery flag).
         self._attach_prereq_trees(latest_profile, proposed_foci)
 
+        # 6. §3.1 self-style: fold the LLM's fresh attack know-how onto EVERY current focus (existing +
+        #    just-opened). Done last so a newly-opened focus also captures its note this session; it is
+        #    then carried into verified_chains by _record_experience NEXT session. LLM owns this text
+        #    (A-layer); code only stores the latest non-empty note per target.
+        self._merge_style_notes(proposed.get("foci") or [])
+
         self._nb["last_session"] = session_idx
         self._save()
         return self.snapshot()
@@ -635,7 +676,11 @@ class SiegeNotebook:
             return proposed
         focus = proposed.get("focus")
         if isinstance(focus, str) and focus.strip():
-            return {"foci": [{"skill": focus, "prereq_tree": proposed.get("prereq_tree") or []}]}
+            return {"foci": [{
+                "skill": focus,
+                "prereq_tree": proposed.get("prereq_tree") or [],
+                "style_note": proposed.get("style_note", ""),  # carry legacy top-level note through
+            }]}
         return {"foci": []}
 
     def _reconcile_foci(
@@ -729,6 +774,8 @@ class SiegeNotebook:
                     f"(started s{foc.get('started_session')}, best SR {foc.get('best_sr')}%, "
                     f"stalled {foc.get('stall_sessions')} session(s))"
                 )
+                if foc.get("style_note"):
+                    lines.append(f"      style-so-far: {foc['style_note']}")
                 tree = foc.get("prereq_tree") or []
                 if tree:
                     for link in tree:
@@ -756,6 +803,8 @@ class SiegeNotebook:
                     f"    - {c.get('target')} via [{', '.join(c.get('links', []))}] "
                     f"(SR {c.get('last_recorded_sr')}%, s{c.get('last_recorded_session')})"
                 )
+                if c.get("style_note"):
+                    lines.append(f"        style: {c['style_note']}")
         if enablers:
             lines.append(
                 f"ENABLER GROUND HELD ({len(enablers)}) — gear/prereqs already in place (scaffolding, "
@@ -766,6 +815,8 @@ class SiegeNotebook:
                     f"    - {c.get('target')} via [{', '.join(c.get('links', []))}] "
                     f"(SR {c.get('last_recorded_sr')}%, s{c.get('last_recorded_session')})"
                 )
+                if c.get("style_note"):
+                    lines.append(f"        note: {c['style_note']}")
         if nb.get("protected_set"):
             lines.append(f"PROTECTED (rehearsal) skills: {', '.join(nb['protected_set'])}")
         return "\n".join(lines)

@@ -350,6 +350,76 @@ def test_enabler_focus_categorised_enabler(nb_path):
     assert len(chains) == 1 and chains[0]["category"] == "enabler"
 
 
+# ---- §3.1 self-style note: the transferable attack know-how carried per target -------------------
+
+def test_style_note_recorded_into_verified_chain(nb_path):
+    # The LLM's style_note for an active focus is folded into that target's verified_chains entry.
+    nb = SiegeNotebook(nb_path)
+    prof = {"defeat_gnome_warrior": 12.0}
+    nb.apply_llm_update(
+        1, _mature_profile(prof),
+        {"focus": "defeat_gnome_warrior", "style_note": "pull one gnome at a time; kite along wall"},
+        num_snapshots=MATURITY_MIN_SNAPSHOTS,
+    )
+    # 2nd session records the experience (focus now has an SR reading); note rides along.
+    nb.apply_llm_update(
+        2, _mature_profile(prof),
+        {"focus": "defeat_gnome_warrior", "style_note": "pull one gnome at a time; kite along wall"},
+        num_snapshots=MATURITY_MIN_SNAPSHOTS,
+    )
+    chain = nb.verified_chains()[0]
+    assert chain["style_note"] == "pull one gnome at a time; kite along wall"
+
+
+def test_style_note_non_empty_updates_empty_keeps_prior(nb_path):
+    # A fresh non-empty note OVERWRITES; a silent (empty) session KEEPS the prior know-how, so style
+    # accumulates rather than being blanked.
+    nb = SiegeNotebook(nb_path)
+    base = {"defeat_gnome_warrior": 12.0}
+    nb.apply_llm_update(1, _mature_profile(base),
+                        {"focus": "defeat_gnome_warrior", "style_note": "note-A"},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    nb.apply_llm_update(2, _mature_profile(base),
+                        {"focus": "defeat_gnome_warrior", "style_note": "note-A"},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    assert nb.verified_chains()[0]["style_note"] == "note-A"
+    # a real SR jump + refined note updates the note in place.
+    nb.apply_llm_update(3, _mature_profile({"defeat_gnome_warrior": 40.0}),
+                        {"focus": "defeat_gnome_warrior", "style_note": "note-B refined"},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    assert nb.verified_chains()[0]["style_note"] == "note-B refined"
+    # another real jump but EMPTY note this session -> prior note is kept, not erased.
+    nb.apply_llm_update(4, _mature_profile({"defeat_gnome_warrior": 40.0 + RECORD_DELTA_PP + 1}),
+                        {"focus": "defeat_gnome_warrior", "style_note": ""},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    assert nb.verified_chains()[0]["style_note"] == "note-B refined"
+
+
+def test_style_note_rendered_into_prompt(nb_path):
+    # The stored note must be rendered back for the next modeler turn (stored-but-unread == wasted).
+    nb = SiegeNotebook(nb_path)
+    prof = {"defeat_gnome_warrior": 12.0}
+    nb.apply_llm_update(1, _mature_profile(prof),
+                        {"focus": "defeat_gnome_warrior", "style_note": "kite-along-wall tactic"},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    text = nb.render_for_prompt()
+    assert "kite-along-wall tactic" in text
+
+
+def test_style_note_long_kept_intact(nb_path):
+    # No length cap (user 2026-07-05): a long note is stored verbatim, not truncated.
+    nb = SiegeNotebook(nb_path)
+    prof = {"defeat_gnome_warrior": 12.0}
+    long_note = "x" * 900
+    nb.apply_llm_update(1, _mature_profile(prof),
+                        {"focus": "defeat_gnome_warrior", "style_note": long_note},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    nb.apply_llm_update(2, _mature_profile(prof),
+                        {"focus": "defeat_gnome_warrior", "style_note": long_note},
+                        num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    assert nb.verified_chains()[0]["style_note"] == long_note
+
+
 # ---- unmastered_links feeds the §3.4 gate, from LIVE SR ----------------------------------------
 
 def test_unmastered_links_reflects_live_sr(nb_path):
