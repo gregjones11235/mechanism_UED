@@ -159,7 +159,19 @@ def append_rehearsal_tasks(
                 combat_min_peak=th.forgetting_combat_min_peak,
             )
             forgetting = {f["achievement"].lower() for f in plog.forgetting_candidates(**kw)}
-        except Exception:  # noqa: BLE001 - never let a prefilter hiccup break training sampling
+        except Exception as e:  # noqa: BLE001 - never let a prefilter hiccup break training sampling
+            # LOUD, not silent: a swallowed error here makes rehearsal a no-op that is indistinguishable
+            # in the log from "nothing is forgetting" — exactly how v6-OLD ran an ENTIRE run with
+            # rehearsal dead (holder mis-resolution) without anyone noticing. Print the full traceback so
+            # a real bug (bad th/plog type, changed forgetting_candidates signature) surfaces immediately
+            # instead of hiding behind the benign "all holding" message below.
+            import traceback
+            print(
+                f"  [Sampling][rehearsal] WARNING: forgetting-detection raised "
+                f"({type(e).__name__}: {e}); treating as no forgetting THIS session. "
+                f"If this repeats, rehearsal is silently disabled — investigate. Traceback:"
+            )
+            traceback.print_exc()
             forgetting = set()
     forgetting &= protected
     if not forgetting:

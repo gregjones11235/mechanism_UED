@@ -1028,7 +1028,16 @@ class TaskGenerator:
 					f"total={r['total']:.3f}"
 				)
 		except Exception as e:  # logging must never break the run
-			print(f"[auction][voice] breakdown logging failed (non-fatal): {e}")
+			# This block is PURE logging (the real _organize_data return below is outside the try, so a
+			# failure here can't corrupt training) — swallowing is correct. But make it LOUD: a silently-
+			# vanished voice log (e.g. bid_breakdown/pool_breakdown field renamed upstream) would otherwise
+			# read as "auction ran fine, just quiet". Surface the type so a broken breakdown is diagnosable.
+			import traceback
+			print(
+				f"[auction][voice] WARNING: breakdown logging failed (non-fatal, training unaffected) "
+				f"({type(e).__name__}: {e}). Voice diagnostics missing this session. Traceback:"
+			)
+			traceback.print_exc()
 
 		# Rebuild the (parsed, parent, example) triplets for the winners and organize as usual.
 		win_parsed = [parsed_of[w.proposal_id] for w in winners]
@@ -1454,6 +1463,19 @@ class TaskGenerator:
 					tag = "STILL-UNMASTERED — MUST be trained (Relevant, NOT Completed)" \
 						if link.get("state") != "CONSOLIDATED" else "mastered — may be scaffolded/compressed"
 					lines.append(f"  - {link.get('skill')} [{tag}] role={link.get('role') or '-'}")
+			# §3.1 self-style: hand the proposer the modeler's accumulated ATTACK TACTIC for this wall —
+			# the know-how distilled from the student's real winning episodes (action mix / pacing / what
+			# was drowning out the target skill). Without this the proposer only knows WHICH wall to build
+			# toward, not HOW to shape the level so the wall is actually practised: e.g. that a gear/craft
+			# wall needs a zero-mob clean drill with stations adjacent and combat/survival stripped out,
+			# so the craft signal isn't drowned by fighting. This is the one place a human player's "go
+			# find a safe spot to grind this move" instinct enters the level design.
+			style = str(foc.get("style_note", "")).strip()
+			if style:
+				lines.append(
+					f"ATTACK TACTIC for {foc.get('skill')} (modeler's know-how from real winning episodes "
+					f"— shape the level to enact it): {style}"
+				)
 		if unmastered:
 			lines.append(
 				"FORBIDDEN in Completed this level (unmastered links — put them in Relevant): "

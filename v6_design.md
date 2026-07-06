@@ -231,6 +231,9 @@ prompt schema 加 style_note + 要求"精简致密、每字有用、不漏重点
 note 贴到 active focus(无门槛,只覆盖非空→累积);④`_upsert_experience` 写进 verified_chains(dedup-by-target,
 非空才覆盖);⑤`render_for_prompt` 三处渲染(active focus 的 style-so-far / milestone 的 style: / enabler 的
 note:)喂回下一轮。**对装备类同样生效**(category 只是标签不阻断)。不截断(信任 prompt 要求的精简)。181 单测绿。
+- **★style_note 有真实证据锚定(见 §3.85)**:上面"每 session 写下攻坚心得"若无真相来源,modeler 会**凭空编造**
+  战术。§3.85 的 **behavior fingerprint**(student 获胜 episode 的动作组合/节奏)正是给 style_note 提供"student 真
+  实怎么打赢的"这一证据,让心得**grounded 在真实行为**而非想象——这是让 H1"可迁移风格"有实质的关键一环。
 
 **★心得 vs rehearsal 两套独立机制(易混淆,用户 2026-07-05 澄清)**:
 - **style_note 心得**:**每 siege session 无条件**注入 modeler prompt(gen_manager 唯一条件=`siege_active`,无遗忘门槛)→ **指导 modeler(teacher)的每一次攻坚决策**。这是全程持续生效的。
@@ -243,7 +246,9 @@ note:)喂回下一轮。**对装备类同样生效**(category 只是标签不阻
 style_note 让 modeler 带着积累心得连续指导攻坚 → SR 应单调爬升而非震荡 → 铁镐真正攻透→退役→focus 推进到
 战斗类(H1 上场)→ 死循环自愈。**修好病根=症状自愈,不需额外的退役冷却代码**。★方法论教训:不能用"无心得
 时的历史震荡轨迹"去推测"有心得后的行为"(那是循环论证);笔记有效则那条轨迹本就不会发生。验证 run =
-job 3658849(DiCode-v6siege-style,新代码带 style_note,旧 3653226 已杀防重启污染)。
+**job 3673466(dicode-v6fix4-s0,wandb DiCode-v6siege/dicode-v6fix4-s0)**——新代码带 style_note + behavior
+fingerprint(§3.85)+ (c)共现 wiring 修复(§3.8),跑 `/users/jzhu223/dicode_v6`(与本地 dicode_v6 逐字节一致);
+中途几版(3653226 首跑 / 3658849 / 3663690…3673394)已杀,防重启污染。
 
 **★A+B 混合的维护方式(用户拍板)** —— 代码保证硬约束 + 骨架,LLM 负责判断:
 - **代码保证(B,防漂移兜底)**:笔记的 schema/存盘(跨 session resume,像 StudentProfileLog 存 JSON)、
@@ -292,6 +297,41 @@ StudentProfileLog / guidance_per_parent / ModelerArchiveView → **升级 modele
 不新起 agent**。若 modeler 职责过重致 prompt 塞不下或诊断与规划混淆降质 → 再拆成"状态诊断"+
 "攻坚规划"两 agent。**先升级,重了再拆。**
 
+### 3.85 behavior fingerprint:把 style_note 锚定在 student 真实行为上(problem-2,用户 2026-07-05)
+
+**动机 = 补 §3.5 style_note 的证据缺口**。(c)共现(§3.8)回答的是"student 攻破深层成就时,同一局**还达成了哪些
+其他成就**"——是成就位掩码上的相关性。它**答不出"student 是怎么打赢的"**:走位、动作组合、节奏——而这个"怎么"
+恰恰是 §3.5 的 style_note 要承接的东西(H1"可迁移风格"的物理载体)。没有一个真相来源,modeler 就只会**从 Craftax
+先验凭空编造**一个听起来合理的战术,写进 style_note→"风格"没有真实实质。
+
+**机制(低成本行为指纹,非完整轨迹)**:对每个深层成就,在其**获胜的 held-out episode** 上累积两个量——每局的
+**动作计数直方图**[num_ach, action_dim] 和 **episode 长度**。查询时给出紧凑摘要:
+> "student 打赢 <deep> 时,一个典型获胜 episode 约 84 步、60% 是移动/idle、大量用 PLACE_STONE + DO 而很少战斗
+> ——即一条采矿/合成路线,不是打架。"
+
+modeler 把这个当**扎实证据**折进 style_note,而非猜测。走位只被动作直方图**部分捕捉**(直方图非坐标)——这是
+低成本路线可接受的代价——但它仍告诉 modeler 真实的移动/合成/战斗组合。
+
+**落地与 (c)共现完全同构**:
+- 数据结构 `auction/behavior_fingerprint_log.py`(`BehaviorFingerprintLog`,纯 python 可离线测):跨 session 累加
+  原始 per-session 总量(**不提前平均**),查询时才除→均值随证据累积稳定;原子写 + resume 重载,与
+  `cooccurrence_counts.json`/`siege_notebook.json` 同目录。
+- **同一道相对 SR 护栏 MIN_SR=3%**:深层成就 SR 低于 3% 时其平均动作组合无意义→`fingerprint` 返回 None、
+  `render_fingerprint_hint` 返回空串→prompt 省略该行,回退到 (b)机制+(c)共现(与 §3.8 (c) 的分阶段回退一致)。
+- **采集端**(craftax_evaluation.py,与 cooc 同一 jit):`if cooc_cols:` 无条件额外算 per-env 动作总量/步数总量/
+  reached 计数,用 `_behav_*` key 带出;`make_evaluate` 额外返回静态 `action_names` 对齐列名。
+- **接入 modeler prompt**:gen_manager `_behav_log` 懒建(仅 siege on),`_render_behavior_hint`(gen_manager.py:1146)
+  取当前 focus + 几个深层战斗目标的指纹,拼成 "REAL-SUCCESS BEHAVIOUR" 块(≤5 行)→ modeler siege user prompt
+  的 `behav_hint`(modeler.py:629);modeler system prompt 明确要求"若有 REAL-SUCCESS BEHAVIOUR 块,style_note
+  必须反映 student 真实做了啥,而非凭空想象的战术;数据太稀疏则退回机制 know-how 并 terse 说明"。
+- **落盘 wiring 与 (c)共现同一处修复**:走 §3.8 订正里的 run_dicode.py Step 4b(`_behav_log` 与 `_cooc_log`
+  一起在 siege 活跃时才由 `run_session_evaluation` pop+accumulate)。
+- 单测:`test_behavior_fingerprint_log.py`(10)+ `test_behav_wiring.py`(3)+ `test_siege_prompt_behav.py`(4)。
+
+**★对 H1 为何关键**:style_note 是**唯一把风格传递**给下一堵相似墙的字段(skill/link/SR 只是账本)。若 note 空
+或是编造,H1 所依赖的"可迁移风格"就没有真实实质。behavior fingerprint 正是让它成真的东西。**对装备类同样生效**
+(只要有足够获胜样本)。
+
 ### 3.8 数据缺口与待办(实现前必须解决)
 
 - **★per-episode 成就共现数据(c) —— 已实现(2026-07-05)**:原缺口=craftax_evaluation.py 在 `.sum()`
@@ -303,6 +343,18 @@ StudentProfileLog / guidance_per_parent / ModelerArchiveView → **升级 modele
   modeler 侧 `render_prereq_hint` 给 siege prompt 注入"student 攻破深层成就时实际共现了啥(附经验 SR)"→让链条
   来自真实轨迹非想象。gen_manager `_cooc_log` 懒建(仅 siege on)。16 单测。
   仍**分阶段**:先用聚合 SR 跑通 §3.4(验证"强制完整链"),(c) 作增强叠加(SR 够高才生效,无害回退)。
+  - **★★★wiring 订正(重要,别再信"采集端存在即生效")**:上述采集/pop/累积逻辑虽写好,但**采集+落盘全在
+    `online_evaluation.run_session_evaluation` 里**,而该函数原先**只被它自己的 `@hydra.main` 独立评测入口调,
+    训练主循环根本不走**(训练 eval 另走 `training.py::extract_and_format_original_metrics`)→ 结果 v6-OLD/中间几版
+    **全系统零 `cooccurrence_counts.json`/`behavior_fingerprint.json` 落盘**,modeler 实际一直只靠 (b)机制+SR。
+    **修复**:在 `run_dicode.py` 主循环 **Step 4b**(run_session_training 之后)加一次显式
+    `run_session_evaluation(...)` 调用——它内部才有 cooc/behav 的 pop+accumulate 块。gate 判"siege 是否活跃":
+    `_cooc_holder = getattr(gen_manager,"task_generator",None) or gen_manager` 再查 `_cooc_log is not None`
+    (★holder 是 `gen_manager.task_generator`(TaskGenerator),不是 GM 本身——`_cooc_log` 由 TaskGenerator 的
+    `evolve_mastered_coop` 懒建;gate 写错 holder 则整块死代码。这与 rehearsal holder 坑同源)。siege off 时
+    `_cooc_log` 保持 None→整块严格 no-op,baseline/v5y 路径字节不变;采集 error 被 try/except 包住绝不打断训练。
+    **当前 run(job 3673466)跑的代码已带此 wiring**(Oscar `/users/jzhu223/dicode_v6` 与本地逐字节一致,已验),
+    但 job 早期 siege 未激活(等成熟度闸,~session 11)→ json 尚未落盘属正常,非未接通。
 - **★共现可信护栏 = 相对 SR 门槛 MIN_SR=3%(user 2026-07-05,订正)**:原设计用绝对计数 `MIN_SUPPORT=5`,
   基于"tier3 成功稀疏"的**错误前提**。实测 held-out eval `num_envs=1024`/session → tier3(SR~12%)单 session
   就有 ~120 次成功局,**绝对计数从不稀疏**;`MIN_SUPPORT=5` 几乎不起作用。真正该防的是"deep 成就极少被攻破
@@ -346,10 +398,71 @@ coop_w_end=0`。config 一行覆盖,`_coop_select`/`GreedyTopKSelector` 代码�
 
 ---
 
+### 3.10 首跑诊断:铁镐"死循环"与「隔离演练关」修复(2026-07-06)
+
+v6siege 首个健康长跑(job 3673466 = wandb `DiCode-v6fix4`,siege 于 session 15 激活)跑到 session 45
+后,对着 held-out 逐技能拆解,暴露出攻坚课程的一个**真实结构性缺陷**,已修复并以全新 run 重跑。
+
+**现象:焦点 make_iron_pickaxe「久攻不破」。** siege 从 session 15 起自始锁定 `make_iron_pickaxe`
+(kept 到 s45),held-out SR 卡在 25–44% 震荡,同 step(~step 4700,v1.md 口径 `_step`=global_update_step)
+对比:v6fix4 铁镐 **28.9% vs baseline 42.3%(−13.5pp)**——攻坚焦点反而**低于根本不攻坚的 baseline**。而
+它的前置全绿(collect_iron 88 / coal 94 / furnace 98 / stone_pick 96 / table 100,均 ≥baseline)、下游
+make_iron_sword 也齐平(58–66%)。**两头齐平、独中间焦点塌一半**=不是链条断,是攻坚方式本身在拖累焦点。
+
+**★ 官方 tier 口径校正(先纠一个长期误判)**:核实 craftax 1.4.5 源码 `constants.py` 的
+`achievement_mapping`(三方交叉:craftax 官方 GitHub + DiCode.pdf 附录 page 24-25/70 + 本地 1.4.5,完全一致)
+——官方**四档**按 reward 权重:Basic(+1)/Intermediate(+3)/Advanced(+5)/VeryAdvanced(+8)。关键订正:
+**`make_iron_pickaxe` 是 Basic(第1档)**(不是 tier3);`collect_diamond`(采钻)=Basic,`make_diamond_*`(钻石
+装备)=Intermediate;**魔法 fireball/iceball=Advanced(第3档)**。我方代码 `auction/craftax_achievements.py`
+的 `DEPTH_TIERS`(手工 1–4 层)与官方**不一致**(魔法、diamond 装备归错档),横比 baseline 一律以官方四档为
+准。全表见本地 `craftax各tier成就汇总.md`。⟹ 铁镐是**最基础的铁器链**,它落后 baseline 比"深层落后"更该警惕。
+
+**根因链(读代码+读磁盘 siege_notebook.json 确认)**:
+1. **焦点选对了**(make_iron_pickaxe 确是真墙:前置全绿唯它上不去)。退休/重开机制也正常(s45 stall 满 10
+   正常退休、又正常重开——不是 bug 锁死)。
+2. **modeler 诊断到位、笔记在迭代**:notebook 的 `style_note` 从 s25「箭矢药水是取胜模式一部分,保留战斗」
+   迭代到 s45「每局 2200 步被 SHOOT_ARROW/放石/喝药/造甲淹没了 smelt-craft → 应零怪干净演练、SR>70 前隔离
+   战斗」——诊断精准(自我风格跨 session 修正,正是 H1 想要的)。
+3. **★真正的病灶=「写好了没接线」**:`style_note`(攻墙战术心得)**只喂给 modeler 自己下轮读**
+   (`render_for_prompt`),**从没进 proposer 的造关指令**(`_render_siege_directive` 原来只吐焦点+前置链+禁压
+   缩列表,不含 style_note)。proposer 只知"攻哪堵墙",不知"该造零怪干净演练关",于是继续按默认心智造**完整
+   真实关**(带黑夜/怪物/下矿)→ craft 信号继续被淹没 → SR 平在 29% → 死循环。与 cooc/rehearsal 曾经的
+   同源 bug 一脉相承([[cooc-behav-never-wired-into-training-loop]])。
+4. **更深的 prompt 缺陷(用户点破)**:proposer 的 system prompt 通篇把"练习"等同于"完整通关一局",**从无
+   "造安全隔离练习场"的概念/许可**。人类玩家练搓装备会找安全角落反复练,proposer 没有这个选项。且经核实:
+   **held-out eval 用 `env.default_params`=完整 Craftax(day_length=300 有黑夜、地表怪 spawn [.1,.02,.05,.1])**,
+   一局同时测全部 67 技能、铁镐 SR=完整局里造出铁镐的比例——所以隔离演练**不能练成"只在安全空地会造"的脆弱
+   策略**,否则 eval 里废掉。**关键事实:造铁镐官方口径根本不需下矿**(配方 wood+stone+iron+coal+furnace+table,
+   地表 OVERWORLD_CONFIG 就有 iron/coal),隔离关"地表+清怪+站台就近"是**真实场景的合法子集**,不脱离迁移。
+
+**修复(prompt 层为主,全部改完、204 单测绿、已上机)**:
+1. **style_note 接线**:`_render_siege_directive` 把每个 focus 的 style_note 作为 `ATTACK TACTIC` 拼进
+   `SIEGE_DIRECTIVE`,喂给 proposer(gen_manager.py;新增 3 单测 test_siege_directive_style_note.py)。
+2. **改造 CONSOLIDATE = 「隔离演练关(ISOLATION DRILL)」**(不新增 TYPE,重定义现有 CONSOLIDATE,用户拍板):
+   剥离无关战斗/生存干扰、让 student 高频干净重复一个目标技能,**保留真实执行链**(真采/真熔/真造,禁把成品塞
+   背包),**取消"不用于 siege 墙"的旧限制**(铁镐这种被淹没的墙恰恰需要它),且**「按需削弱(reduce,非清零)+
+   SR 上升后加回干扰、向完整游戏收敛」**(防过拟合到安全沙盒;persona + modeler system prompt 6 处一致改)。
+   modeler 侧定义拓宽为**预防优先**:一看到 craft/gear 技能落后于已稳固前置就尽早用,别等硬化成长期卡死墙。
+3. **隐患修复(本次修改自身引入,已补)**:CONSOLIDATE 放开用于 siege 墙后,与 SIEGE_DIRECTIVE 原"造完整链关"
+   指令**冲突**。修法=**level TYPE 决定攻墙形态**:DEPTH→造完整链关,CONSOLIDATE→造隔离演练关;SIEGE_DIRECTIVE
+   退回只提供"哪堵墙+链+战术",不强制关卡形态。配套给 modeler 加 **DEPTH-vs-CONSOLIDATE 决策规则**(前置未
+   起=DEPTH / 前置全绿但技能仍卡=CONSOLIDATE),正对上铁镐(前置全绿仍卡→CONSOLIDATE)。
+
+**重跑**:job 3682819 = wandb `DiCode-v6fix6`(新名),从零、可续跑(load_checkpoint=true + 全新空 output
+dir `v6fix6_s0`);带上述全部修复。待验证命题=隔离演练能否把 make_iron_pickaxe 从 29% 天花板推上去、且不
+在带怪带夜的 held-out 上退化。相关:[[cooc-behav-never-wired-into-training-loop]]、
+[[v6-implementation-progress]]、本地 `craftax各tier成就汇总.md`。
+
+---
+
 ## 4. 数据与复现
 - v5yA graphml:`/oscar/scratch/jzhu223/dicode_outputs/v5yA_s0_r2/task_graph.graphml`(670 节点,
   session_created / description / performance_history 字段);解析脚本 scratchpad/_parse_v5yA_levels.py。
 - 裸 tier SR 对比脚本:scratchpad/_tier_absolute.py;mean_return 横比:_xcompare_v1shift.py。
 - run:v5yA=DiCode-v5debate/dicode-v5yA-s0-r2,v5yB=dicode-v5yB-s0,base=DiCode-repro/dicode-repro-s0-v1。
+- v6 run:v6siege 首跑=DiCode-v6fix4/dicode-v6fix4-s0(job 3673466,已停,首跑诊断源,见 §3.10);
+  **当前 = DiCode-v6fix6/dicode-v6fix6-s0(job 3682819,带 §3.10 隔离演练修复)**;上机脚本 ~/dicode_v6fix6.sh。
+- v6 首跑诊断脚本/数据:siege_notebook.json / cooccurrence_counts.json 在 output dir v6fix4_s0;官方 tier
+  权威表=本地 `craftax各tier成就汇总.md`;性能对比口径=v1.md 的 `_step`(=global_update_step)。
 - 相关:[[v5-runs-and-selection-variants-2026-07-03]]、[[v1-step-1900-pollution-early-lead-real]]、
   experiment_design.md §10.7(v1 tier漂移+遗忘)、v5_design.md §8(筛选策略)。

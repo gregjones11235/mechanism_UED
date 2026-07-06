@@ -15,6 +15,27 @@ from minicraftax.envs.craftax import CraftaxAugObsTrain
 def make_evaluate(config, env, env_params):
 	num_envs = config.evaluation.num_envs
 	num_steps = config.evaluation.num_steps
+
+	# v6 §3.8 (c): the STATIC achievement-key order (jit-external; used to label the co-occurrence
+	# arrays the jitted evaluate() returns). Computed HERE at make-time — NOT inside evaluate() — so it
+	# lives in make_evaluate's scope and can be returned below. (Previously it was defined inside the
+	# inner evaluate() body, so `return evaluate, cooc_names_static` raised NameError and the whole siege
+	# cooc/behav collection was silently skipped.) The achievement key SET is rng-independent, so a
+	# throwaway key is fine: eval_shape never runs the step, it only inspects the info pytree structure.
+	_probe_rng = jax.random.PRNGKey(0)
+	_probe_reset_rng, _ = jax.random.split(_probe_rng)
+	_probe_obsv, _probe_state = env.reset(_probe_reset_rng, env_params)
+
+	def _probe_info_shape():
+		dummy_action = jnp.zeros((num_envs,), dtype=jnp.int32)
+		_, _, _, _, info = env.step(_probe_reset_rng, _probe_state, dummy_action, env_params)
+		return info
+
+	_probe_info_structure = jax.eval_shape(_probe_info_shape)
+	cooc_names_static = [
+		k.split("/")[-1] for k in _probe_info_structure.keys() if "Achievements" in k
+	]
+
 	def evaluate(train_state, rng):
 		action_dim = env.action_space(env_params).n  # v6 problem-2: width of the behaviour action histogram
 		network = ActorCriticTransformer(
@@ -42,12 +63,9 @@ def make_evaluate(config, env, env_params):
 		
 		info_structure = jax.eval_shape(get_info_shape)
 
-		# v6 §3.8 (c): the STATIC achievement-key order (jit-external; used to label the co-occurrence
-		# arrays the jitted evaluate() returns). Same iteration order as the jitted loop over
-		# final_stats, so column k of the returned cooc arrays corresponds to cooc_names[k].
-		cooc_names_static = [
-			k.split("/")[-1] for k in info_structure.keys() if "Achievements" in k
-		]
+		# (cooc_names_static is computed once at make_evaluate scope above so it can be returned; the
+		# inner info_structure here is still used to shape accumulated_stats below. The achievement key
+		# order is identical either way — same env, same info pytree.)
 
 		# Initialize accumulated_stats with zeros matching info_structure
 		accumulated_stats = jax.tree.map(

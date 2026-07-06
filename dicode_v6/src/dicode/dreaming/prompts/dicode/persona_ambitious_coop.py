@@ -8,8 +8,9 @@ persona_ambitious.py and adapted; the original file is UNCHANGED (v4 still uses 
      level TYPE the first did NOT cover, rather than fighting over the same ground. No auction culling,
      no "win rate" — both proposers' outputs are kept (like baseline; §3).
   2. Three level TYPES the proposer chooses among: DEPTH (deeper transition) / BREADTH (an untouched
-     skill family) / CONSOLIDATE (strengthen a learned-but-unreliable NON-siege skill toward mastery;
-     forgotten skills are rescued automatically by the system, not via CONSOLIDATE).
+     skill family) / CONSOLIDATE (an ISOLATION DRILL: a stripped-down level that lets the student
+     repeat ONE target skill cleanly, distractions removed but the skill's real execution chain kept —
+     MAY be used for the siege wall; forgotten skills are rescued automatically, not via CONSOLIDATE).
   3. Guided (soft) by the MODELER's per-parent diagnosis ({MODELER_GUIDANCE}); the proposer stays
      ambitious and autonomous and weighs the modeler's guidance as a strong recommendation.
   4. May reuse/adapt a modeler-recommended historical reference level ({REFERENCE_LEVEL}).
@@ -46,7 +47,7 @@ THE THREE LEVEL TYPES (choose ONE per level)
 ==========================
 - **DEPTH**: push a deeper transition FORWARD — a new capability beyond what the student does reliably now. Appropriate when the prerequisites for that direction are already solid or clearly improving. This is your default ambitious instinct; scaffold the prerequisites so it stays solvable.
 - **BREADTH**: bring an UNATTEMPTED skill family into play — a capability area the student has never trained, at a learnable difficulty. Appropriate when whole areas sit untouched while others are solid.
-- **CONSOLIDATE**: STRENGTHEN a capability the student already has but has NOT yet mastered — push a learned-but-mediocre skill higher (e.g. a skill sitting at ~40% up toward reliable mastery). This is NOT for rescuing forgotten skills (the system handles forgetting automatically by re-running old levels) and NOT for the hard wall(s) under active siege (those are DEPTH, driven by the SIEGE DIRECTIVE). Use CONSOLIDATE for a non-siege skill the student can do but does unreliably, when making it solid unblocks or de-risks further progress.
+- **CONSOLIDATE (ISOLATION DRILL)**: a STRIPPED-DOWN level that removes the unrelated combat/survival distraction so the student repeats ONE unreliable skill cleanly and often — like a player finding a safe spot to grind one move. Best for a craft/gear skill whose own sequence (mine → smelt → craft) is drowned by fighting/surviving in every full episode; MAY target the wall under active siege. Reduce only the DISTRACTIONS (mobs, night, hunger, unrelated depth), NEVER the skill — the student must still perform the whole real sequence (never gift the finished item), so it transfers. Since the real game still has mobs and night, calm the drill only as much as the skill needs and reintroduce the pressure as its SR rises, converging back toward the full game rather than a permanently safe sandbox. NOT for forgotten skills (rescued automatically).
 
 JUDGING PREREQUISITES: to know what a capability depends on, reason PRIMARILY from the game mechanics in your KNOWLEDGE BASE — an action's requirements (a needed tool, an unlocked ability, a held item, a reached context) tell you what must come first. Layer the MODELER's diagnosis on top: it can see the student's full trajectory (which dependencies are the *live* bottleneck right now) and you cannot, so treat its per-parent guidance as the read on WHICH mechanically-possible prerequisite is actually blocking the student now. Do not invent dependencies that neither the mechanics nor the modeler support.
 
@@ -143,7 +144,7 @@ Specifically, address the following points:
 0) **Chosen Level TYPE & Coverage (state FIRST):**
    - Declare your chosen TYPE: DEPTH, BREADTH, or CONSOLIDATE.
    - Justify it from the MODELER's guidance and the student's state. If you are SECOND this round, explain why your type differs from / complements what your peer already made (do not duplicate).
-   - If you chose CONSOLIDATE, name the learned-but-unreliable NON-siege skill you are strengthening and its current SR (it must be a skill the student already does, just not reliably — not a forgotten skill, not the siege wall). If BREADTH, name the untouched skill family. If DEPTH, proceed with the bottleneck analysis below.
+   - If you chose CONSOLIDATE (isolation drill), name the target skill you are drilling and its current SR (a skill the student does partly but unreliably — NOT a forgotten skill; it MAY be the skill under active siege). State (a) which DISTRACTIONS you stripped (mobs/night/hunger/unrelated depth) and (b) that the skill's REAL execution chain is still performed in-level (not gifted via starting inventory). If BREADTH, name the untouched skill family. If DEPTH, proceed with the bottleneck analysis below.
 
 1) **Forward Bottleneck Hypothesis (Objective Signal):**
    - Identify ONE progression transition the agent has NOT unlocked (using the ORIGINAL Craftax profile) that is the highest-value next frontier.
@@ -214,9 +215,10 @@ Your turn order this round:
 </my_turn_order>
 
 The MODELER's diagnosis of the student's CURRENT state and what TYPE of level is most valuable at
-this parent right now (DEPTH = deeper transition, incl. the hard wall under siege / BREADTH = an
-untouched skill family / CONSOLIDATE = strengthen a learned-but-unreliable NON-siege skill toward
-mastery — forgotten skills are rescued automatically by the system, not via CONSOLIDATE). Treat it
+this parent right now (DEPTH = deeper transition, incl. pushing the chain toward a hard wall under
+siege / BREADTH = an untouched skill family / CONSOLIDATE = an ISOLATION DRILL that strips distractions
+so the student repeats ONE target skill cleanly, real execution chain kept — MAY target the siege wall
+itself; forgotten skills are rescued automatically, not via CONSOLIDATE). Treat it
 as a strong recommendation
 (soft guidance; you stay ambitious — follow it unless the evidence you see clearly contradicts it):
 <modeler_guidance>
@@ -225,11 +227,23 @@ as a strong recommendation
 
 SIEGE DIRECTIVE for the current hard-wall focus (empty if no active siege this session). When present
 it names the hard wall(s) being sieged — there may be more than one — and, for each, the prerequisite
-links the student has NOT yet mastered. A wall can be a combat fight OR a hard gear/craft skill that
-unblocks a harder fight; treat whichever wall(s) it lists as the goal(s) to build toward. Those
-UNMASTERED links MUST be trained in your level (put them in `Relevant`), NEVER compressed into
-`Completed`. Mastered links may still be scaffolded/compressed as usual. Design the level so the whole
-chain up to the wall is practised, not just the final jump:
+links the student has NOT yet mastered, plus (if the modeler recorded one) an ATTACK TACTIC for that
+wall. A wall can be a combat fight OR a hard gear/craft skill that unblocks a harder fight; treat
+whichever wall(s) it lists as the goal(s) to build toward.
+
+★ HOW you attack the wall is set by the level TYPE the modeler recommended for this parent (in
+MODELER_GUIDANCE above), NOT by this directive:
+  - If the recommended TYPE is DEPTH: build a level where the WHOLE chain up to the wall is practised
+    (not just the final jump) — push the frontier forward toward the wall.
+  - If the recommended TYPE is CONSOLIDATE: build an ISOLATION DRILL of the wall skill instead —
+    REDUCE the unrelated combat/survival distraction (only as much as the skill needs, not necessarily
+    to zero) so the wall's own sequence is repeated cleanly, following the ATTACK TACTIC. As the
+    skill's SR rises, add the pressure back and converge toward the full game (see the CONSOLIDATE
+    definition above) — the aim is a cleaner drill, not a permanently safe sandbox. Do NOT force a full
+    whole-chain playthrough while the drill is still calming the distraction.
+This directive only tells you WHICH wall + its unmastered links + the tactic; the TYPE tells you the
+level SHAPE. In BOTH cases the UNMASTERED links below MUST be trained in your level (put them in
+`Relevant`), NEVER compressed into `Completed`; mastered links may still be scaffolded/compressed:
 <siege_directive>
 {SIEGE_DIRECTIVE}
 </siege_directive>

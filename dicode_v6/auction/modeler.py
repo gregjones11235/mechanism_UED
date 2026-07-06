@@ -9,9 +9,12 @@ of three level TYPES is most valuable right now:
 
   - DEPTH       : push a deeper transition (tier frontier forward)
   - BREADTH     : explore an untouched skill family (new achievements never attempted)
-  - CONSOLIDATE : strengthen a learned-but-unreliable NON-siege skill toward mastery
-                  (a middling SR that has stalled short of solid; forgotten skills are
-                   rescued automatically by the system, not via CONSOLIDATE)
+  - CONSOLIDATE : an ISOLATION DRILL — a stripped-down level that strips the unrelated
+                  combat/survival distraction so the student repeats ONE target skill cleanly
+                  (real execution chain kept). For a middling SR that has stalled short of
+                  solid; MAY target the siege wall itself when it stalls because its craft
+                  signal is drowned by fighting. (Forgotten skills are rescued automatically,
+                   not via CONSOLIDATE.)
 
 It must distinguish (prompt is designed for this, see MODELER_SYSTEM_PROMPT):
   NORMAL_EARLY (weak-but-rising, leave it)  vs  STALLED (genuinely can't learn, re-aim)
@@ -215,10 +218,21 @@ class Modeler:
             print(f"[modeler][siege] query failed ({type(e).__name__}: {e}); no siege update.")
             content = ""
 
-        raw = _parse_modeler_json(content)
-        out = self._validate(raw, parent_ids)
-        out["siege_update"] = self._validate_siege(raw)
-        return out
+        # Parsing + validation must ALSO be inside the guard: _validate_siege walks LLM-shaped nested
+        # data (str() on arbitrary style_note values, per-focus dicts), so a malformed LLM payload could
+        # raise here and — since this used to sit OUTSIDE the try — crash the whole session, breaking the
+        # very "modeler must never crash the session" contract this except claims. On any failure we
+        # degrade to the same empty guidance the query-failure path yields, plus an empty siege_update.
+        try:
+            raw = _parse_modeler_json(content)
+            out = self._validate(raw, parent_ids)
+            out["siege_update"] = self._validate_siege(raw)
+            return out
+        except Exception as e:  # noqa: BLE001 - malformed LLM output must never crash the session
+            print(f"[modeler][siege] parse/validate failed ({type(e).__name__}: {e}); no siege update.")
+            out = self._validate({}, parent_ids)
+            out["siege_update"] = {"foci": []}
+            return out
 
     @staticmethod
     def _validate_siege(raw: dict) -> dict:
@@ -393,10 +407,26 @@ valuable RIGHT NOW given the student's state:
   MASTERED or RISING (the student can actually reach the new situation).
 - BREADTH: bring an entirely UNATTEMPTED skill family into play — appropriate when whole capability
   areas sit untouched while others are already solid.
-- CONSOLIDATE: STRENGTHEN a learned-but-unreliable skill toward mastery — appropriate when a skill
-  the student already performs, but only sometimes (a middling SR that has stalled short of solid),
-  would de-risk further progress if made reliable. This is NOT for forgotten skills (the system
-  rescues those automatically) and NOT for the hard wall(s) under active siege (those are DEPTH).
+- CONSOLIDATE (ISOLATION DRILL): recommend a stripped-down practice level that removes the unrelated
+  combat/survival distraction so the student REPEATS ONE target skill cleanly and often (its real
+  execution chain kept intact — the skill is still performed, only the distractions are removed).
+  Recommend it WHENEVER a skill's own signal is being drowned out by unrelated pressure — most often a
+  craft/gear skill whose winning episodes are dominated by fighting/surviving so the actual craft
+  sequence gets few clean reps. Prefer it EARLY, the moment you see a craft/gear skill lagging its
+  already-solid prerequisites — do NOT wait until it has hardened into a long-stuck wall; a timely
+  isolation drill is meant to PREVENT the "gear skill stuck for many sessions" pattern, not just
+  rescue it after the fact. It MAY of course also be the right attack for such a wall once under
+  active SIEGE (DEPTH pushes the chain forward; CONSOLIDATE drills the stalled step clean). NOT for
+  forgotten skills (the system rescues those automatically).
+
+DEPTH vs CONSOLIDATE — HOW TO CHOOSE (esp. for the same siege wall, where both can look applicable):
+  look at WHERE the block is. If the student cannot yet reliably REACH the situation the skill needs
+  (a prerequisite is still weak/RISING, a floor/context isn't reached) -> the bottleneck is the CHAIN,
+  recommend DEPTH to build the missing rungs. If the student CAN reach it — every prerequisite is
+  already solid — yet the skill itself stays stuck, the bottleneck is NOT the chain but the noisy
+  execution: the target action gets too few clean reps because fighting/surviving dominates the
+  episode -> recommend CONSOLIDATE (isolation drill). Rule of thumb: prerequisites still coming up =
+  DEPTH; prerequisites all solid but the skill still stalls = CONSOLIDATE. Recommend exactly ONE.
 
 ==========================
 INFERRING WHICH SKILL DEPENDS ON WHICH (how to know a "prerequisite")
