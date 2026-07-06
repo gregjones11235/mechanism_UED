@@ -221,6 +221,34 @@ def main(config: DictConfig):
                 eval_log_data[f"evaluation/{key}"] = value
             wandb.log(eval_log_data)
 
+        # --- Step 4b: SIEGE co-occurrence + behaviour fingerprint collection (v6 §3.8 c / problem-2) ---
+        # The per-session eval above (run_session_training) reuses TRAINING metrics and never runs an
+        # evaluation rollout, so it produces no _cooc_*/_behav_* arrays. run_session_evaluation DOES run a
+        # rollout and (via its cooc/behav pop-and-accumulate block) feeds the siege logs — which the
+        # modeler reads next session in evolve_mastered_coop (_render_cooccurrence_hint /
+        # _render_behavior_hint). Without this call those logs stay empty forever and the modeler silently
+        # falls back to (b)+SR only.
+        #   ★ HOLDER: _cooc_log lives on gen_manager.task_generator (TaskGenerator), NOT gen_manager
+        #     itself — evolve_mastered_coop that lazily creates it is a TaskGenerator method. This is the
+        #     SAME holder distinction online_evaluation resolves (task_generator first), and the same one
+        #     the rehearsal bug tripped over on 2026-07-05. Gate on the real holder or this whole block is
+        #     dead code (gen_manager never sets _cooc_log).
+        # STRICT no-op when siege is off (_cooc_log stays None) -> baseline / v5y path byte-identical.
+        # Guarded so a collection error can never break the training loop.
+        _cooc_holder = getattr(gen_manager, "task_generator", None) or gen_manager
+        if getattr(_cooc_holder, "_cooc_log", None) is not None:
+            try:
+                rng, _siege_eval_metrics = run_session_evaluation(
+                    config,
+                    rng,
+                    rl_train_state,
+                    gen_manager,
+                    current_session_idx,
+                    global_env_steps,
+                )
+            except Exception as e:  # noqa: BLE001 - co-occurrence/behaviour collection must never break training
+                print(f"  - [cooc/behav] siege collection eval skipped ({type(e).__name__}: {e}).")
+
         # --- Step 5: Post-Training Activation (Compare-and-Swap) ---
         real_activated_count = 0
         if new_task_ids:
