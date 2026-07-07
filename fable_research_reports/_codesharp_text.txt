@@ -1,0 +1,3153 @@
+===== PAGE 1 =====
+CODE-SHARP: Continuous Open-ended Discovery
+and Evolution of Skills as Hierarchical Reward
+Programs
+Richard Bornemann
+Imperial College London
+r.bornemann25@imperial.ac.uk
+Pierluigi Vito Amadori
+Sony Interactive Entertainment
+Antoine Cully
+Imperial College London
+Abstract
+A core quality of general intelligence is the ability to open-endedly expand and
+evolve its set of mastered skills autonomously. While recent Foundation Model
+(FM) driven approaches have shown promising results towards this goal, they typi-
+cally rely on significant human-in-the-loop engineering, limiting their transferabil-
+ity to novel environments. To address this, we introduce Continuous Open-ended
+Discovery and Evolution of Skills as Hierarchical Reward Programs (CODE-
+SHARP), a framework that leverages FMs to open-endedly grow and evolve an
+archive of Python programs encoding skills to train a generalist agent policy en-
+tirely from scratch via reinforcement learning, directly from source code. These
+programs, termed Skills as Hierarchical Reward Programs (SHARPs), each encode
+a local success condition and a set of prerequisites delegated to previously discov-
+ered SHARPs. At runtime, SHARPs dynamically route the agent through their
+prerequisite chain based on the current state, rewarding each completion along the
+way, requiring the agent to learn only the marginal behaviour each new SHARP in-
+troduces, enabling efficient learning of long-horizon skills without any pre-defined
+rewards. On Craftax-Classic and XLand, agents trained fully autonomously by
+CODE-SHARP outperform previous works by 6x and 2.6x in median performance
+and are the only agents capable of crafting iron tools and mining diamonds. Scaled
+to Craftax-Extended, CODE-SHARP trains a generalist agent on over 90 discov-
+ered SHARPs, enabling the agent to solve challenging long-horizon tasks zero-shot,
+matching agents trained on ground-truth rewards.
+1 Introduction
+A core quality of general intelligence is the ability to open-endedly expand and evolve its set of
+mastered skills autonomously [Hughes et al., 2024]. Consequently, recent years have seen significant
+progress in open-ended skill discovery for artificial intelligence [Wang et al., 2019, 2020, Team et al.,
+2023]. Recent Foundation Model (FM) based agents, such as V oyager [Wang et al., 2023a] and
+Jarvis [Wang et al., 2024], have demonstrated impressive results on open-ended skill discovery in
+environments like Minecraft [Fan et al., 2022], and similar successes have been shown in robotics
+with FM-based planners [Ahn et al., 2022, Zhang et al., 2023b]. However, these methods rely
+completely on human engineering to bridge the gap between high-level planning and low-level
+action execution via hand-crafted APIs [Wang et al., 2023a, 2024] or models pre-trained on massive
+datasets of annotated human trajectories [Wang et al., 2024, Fan et al., 2022, Zhang et al., 2023b].
+The scale of this engineering is considerable: the Mineflayer API used across open-ended skill
+discovery work in Minecraft comprises 13,000 lines of JavaScript, while the MineDojo [Fan et al.,
+Preprint.
+arXiv:2602.10085v3  [cs.AI]  21 May 2026
+===== PAGE 2 =====
+F oundation Model
+Failed Proposals Skill T ype
+Skill Proposal Generator
+Skill Proposals
+Skill Proposal Implementor
+Skills in Code
+Skill Proposal Judge
+Candidate Skills
+Code 
+RefinementSyntax Check
+Pass
+Failed Skill Proposals
+RL  T raining
+Accepted Skills
+Environment Code
+Skill 
+Archive
+Sampled Parent Skill
+Accepted Mutation
+Mutation T ype Failed Mutations
+Skill Mutation Generator
+Mutation Proposals
+Skill Mutation Implementor
+Mutation in Code
+Code 
+RefinementSyntax Check
+Pass
+Environment 
+Evaluation
+Failed Mutations
+Figure 1: CODE-SHARP consists of two FM-driven iterative processes that discover and evolve skill
+encoding SHARPs. Theskill proposal generator,implementor, andjudgegenerate and filter novel
+SHARPs before environment evaluation. Theskill mutation generatorandimplementorproduce
+mutated versions of existing SHARPs, evaluated directly in the environment.
+2022] agent was trained on 33 years of annotated human gameplay, creating a severe bottleneck
+for transferring such methods to novel environments. Exploration with LLMs (ELLM) [Du et al.,
+2023] and Open-Endedness via Human Notions of Interestingness (OMNI) [Zhang et al., 2023a]
+reduce these requirements by training goal-conditioned agents from scratch to handle low-level action
+execution. However, both methods still depend on hand-engineered state captioners and translation
+functions requiring expert knowledge of the environment’s actions, objects, and dynamics.
+To overcome these limitations and move towards a more general and transferable approach to au-
+tonomous open-ended skill discovery, we introduceContinuousOpen-endedDiscovery andEvolution
+ofSkills asHierarchicalRewardPrograms (CODE-SHARP). CODE-SHARP leverages FMs to
+autonomously and open-endedly grow an archive of Python programs encoding skills, termed Skills as
+Hierarchical Reward Programs (SHARPs), to continuously train a goal-conditioned policy, represent-
+ing a generalist agent, to acquire increasingly complex skills entirely from scratch via reinforcement
+learning. Rather than depending on hand-crafted APIs or curated demonstrations, CODE-SHARP
+ingests the environment source code directly, substantially reducing the amount of human engineering
+required. CODE-SHARP structures the archive of discovered SHARPs as a continuously growing,
+interconnected graph, where each SHARP is directly composed of SHARPs discovered in previous
+iterations. Each SHARP guides the agent through its chain of prerequisite SHARPs based on the
+current state, directly instructing it to reuse already mastered skills and reducing learning to the
+marginal behaviour each new SHARP introduces. Similarly, to define a novel SHARP, the FM needs
+only to specify this marginal behaviour and its immediate prerequisites, rather than encoding every
+substep required for completion, reducing the risk of errors introduced during SHARP specification.
+CODE-SHARP consists of two open-ended iterative processes: 1) FM-driven open-ended discovery
+of SHARPs based on the current skill archive, and 2) FM-driven evolution of the archive through
+targeted mutation of existing SHARPs. Simultaneously, the agent is trained exclusively on the
+rewards derived from the growing archive of SHARPs.
+On Craftax-Classic [Matthews et al., 2024, Hafner, 2021] and XLand [Nikulin et al., 2024], agents
+trained entirely from scratch by SHARPs discovered by CODE-SHARP outperform baselines by a
+factor of 6x and 2.6x in median performance, respectively, and are the only agents capable of reliably
+crafting iron tools and mining diamonds. To challenge CODE-SHARP’s open-endedness, we evaluate
+on Craftax-Extended [Matthews et al., 2024] with 4× the proposal iterations and 20× the training
+budget of our Craftax-Classic experiments. In this setting, CODE-SHARP discovers 90 SHARPs,
+which train an agent to match or outperform baselines trained on ground-truth rewards zero-shot on
+four challenging benchmarks.
+To summarise, our principal contributions are:1)CODE-SHARP, an autonomous open-ended
+skill discovery framework that trains generalist agents via reinforcement learning directly from
+environment source code, substantially reducing the human engineering required compared to prior
+work;2)the formalisation of Skills as Hierarchical Reward Programs (SHARPs), Python programs
+generated by FMs and built from previously discovered SHARPs, which reward the agent upon
+reaching a specified goal state; and3)a recursive transition operator that identifies the most immediate
+2
+===== PAGE 3 =====
+actionable prerequisite skill at each step, guiding the agent through the SHARP’s prerequisite chain
+and reducing learning to only the novel behaviour each newly discovered SHARP introduces.
+2 Method
+CODE-SHARP facilitates open-ended unsupervised skill discovery by curating a continuously
+growing skill archive implemented as a directed acyclic graph of Skills as Hierarchical Reward
+Programs (SHARPs). Each SHARP is represented as an FM-generated Python program encoding a
+skill’s success condition and prerequisite dependencies (Section 2.2). Two FM-driven loops grow
+and refine this archive: a propose–implement–judge pipeline adds novel SHARPs for which the
+agent shows measurable learning progress, while a mutation loop improves existing SHARPs by
+revising their condition functions and prerequisite assignments. Throughout, a goal-conditioned
+policy π, representing the agent, is trained via PPO exclusively on SHARP-generated rewards. The
+full algorithm is summarised in Appendix A.
+2.1 Problem Formalisation
+We model the environment as a Goal-Conditioned MDP M=⟨S,A,G, P, γ⟩ , with state and action
+spaces S,A , transition dynamics P:S × A →∆(S) , discount factor γ∈[0,1) , and semantic goal
+spaceG.
+We formalise open-ended skill discovery as the iterative construction of a dynamic skill archive,
+structured as a directed acyclic graph Λt = (Vt,E t), where each node σ∈ V t is a Python program
+encoding a skill corresponding to a semantic goal in G, and edges encode prerequisite dependencies
+between skills. The skill discovery process corresponds to a mapping f: Λ t →Λ t+1 that identifies
+and adds novel, learnable skills to the graph.
+2.2 Skills as Hierarchical Reward Programs
+Cr aftSt onePickax e
+Not near Table? → CraftCraftingTableID
+Has Stone Pickaxe?:
+   reward = 1.0
+   done = True
+else:
+   reward = 0.0
+   done = False
+
+return CraftStonePickaxeID, reward, done
+Wood < 1? → MineWoodID 
+Stone < 1? → MineStoneID 
+# Success Condition Function
+# Environment Condition Functions
+Figure 2: Pseudo-code of
+a SHARP
+Each node in the archive is represented by a SHARP, an FM-generated
+executable Python program defined as σ=⟨ϕ σ, ψσ, ρσ⟩. The FM writes
+the defines function ϕσ :S × S → {0,1} that encodes the semantic goal
+of a skill in code (e.g.agent.inventory.stone_pickaxe >= 1) and
+acts as the termination condition. The initiation set ψσ = ((ci, ui))m
+i=1
+is an ordered list of (condition, prerequisite) pairs, where each condition
+function ci verifies whether st satisfies an immediate requirement for
+attempting ϕσ (e.g. agent.inventory.stone >= 1 ), and each ui ∈ V t
+is an existing SHARP from the archive (e.g. MineStone) selected by the
+FM to be invoked when ci is unmet. These FM-assigned dependencies
+define the directed edges (ui, σ)∈ E t. At runtime, SHARPs receive
+the current and previous states (st, st−1) as input and return the reward
+achieved ins t.
+Each episode, a target SHARP σtarget ∈ V t is sampled from a distribution
+P(V t) over the archive. To resolve the immediately actionable skill given
+the current state, we define a recursive transition operator T:V t × S → V t that descends the
+prerequisite hierarchy ofσ target until reaching a skill whose conditions are all satisfied ins t:
+T(σ target, s) =
+(
+ui if∃i:c i(s) = 0∧(∀j < i, c j (s) = 1)
+σtarget otherwise (1)
+Concretely, given σtarget = CraftStonePickaxe and its first unmet condition
+agent.inventory.stone >= 1 , T recurses into MineStone; if MineStone in turn has an
+unmet condition such as agent.inventory.wood_pickaxe >= 1 , the recursion descends
+further into CraftWoodPickaxe, and so on until reaching a SHARP whose conditions are all
+satisfied in st. The resulting σactive simultaneously conditions the agent’s goal-conditioned policy
+π:S × V t →∆(A) and defines the reward R(s, a, s′ |σ active) =α(σ active)·I[ϕ σactive(s′, s) = 1] to
+train it. This traversal repeats at every environment step, allowing σactive to adapt to changes in state,
+so the agent is continuously guided and rewarded through the full chain of prerequisite SHARPs
+towards σtarget. Consequently, to learn a novel skill, the hierarchy automatically guides the agent into
+3
+===== PAGE 4 =====
+environment states from which only the marginal new behaviour needs to be learned, rather than
+requiring it to rediscover the full prerequisite sequence from scratch.
+2.3 Open-Ended Skill Discovery
+CODE-SHARP adopts an FM-based propose-implement-judge approach to generating novel SHARPs
+[Faldor et al., 2024]. Throughout both the discovery and evolution loops, every FM call receives the
+same base context: the current skill archive, the environment source code, failed proposals from prior
+iterations, and any optional auxiliary documentation such as tutorials. Component-specific inputs are
+noted below. All prompts are provided in Appendix J.
+Skill Proposal Generator and Implementor: The generator produces n SHARP candidates as
+pseudo-code, each specifying a high-level description, a binary success condition ϕ, and a dictionary
+mapping condition functions of the proposed SHARP candidate to prerequisite SHARPs in the existing
+archive. To encourage diversity, generation is conditioned onn skill categories sampled uniformly
+with replacement from a predefined set of category heuristics. The skill proposal implementor
+translates the pseudo-code candidates into SHARPs in Python code, based on a general SHARP class
+template.
+Skill Proposal Judge: Recent work has demonstrated that FMs serve as effective proxies for
+human judgments of interestingness, novelty, and skill learnability [Zhang et al., 2023a, Faldor
+et al., 2024]. CODE-SHARP therefore employs an FM-based judge to evaluate and select up to
+two of the implemented SHARP candidates for learnability evaluation based on three criteria:1)
+Correctness:The implemented SHARP must follow the provided template and correctly map all
+required conditions ci to valid prerequisites ui in V.2) Feasibility:The skill must be learnable given
+the agent’s current capabilities.3) Novelty:The skill must target a distinct region of the skill space
+compared to existing skills.
+Learnability Evaluation: If a selected candidate fails to compile, the code and error trace are
+returned to the implementor for iterative refinement, repeated up to three times. A copy of the
+goal-conditioned agent is trained on the entire archive with the candidate SHARPs added to their
+leanability. We define learning progress as a success rate improvement of τ= 0.05 between the
+first and final evaluation iterations, set to filter spurious successes while retaining gradually-learned
+long-horizon skills. SHARPs meeting this criterion enter the archive, with the rest being logged as
+failed proposals.
+2.4 Open-Ended Archive Evolution
+CODE-SHARP leverages FMs to continuously evolve SHARPs already present in the skill archive to
+remedy potential misspecifications or replace existing prerequisite SHARPs with recently discovered,
+better fitting alternatives. Each iteration, SHARPs are sampled for mutation with probability P(k)∝
+(1−ρ k), whereρ k is the SHARP’s current success rate. All prompts are provided in Appendix K.
+Mutation Generation and ImplementationThe mutation proposal generator produces m candidate
+mutations of the sampled SHARP, each conditioned on the parent SHARP’s implementation and a
+mutation heuristic sampled from a predefined set. These heuristics target recurring, environment-
+independent failure modes, such as reordering condition functions, substituting prerequisite SHARPs
+with more suitable alternatives, or inserting missing condition–prerequisite pairs. The mutation
+implementor then translates each proposal into an executable SHARP in Python.
+Mutation EvaluationA central property of the SHARP formulation is that the π is conditioned only
+on σactive at each step, never on the structure of the parent skill that induced it. Consequently, mutations
+to a SHARP’s condition functions and prerequisite assignments alter only howT traverses the archive,
+eliminating the need for gradient updates during mutation evaluation. We collect trajectories of the
+agent executing each candidate mutation in parallel, updating the archive in-place via σk ←σ ′
+k if a
+mutation demonstrates a higher success rate than the currently best-performingσ k.
+2.5 Agent Training
+The agent’s policyπ is trained via PPO Schulman et al. [2017] in a continual, open-ended fashion
+exclusively on the rewards generated by the SHARPs discovered by CODE-SHARP. Crucially, the
+4
+===== PAGE 5 =====
+FM is invoked only during the discovery and mutation loops. At runtime, only π and the SHARP
+code execute, with no FM in the loop. At the beginning of each episode, a target SHARP σtarget is
+uniformly sampled from the archive for the agent to complete. A new target SHARP is sampled if
+σtarget is completed successfully or 200 environment steps have elapsed without progress on σactive.
+To condition the agent, an embedding of σactive’s name is concatenated with the environment state
+st. We provide ablations all training components in Appendix F.
+Prerequisite-Aware Opportunistic SamplingTo exploit hard-to-reach environment states, the
+sampling of σtarget is biased towards SHARPs whose condition functions are already satisfied but
+whose prerequisite SHARPs have low success rates, indicating that the current state presents a rare
+opportunity to practise the skill. Concretely, a sampling weight Bj is computed for each SHARP σj
+as the inverse product of the success rates of its satisfied prerequisites:B j = 1Q|V|
+k=1(ρk+ϵ)Njk where
+Njk = 1 if prerequisite σk is assigned to a currently satisfied condition function of σj. SHARPs
+with a satisfied success condition in st are masked for the final sampling distribution, as they would
+be trivial to complete.
+Adaptive Reward ScalingDue to the hierarchical nature of SHARPs, simply up-sampling low-
+performing skills to incentivise learning is insufficient, as it results in equal up-sampling of all
+SHARPs assigned as their prerequisites. To counter this and provide more direct learning feedback,
+we implement adaptive reward scaling [Kwon et al., 2025]. Rewards ri provided by each SHARP σi
+are scaled inversely to its success rate:r i = min
+
+1
+ρi
++ϵ,10.0
+
+.
+3 Comparative Evaluation Experiments
+We first evaluate CODE-SHARP’s ability to autonomously discover meaningful skills and train
+a goal-conditioned agent from scratch in two complex environments containing rich skill spaces:
+Craftax-Classic [Matthews et al., 2024, Hafner, 2021] and XLand [Nikulin et al., 2024]. We address
+two research questions.RQ1: Does CODE-SHARP autonomously discover skills aligned with
+objectives that humans deem meaningful, across unseen environments?RQ2: Does the hierarchical
+composition of SHARPs enable the agent to master complex, long-horizon tasks that flat and non-
+compositional skill representations cannot achieve?
+We compare CODE-SHARP against two FM-guided baselines for open-ended skill discovery, ELLM
+[Du et al., 2023] and OMNI [Zhang et al., 2023a]. ELLM prompts the FM at every environment
+step to generate natural language goals based on the current state st, computing rewards via cosine
+similarity between the goal and a hand-crafted caption of the state transition. OMNI instead queries
+the FM outside of the training loop to define novel and learnable skills as a sequence of target
+states the agent must reach in order, and rewards the agent for reaching each successive state in the
+sequence. To translate the FM’s proposed target states into valid environment states, OMNI relies on
+hand-engineered translation functions. CODE-SHARP, in contrast, defines all SHARPs directly in
+Python from environment source code. Both CODE-SHARP and OMNI receive the environment
+code stripped of all reward and achievement logic, with ELLM receiving the environment state and
+the list of state admissible actions. We perform 25 proposal iterations on Craftax-Classic and 40 on
+XLand for OMNI and CODE-SHARP. All methods use Qwen3-235B-A22B-Thinking-2507 [Yang
+et al., 2025] as the FM, with a JAX-based [Bradbury et al., 2018] TransformerXL [Dai et al., 2019,
+Hamon, 2024] agent trained via PPO [Schulman et al., 2017] for 1×10 8 steps on a single A6000
+ADA GPU, with 4 A6000 Blackwell GPUs for FM inference. CODE-SHARP and OMNI each take
+roughly one day per run on our hardware. Due to the prohibitive inference cost of ELLM’s per-step
+querying of the FM, we reuse the authors’ public FM cache for Craftax and pre-compute a cache of
+caption and FM response pairs for XLand for 9 days.
+To isolate the impact of the step-adaptive conditioning on σactive enabled by SHARPs, we com-
+pare against a Flat Reward Programs (FRPs) ablation. FRPs forgo the recursive transition operator
+T , instead requiring the FM to explicitly enumerate the full sequence of prerequisite skills. For
+example, where a SHARP corresponding to MineStone needs only specify the immediate pre-
+requisite CraftWoodPickaxe, the corresponding FRP must enumerate the full chain MineWood→
+PlaceCraftingTable→CraftWoodPickaxe . For every discovered SHARP, we query an FM-
+based FRP generator to produce a counterpart conditioned on the SHARP’s name, description, and
+success condition. Since both share identical names and success conditions, FRPs are evaluated using
+5
+===== PAGE 6 =====
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+Craftax Achievements
+Wood
+Sword
+Stone
+Sword
+Iron
+Sword
+Eat
+Cow
+Mine
+Iron
+Mine
+Diamond
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+Selected Craftax Achievements
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0Success Rate
+XLand Achievementsa) b) c)
+CODE-SHARP (Ours)
+CODE-FRP (Ours)
+ELLM
+OMNI
+Median
+Mean
+Figure 3:a): Distribution of success rates on all achievements in Craftax-Classic aggregated over
+five runs. Shaded area indicates the inner quartile range.b): Average success rate on selected
+achievements on Craftax-Classic, error bars denote the boostrapped 95% CI around the mean.c):
+Distribution of success rates on all achievements in XLand across five runs.
+the agent trained on SHARPs, eliminating agent performance as a confounding factor. Performance
+differences, therefore, stem from two coupled effects of the flat formulation: the absence of step-level
+adaptation via T , and the increased specification burden placed on the FM, which must enumerate
+the full prerequisite chain rather than only the immediate prerequisites.
+We evaluate agent performance against the set of achievements predefined by Craftax. For CODE-
+SHARP, CODE-FRP and OMNI, we utilise the discovered skill with the highest semantic similarity
+to the achievement name in embedding space to handle the conditioning of the respective agents,
+with ELLM conditioning the agent directly on the achievement name. A detailed breakdown of
+performance on all achievements is presented in Appendix C.
+3.1 Craftax-Classic Experiments
+Craftax-Classic[Matthews et al., 2024] is a procedural 2D environment based on Crafter [Hafner,
+2021], featuring mechanics where agents collect resources, craft increasingly advanced tools, manage
+survival metrics, and fight mobs within a partially observable 64x64 grid. We evaluate performance
+across 22 predefined achievements, ranging from collecting basic resources to mining diamonds, the
+latter requiring up to 9 sequential prerequisite tasks. We remove all references to these achievements
+from the environment context provided to CODE-SHARP, OMNI and CODE-FRP.
+Results: As shown in Figure 3a, CODE-SHARP outperforms both baselines, achieving a median
+success rate of 94.8% and an average of 67.2% across all 22 achievements, compared to 8.1% (39.8%)
+for ELLM and 15.8% (39.2%) for OMNI. Figure 3b shows that the agent trained by ELLM is largely
+confined to shallow tasks requiring minimal prerequisites and fails to reliably learn longer-horizon
+skills. OMNI successfully discovers more advanced skills, training the agent to reliably craft stone
+tools. However, OMNI’s programmatic representation of skills as a sequence of fixed target states
+fails to train the agent to master more complex behaviours. In contrast, CODE-SHARP’s step-level
+adaptation of the active SHARP through T successfully trains the agent to reliably learn long-horizon
+skills, achieving over 94% success rate on both the iron sword and iron pickaxe and 16% on mining
+diamonds, with individual runs reaching up to 39% success rate. The importance of this step-level
+adaptation is reinforced by the CODE-FRP ablation, which reaches only 38.9% (44.2%) and exhibits
+the same failure mode as OMNI. We further observe that the requirement to enumerate the entire list
+of prerequisite skills for FRPs instead of just the most immediate prerequisites for SHARPs results
+in a higher misspecification rate by the FM. Together, these results provide strong evidence that
+CODE-SHARP’s unsupervised discovery process produces skills well-aligned with human definitions
+of meaningful skills to achieve in the environment (RQ1) and that SHARPs’ hierarchical composition
+is central to enabling the agent to master long-horizon skills (RQ2).
+3.2 XLand Experiments
+XLand[Nikulin et al., 2024] is a procedurally generated 2D grid-world that challenges CODE-
+SHARP along two axes absent in Craftax-Classic: stochastic dynamics, where object interaction rules
+are randomly sampled each episode (yielding up to 36 possible interaction rules for a single object),
+and a lower level of action abstraction, where rather than executing high-level commands in a single
+action like in Craftax-Classic, the agent carries one object at a time and must physically navigate to
+other objects to trigger any interaction. We evaluate on a three-room configuration containing up to
+6
+===== PAGE 7 =====
+Move to 
+Light Edge
+Kill Orc 
+Warrior
+Open Chest
+Kill Snail
+Kill Orc 
+Mage
+Find 
+Dungeon 
+Ladder
+Descend To 
+Mines
+Fight Gnome 
+Warrior
+Descend To 
+Dungeon
+Eat Food
+Fight 
+Skeleton
+Find Down 
+Ladder
+ Recover 
+Health Craft Iron 
+Sword
+Craft Wood 
+Pickaxe
+Craft Table
+Kill Bat
+Face Ladder 
+Mines
+Cr afting
+R esour ce Management Fighting
+Na vigation
+Mine Stone
+Mine Wood
+ Craft Wood 
+Sword
+Descend To 
+Sewers
+Figure 4: CODE-SHARP continuously builds on existing SHARPs in the archive to define novel,
+meaningful skills mirroring the natural skill curriculum of Craftax.
+18 objects, including a red and blue door, which first requires the agent to possess the fitting key to
+access further objects. As XLand defines no native achievements, we introduce 20 evaluation targets:
+18 for picking up each object, 10 of which are not immediately accessible to the agent and require
+various levels of prerequisite crafting, and 2 for unlocking the red and blue doors.
+Results: As shown in Figure 3c, CODE-SHARP substantially outperforms both baselines, achieving
+a median success rate of 79.2% and an average of 61.6%, compared to 29.7% (45.4%) for ELLM
+and 2.3% (19.3%) for OMNI. ELLM again performs well on shallow achievements but fails to chain
+longer sequences. OMNI performs considerably worse, as its fixed target-state sequences cannot
+accommodate the stochastic interaction rules that vary across episodes. Similarly, our CODE-FRP
+ablation achieves 6.1% (22.8%), compounded by the FM’s tendency to misspecify sub-step sequences
+under the stochastic rule set. SHARPs efficiently absorb this variation by dispatching to different
+prerequisite SHARPs depending on the environment state. On the pickup red key achievement, where
+the active crafting rule is sampled from a pool of 18 possible rules, the agent succeeds in over 37%
+of episodes compared to just 0.6% for ELLM. For the 11% of achievements matched to mutated
+SHARPs, mutations yield an average relative performance increase to the base versions of 130.7%,
+driven primarily by the addition of prerequisites missed in the original specification. These results
+further support our observations from Craftax-Classic and strongly affirmRQ1andRQ2.
+4 Long Run Experiment
+To rigorously test CODE-SHARP’s capacity for open-ended skill discovery, we scale our evaluation to
+Craftax-Extended [Matthews et al., 2024], which augments Craftax-Classic with NetHack’s [Küttler
+et al., 2020] dungeon-crawling dynamics, adding 8 new levels with diverse entities and mechanics.
+We aim to address one main research question,RQ3: Does CODE-SHARP sustain open-ended
+discovery at scale, producing an archive of increasingly complex SHARPs that broadly covers the
+environment’s skill space and trains a generalist agent to learn increasingly complex skills?
+We run CODE-SHARP for 100 proposal and 85 evolution iterations, training the agent for2×10 9
+environment steps, requiring roughly 3 days. To better disentangle CODE-SHARP’s skill discovery
+process from limitations posed by outside factors, we enforce a minimum health threshold to prevent
+premature episode termination. To evaluate both the breadth of the discovered archive and the quality
+of the skills within it, we employ an FM-based policy planner that guides the agent through a set of
+challenging benchmark tasks, each consisting of up to 11 sub-tasks, via policies-in-code [Klissarov
+et al., 2024]. For the planner to be able to generate effective policies, CODE-SHARP must discover
+SHARPs that broadly cover the environment skill space and define them such that the agent learns to
+reliably execute their intended behaviours. Consequently, benchmark performance serves as a joint
+proxy for archive breadth and skill quality. Detailed descriptions of the four benchmark tasks are
+provided in Appendix B.
+Without any training on the original environment or benchmark rewards, we compare the zero-shot
+performance of the agent trained exclusively by CODE-SHARP against; 1) An agent pretrained on the
+original Craftax-Extended rewards and finetuned for each benchmark separately; 2) A task-specific
+7
+===== PAGE 8 =====
+Navigation Crafting Dungeon Mines
+Benchmark T ask
+0
+20
+40
+60
+80
+Score
+(a)
+CODE-SHARP
+CODE-FRP
+Finetuned
+T ask Specific
+ReAct
+10 20 40 60 80 100
+Skill Proposal Iteration
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+Relative Performance vs Average Baseline
+(b)
+Navigation
+Crafting
+Dungeon
+Mines
+10
+15
+20
+25
+Average Complexity of Skills in Policy
+Figure 5:(a)Score achieved by CODE-SHARP across benchmark tasks.(b)The policy planner
+utilises increasingly complex SHARPs to define policies-in-code throughout training, resulting in
+large performance gains relative to the average baseline.
+agent trained only on the benchmarks; 3) A zero-shot baseline in the form of an LLM agent based on
+the ReAct Yao et al. [2022] framework; 4) Our CODE-FRP ablation presented in Section 3, utilising
+the same policies-in-code as for CODE-SHARP. All applicable baselines are trained for2×10 9 steps,
+with an additional 1×10 8 for the fine-tuned agent, and evaluated with minimum health threshold
+enforcement. Scores are reported as the geometric mean over sub-task success rates following the
+Craftax scoring paradigm. For CODE-SHARP and CODE-FRP, results are over three runs × three
+policies-in-code, and nine seeds for all other methods. Error bars indicate the boostrapped 95% CI.
+See Appendix D for detailed results and ablations on the impact of FM scaling Appendix G.
+4.1 Long Run Results
+Results: CODE-SHARP discovers an average of 90 SHARPs, forming a structured curriculum
+that closely mirrors the natural progression of Craftax-Extended. The archive evolves from foun-
+dationalOverworldskills to increasingly complex skills spanning theDungeon,MinesandSew-
+erslevels, which directly build on the growing hierarchical archive (Figure 4). We find that this
+progress is often driven by CODE-SHARP directly exploiting environment mechanics to define
+unexpected and innovative behaviours. For example, in the darkMines, CODE-SHARP discovers
+the MoveToEdgeOfLightLevel2 SHARP, rewarding the agent for moving to the edge of a lit area.
+PlaceTorchAtEdgeLevel2 directly builds on this, rewarding the agent for first moving to the light
+edge, then placing a torch to extend the lit area’s boundary. CODE-SHARP discovers that by using
+this SHARP as a prerequisite, the agent can be implicitly induced to perform exploration as it
+constantly alternates between moving to the edge of the light circle and placing down a new torch.
+On the four benchmark tasks the agent trained exclusively by CODE-SHARP and following the
+policies-in-code achieves an overall benchmark score of 50.5 (Figure 5a). This matches the finetuned
+agent (47.9) and significantly outperforms all other baselines, demonstrating that the SHARPs
+discovered by CODE-SHARP extensively cover the skill space of Craftax-Extended and faithfully
+train the generalist agent in their intended behaviours. Specifically, CODE-SHARP demonstrates
+superior performance in Crafting (66.5 vs. 58.1) and Dungeon (87.4 vs. 77.1); conversely, the
+fine-tuned agent retains an advantage only in Navigation (12.7 vs. 17.3) and Mines (35.6 vs. 39.2),
+likely benefiting from ground-truth environment rewards that explicitly incentivise deeper exploration.
+Further illustrating the complexity of these tasks, the task-specific agents demonstrate markedly
+degraded performance, recording scores of 0.5 and 4.7 on Navigation and Mines respectively, with an
+overall average of 12.2. Similarly, the ReAct agent performs poorly across benchmark tasks (6.7),
+struggling with structured embodied exploration despite having source code access. These results
+highlight that FMs can be more effectively utilised as high-level skill discovery orchestrators via
+CODE-SHARP rather than directly as embodied agents. Finally, the CODE-FRP ablation (14.1)
+confirms the SHARP formulation as the primary driver of benchmark performance rather than the
+planning provided by the policies-in-code.
+We additionally analyse how the performance of the agent evolves as the archive grows in Figure 5b)
+by restricting the policy planner to only use SHARPs for the policies-in-code discovered by specific
+iterations of the discovery process. We find that downstream scores consistently improve as the
+archive expands, following a natural curriculum: Benchmarks focused on earlier levels (Crafting
+and Dungeon) improve early on, while benchmarks focused on later levels (Navigation and Mines)
+see gains later. Crucially, these performance leaps correlate directly with increases in the average
+8
+===== PAGE 9 =====
+complexity1 of the SHARPs utilised by the policy planner, confirming that CODE-SHARP open-
+endedly discovers increasingly complex SHARPs training the agent to continuously expand its set of
+learned abilities across 100 iterations and producing an archive that broadly covers the skill space of
+Craftax-Extended (RQ3).
+SHARP Mutation Analysis: CODE-SHARP continuously improves existing SHARPs through
+FM-based mutation, producing an average of 20 elite SHARP versions per run. These mutations
+yield a 68.8% relative performance gain, increasing absolute success rates of the agent from24.3% to
+41.0% across all mutated SHARPs. We observe that successful mutations primarily resolve structural
+inefficiencies such as suboptimal condition ordering and missing or poorly chosen prerequisites. For
+instance, the base KillOrcWarrior SHARP incorrectly required descending to theDungeonbefore
+crafting a stone sword, whereas the refined version reorders these steps, significantly improving
+success rate.
+5 Related Work
+Foundation Models for Open-Ended Skill Discovery: The ability to acquire novel skills and
+reflect on one’s own mastered abilities is central to general intelligence [Hughes et al., 2024, Jiang
+et al., 2023, Wang et al., 2020, Team et al., 2023]. With the recent rise in FMs’ reasoning abilities
+and semantic world knowledge, multiple works have proposed utilising FMs to drive open-ended
+autonomous skill discovery and learning. One prominent class of methods deploys FMs directly as
+open-ended agents [Yao et al., 2022, Wang et al., 2023b, Bolton et al., 2025]. While these approaches
+are very general, they typically suffer from high computational costs and latency due to the need for
+frequent FM inference at each decision step. To minimise computational costs, alternative frameworks
+utilise FMs as high-level planners, relying on hand-engineered frameworks [Wang et al., 2023a] and
+pre-trained models [Wang et al., 2024, Ahn et al., 2022, Zhang et al., 2023b] to handle low-level
+action execution or require pre-defined high-level goals to encourage skill discovery [Ma et al., 2023,
+Xie et al., 2024, Castanyer et al., 2025]. While such methods have shown promising results, they
+require significant engineering efforts to transfer to novel environments, where such frameworks or
+pre-trained models are not readily available. An alternative class of approaches therefore utilises FMs
+to provide rewards to train an agent from scratch to learn novel skills [Zhang et al., 2023a, Du et al.,
+2023, Xie et al., 2024, Pourcel et al., 2024, Faldor et al., 2024, Liang et al., 2024].
+Foundation Models for Hierarchical Learning: Decomposing long-horizon tasks into temporally
+extended abstractions is a fundamental challenge in AI, historically addressed through Hierarchi-
+cal Task Networks (HTNs) [Ghallab et al., 2004, Erol et al., 1994] and the Options framework in
+reinforcement learning [Sutton et al., 1999, Bacon et al., 2017, Klissarov and Precup, 2021]. Recent
+neuro-symbolic approaches leverage the reasoning capabilities of FMs to automate task decomposi-
+tion. These methods translate high-level instructions into sequences of sub-goals, guiding embodied
+agents either through executable code policies [Ahn et al., 2022, Liang et al., 2022, Prakash et al.,
+2023, Wang et al., 2023a, Klissarov et al., 2024] or via auxiliary rewards and completion signals
+[Venuto et al., 2024, Castanyer et al., 2025, Nottingham et al., 2023, Zhang et al., 2023a,b].
+6 Conclusion
+We introduced CODE-SHARP, a framework that leverages FMs to autonomously and open-endedly
+grow and evolve an archive of Skills as Hierarchical Reward Programs (SHARPs) to train a generalist
+goal-conditioned agent via reinforcement learning from scratch. Each SHARP is an FM-generated
+Python program that encodes a success condition and a set of prerequisite dependencies over pre-
+viously discovered SHARPs, using a recursive transition operator to dynamically route the agent
+through its prerequisite chain at runtime, enabling efficient learning of long-horizon tasks with-
+out any hand-crafted rewards, APIs, or curated demonstrations. Empirically, we demonstrate that
+CODE-SHARP’s fully autonomous open-ended discovery process produces a continuously growing,
+structured skill archive that spans increasingly complex behaviours, successfully training agents to
+master increasingly long-horizon skills, substantially outperforming prior works and matching agents
+trained on ground truth rewards. While CODE-SHARP reduces the human engineering required
+1We define the complexity of a SHARP as one plus the sum of complexities of all its assigned prerequisite SHARPs:
+C(σk) = 1 + P
+uk,i∈ψσk
+C(σuk,i )
+9
+===== PAGE 10 =====
+in the loop compared to related works, it still requires access to the environment’s source code.
+Additionally, our ablations show that the coding ability of the underlying FM has a direct impact
+on the quality of behaviours learned by the agent. Overall, we believe CODE-SHARP presents a
+meaningful next step toward fully autonomous open-ended skill discovery and training of generalist
+agents.
+References
+Michael Ahn, Anthony Brohan, Noah Brown, Yevgen Chebotar, Omar Cortes, Byron David, Chelsea
+Finn, Chuyuan Fu, Keerthana Gopalakrishnan, Karol Hausman, et al. Do as i can, not as i say:
+Grounding language in robotic affordances.arXiv preprint arXiv:2204.01691, 2022.
+Pierre-Luc Bacon, Jean Harb, and Doina Precup. The option-critic architecture. InProceedings of
+the AAAI conference on artificial intelligence, volume 31, 2017.
+Adrian Bolton, Alexander Lerchner, Alexandra Cordell, Alexandre Moufarek, Andrew Bolt, Andrew
+Lampinen, Anna Mitenkova, Arne Olav Hallingstad, Bojan Vujatovic, Bonnie Li, et al. Sima 2: A
+generalist embodied agent for virtual worlds.arXiv preprint arXiv:2512.04797, 2025.
+James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Chris Leary, Dougal
+Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-Milne, and
+Qiao Zhang. JAX: composable transformations of Python+NumPy programs, 2018. URL
+http://github.com/jax-ml/jax.
+Roger Creus Castanyer, Faisal Mohamed, Pablo Samuel Castro, Cyrus Neary, and Glen Berseth.
+Arm-fm: Automated reward machines via foundation models for compositional reinforcement
+learning.arXiv preprint arXiv:2510.14176, 2025.
+Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V . Le, and Ruslan Salakhutdinov.
+Transformer-xl: Attentive language models beyond a fixed-length context, 2019. URL https:
+//arxiv.org/abs/1901.02860.
+Yuqing Du, Olivia Watkins, Zihan Wang, Cédric Colas, Trevor Darrell, Pieter Abbeel, Abhishek
+Gupta, and Jacob Andreas. Guiding pretraining in reinforcement learning with large language
+models. InInternational Conference on Machine Learning, pages 8657–8677. PMLR, 2023.
+Kutluhan Erol, James Hendler, and Dana S Nau. Htn planning: complexity and expressivity. In
+Proceedings of the Twelfth AAAI National Conference on Artificial Intelligence, pages 1123–1128,
+1994.
+Maxence Faldor, Jenny Zhang, Antoine Cully, and Jeff Clune. Omni-epic: Open-endedness via
+models of human notions of interestingness with environments programmed in code.arXiv preprint
+arXiv:2405.15568, 2024.
+Linxi Fan, Guanzhi Wang, Yunfan Jiang, Ajay Mandlekar, Yuncong Yang, Haoyi Zhu, Andrew Tang,
+De-An Huang, Yuke Zhu, and Anima Anandkumar. Minedojo: building open-ended embodied
+agents with internet-scale knowledge. InProceedings of the 36th International Conference on
+Neural Information Processing Systems, pages 18343–18362, 2022.
+Malik Ghallab, Dana Nau, and Paolo Traverso.Automated Planning: theory and practice. Elsevier,
+2004.
+Danijar Hafner. Benchmarking the spectrum of agent capabilities.arXiv preprint arXiv:2109.06780,
+2021.
+Gautier Hamon. transformerXL_PPO_JAX, July 2024. URL https://inria.hal.science/
+hal-04659863.
+Edward Hughes, Michael Dennis, Jack Parker-Holder, Feryal Behbahani, Aditi Mavalankar, Yuge
+Shi, Tom Schaul, and Tim Rocktaschel. Open-endedness is essential for artificial superhuman
+intelligence, 2024. URLhttps://arxiv.org/abs/2406.04268.
+Minqi Jiang, Tim Rocktäschel, and Edward Grefenstette. General intelligence requires rethinking
+exploration.Royal Society Open Science, 10(6):230539, 2023.
+10
+===== PAGE 11 =====
+Martin Klissarov and Doina Precup. Flexible option learning.Advances in Neural Information
+Processing Systems, 34:4632–4646, 2021.
+Martin Klissarov, Mikael Henaff, Roberta Raileanu, Shagun Sodhani, Pascal Vincent, Amy Zhang,
+Pierre-Luc Bacon, Doina Precup, Marlos C. Machado, and Pierluca D’Oro. Maestromotif: Skill
+design from artificial intelligence feedback, 2024. URL https://arxiv.org/abs/2412.08542.
+Minjae Kwon, Ingy ElSayed-Aly, and Lu Feng. Adaptive reward design for reinforcement learning,
+2025. URLhttps://arxiv.org/abs/2412.10917.
+Heinrich Küttler, Nantas Nardelli, Alexander H. Miller, Roberta Raileanu, Marco Selvatici, Edward
+Grefenstette, and Tim Rocktäschel. The nethack learning environment, 2020. URL https:
+//arxiv.org/abs/2006.13760.
+Jacky Liang, Wenlong Huang, Fei Xia, Peng Xu, Karol Hausman, Brian Ichter, Pete Florence, and
+Andy Zeng. Code as policies: Language model programs for embodied control.arXiv preprint
+arXiv:2209.07753, 2022.
+William Liang, Sam Wang, Hung-Ju Wang, Osbert Bastani, Dinesh Jayaraman, and Yecheng Jason
+Ma. Eurekaverse: Environment curriculum generation via large language models, 2024. URL
+https://arxiv.org/abs/2411.01775.
+Yecheng Jason Ma, William Liang, Guanzhi Wang, De-An Huang, Osbert Bastani, Dinesh Jayaraman,
+Yuke Zhu, Linxi Fan, and Anima Anandkumar. Eureka: Human-level reward design via coding
+large language models. InThe Twelfth International Conference on Learning Representations,
+2023.
+Michael Matthews, Michael Beukman, Benjamin Ellis, Mikayel Samvelyan, Matthew Jackson,
+Samuel Coward, and Jakob Foerster. Craftax: A lightning-fast benchmark for open-ended rein-
+forcement learning. InInternational Conference on Machine Learning (ICML), 2024.
+Alexander Nikulin, Vladislav Kurenkov, Ilya Zisman, Artem Agarkov, Viacheslav Sinii, and Sergey
+Kolesnikov. Xland-minigrid: Scalable meta-reinforcement learning environments in jax.Advances
+in Neural Information Processing Systems, 37:43809–43835, 2024.
+Kolby Nottingham, Prithviraj Ammanabrolu, Alane Suhr, Yejin Choi, Hannaneh Hajishirzi, Sameer
+Singh, and Roy Fox. Do embodied agents dream of pixelated sheep: Embodied decision making
+using language guided world modelling, 2023. URLhttps://arxiv.org/abs/2301.12050.
+Guillaume Pourcel, Thomas Carta, Grgur Kovaˇc, and Pierre-Yves Oudeyer. Autotelic LLM-based ex-
+ploration for goal-conditioned RL. InIntrinsically-Motivated and Open-Ended Learning Workshop
+@NeurIPS2024, 2024. URLhttps://openreview.net/forum?id=n2OINaKF1e.
+Bharat Prakash, Tim Oates, and Tinoosh Mohsenin. Llm augmented hierarchical agents.arXiv
+preprint arXiv:2311.05596, 2023.
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms, 2017. URLhttps://arxiv.org/abs/1707.06347.
+Richard S Sutton, Doina Precup, and Satinder Singh. Between mdps and semi-mdps: A framework
+for temporal abstraction in reinforcement learning.Artificial intelligence, 112(1-2):181–211, 1999.
+Adaptive Agent Team, Jakob Bauer, Kate Baumli, Satinder Baveja, Feryal Behbahani, Avishkar
+Bhoopchand, Nathalie Bradley-Schmieg, Michael Chang, Natalie Clay, Adrian Collister, Vibhavari
+Dasagi, Lucy Gonzalez, Karol Gregor, Edward Hughes, Sheleem Kashem, Maria Loks-Thompson,
+Hannah Openshaw, Jack Parker-Holder, Shreya Pathak, Nicolas Perez-Nieves, Nemanja Rakicevic,
+Tim Rocktäschel, Yannick Schroecker, Jakub Sygnowski, Karl Tuyls, Sarah York, Alexander
+Zacherl, and Lei Zhang. Human-timescale adaptation in an open-ended task space, 2023. URL
+https://arxiv.org/abs/2301.07608.
+David Venuto, Sami Nur Islam, Martin Klissarov, Doina Precup, Sherry Yang, and Ankit Anand.
+Code as reward: Empowering reinforcement learning with vlms.arXiv preprint arXiv:2402.04764,
+2024.
+11
+===== PAGE 12 =====
+Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and
+Anima Anandkumar. V oyager: An open-ended embodied agent with large language models.arXiv
+preprint arXiv:2305.16291, 2023a.
+Rui Wang, Joel Lehman, Jeff Clune, and Kenneth O Stanley. Paired open-ended trailblazer (poet):
+Endlessly generating increasingly complex and diverse learning environments and their solutions.
+arXiv preprint arXiv:1901.01753, 2019.
+Rui Wang, Joel Lehman, Aditya Rawal, Jiale Zhi, Yulun Li, Jeff Clune, and Kenneth O. Stanley.
+Enhanced poet: Open-ended reinforcement learning through unbounded invention of learning
+challenges and their solutions, 2020. URLhttps://arxiv.org/abs/2003.08536.
+Zihao Wang, Shaofei Cai, Guanzhou Chen, Anji Liu, Xiaojian Ma, and Yitao Liang. Describe,
+explain, plan and select: Interactive planning with large language models enables open-world
+multi-task agents.arXiv preprint arXiv:2302.01560, 2023b.
+Zihao Wang, Shaofei Cai, Anji Liu, Yonggang Jin, Jinbing Hou, Bowei Zhang, Haowei Lin, Zhaofeng
+He, Zilong Zheng, Yaodong Yang, et al. Jarvis-1: Open-world multi-task agents with memory-
+augmented multimodal language models.IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 2024.
+Tianbao Xie, Siheng Zhao, Chen Henry Wu, Yitao Liu, Qian Luo, Victor Zhong, Yanchao Yang, and
+Tao Yu. Text2reward: Reward shaping with language models for reinforcement learning. InICLR,
+2024.
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang
+Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu,
+Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin
+Yang, Jiaxi Yang, Jing Zhou, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang,
+Le Yu, Lianghao Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui
+Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tianhao Li, Tianyi Tang, Wenbiao Yin, Xingzhang
+Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yinger
+Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru Zhang, Zhipeng Zhou, and Zihan
+Qiu. Qwen3 technical report, 2025. URLhttps://arxiv.org/abs/2505.09388.
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R Narasimhan, and Yuan
+Cao. React: Synergizing reasoning and acting in language models. InThe eleventh international
+conference on learning representations, 2022.
+Jenny Zhang, Joel Lehman, Kenneth Stanley, and Jeff Clune. Omni: Open-endedness via models
+of human notions of interestingness. InThe Twelfth International Conference on Learning
+Representations, 2023a.
+Jesse Zhang, Jiahui Zhang, Karl Pertsch, Ziyi Liu, Xiang Ren, Minsuk Chang, Shao-Hua Sun, and
+Joseph Lim. Bootstrap your own skills: Learning to solve new tasks with large language model
+guidance. InConference on Robot Learning, number 2023, 2023b.
+12
+===== PAGE 13 =====
+A Algorithm
+Algorithm 1CODE-SHARP: Continuous Open-ended Discovery & Evolution
+1:Input:Max iterationsE, Initial ArchiveΛ 0 = (V0,E 0), Initial Policyπ θ
+2:Initialize:Failed ProposalsH ← ∅, Success Ratesρ←Init(Λ 0)
+3:fort= 1toEdo
+4:P raw ←ProposalGenerator(Λ t−1,H,Context)
+5:P impl ←ProposalImplementor(P raw)
+6:S cand ←ProposalJudge(P impl)
+7:forσ new ∈ S cand do
+8:π copy ←Copy(π θ)
+9:(ρ init
+new, ρfinal
+new)←EvaluateLearnability(π copy, σnew)
+10:∆ρ new ←ρ final
+new −ρ init
+new
+11:if∆ρ new > τthen
+12:Λ t ←Λ t−1 ∪ {σnew}
+13:Updateρ(σ new)←ρ final
+new
+14:else
+15:H ← H ∪ {σ new}
+16:end if
+17:end for
+18:Sampleσ k ∼P(k)∝(1−ρ k)
+19:{σ (1)
+k , . . . , σ(m)
+k } ←MutationPipeline(σ k,Λ t)
+20:ρ (i)
+mut ←ZeroShotEval(π θ, σ(i)
+k )fori= 1, . . . , m
+21:i ∗ ←arg max i∈{1,...,m} ρ(i)
+mut
+22:ifρ (i∗)
+mut > ρ k then
+23:Λ t[σk]←σ (i∗)
+k
+24:Updateρ(σ k)←ρ (i∗)
+mut
+25:end if
+26:π θ, ρ←TRAINEPOCH(π θ,Λ t, ρ)
+27:end for
+13
+===== PAGE 14 =====
+Algorithm 2Training Epoch
+1:functionTRAINEPOCH(π,Λ, ρ)
+2:Observe initial states 0; sett←0,t last ←0
+3:Construct Satisfied Conditions MatrixN(s 0)∈ {0,1} |V|×|V|
+4:Construct trivial-skill maskm(s 0)∈ {0,1} |V| wherem j = 0ifϕ σj(s0) = 1, else1
+5:Compute base weightsB(s 0)
+6:Sample targetσ target ∼TopK
+ 
+B(s0)⊙m(s 0)
+
+7:whileepisode not donedo
+8:σ active ← T ∗(σtarget, st)▷iterated closure ofTuntil fixed point
+9:Step environment:s t+1,done←Env(a t)
+10:r t ←α(σ active)·I[ϕ σactive(st, st+1) = 1]
+11:Store transition in buffer
+12:ifϕ σactive(st, st+1) = 1then
+13:t last ←t+ 1▷progress made: reset stall timer
+14:end if
+15:ifϕ σtarget(st, st+1) = 1or(t+ 1−t last)≥200then
+16:RecomputeN(s t+1),m(s t+1), andB(s t+1)
+17:σ target ∼TopK
+ 
+B(st+1)⊙m(s t+1)
+
+18:t last ←t+ 1
+19:end if
+20:t←t+ 1
+21:end while
+22:Updateπvia PPO
+23:returnπ, updatedρ
+24:end function
+B Description of Benchmark Scenarios
+The Craftax environment presents a vast and ostensibly open-ended skill space that remains chal-
+lenging even for expert human players. Consequently, our benchmark suite is designed to probe the
+diverse spectrum of capabilities required within the environment, specifically targeting the first four
+levels, which, to our knowledge, are the only levels that have been reached by any algorithm trained
+on Craftax. Drawing on the evaluation methodology of MaestroMotif [Klissarov et al., 2024] we
+defined four distinct tasks targeting essential high-level competencies:Navigation,Crafting, and
+two composite scenarios,DungeonandMines, which require the integration of multiple distinct
+competencies.
+Each benchmark is implemented as a sequence of milestones that must be achieved in order. These
+tasks are intentionally designed as ambitious, long-horizon objectives intended to quantify incremental
+progress toward complex goals, rather than as binary pass/fail assessments. Detailed specifications
+for each benchmark task are provided below.
+NavigationThe navigation benchmark is comprised of 6 milestones which follow the natural
+progression through the levels of Craftax. First, the agent must locate the down ladder on the
+Overworldlevel to descend to theOrcish Dungeons. Once onOrcish Dungeons, the agent must
+find and eliminate 8 hostile orc mobs to be able to unlock the next level, before exploring the level
+to locate the ladder down to theGnomish Mines. Here, the agent must eliminate 8 hostile gnome
+mobs to unlock theSewerslevel. TheGnomish Minesis initially fully dark, prohibiting any form
+of exploration unless the agent places down torches to light up a limited perimeter. Resources to
+craft torches can only be found on the preceding levels, requiring the agent to effectively plan ahead.
+After the agent has located the down ladder, the agent should descend to theSewerslevel. On the
+Sewerslevel, paths are often blocked by water, requiring the agent to place down blocks to displace
+it and clear a path. The benchmark terminates once the agent has located an enchantment table, an
+important in-game item which can enchant weapons and armour with certain effects.
+CraftingThe crafting benchmark focuses on 5 milestones related to crafting advanced iron tools.
+While diamond tools represent the most advanced tool class in Craftax they require diamonds, which
+are not guaranteed to spawn in the overworld. To be able to evaluate an agent’s crafting ability
+without it being constrained by its ability to descend to subsequent levels, we therefore focus on the
+14
+===== PAGE 15 =====
+iron tools and armour. The first milestone requires the agent to craft a WoodPickaxe, which requires
+a total of 3 blocks of wood. For the next milestone, the agent needs to craft a StonePickaxe, which
+requires the previously crafted pickaxe to mine stone and another block of wood. Next, the agent
+should craft an IronPickaxe, which requires a furnace adjacent to a crafting table, a block of coal
+and the StonePickaxe to mine a block of iron. Next, the agent must craft an IronSword, which
+again requires the same resources as the IronPickaxe. Finally, the benchmark terminates when
+the agent crafts a set of IronArmour, requiring a furnace adjacent to a crafting table as well as 3
+blocks of coal and 3 blocks of iron. To solve this benchmark, the agent must repeatedly explore the
+environment to obtain the required resources and complete multi-step crafting processes.
+DungeonThe dungeon benchmark focuses on 11 milestones across theOverworldandOrcish
+Dungeonlevels of Craftax, simulating the process of the agent first having to gather helpful resources
+and tools before descending to subsequent levels. The agent must first craft a WoodPickaxe before
+crafting a StonePickaxe and a StoneSword. After these essential tools, the agent should continue
+by crafting Torches and Arrows before heading to the grassland and collecting a Sapling. Next,
+the agent must descend to theDungeonlevel, where it should locate and open loot chests until a
+Potion is dropped. Next, the agent should eliminate at least 2 hostile orcish mobs before locating the
+upwards ladder and ascending back to theOverworld. Finally, the benchmark terminates when the
+agent has replenished its hunger via eating fruit or killing a cow. To solve this benchmark, the agent
+must complete a large number of sub-goals for each milestone, making it extremely challenging to
+fully complete.
+MinesThe mines benchmark focuses on theGnomish Mineslevel, an area characterised by a higher
+spawn rate for rare resources such as diamonds. This benchmark evaluates the agent’s ability to
+descend through the environment and locate a diamond via 10 sequential milestones. Similar to the
+Dungeonbenchmark, the agent must first craft a WoodPickaxe, StonePickaxe, and Torches in the
+Overworldbefore locating the ladder to theOrcish Dungeon. After descending, the agent is required
+to eliminate 8 hostile orc mobs to unlock the passage to theGnomish Mines. Upon reaching the level,
+the agent must demonstrate survival proficiency by placing a torch and hunting a bat for food. Next
+the agent must navigate theGnomish Mineslevel, ideally illuminating its way via the crafted torches,
+to locate a water source and replenish its thirst. This benchmark is extremely challenging to solve, as
+it requires strong exploration skills to first descend to theGnomish Minesand understanding of the
+game mechanics to deal with the darkness before attempting to locate a diamond block comprising
+approximately0.5%of blocks on theGnomish Mineslevel.
+15
+===== PAGE 16 =====
+C Performance Breakdown Comparative Evaluation Experiments
+Table 1: Per-achievement mean success rate on Craftax Achievements.
+Achievement CODE-SHARP (Ours) CODE-FRP (Ours) ELLM OMNI
+Place Table1.0000.998 0.971 0.989
+Collect Sapling0.9990.998 0.994 0.044
+Make Wood Pickaxe0.9990.994 0.727 0.779
+Make Wood Sword0.9990.800 0.230 0.965
+Place Furnace0.9980.575 0.011 0.273
+Collect Stone0.9980.200 0.097 0.699
+Make Stone Sword0.9980.380 0.001 0.790
+Make Stone Pickaxe0.9970.532 0.000 0.779
+Collect Coal0.9900.782 0.008 0.579
+Collect Iron0.9810.181 0.000 0.000
+Make Iron Sword0.9490.168 0.000 0.000
+Make Iron Pickaxe0.9470.165 0.000 0.000
+Collect Wood 0.892 1.0001.0000.997
+Eat Cow 0.657 0.5710.9410.859
+Collect Drink 0.6050.9340.892 0.004
+Place Plant 0.398 0.3980.9930.004
+Collect Diamond0.1600.001 0.000 0.000
+Defeat Zombie 0.135 0.0120.9730.863
+Defeat Skeleton0.0740.016 0.000 0.006
+Eat Plant 0.000 0.000 0.000 0.000
+Place Stone 0.000 0.0000.0650.000
+Wake Up 0.000 0.0080.8500.003
+Median 0.9480.389 0.081 0.158
+A verage 0.6720.442 0.398 0.392
+Table 2: Per-achievement mean success rate on XLand achievements.
+Achievement CODE-SHARP (Ours) CODE-FRP (Ours) ELLM OMNI
+Pick Up Square Red0.9780.683 0.908 0.493
+Pick Up Ball Green0.9690.479 0.877 0.552
+Pick Up Ball Blue0.9620.576 0.885 0.396
+Pick Up Square Purple0.9590.346 0.848 0.163
+Pick Up Square Green0.9530.446 0.864 0.408
+Pick Up Ball Red0.9380.454 0.889 0.636
+Pick Up Square Blue0.9370.379 0.918 0.309
+Pick Up Ball Purple0.9310.618 0.824 0.210
+Pick Up Hex Red0.9230.431 0.923 0.621
+Pick Up Pyramid Green0.8050.082 0.270 0.021
+Pick Up Hex Purple0.7790.004 0.191 0.006
+Pick Up Key Blue0.6550.040 0.306 0.016
+Pick Up Pyramid Red0.6260.015 0.289 0.024
+Pick Up Key Red0.3750.006 0.075 0.001
+Pick Up Star Green0.2500.000 0.007 0.000
+Unlock Blue Door0.1310.002 0.000 0.000
+Pick Up Star Blue0.1200.000 0.000 0.000
+Unlock Red Door0.0370.000 0.000 0.000
+Pick Up Star Red0.0010.000 0.000 0.000
+Pick Up Pyramid Blue 0.000 0.000 0.000 0.000
+Median 0.7920.061 0.297 0.022
+A verage 0.6160.228 0.454 0.193
+16
+===== PAGE 17 =====
+D Performance Breakdown Long Run Experiments
+We present the average success rate for over the individual milestones in each benchmark. The overall
+score is computed following the Craftax scoring paradigm, which computes the geometric mean over
+success rate to emphasise small improvements on hard-to-complete milestones.
+Table 3: Per-milestone success rates (%) on the Crafting benchmark. Values are mean (95% CI),
+computed via bootstrap over 2000 resamples.
+Milestone CODE-SHARP CODE-FRP Finetuned task-specific ReAct
+Craft wood pickaxe 92.6 (80.9, 98.8) 79.0 (54.6, 96.6) 98.7 (98.3, 99.0) 99.0 (98.8, 99.2) 100.0 (100.0, 100.0)
+Craft stone pickaxe 87.5 (65.9, 98.6) 63.5 (38.7, 85.4) 96.0 (95.3, 96.9) 97.7 (96.9, 98.4) 88.9 (66.7, 100.0)
+Craft iron pickaxe 75.8 (51.7, 93.0) 17.6 (1.7, 39.6) 84.8 (83.5, 86.1) 0.0 (0.0, 0.0) 33.3 (0.0, 66.7)
+Craft iron sword 69.7 (48.5, 86.4) 11.7 (0.0, 28.7) 65.9 (64.1, 67.9) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Craft iron armour 34.9 (21.2, 48.6) 3.4 (0.0, 8.5) 12.2 (10.6, 14.0) 0.0 (0.0, 0.0) 0.0 (0.0, 0.0)
+Overall Score66.52 (48.17, 79.96) 16.43 (4.77, 29.09) 58.08 (56.33, 60.00) 5.29 (5.28, 5.31) 10.80 (4.91, 18.73)
+Table 4: Per-milestone success rates (%) on the Mines benchmark. Values are mean (95% CI),
+computed via bootstrap 2000 resamples.
+Milestone CODE-SHARP CODE-FRP Finetuned task-specific ReAct
+Craft wood pickaxe 98.5 (98.1, 98.9) 96.4 (95.1, 97.5) 98.7 (98.3, 98.9) 98.7 (98.1, 99.1) 100.0 (100.0, 100.0)
+Craft stone pickaxe 98.3 (97.7, 98.7) 81.8 (75.4, 87.7) 96.7 (96.1, 97.4) 98.4 (97.7, 98.9) 88.9 (66.7, 100.0)
+Craft torches 97.6 (96.7, 98.4) 73.7 (65.9, 80.3) 96.2 (95.4, 97.0) 97.4 (96.4, 98.3) 77.8 (44.4, 100.0)
+Descend to dungeon 89.1 (84.2, 93.4) 34.7 (28.2, 41.9) 81.7 (80.3, 83.2) 34.5 (28.9, 40.3) 11.1 (0.0, 33.3)
+Kill 8 dungeon monsters 69.6 (58.4, 81.3) 8.9 (4.8, 13.4) 57.4 (54.1, 60.7) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Descend to gnomish mines 47.3 (35.4, 59.6) 2.6 (1.8, 3.3) 41.6 (38.3, 44.9) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Place torch 40.1 (29.3, 51.9) 0.4 (0.1, 0.8) 39.6 (36.8, 42.7) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Kill bat 31.7 (19.3, 44.4) 0.0 (0.0, 0.0) 38.9 (36.1, 42.2) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Drink water 5.9 (3.6, 8.9) 0.0 (0.0, 0.0) 16.6 (13.5, 19.5) 0.0 (0.0, 0.0) 0.0 (0.0, 0.0)
+Find diamond 1.3 (0.8, 1.8) 0.0 (0.0, 0.0) 1.2 (0.7, 1.6) 0.0 (0.0, 0.0) 0.0 (0.0, 0.0)
+Overall Score35.56 (31.24, 40.67) 6.71 (6.23, 7.14) 39.21 (36.60, 41.74) 4.66 (4.56, 4.75) 6.58 (2.13, 14.87)
+Table 5: Per-milestone success rates (%) on the Dungeon benchmark. Values are mean (95% CI),
+computed via percentile bootstrap over 2000 resamples
+Milestone CODE-SHARP CODE-FRP Finetuned task-specific ReAct
+Craft wood pickaxe 98.3 (97.0, 99.2) 93.8 (88.7, 97.2) 99.0 (98.7, 99.4) 99.2 (98.8, 99.6) 100.0 (100.0, 100.0)
+Craft stone pickaxe 98.0 (96.4, 99.0) 82.0 (74.3, 89.3) 98.4 (97.7, 99.0) 99.0 (98.4, 99.6) 88.9 (66.7, 100.0)
+Craft stone sword 97.8 (96.1, 99.0) 76.2 (65.6, 86.3) 97.7 (96.8, 98.6) 99.0 (98.4, 99.6) 88.9 (66.7, 100.0)
+Craft torches 97.0 (95.0, 98.4) 69.4 (57.4, 79.8) 97.6 (96.6, 98.5) 98.8 (98.0, 99.6) 77.8 (44.4, 100.0)
+Craft arrows 96.8 (95.1, 98.3) 67.4 (56.5, 77.7) 97.3 (96.2, 98.4) 98.8 (98.0, 99.6) 77.8 (44.4, 100.0)
+Collect sapling 96.8 (95.0, 98.3) 67.3 (56.9, 77.9) 93.6 (92.0, 95.3) 98.8 (98.0, 99.6) 33.3 (0.0, 66.7)
+Descend to dungeon 88.9 (82.6, 94.3) 23.7 (18.7, 29.1) 79.8 (77.1, 82.6) 38.3 (36.7, 40.2) 11.1 (0.0, 33.3)
+Find potion 83.0 (74.3, 91.0) 14.5 (9.5, 19.5) 66.1 (62.4, 69.8) 24.3 (18.4, 34.4) 0.0 (0.0, 0.0)
+Kill dungeon mob 82.2 (72.6, 90.4) 12.5 (7.7, 17.8) 64.9 (60.7, 68.9) 23.6 (17.6, 34.0) 0.0 (0.0, 0.0)
+Ascend to overworld 68.9 (55.3, 80.9) 8.1 (5.2, 11.3) 46.0 (42.6, 49.3) 10.7 (7.8, 13.3) 0.0 (0.0, 0.0)
+Replenish hunger 68.0 (54.1, 80.1) 4.0 (3.1, 5.0) 43.3 (39.5, 46.8) 0.4 (0.0, 1.2) 0.0 (0.0, 0.0)
+Overall Score87.40 (81.10, 93.00) 30.97 (25.50, 36.64) 77.14 (74.87, 79.54) 38.19 (36.87, 39.06) 8.03 (5.08, 11.42)
+17
+===== PAGE 18 =====
+Table 6: Per-milestone success rates (%) on the Navigation benchmark. Values are mean (95% CI),
+computed via bootstrap over 2000 resamples.
+Milestone CODE-SHARP CODE-FRP Finetuned task-specific ReAct
+Descend to dungeon 86.2 (80.6, 91.1) 36.5 (26.0, 46.1) 92.1 (91.2, 93.0) 10.3 (9.4, 12.1) 33.3 (0.0, 66.7)
+Kill 8 dungeon monsters 78.9 (72.0, 85.1) 10.2 (4.0, 18.4) 56.9 (52.0, 61.2) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Descend to gnomish mines 59.8 (50.6, 68.8) 5.0 (1.4, 9.5) 38.9 (36.2, 41.5) 0.0 (0.0, 0.0) 11.1 (0.0, 33.3)
+Kill 8 gnomish mines monsters 12.6 (4.9, 22.4) 0.0 (0.0, 0.0) 9.7 (8.2, 11.4) 0.0 (0.0, 0.0) 0.0 (0.0, 0.0)
+Descend to sewers 0.9 (0.3, 1.6) 0.0 (0.0, 0.0) 5.6 (4.7, 6.6) 0.0 (0.0, 0.0) 0.0 (0.0, 0.0)
+Find enchantment table 0.1 (0.0, 0.3) 0.0 (0.0, 0.0) 1.6 (1.2, 2.1) 0.0 (0.0, 0.0) 0.0 (0.0, 0.0)
+Overall12.72 (10.46, 15.08) 2.29 (1.41, 3.27) 17.33 (15.81, 18.84) 0.50 (0.48, 0.54) 1.26 (0.00, 3.27)
+E Hyperparameters
+E.1 Craftax-Classic and XLand
+Table 7: CODE-SHARP Hyperparameters Craftax-Classic
+Hyperparameter Value
+Proposal Iterations 25
+Training Epochs per Iteration 4
+Mutation Start Iteration 7
+Proposal Evaluation Epochs 4
+Skill Proposals per Iteration 10
+Mutation Proposals per Iteration 5
+Sampled Skills for Mutation per Iteration 1
+Table 8: CODE-SHARP Hyperparameters XLand
+Hyperparameter Value
+Proposal Iterations 40
+Training Epochs per Iteration 5
+Mutation Start Iteration 20
+Proposal Evaluation Epochs 5
+Skill Proposals per Iteration 10
+Mutation Proposals per Iteration 5
+Sampled Skills for Mutation per Iteration 1
+Table 9: Hyperparameters for PPO Training (Shared Craftax-Classic and XLand)
+Hyperparameter Value
+Start Learning Rate2×10 −4
+Learning Rate Decay Linear
+End Learning Rate2×10 −4
+Batch Size 512
+Optimizer AdamW
+Discount Factor (γ) 0.99
+Entropy Coefficient 0.01
+Clip Range (ϵ) 0.2
+GAE Parameter (λ) 0.8
+Total Environment Steps1×10 8
+18
+===== PAGE 19 =====
+Table 10: Transformer Architecture Hyperparameters (Shared Craftax-Classic and XLand)
+Hyperparameter Value
+Architecture Transformer-XL
+Number of Layers 2
+Number of Attention Heads 8
+Embedding Dimension (dmodel) 256
+QKV Dimension (dqkv) 256
+MLP Hidden Size 256
+Memory Window Length (Nmem) 128
+Gradient Window Length (Ngrad) 128
+Gating True (Bias 2.0)
+E.2 Long Run Experiments
+Table 11: CODE-SHARP Hyperparameters
+Hyperparameter Value
+Proposal Iterations 100
+Training Epochs per Iteration 10
+Mutation Start Iteration 15
+Proposal Evaluation Epochs 5
+Skill Proposals per Iteration 10
+Mutation Proposals per Iteration 5
+Sampled Skills for Mutation per Iteration 1
+Table 12: Hyperparameters for PPO Training
+Hyperparameter Value
+Start Learning Rate2×10 −5
+Learning Rate Decay Linear
+End Learning Rate2×10 −6
+Batch Size 1024
+Optimizer AdamW
+Discount Factor (γ) 0.99
+Entropy Coefficient 0.02
+Clip Range (ϵ) 0.2
+GAE Parameter (λ) 0.8
+Total Environment Steps2×10 9
+Table 13: Transformer Architecture Hyperparameters
+Hyperparameter Value
+Architecture Transformer-XL
+Number of Layers 2
+Number of Attention Heads 8
+Embedding Dimension (dmodel) 256
+QKV Dimension (dqkv) 256
+MLP Hidden Size 256
+Memory Window Length (Nmem) 128
+Gradient Window Length (Ngrad) 128
+Gating True (Bias 2.0)
+19
+===== PAGE 20 =====
+F Ablations on Individual Benchmark Tasks
+We perform a detailed ablation study to isolate the contributions of three core components described in
+Section 2.5: open-ended training (OE), adaptive reward scaling (SR), and opportunistic sampling (OS).
+For all conditions, the agent is trained on the full generated skill archive, following the chronological
+order of skill discovery. We evaluate the following configurations:
+No OE+SR+OS: To evaluate the necessity of open-ended training, we train the agent in a strictly
+episodic setting. At the start of each episode, a target SHARP is sampled uniformly at random. The
+episode terminates after the target SHARP success condition returns True or when the time limit of
+300 steps is reached.
+No SR+OS: We enable open-ended training but disable adaptive reward scaling and opportunistic
+sampling. In this setting, the next target SHARP is sampled uniformly from the skill archive
+discovered up to the current iteration of training.
+No OS: We retain open-ended training and adaptive reward scaling but disable opportunistic sampling.
+New target SHARP are sampled uniformly from the skill archive discovered up to the current iteration
+of training, with the returned rewards being scaled based on their current overall success rate.
+CODE-SHARP: The complete framework utilising open-ended training, adaptive reward scaling,
+and opportunistic sampling.
+Table 14: Ablation Impact on Average Score over Benchmarks
+Condition A verage Score Absolute Decrease
+CODE-SHARP 50.55 –
+No OS 31.93 -18.62
+No SR+OS 21.20 -29.35
+No OE+SR+OS 13.50 -37.05
+As detailed in Table 14, we observe a monotonic degradation in performance as components are
+removed. The full CODE-SHARPframework achieves an average score of 50.55, whereas removing
+opportunistic sampling (No OS) results in a significant absolute decrease of18.62, dropping the score
+to 31.93. Reverting to a purely episodic setting (No OE+SR+OS) results in the lowest performance
+with an average score across all baselines of13.50.
+Figure 6 further illustrates the impact of these components across individual benchmark tasks. We
+observe that opportunistic sampling is critical for mastering complex, long-horizon tasks. While
+all ablations contribute to the agent’s success, the data suggest that opportunistic sampling, by
+dynamically shifting the training distribution toward the frontier of the agent’s capabilities, provides
+the largest singular contribution to performance on challenging benchmarks.
+20
+===== PAGE 21 =====
+Navigation Crafting Dungeon Mines
+Benchmark T ask
+0
+20
+40
+60
+80
+Score
+CODE-SHARP
+No OS
+No SR+OS
+No OE+SR+OS
+Figure 6: Detailed Ablation Results per Benchmark
+G Ablations with Smaller Foundation Model
+We conducted 3 runs of 60 iterations withQwen3-30B-A3B-Thinking-2507 (Qwen3-30) to evaluate
+the performance of smaller FMs. We follow the same evaluation procedure as for our main experi-
+ments and use Qwen3-235B-A22B-Thinking-2507 (Qwen3-235) to generate the policies-in-code
+over the skill archive discovered by Qwen3-30.
+Qwen3-30 performs competitively on benchmarks utilising lower complexity skills but struggles with
+long-horizon skills. As shown in Table 15, the agent trained on Qwen3-30’s archive outperforms the
+agent trained on the archive discovered by Qwen3-235 on Crafting but substantially underperforms
+on Dungeon, Mines, and Navigation. Qwen3-30 also struggles to judge skill novelty, producing
+archives with duplicate skills that stall discovery on minor variations rather than advancing to more
+complex ones.
+We further evaluate Qwen3-30 as a policy planner over archives discovered by Qwen3-235 (Table 15).
+Again, Qwen3-30 matches or exceeds Qwen3-235 on Crafting but fails to construct effective policies
+for longer-horizon tasks, particularly struggling to identify useful auxiliary objectives, such as crafting
+weapons or stockpiling resources, not explicitly specified by the benchmark milestones.
+Table 15: Benchmark scores across different combinations of discovery (top header) and policy
+planning (bottom header) models, evaluated at 100 and 60 proposal iterations respectively.
+Qwen3-235 (It: 100) Qwen3-235 (It: 60) Qwen3-30 (It: 60)
+Benchmark Qwen3-235 Qwen3-30 Qwen3-235
+Navigation 12.72 3.37 10.30 3.99
+Crafting 66.52 75.95 67.81 67.07
+Dungeon 87.40 65.36 83.50 59.15
+Mines 35.56 24.09 30.93 10.90
+A verage 50.55 42.20 48.15 35.28
+H Archive Complexity Evolution
+We analyse the evolution of the average complexity of the SHARPs present in the skill archive.
+For each iteration, we compute each SHARP’s complexity according to the complexity equation
+21
+===== PAGE 22 =====
+presented in Section 4.1. We observe that the average skill complexity in the skill archive steadily
+increases with subsequent iterations, as seen in Figure 7. This indicates that SHARPs proposed
+by CODE-SHARP later on in the skill discovery process effectively build on top of the previously
+implemented SHARPs already present in the skill archive.
+0 20 40 60 80 100
+Iteration
+2
+4
+6
+8
+10
+12
+14
+16Mean Skill Complexity
+Average Mean Complexity
+±1 SD
+Figure 7: Evolution of average SHARP complexity present in the skill archive
+22
+===== PAGE 23 =====
+I Examples of Polices-in-Code
+We provide an example for the high-level policies-in-code generated by the FM-based policy planner
+for two benchmark tasks.
+Policy-in-Code for the Navigation Benchmark
+class BenchmarkSolver:
+def __init__(self):
+self.parent_skill_index = 500
+self.assigned_reward = 1.0
+self.cond_fns = (
+lambda states: self._has_drunk_water(*states),
+lambda states: self._has_eaten_food(*states),
+lambda states: self._has_stone_sword(*states),
+lambda states: self._is_on_level1_or_beyond(*states),
+lambda states: self._has_killed_8_mobs_level1(*states),
+lambda states: self._is_on_level2_or_beyond(*states),
+lambda states: self._has_killed_8_mobs_level2(*states),
+lambda states: self._is_on_level3_or_beyond(*states),
+lambda states: self._is_near_enchantment_table(*states),
+)
+self.prereq_fns = (
+lambda states: self._do_drink_water(*states),
+lambda states: self._do_eat_food(*states),
+lambda states: self._do_craft_stone_sword(*states),
+lambda states: self._do_descend_ladder(*states),
+lambda states: self._do_kill_eight_mobs_level1(*states),
+lambda states: self._do_descend_ladder_level1(*states),
+lambda states: self._do_kill_eight_mobs_level2(*states),
+lambda states: self._do_descend_ladder_level2(*states),
+lambda states: self._do_enter_new_room_from_corridor(*states),
+)
+def _has_drunk_water(self, prev: Any, cur: Any) -> jnp.bool_:
+target = 7 + 2 * cur.player_dexterity
+on_level0 = jnp.equal(cur.player_level, 0)
+has_full_water = jnp.greater_equal(cur.player_drink, target)
+return jnp.logical_or(jnp.logical_not(on_level0), has_full_water)
+def _has_eaten_food(self, prev: Any, cur: Any) -> jnp.bool_:
+target = 7 + 2 * cur.player_dexterity
+on_level0 = jnp.equal(cur.player_level, 0)
+has_full_food = jnp.greater_equal(cur.player_food, target)
+return jnp.logical_or(jnp.logical_not(on_level0), has_full_food)
+def _has_stone_sword(self, prev: Any, cur: Any) -> jnp.bool_:
+return jnp.greater_equal(cur.inventory.sword, 2)
+def _is_on_level1_or_beyond(self, prev: Any, cur: Any) -> jnp.bool_:
+return jnp.greater_equal(cur.player_level, 1)
+def _has_killed_8_mobs_level1(self, prev: Any, cur: Any) -> jnp.bool_:
+return jnp.greater_equal(cur.monsters_killed[1], 8)
+def _is_on_level2_or_beyond(self, prev: Any, cur: Any) -> jnp.bool_:
+return jnp.greater_equal(cur.player_level, 2)
+def _has_killed_8_mobs_level2(self, prev: Any, cur: Any) -> jnp.bool_:
+return jnp.greater_equal(cur.monsters_killed[2], 8)
+23
+===== PAGE 24 =====
+def _is_on_level3_or_beyond(self, prev: Any, cur: Any) -> jnp.bool_:
+return jnp.greater_equal(cur.player_level, 3)
+def _is_near_enchantment_table(self, prev: Any, cur: Any) -> jnp.bool_:
+on_level3 = jnp.equal(cur.player_level, 3)
+near_table = is_near_block(
+cur,
+BlockType.ENCHANTMENT_TABLE_ICE.value,
+)
+return jnp.logical_and(on_level3, near_table)
+def _do_drink_water(self, prev: Any, cur: Any) -> Tuple[int, float, bool]:
+return 4, 0.0, False # DrinkWater
+def _do_eat_food(self, prev: Any, cur: Any) -> Tuple[int, float, bool]:
+return 61, 0.0, False # EatFood
+def _do_craft_stone_sword(self, prev: Any, cur: Any) -> Tuple[int, float,
+bool]:
+return 41, 0.0, False # CraftStoneSword
+def _do_descend_ladder(self, prev: Any, cur: Any) -> Tuple[int, float,
+bool]:
+return 103, 0.0, False # DescendLadder
+def _do_kill_eight_mobs_level1(self, prev: Any, cur: Any) -> Tuple[int,
+float, bool]:
+return 183, 0.0, False # KillEightMobsLevel1
+def _do_descend_ladder_level1(self, prev: Any, cur: Any) -> Tuple[int,
+float, bool]:
+return 196, 0.0, False # DescendLadderLevel1
+def _do_kill_eight_mobs_level2(self, prev: Any, cur: Any) -> Tuple[int,
+float, bool]:
+return 251, 0.0, False # KillEightMobsLevel2
+def _do_descend_ladder_level2(self, prev: Any, cur: Any) -> Tuple[int,
+float, bool]:
+return 314, 0.0, False # DescendLadderLevel2
+def _do_enter_new_room_from_corridor(self, prev: Any, cur: Any) -> Tuple[
+int, float, bool]:
+return 172, 0.0, False # EnterNewRoomFromCorridorLevel1
+def _finalize(self, prev: Any, cur: Any) -> Tuple[int, float, bool]:
+success = self._is_near_enchantment_table(prev, cur)
+reward = jnp.where(success, self.assigned_reward, 0.0)
+return self.parent_skill_index, reward, success
+Policy-in-Code for the Dungeon Benchmark
+class BenchmarkSolver:
+def __init__(self):
+self.parent_skill_index = 500
+self.assigned_reward = 1.0
+self.cond_fns = (
+24
+===== PAGE 25 =====
+lambda states: self._has_drunk_water(*states),
+lambda states: self._has_wood_pickaxe(*states),
+lambda states: self._has_stone_pickaxe(*states),
+lambda states: self._has_stone_sword(*states),
+lambda states: self._has_torches(*states),
+lambda states: self._has_arrows(*states),
+lambda states: self._has_sapling(*states),
+lambda states: self._has_potion(*states),
+lambda states: self._has_killed_two_mobs(*states),
+lambda states: self._has_ascended(*states),
+lambda states: self._has_eaten_food(*states),
+)
+self.prereq_fns = (
+lambda states: self._do_drink_water(*states),
+lambda states: self._do_craft_wood_pickaxe(*states),
+lambda states: self._do_craft_stone_pickaxe(*states),
+lambda states: self._do_craft_stone_sword(*states),
+lambda states: self._do_craft_torches(*states),
+lambda states: self._do_craft_arrows(*states),
+lambda states: self._do_collect_sapling(*states),
+lambda states: self._do_find_potion(*states),
+lambda states: self._do_kill_two_mobs(*states),
+lambda states: self._do_ascend(*states),
+lambda states: self._do_eat_food(*states),
+)
+def _has_drunk_water(self, prev, cur):
+return cur.player_drink >= 9
+def _has_wood_pickaxe(self, prev, cur):
+return cur.inventory.pickaxe >= 1
+def _has_stone_pickaxe(self, prev, cur):
+return cur.inventory.pickaxe >= 2
+def _has_stone_sword(self, prev, cur):
+return cur.inventory.sword >= 2
+def _has_torches(self, prev, cur):
+return cur.inventory.torches >= 4
+def _has_arrows(self, prev, cur):
+return cur.inventory.arrows >= 2
+def _has_sapling(self, prev, cur):
+return cur.inventory.sapling > 0
+def _has_potion(self, prev, cur):
+return jnp.any(cur.inventory.potions > 0)
+def _has_killed_two_mobs(self, prev, cur):
+return cur.monsters_killed[1] >= 2
+def _has_ascended(self, prev, cur):
+return cur.player_level == 0
+def _has_eaten_food(self, prev, cur):
+return cur.player_hunger >= 9
+def _do_drink_water(self, prev, cur):
+return 11, 0.0, False # DrinkWater skill index
+25
+===== PAGE 26 =====
+def _do_craft_wood_pickaxe(self, prev, cur):
+return 27, 0.0, False # CraftWoodPickaxe
+def _do_craft_stone_pickaxe(self, prev, cur):
+return 38, 0.0, False # CraftStonePickaxe
+def _do_craft_stone_sword(self, prev, cur):
+return 72, 0.0, False # CraftStoneSword
+def _do_craft_torches(self, prev, cur):
+return 54, 0.0, False # CraftTorches
+def _do_craft_arrows(self, prev, cur):
+return 85, 0.0, False # CraftArrow
+def _do_collect_sapling(self, prev, cur):
+return 123, 0.0, False # GatherSapling
+def _do_find_potion(self, prev, cur):
+return 234, 0.0, False # LootPotionFromChest
+def _do_kill_two_mobs(self, prev, cur):
+return 118, 0.0, False # KillOrcSoldier
+def _do_ascend(self, prev, cur):
+return 175, 0.0, False # PositionOnUpwardLadderDungeon
+def _do_eat_food(self, prev, cur):
+return 167, 0.0, False # EatSnail
+def _finalize(self, prev, cur):
+success = self._has_eaten_food(prev, cur)
+reward = jnp.where(success, self.assigned_reward, 0.0)
+return self.parent_skill_index, reward, success
+J Skill Discovery Prompts
+Skill Proposal Generation Prompt
+You are a curriculum designer for a reinforcement learning agent in the \
+$env_name environment.
+## Goal
+Your task is to **iteratively build a curriculum of hierarchical skills** that
+progressively expand the agent’s capabilities. Each skill you propose
+becomes a building block that future, more advanced skills can depend on.
+Over time, this curriculum should guide the agent from basic survival and
+navigation towards mastering the full environment.
+**Key Principle:** Every proposed skill must **meaningfully extend the agent’s
+current abilities** by building logically on top of what it has already
+learned. Think of the skill archive as a growing dependency tree –- your
+proposal adds the next logical node.
+---
+26
+===== PAGE 27 =====
+## How Skills Work
+A skill is a sequence of **Starting Conditions** (checked in order, top to
+bottom) followed by a **Success Condition**:
+1. If a starting condition is **not satisfied**, the system runs the **
+prerequisite skill** linked to that condition until it is.
+2. Once satisfied, the system advances to the next condition.
+3. When **all** starting conditions hold, the agent pursues the Success
+Condition; meeting it earns a reward.
+> **Every starting condition MUST be paired with a prerequisite skill from the
+agent’s current repertoire that can fulfil it. No exceptions.**
+> If the required prerequisite does not exist, do **not** stretch an unrelated
+skill to fit. Stop, and propose that simpler prerequisite skill instead.
+## Condition Ordering
+Order conditions so fulfilling a later one cannot undo an earlier one.
+- **Persistent conditions** (poessisng an item) come **first**.
+- **Positional / transient conditions** (facing a tile, standing next to an
+object) come **last**, immediately before the success condition.
+## Skill Granularity –- hard rules
+These are not soft guidelines; a proposal that violates either rule is invalid
+and will be rejected.
+* **No atomic action-wrapper skills.** If the success condition reduces to "
+a single primitive action has been executed once" (a rotation, a one-step
+move), the skill adds no hierarchical value.
+* **No over-generic umbrella skills.** If the success condition is satisfied
+by many qualitatively different targets (any object, any colour, any door
+state, any tile of a broad category), the outcome is under-specified and
+the skill cannot be reused as a prerequisite. If the success condition
+needs the word *any*, the skill is too broad.
+* A good skill sits **between an action and a generic family**: concrete
+enough to have a single clear success condition, abstract enough to be
+reusable as a prerequisite for multiple future skills.
+---
+## Your Task –- Step by Step
+1. **Environment Dynamics Analysis (MANDATORY).** Before proposing anything,
+write out a concrete analysis of the environment from the provided source.
+Cover:
+(a) the objects present and the functional role each plays;
+(b) for each property, whether it gates a rule, defines a relation between
+objects, or is cosmetic –- justified from the code;
+(c) a layered dependency chain of capabilities, from primitive to composite
+, making the required prerequisite for each composite capability explicit.
+This analysis grounds every subsequent step.
+2. **Analyse the Repertoire.** Study the current skills and their success
+rates. Identify the most impactful next skill that fits the sampled
+category and is reachable given the current repertoire. Within the sampled
+category, inspect which sub-areas are already covered and prefer filling
+27
+===== PAGE 28 =====
+a sub-gap over deepening an already well-covered sub-area. The sampled
+category itself is binding –- this only steers your choice of skill *
+within* it.
+3. **Propose Exactly One Skill.** It must be:
+- in the sampled category,
+- genuinely novel (not a duplicate, trivial variant, or re-implementation
+of a failed proposal). Example: MineTwoWood if MineWood exists is not
+novel,
+- not an existing skill with simple changes in the starting conditions,
+- neither a wrapper around a single primitive action nor an under-specified
+‘*Any‘-style umbrella (see Skill Granularity above –- this is a hard rule
+, re-check it before committing),
+- consistent with the environment dynamics from Step 1.
+4. **Define the Success Condition.** Clear, unambiguous, and expressible from
+the code’s state representation.
+- For crafting and resource gathering: use absolute values (e.g., agent has
+more than 1).
+5. **Define Starting Conditions, each paired with a prerequisite.** For each
+condition:
+- State the precise environment predicate.
+- Name the prerequisite skill **from the existing repertoire** that fulfils
+it. Every condition needs at least one.
+- Order conditions so later ones do not invalidate earlier ones (see
+Condition Ordering).
+- For skills which require objects to be present in the environment, verify
+they are present by default. If not, starting conditions must include an
+existence check and an according prerequisite skill which is able to
+create the object in cases it is not already present.
+- The agent is able to learn atomic skills like moving forwards or placing
+down objects in free spots by itself. You can assume the agent to be able
+to perform such atomic actions by itself.
+- If no starting conditions are needed, write: ‘"No implementation for a
+condition needed"‘.
+6. **Assign a reward of 1.**
+7. **Learn from Failures.** Review previously failed proposals; do not re-
+propose them.
+---
+ENVIRONMENT DESCRIPTION
+\$environment_description
+---
+SAMPLED CATEGORY
+\$category
+---
+SKILL REPERTOIRE:
+Current Agent Skill Repertoire: \$skill_repertoire
+28
+===== PAGE 29 =====
+Success rates: \$success_rates
+FAILED PROPOSALS:
+Use the previously failed proposals as inspiration for new proposals. Do not
+directly reimplement them.
+\$failed_proposals
+OUTPUT FORMAT:
+-------------
+End your text with the skill proposal in this exact format –- do not generate
+anything after it:
+<proposal_start>
+"Skill Name": "SkillName1", #Do not include spaces or _ in your skill names
+"Skill Type": "The skill type that the proposed skill belongs to",
+"Skill Description": "Describe the skill...",
+"Assigned Reward": "Integer value for assigned reward",
+"Success Condition": "The condition ...",
+"Starting Conditions": {
+"Condition 1": ["description of predicate to check condition", "SkillName
+from repertoire to satisfy condition 1"],
+"Condition 2": ["description of predicate to check condition. If nested
+condition describe here.", "SkillName from repertoire to satisfy nested
+condition 1 | SkillName from repertoire to satisfy nested condition 2 |
+SkillName from repertoire to satisfy nested ... "],
+"Condition 3": ....}
+<proposal_end>
+<think>
+Skill Proposal Implementor Prompt
+You are a JAX coding assistant. Your goal is to translate a "skill proposal"
+into a valid Python class, implementing it as a new skill for an agent.
+The skills should be implemented as hierarchical reward programs. Each
+skill has Precondition Functions to check if necessary sub-goals (e.g., "
+possess iron," "near crafting table") are met.
+If a precondition fails, the skill calls a prerequisite skill–-itself defined
+with its own preconditions–-dedicated to achieving that sub-goal, creating
+a dependency chain. At each environment step, these preconditions are
+checked sequentially, allowing the system to traverse this chain to find
+the first skill whose prerequisites are currently satisfied. This
+sequential, step-by-step checking means previously met conditions can
+become false, re-triggering their respective sub-goal skills. Finally, a
+Success Condition verifies if the main objective has been completed, at
+which point the skill returns a reward to the agent. Using this
+formulation, your task is to iteratively expand the agents skill archive
+via these interconnected skills.
+---------------------------------
+INPUT: SKILL PROPOSAL
+======================
+29
+===== PAGE 30 =====
+You will receive a proposal containing:
+* name: The skill’s name.
+* description: A brief explanation of what the skill does.
+* index: The proposed integer ID for the skill.
+* success_condition: A condition that is True only when the skill is completed
+successfully.
+* start_conditions (Optional): A set of prerequisite environment states. Each
+is paired with a prerequisite skill that can achieve it if not specified
+otherwise.
+---------------------------------
+YOUR TASK: VALIDATION & IMPLEMENTATION
+======================================
+Follow these rules to implement the skill using the provided JAX class
+template.
+1. Validate the Proposal
+-------------------------
+First, check the proposal for correctness. If it’s fundamentally flawed and
+cannot be fixed, reject it and explain why.
+* Success Condition:
+- Ensure it’s logical and unambiguous.
+- Correct minor logical errors.
+- For crafting tools the success condition must be given as absolute
+values, i.e. for wood pickaxe it must be cur.inventory.pickaxe >= 1. For
+resources it should be relative to the previous state.
+* Start Conditions:
+- Verify that every prerequisite skill exists in the agent’s repertoire.
+- If a prerequisite skill is invalid, try to replace it with a valid one.
+If none exists, reject the proposal.
+2. Implement the JAX Class
+--------------------------
+If the proposal is valid (or you’ve corrected it), implement the class.
+* Indexing:
+- Use the proposed index. If it’s already taken, increment the index by
+one until it is unique.
+- Refer to prerequisite skills by their correct index.
+* Code Requirements:
+- Your entire implementation MUST be JAX and JIT-compatible.
+- ALWAYS use JAX logical operators (e.g., jnp.logical_and, jnp.logical_or)
+instead of Python’s native ’and’, ’or’.
+- If the proposal specifies a condition with "No implementation for a
+condition needed" or you can not add the condition to the skill class. You
+are allowed to simply ignore it by either not adding it to the code or
+only adding it as a comment
+ENVIRONMENT CODE
+----------------
+All functions and global variables shown in the environment code below are
+available for direct use in your skill implementation –- you do not need
+to import or redefine them.
+30
+===== PAGE 31 =====
+\$environment_description
+class SkillName:
+"""One-line description of what this skill achieves."""
+def __init__(self):
+self.parent_skill_index = \$skill_index # unique integer, from the
+proposal
+self.assigned_reward = 1.0
+self.cond_fns = (
+# Sub-goal 1: one branch per possible case the environment may
+assign.
+# Exactly one of these returns a meaningful False per episode; the
+rest pass through.
+lambda states: self._cond_subgoal1_case1(*states),
+lambda states: self._cond_subgoal1_case2(*states),
+# ... one entry per case in sub-goal 1’s pool ...
+# Sub-goal 2: same pattern, different pool of cases.
+lambda states: self._cond_subgoal2_case1(*states),
+lambda states: self._cond_subgoal2_case2(*states),
+# ... one entry per case in sub-goal 2’s pool ...
+...
+)
+self.prereq_fns = (
+# Same length and order as cond_fns.
+lambda states: self._do_subgoal1_case1(*states),
+lambda states: self._do_subgoal1_case2(*states),
+lambda states: self._do_subgoal2_case1(*states),
+lambda states: self._do_subgoal2_case2(*states),
+)
+# --- Sub-goal 1 branches ---
+# All branches check the same sub-goal; they differ only in which case is
+active.
+def _cond_subgoal1_case1(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case1 for this sub-
+goal>
+met = <True when sub-goal 1 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal1_case1(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE1>, 0.0, False
+def _cond_subgoal1_case2(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case2 for this sub-
+goal>
+met = <True when sub-goal 1 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal1_case2(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE2>, 0.0, False
+# --- Sub-goal 2 branches ---
+def _cond_subgoal2_case1(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case1 for this sub-
+goal>
+31
+===== PAGE 32 =====
+met = <True when sub-goal 2 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal2_case1(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE1>, 0.0, False
+def _cond_subgoal2_case2(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case2 for this sub-
+goal>
+met = <True when sub-goal 2 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal2_case2(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE2>, 0.0, False
+def _finalize(self, prev, cur):
+success = <True when the overall skill goal is achieved>
+reward = jnp.where(success, self.assigned_reward, 0.0)
+return self.parent_skill_index, reward, success
+#### DO NOT CHANGE ANYTHING BEYOND THIS ####
+def _dummy_condition(self, *args):
+return jnp.bool_(True)
+def _dummy_prereq(self, *args):
+return (-1, 0.0, False)
+SKILL REPERTOIRE:
+-----------------
+Current Agent Skill Repertoire:
+\$skill_repertoire_dicts
+\$skill_repertoire
+SKILL PROPOSAL
+---------------
+The following is the skill proposal with its name, description, success
+condition, and necessary starting conditions. First, verify that all
+properties are correctly specified according to the rules and environment
+mechanics, and that all prerequisite skills are present in the agent’s
+skill repertoire. If not, correct these errors before creating the skill
+class in Python. If the proposal cannot be corrected, do not output a
+skill class.
+\$skill_proposal_one
+OUTPUT FORMAT:
+-------------
+To make it easier to parse your skill proposal, follow this exact format for
+describing the novel skill. End your text with the skill proposal. Do not
+generate anything after that:
+<start_proposal>
+32
+===== PAGE 33 =====
+"Skill Name": "SkillName1",
+"Skill Index": "The skill’s index corresponds to the index provided by the
+skill proposal",
+"Skill Description": "Describe the skill...",
+"Skill Function": "The implemented JAX skill function goes here"
+<end_proposal>
+<think>
+Skill Proposal Judge Prompt
+You are the official Skill Novelty Judge for an agent’s open-ended skill
+learning curriculum.
+Your mandate is to select at most two of the most valuable new skills from a
+batch of proposals.
+Each skill has Precondition Functions that check whether necessary sub-goals
+are met.
+If a precondition fails, the skill delegates to a prerequisite SHARP –- itself
+defined with its own preconditions –- dedicated to achieving that sub-
+goal, forming a dependency chain.
+A Success Condition then verifies that the main objective is complete, at
+which point the skill returns a reward.
+Your decision must balance curriculum coherence (skills that incrementally
+build on the agent’s current abilities) with diversity (skills that open
+new branches of the skill tree).
+---
+### Step 1 –- Environment Dynamics Analysis (MANDATORY)
+Before looking at any proposal, write out a concrete analysis of the
+environment dynamics from the provided source. This is the single source
+of truth for every downstream judgement –- do not skip or shortcut it.
+Cover:
+(a) **Objects:** every object present and its functional role.
+(b) **Properties:** for each property, state whether it gates a rule, defines
+a relation between objects, or is cosmetic –- justified from the code.
+(c) **Dependency chain:** the high-level chain of capabilities the dynamics
+induce, e.g. objects required for crafting, keys for doors etc, all the
+possible rules which apply to an object or skill.
+You will reference this analysis in Step 2 to verify each proposal.
+You will reference this analysis in Step 2 to verify each proposal.
+### Step 2 –- Per-Proposal Scrutiny
+Evaluate every proposal against the dynamics analysis from Step 1. A proposal
+must pass ALL of the following checks; any single failure is an immediate
+disqualification. You are **not** allowed to correct code or silently add
+33
+===== PAGE 34 =====
+missing prerequisites –- if a change would be required, reject the
+proposal.
+* **Dynamics & Prerequisite Compliance (GATING CHECK):**
+* Trace the proposal’s start conditions and success condition through
+the dynamics chain from Step 1. The skill must produce its claimed outcome
+under the real rules. Refer to the point on Feasibility for examples of
+what is complient with the rules and what is not.
+* The proposal must list **every** prerequisite skill implied by that
+chain. If the success condition requires a sub-capability and the
+corresponding prerequisite is missing, wrong, or not present in the agent’
+s repertoire, reject the proposal –- even if it is otherwise novel.
+* Success and start conditions must be unambiguous, self-contained, and
+actually reachable by the skill (e.g. do not require picking up an object
+type absent from the environment by default).
+* *Note: Fine-grained positional gaps between a prerequisite’s end-
+position and the parent skill’s start-position do not count as a missing
+prerequisite under this check –- see the Feasibility bullet for how those
+are handled.*
+* **Granularity (GATING CHECK):**
+* **Atomic action wrapper→reject.** If the success condition reduces
+to "a single primitive action has been executed once" (a rotation, a one-
+cell move), the skill adds no hierarchical value and must be rejected.
+* **Over-generic umbrella→reject.** If the success condition is
+satisfied by many qualitatively different targets (any object, any colour,
+any door state, any tile of a broad category), the outcome is under-
+specified and the skill cannot serve as a reusable prerequisite. Reject.
+If the success condition needs the word *any*, the skill is too broad.
+* A valid skill sits between a single primitive action and an ‘*Any‘-
+style family: one precise, named capability with an unambiguous success
+condition.
+* **Novelty & Precision:**
+* Genuinely new capability, not a trivial variation or duplicate of an
+archived skill.
+* Not a minimal change in capabilities, or an existing skill with added
+prerequsite skills.
+* Not a strict re-implementation of a previously failed proposal.
+* **Feasibility:**
+* The proposal must be feasible given the agent’s skill repertoire. If
+prerequisite skills for high-level sub-tasks are missing, the skill is not
+feasible.
+* Focus on the high-level sub-steps required to complete the skill and
+whether each is covered by a prerequisite from the repertoire. If a
+proposal assumes the agent can perform atomic tasks –- moving forward a
+step, rotating to face an object, toggling, placing down objects in
+adjacent spots –- but is otherwise well defined, accept it.
+* **Positional tolerance:** A prerequisite skill that delivers the agent
+into the vicinity of a target satisfies the positional requirement of the
+parent skill even if the agent still needs a small number of primitive
+steps to reach the exact interaction position. The RL agent will learn to
+bridge these residual steps autonomously when the parent skill becomes
+active. Do NOT reject a proposal solely because a prerequisite skill ends
+slightly short of the precise target position.
+* **Hard limit on tolerance:** This positional tolerance covers only
+fine-grained proximity adjustments. It does NOT excuse the absence of a
+high-level prerequisite skill –- such as acquiring a required object,
+unlocking a door, navigating to a different room, or crafting an
+ingredient. If an entire capability class is unrepresented in the
+prerequisite list, reject.
+34
+===== PAGE 35 =====
+* Example –- valid reason for rejection: An interaction skill requires
+an object but has no prerequisite skill to acquire or create it. Example
+–- valid reason for rejection: A composite skill requires navigating to a
+location but has no navigation prerequisite at all. Example –- NOT a valid
+reason for rejection: A prerequisite navigation skill brings the agent
+near the target, and the agent needs a couple of primitive steps to close
+the remaining gap before interacting.
+* **Curriculum Value:**
+* **Natural curriculum progression.** Keep accepting simple skills as
+long as they are valuable prerequisites for more complex capabilities the
+agent has not yet reached. The moment **all** prerequisite skills a more
+complex capability depends on are present in the repertoire **and reliably
+learned**, that complex capability becomes the preferred pick –- graduate
+to it instead of stacking further simple skills. If even one required
+prerequisite is missing, the complex capability is not yet reachable;
+accept the missing prerequisite first.
+* **Category balance (validity-gated tie-breaker).** If a category is
+under-represented in the current repertoire and a proposal in that
+category passes **every** gating check above, prefer it over equally-valid
+proposals in over-represented categories. This is a tie-breaker among
+proposals that are already valid. It is **never** grounds to lower the bar
+on Dynamics, Prerequisite, Granularity, Feasibility, or Technical checks
+–- reject an invalid proposal even if doing so leaves its category empty
+for this round.
+* **Genuine capability gain.** Favour proposals that unlock a
+qualitatively new skill and fill an obvious gap in the skill tree over
+cosmetic variants of existing skills.
+* **Technical Compliance:**
+* Fully JIT-compatible, JAX-only code; strict adherence to the provided
+JAX skill-class template.
+* If the proposed index is already taken, assign the next available
+unique integer.
+### Step 3 –- Final Verdict
+Select at most two proposals that pass every check above; reject all if none
+qualify.
+For each selected skill, your justification must explicitly name:
+(i) which dynamics-chain prerequisites you verified,
+(ii) the curriculum stage the skill targets –- simple stepping-stone vs.
+graduation to a more complex capability –- with a direct reference to the
+prerequisite success rates in ‘\$skill_performances‘ that justify that
+choice,
+(iii) whether category-balance diversity played a role in the selection and,
+if so, an explicit confirmation that the choice was made **among already-
+valid candidates** and did not lower the bar on any gating check.
+Adhere strictly to the rules above. Previously added skills that violated any
+rule do not license you to repeat the violation.
+ENVIRONMENT CODE
+----------------
+\$environment_description
+SKILL REPERTOIRE:
+-----------------
+35
+===== PAGE 36 =====
+Current Agent Skill Repertoire: \$skill_repertoire
+Skill performances: \$skill_performances
+FAILED PROPOSALS:
+----------------
+\$failed_proposals
+SKILL PROPOSAL
+---------------
+The following is the skill proposal with its name, description, success
+condition, and necessary starting conditions.
+\$candidate_dict
+\$candidate_code
+OUTPUT FORMAT:
+-------------
+If the skill proposal passes your judgement, output your decision following
+this exact template. Do not output anything after the <decision_end> token
+.
+<decision_start>
+[
+{
+"Skill Names": "The name of the first skill you choose",
+"Proposal Index": Must correspond to the index of the chosen skill
+proposal,
+"Decision Reason": "Explain your reasoning for choosing this specific
+skill"
+},
+{
+"Skill Names": "The name of the second skill you choose",
+"Proposal Index": Must correspond to the index of the chosen skill
+proposal,
+"Decision Reason": "Explain your reasoning for choosing this specific
+skill"
+}
+]
+<decision_end>
+If the skill does not pass your judgement, simply output "Skill did not pass
+judgement".
+<think>
+36
+===== PAGE 37 =====
+K Skill Mutation Prompts
+Skill Mutation Proposal Prompt
+You are a helpful skill engineer with the job of designing skills as
+hierarchical reward programs (SHARP) to train an agent in the \$env_name
+environment. Each SHARP consists of precondition functions which define
+the necessary environment conditions that need to be satisfied in order to
+be able to execute the parent skill. Each precondition can call an
+already existing skill from the agents archive of learned skills to
+satisfy the respective condition. Each SHARP further has a success
+condition which checks if the parent skill is completed and returns the
+reward.
+During the initial implementation there can often be mistakes, oversights or
+inefficiencies in the defined SHARPs. Your task is to evolve and mutate an
+already existing SHARP to optimise it based on its current structure and
+the other skills present in the agents skill archive. For this you will
+receive a heuristic which you will use as guidance on how to mutate the
+sampled SHARP. Your mutation will be evaluated against the parent skill.
+If it has a better performance in terms of the success rate of completing
+the skill, the mutation will be accepted as the new elite.
+Mutation Rules:
+1. Ensure your mutations follow the exact heuristic specification given to you
+and are sensible.
+2. If you add a new precondition function, ensure that a relevant skill to
+satisfy it is present in the agents skill archive.
+3. Directly follow the output template given to you to define your mutation
+proposal.
+4. All precondition functions should be clearly marked in the mutation
+preconditions.
+5. Carefully analyse the previous failed mutation attempts, if available, to
+intelligently propose a next mutation. You should not directly reimplement
+one of the previous failed mutations.
+6. Under no circumstances should you mutate the success condition of the
+parent skill.
+ENVIRONMENT DESCRIPTION
+\$environment_description
+SKILL ARCHIVE
+\$skill_repertoire
+PARENT SKILL
+\$sampled_parent_skill
+\$sampled_parent_skill_code
+PREVIOUSLY FAILED PROPOSED MUTATIONS
+\$previous_failed_elites
+MUTATION HEURISTIC
+\$heuristic_name
+37
+===== PAGE 38 =====
+\$heuristic
+OUTPUT
+The mutation for this index is \$mutation_index . Be sure to use this exact
+value for the mutation output dict.
+To make it easier to parse your skill proposal, follow this exact format. End
+your text with the skill proposal –- do not generate anything after that:
+</mutation_start>
+"Skill Name": "ParentSkillName",
+"Mutation Name": "Name of the mutated skill",
+"Skill Index": "The skill’s index corresponds to the skill idx of the parent
+skill",
+"Mutation Index": "\$mutation_index",
+"Skill Description": "Describe the skill...",
+"Assigned Reward": "The reward you assign to the skill",
+"Mutation Description": "Describe the mutation and how it should improve the
+skill success rate...",
+"Success Condition": "The condition using xland helper functions...",
+"Mutation Starting Conditions": {
+"Condition 1": ["environment predicate", "SkillName from repertoire to
+satisfy condition 1"],
+"Condition 2": ["environment predicate", "SkillName from repertoire to
+satisfy condition 2"]
+}
+</mutation_end>
+<think>
+Mutation Heuristics
+{
+"Crossover": "Add new preconditions and prerequisite skills to the parent
+skill that synergize with the sampled skill to enhance its success rate.
+Focus on synergies that improve survival, ability to navigate the
+environment, or resource management. You can also replace prerequisite
+skills for existing preconditions with skills from the agent’s repertoire
+that are more likely to successfully fulfil the specified preconditions.",
+"Efficiency": "Streamline the skill’s execution flow. Analyze the logical
+sequence of preconditions, ensuring they are ordered for maximum
+effectiveness (e.g., gathering tools before attempting tasks).",
+"Simplicity": "Optimize the skill’s implementation to be as efficient and
+streamlined as possible by identifying at least one redundant or
+distracting precondition that can be removed. Redundant preconditions are
+those that repeat other preconditions objectives. Distracting
+preconditions are those that force the agent to complete unnecessary
+objectives, diverting attention away from the skill’s primary objective.
+Carefully analyse which conditions are absolutetly necessary to achieve
+the sampled skills stated goal and then remove all preconditions deemed
+distracting or redundant",
+"Hyperparameters": "Optimize the numerical parameters governing the skill,
+such as precondition thresholds. Adjust these parameters to minimize the
+38
+===== PAGE 39 =====
+need for re-visiting preconditions. Ensure the agent gathers sufficient
+resources in the first instance to sustain the skill’s execution."
+}
+Skill Mutation Implementor Prompt
+You are a JAX coding assistant. Your goal is to translate a "skill mutation
+proposal" into a valid Python class, implementing it as a new skill for an
+agent.
+The skills should be implemented as hierarchical reward programs. Each skill
+has Precondition Functions to check if necessary sub-goals are met. If a
+precondition fails, the skill calls a prerequisite skill –- itself defined
+with its own preconditions –- dedicated to achieving that sub-goal,
+creating a dependency chain. At each environment step, these preconditions
+are checked sequentially, allowing the system to traverse this chain to
+find the first skill whose prerequisites are currently satisfied. Finally,
+a Success Condition verifies if the main objective has been completed, at
+which point the skill returns a reward to the agent. Your task is to
+translate a proposed mutation of an existing skill into a valid Python
+class.
+INPUT: MUTATION PROPOSAL
+======================
+You will receive a mutation proposal containing:
+* ‘SkillName‘: The skill’s name.
+* ‘SkillIndex‘: The integer ID for the skill, which you must use.
+* ‘SkillDescription‘: A brief explanation of what the skill does.
+* ‘SuccessCondition‘: A condition that is ‘True‘ only when the skill is
+completed successfully.
+* ‘Mutation Starting Conditions‘: A set of prerequisite environment states for
+the mutated skill. Each is paired with a prerequisite skill that can
+achieve it.
+---------------------------------
+YOUR TASK: VALIDATION & IMPLEMENTATION
+======================================
+Follow these rules to implement the mutated skill using the provided JAX class
+template.
+**1. Validate the Proposal**
+-------------------------
+First, check the mutation proposal for correctness. If it’s fundamentally
+flawed and cannot be fixed, reject it and explain why.
+* **Success Condition:**
+* Ensure it’s logical and unambiguous.
+* Correct minor logical errors.
+* The success condition must exactly match that of the original parent
+skill –- do not modify it.
+* **Mutation Starting Conditions:**
+* Verify that every prerequisite skill exists in the agent’s repertoire.
+* If a prerequisite skill is invalid, try to replace it with a valid one.
+If no valid replacement exists, reject the proposal.
+39
+===== PAGE 40 =====
+**2. Implement the JAX Class**
+--------------------------
+If the proposal is valid (or you’ve corrected it), implement the class.
+* **Indexing:**
+* Use the exact ‘SkillIndex‘ provided in the proposal.
+* Refer to prerequisite skills by their correct index from the skill
+repertoire.
+* **Code Requirements:**
+* Your entire implementation **MUST** be JAX and JIT-compatible.
+* **ALWAYS** use JAX logical operators (e.g., ‘jnp.logical_and‘, ‘jnp.
+logical_or‘) instead of Python’s native ‘and‘ or ‘or‘.
+* If the proposal specifies a condition with "No implementation for a
+condition needed," implement the function body but **must not** append it
+to ‘self.cond_fns‘, and the respective prerequisite must not be added to ‘
+self.prereq_fns‘.
+---------------------------------
+ENVIRONMENT CODE
+----------------
+\$environment_description
+class SkillName:
+"""One-line description of what this skill achieves."""
+def __init__(self):
+self.parent_skill_index = \$skill_index # unique integer, from the
+proposal
+self.assigned_reward = 1.0
+self.cond_fns = (
+# Sub-goal 1: one branch per possible case the environment may
+assign.
+# Exactly one of these returns a meaningful False per episode; the
+rest pass through.
+lambda states: self._cond_subgoal1_case1(*states),
+lambda states: self._cond_subgoal1_case2(*states),
+# ... one entry per case in sub-goal 1’s pool ...
+# Sub-goal 2: same pattern, different pool of cases.
+lambda states: self._cond_subgoal2_case1(*states),
+lambda states: self._cond_subgoal2_case2(*states),
+# ... one entry per case in sub-goal 2’s pool ...
+...
+)
+self.prereq_fns = (
+# Same length and order as cond_fns.
+lambda states: self._do_subgoal1_case1(*states),
+lambda states: self._do_subgoal1_case2(*states),
+lambda states: self._do_subgoal2_case1(*states),
+lambda states: self._do_subgoal2_case2(*states),
+)
+# --- Sub-goal 1 branches ---
+# All branches check the same sub-goal; they differ only in which case is
+active.
+40
+===== PAGE 41 =====
+def _cond_subgoal1_case1(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case1 for this sub-
+goal>
+met = <True when sub-goal 1 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal1_case1(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE1>, 0.0, False
+def _cond_subgoal1_case2(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case2 for this sub-
+goal>
+met = <True when sub-goal 1 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal1_case2(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE2>, 0.0, False
+# --- Sub-goal 2 branches ---
+def _cond_subgoal2_case1(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case1 for this sub-
+goal>
+met = <True when sub-goal 2 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal2_case1(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE1>, 0.0, False
+def _cond_subgoal2_case2(self, prev, cur) -> jnp.bool_:
+applicable = <True when the environment assigned case2 for this sub-
+goal>
+met = <True when sub-goal 2 is already satisfied>
+return jnp.logical_or(jnp.logical_not(applicable), met)
+def _do_subgoal2_case2(self, prev, cur):
+return <PREREQ_SKILL_FOR_CASE2>, 0.0, False
+def _finalize(self, prev, cur):
+success = <True when the overall skill goal is achieved>
+reward = jnp.where(success, self.assigned_reward, 0.0)
+return self.parent_skill_index, reward, success
+#### DO NOT CHANGE ANYTHING BEYOND THIS ####
+def _dummy_condition(self, *args):
+return jnp.bool_(True)
+def _dummy_prereq(self, *args):
+return (-1, 0.0, False)
+SKILL REPERTOIRE
+Current Agent Skill Repertoire: \$skill_repertoire
+MUTATION PROPOSAL
+The following is the mutation proposal. First, verify that all properties are
+correctly specified according to
+the rules and environment mechanics and that all prerequisite skills are
+present in the agent’s skill repertoire.
+If not, correct these errors before creating the skill class in Python. If the
+proposal cannot be corrected,
+do not output a skill class.
+41
+===== PAGE 42 =====
+\$mutation_proposal
+SAMPLED PARENT SKILL CODE
+This is the code of the sampled parent skill. It can diverge from the code in
+the base repertoire. Always use the version
+given to you here as the base for your code.
+\$sampled_parent_skill
+OUTPUT FORMAT
+To make it easier to parse your skill definition, follow this exact format:
+<start_proposal>
+"Skill Name": "SkillName1",
+"Skill Index": "The skill’s index corresponds to the index provided by the
+skill proposal",
+"Skill Description": "Describe the skill...",
+"Skill Function": "The implemented JAX skill function goes here"
+<end_proposal>
+<think>
+L Policy Planner Prompt
+Policy Planner Prompt
+You are an expert AI architect guiding an agent to solve complex tasks in the
+Craftax environment. Your goal is to design a high-level policy skill, ‘
+BenchmarkSolver‘, that orchestrates existing skills from a repertoire to
+complete a specific benchmark.
+The ‘BenchmarkSolver‘ acts as a meta-policy. You must define a sequence of **
+preconditions** (checks for specific states) and map each to a **
+prerequisite skill** (an action to achieve that state). The agent will
+execute these in order.
+YOUR TASK: IMPLEMENT BENCHMARK SOLVER
+======================================
+Implement the ‘BenchmarkSolver‘ skill using the JAX class template provided.
+This skill orchestrates the agent to achieve the provided **Benchmark
+Milestones**.
+1. Skill Structure
+------------------
+* **Class Name:** ‘BenchmarkSolver‘
+* **Index:** $next_skill_index
+* **Template:** Use the provided JAX class structure.
+2. Logic & Strategy Requirements
+--------------------------------
+You must define the ‘cond_fns‘ (preconditions) and ‘prereq_fns‘ (actions)
+lists. Construct them using the following logic:
+### A. Strategic Planning
+42
+===== PAGE 43 =====
+Before strictly following the provided milestones, you must analyze the task
+requirements to ensure agent survival and efficiency.
+* **Preparation:** You are encouraged to define a limited set of auxiliary
+preconditions for essential tools that are not explicitly listed in the
+milestones but can assist the agent in completing the milestones.
+* **Focus:** Focus on the only the most critical tools that are required to
+complete the milestones. Avoid adding too many preparatory steps as it may
+lead to the agent getting distracted from the main task of solving
+milestones.
+* **Efficiency:** The agent can get distracted if you add too many preparatory
+steps. Ensure that you limit the number of preparatory steps to a minimum
+and that they can be completed easily by the agent.
+* **Ordering:** These preparatory steps must be placed only at the **beginning
+** of your precondition sequence, ensuring the agent is equipped *before*
+attempting to solve the milestones.
+### B. Milestone Execution
+* After your preparatory steps, define preconditions that mirror the **
+Benchmark Milestones** in order.
+* Ensure the logical flow allows the agent to progress from one milestone to
+the next without getting stuck.
+### C. Skill Selection
+* For each precondition, assign the most effective skill from the **Skill
+Repertoire**.
+* **Best Fit:** Choose the skill with the highest success rate that achieves
+the goal.
+* **Approximation:** If no skill perfectly matches a milestone, use the
+closest available alternative or a skill that covers multiple milestones (
+e.g., a "Mine Stone" skill might naturally cover a "Craft Stone Pickaxe"
+milestone).
+* **Constraint:** You must use *existing* skills only. Do not invent new skill
+names.
+3. Code Requirements
+--------------------
+* **JAX Compatibility:** The implementation must be pure JAX and JIT-
+compatible.
+* **Operators:** ALWAYS use ‘jnp.logical_and‘, ‘jnp.logical_or‘, etc., instead
+of Python native operators.
+* **Imports:** Do not add import statements; assume the environment is pre-
+loaded.
+---------------------------------
+CRAFTAX ENVIRONMENT
+-------------------
+$environment_description
+BENCHMARK MILESTONES
+--------------------
+The benchmark task consists of the following milestones that should be
+achieved in order:
+$milestones
+---------------------------------
+SKILL REPERTOIRE
+----------------
+43
+===== PAGE 44 =====
+Current Agent Skill Repertoire:
+$skill_repertoire
+Skill Success Rates:
+$success_rates
+---------------------------------
+SKILL FUNCTION TEMPLATE
+--------------------
+class BenchmarkSolver:
+# Top-level policy for solving the benchmark task.ß
+def __init__(self):
+self.parent_skill_index = $next_skill_index
+self.assigned_reward = 1.0
+#### Implement the tuples containing the condition and prerequisite
+functions ####
+# NOTE: The Wrapper requires these to be tuples of lambdas accepting a
+single ’states’ argument.
+# Always keep the dummy functions first to prevent empty tuple errors
+during JIT compilation.
+self.cond_fns = (
+# lambda states: self._condition_1(*states),
+# lambda states: self._condition_2(*states),
+)
+self.prereq_fns = (
+# lambda states: self._do_condition1(*states),
+# lambda states: self._do_condition2(*states),
+)
+#### Implement the logic functions here ####
+# def _condition_1(self, prev: Any, cur: Any) -> jnp.bool_:
+# # Return True if the condition is satisfied (e.g., item is in
+inventory)
+# return cur.inventory.wood >= 1
+# def _do_condition1(self, prev: Any, cur: Any) -> Tuple[int, float, bool
+]:
+# # Return the index of the skill required to satisfy _condition_1
+# # Returns: (Prerequisite Skill Index, 0.0, False)
+# return 5, 0.0, False # Example: Index 5 is "Collect Wood"
+#### Implement the success condition (Finalize) here ####
+def _finalize(self, prev: Any, cur: Any) -> Tuple[int, float, bool]:
+# Implement the ultimate success check for this skill
+# e.g., success = cur.inventory.crafting_table >= 1
+success = False
+reward = jnp.where(success, self.assigned_reward, 0.0)
+return self.parent_skill_index, reward, success
+44
+===== PAGE 45 =====
+OUTPUT FORMAT:
+-------------
+To make it easier to parse your skill proposal, follow this exact format for
+describing the novel skill. End your text with the skill proposal. Do not
+generate anything after that:
+</start_proposal>
+"Skill Name": "BenchmarkSolver",
+"Skill Description": "Describe the skill...",
+"Skill Function": "The implemented JAX skill function goes here"
+</end_proposal>
+M Discovered Skill Archive
+In the following we present the skill archive discovered during one of the three runs, consisting of
+93 discovered SHARPs. The skills were discovered over 100 iterations of skill proposal and agent
+training.
+FindTree
+Description:The agent explores the environment until it is in the proximity of a tree (within a radius of 2
+blocks).
+Skill Type:Navigation
+Assigned Reward:1
+Success Condition:agent near block: BlockType.TREE
+Starting Conditions:None
+FindLake
+Description:The agent explores the environment to locate a lake, a vital water source to manage its thirst.
+This skill aims to teach the agent to identify and approach water bodies for survival.
+Skill Type:Navigation
+Assigned Reward:1
+Success Condition:agent near block: BlockType.WATER
+Starting Conditions:None
+FindCow
+Description:The agent explores the overworld until it is within 2 blocks of a cow, a passive mob that can
+be killed for food.
+Skill Type:Navigation
+Assigned Reward:1
+Success Condition:agent near passive mob: PassiveMobType.COW
+Starting Conditions:None
+45
+===== PAGE 46 =====
+DrinkWater
+Description:The agent locates a water source and drinks from it to replenish its thirst intrinsic to
+maximum capacity, ensuring survival through hydration management.
+Skill Type:SurvivalAssigned Reward:1
+Success Condition:agent drink >= (7 + 2 * agent dexterity)
+Starting Conditions:
+•C1:agent near block: BlockType.WATER(Requires: FindLake)
+MineWood
+Description:The agent mines a tree to obtain wood, a fundamental resource required for crafting tools and
+structures. This skill builds upon tree location by teaching the agent to interact with trees to gather raw
+materials.
+Skill Type:Resource Gathering
+Assigned Reward:1
+Success Condition:agent inventory wood >= 1
+Starting Conditions:
+•C1:agent near block: BlockType.TREE(Requires: FindTree)
+KillCow
+Description:The agent engages and defeats a cow, a passive mob found in the overworld, to obtain food
+resources. This skill teaches the agent basic combat mechanics against passive mobs.
+Skill Type:Fighting Mobs
+Assigned Reward:1
+Success Condition:agent killed mob: PassiveMobType.COW
+Starting Conditions:
+•C1:agent near passive mob: PassiveMobType.COW(Requires: FindCow)
+PlaceCraftingTable
+Description:The agent places a crafting table using wood resources, creating a necessary structure for
+crafting tools and enabling progression to more advanced skills.
+Assigned Reward:1
+Skill Type:Crafting
+Success Condition:agent near block: BlockType.CRAFTING_TABLE
+Starting Conditions:
+•C1:agent inventory wood >= 2(Requires: MineWood)
+FindStone
+Description:The agent explores the overworld to locate stone deposits within a 2-block radius, which are
+essential for crafting stone tools and advancing resource gathering capabilities.
+Skill Type:Navigation
+Assigned Reward:1
+Success Condition:agent near block: BlockType.STONE
+Starting Conditions:None
+46
+===== PAGE 47 =====
+CraftWoodPickaxe
+Description:The agent crafts a wooden pickaxe at a crafting table, enabling stone mining for progression.
+This skill builds upon wood gathering and table placement to teach core crafting mechanics.
+Skill Type:Crafting
+Assigned Reward:1
+Success Condition:agent inventory pickaxe >= 1
+Starting Conditions:
+•C1:agent inventory wood >= 1(Requires: MineWood)
+•C2:agent near block: BlockType.CRAFTING_TABLE(Requires: PlaceCraftingTable)
+CraftWoodSword
+Description:The agent crafts a wooden sword at a crafting table using gathered wood resources. This skill
+builds upon wood acquisition and crafting table placement to teach the agent foundational combat tool
+creation.
+Skill Type:Crafting
+Assigned Reward:1
+Success Condition:agent inventory sword >= 1
+Starting Conditions:
+•C1:agent inventory wood >= 1(Requires: MineWood)
+•C2:agent near block: BlockType.CRAFTING_TABLE(Requires: PlaceCraftingTable)
+MineStone
+Skill Type:Resource Gathering
+Description:The agent locates stone deposits and mines them using a wooden pickaxe to obtain stone
+resources.
+Assigned Reward:1
+Success Condition:agent inventory stone >= 1
+Starting Conditions:
+•C1:agent inventory pickaxe >= 1(Req: CraftWoodPickaxe)
+•C2:agent near block: BlockType.STONE(Req: FindStone)
+CraftStonePickaxe
+Skill Type:Crafting
+Description:The agent crafts a stone pickaxe at a crafting table using gathered wood and stone resources.
+Assigned Reward:1
+Success Condition:agent inventory pickaxe >= 2
+Starting Conditions:
+•C1:agent inventory wood >= 1(Req: MineWood)
+•C2:agent inventory stone >= 1(Req: MineStone)
+•C3:agent near block: BlockType.CRAFTING_TABLE(Req: PlaceCraftingTable)
+FindCoal
+Skill Type:Navigation
+Description:The agent explores the overworld (level 0) to locate coal deposits within a 2-block radius.
+Assigned Reward:1
+Success Condition:(agent level == 0) & agent near block: BlockType.COAL
+Starting Conditions:
+•C1:agent near block: BlockType.STONE(Req: FindStone)
+47
+===== PAGE 48 =====
+MineCoal
+Skill Type:Resource Gathering
+Description:The agent locates coal deposits identified in stone-rich areas and mines them using a wooden
+pickaxe.
+Assigned Reward:1
+Success Condition:agent inventory coal >= 1
+Starting Conditions:
+•C1:agent inventory pickaxe >= 1(Req: CraftWoodPickaxe)
+•C2:agent near block: BlockType.COAL(Req: FindCoal)
+CraftStoneSword
+Skill Type:Crafting
+Description:The agent crafts a stone sword at a crafting table using gathered wood and stone resources.
+Assigned Reward:1
+Success Condition:agent inventory sword >= 2
+Starting Conditions:
+•C1:agent inventory wood >= 1(Req: MineWood)
+•C2:agent inventory stone >= 1(Req: MineStone)
+•C3:agent near block: BlockType.CRAFTING_TABLE(Req: PlaceCraftingTable)
+PlaceFurnace
+Skill Type:Crafting
+Description:The agent places a furnace using gathered stone resources, creating essential infrastructure
+for smelting ores.
+Assigned Reward:1
+Success Condition:agent near block: BlockType.FURNACE
+Starting Conditions:
+•C1:agent inventory stone >= 1(Req: MineStone)
+CraftTorch
+Skill Type:Crafting
+Description:The agent crafts torches at a crafting table using gathered wood and coal resources.
+Assigned Reward:1
+Success Condition:agent inventory torches >= 1
+Starting Conditions:
+•C1:agent inventory wood >= 1(Req: MineWood)
+•C2:agent inventory coal >= 1(Req: MineCoal)
+•C3:agent near block: BlockType.CRAFTING_TABLE(Req: PlaceCraftingTable)
+MineSapling
+Skill Type:Resource Gathering
+Description:The agent mines grass blocks in the overworld (level 0) near cows to obtain saplings.
+Assigned Reward:1
+Success Condition:agent inventory sapling >= 1
+Starting Conditions:
+•C1:agent near passive mob: PassiveMobType.COW(Req: FindCow)
+48
+===== PAGE 49 =====
+EatFood
+Skill Type:Survival
+Description:The agent locates and kills cows in the overworld (level 0) until its food level reaches
+maximum capacity.
+Assigned Reward:1
+Success Condition:(agent level == 0) & (agent food >= (7 + 2 * agent dexterity))
+Starting Conditions:
+•C1:agent near passive mob: PassiveMobType.COW(Req: FindCow)
+CraftArrow
+Skill Type:Crafting
+Description:The agent crafts arrows at a crafting table using gathered wood and stone resources.
+Assigned Reward:1
+Success Condition:agent inventory arrows >= 1
+Starting Conditions:
+•C1:agent inventory wood >= 1(Req: MineWood)
+•C2:agent inventory stone >= 1(Req: MineStone)
+•C3:agent near block: BlockType.CRAFTING_TABLE(Req: PlaceCraftingTable)
+KillZombie
+Skill Type:Fighting Mobs
+Description:The agent locates and defeats a zombie, an aggressive melee mob that spawns in stone-rich
+areas.
+Assigned Reward:1
+Success Condition:(agent level == 0) & agent killed mob: MeleeMobType.ZOMBIE
+Starting Conditions:
+•C1:agent near melee mob: MeleeMobType.ZOMBIE(Req: FindStone)
+MineIron
+Skill Type:Resource Gathering
+Description:The agent mines iron ore deposits using a stone pickaxe, obtaining iron resources.
+Assigned Reward:1
+Success Condition:agent inventory iron >= 1
+Starting Conditions:
+•C1:agent inventory pickaxe >= 2(Req: CraftStonePickaxe)
+•C2:agent near block: BlockType.STONE(Req: FindStone)
+KillSkeleton
+Skill Type:Fighting Mobs
+Description:The agent locates and defeats a skeleton, a ranged mob that spawns in stone-rich areas.
+Assigned Reward:1
+Success Condition:(agent level == 0) & agent killed mob: RangedMobType.SKELETON
+Starting Conditions:
+•C1:agent inventory sword >= 1(Req: CraftWoodSword)
+•C2:(agent level == 0) & agent near ranged mob: RangedMobType.SKELETON(Req:
+FindStone)
+49
+===== PAGE 50 =====
+SleepToFullEnergy
+Skill Type:Survivability
+Description:The agent ensures its survival intrinsics are stabilized and eliminates threats before sleeping
+to recover energy.
+Assigned Reward:1
+Success Condition:(agent level == 0) & (agent energy >= (7 + 2 * agent dexterity))
+Starting Conditions:
+•C1:(agent level == 0) & (agent food >= (7 + 2 * agent dexterity))(Req: EatFood)
+•C2:(agent level == 0) & (agent drink >= (7 + 2 * agent dexterity))(Req:
+DrinkWater)
+•C3:not agent near melee mob: MeleeMobType.ZOMBIE(Req: KillZombie)
+•C4:not agent near ranged mob: RangedMobType.SKELETON(Req: KillSkeleton)
+FindLadderDown
+Skill Type:Navigation
+Description:The agent explores the overworld (level 0) to locate the downward ladder required to descend
+to the dungeon level.
+Assigned Reward:1
+Success Condition:(agent level == 0) & local object exists: ItemType.LADDER_DOWN
+Starting Conditions:None
+PlaceTorch
+Skill Type:Survivability
+Description:The agent utilizes crafted torches to place them on valid adjacent blocks, illuminating the
+immediate surroundings.
+Assigned Reward:1
+Success Condition:stationary object exists: ItemType.TORCH
+Starting Conditions:
+•C1:agent inventory torches >= 1(Req: CraftTorch)
+RecoverHealth
+Skill Type:Survivability
+Description:The agent ensures its survival intrinsics are fully replenished and in a safe environment,
+allowing passive health regeneration.
+Assigned Reward:1
+Success Condition:(agent level == 0) & (agent health >= (8 + agent strength))
+Starting Conditions:
+•C1:(agent level == 0) & (agent energy >= (7 + 2 * agent dexterity))(Req:
+SleepToFullEnergy)
+StepOntoLadderDown
+Skill Type:Navigation
+Description:The agent moves from being within a 2-block radius of the downward ladder to standing
+exactly on the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 0) & (agent standing on: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:local object exists: ItemType.LADDER_DOWN(Req: FindLadderDown)
+50
+===== PAGE 51 =====
+FindIron
+Skill Type:Resource Gathering
+Description:The agent explores the overworld (level 0) to locate iron ore deposits within a 2-block radius.
+Assigned Reward:1
+Success Condition:(agent level == 0) & agent near block: BlockType.IRON
+Starting Conditions:
+•C1:(agent level == 0) & agent near block: BlockType.STONE(Req: FindStone)
+DescendLadder
+Skill Type:Navigation
+Description:The agent executes the descend action while positioned on the downward ladder in the
+overworld to transition to the dungeon.
+Assigned Reward:1
+Success Condition:agent level == 1
+Starting Conditions:
+•C1:(agent level == 0) & (agent standing on: ItemType.LADDER_DOWN)(Req:
+StepOntoLadderDown)
+FindChestLevel1
+Skill Type:Navigation
+Description:The agent navigates the dungeon level (level 1) to locate a chest within a 2-block radius.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent near block: BlockType.CHEST
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+FindOrcSoldierLevel1
+Skill Type:Navigation
+Description:The agent explores the dungeon level (level 1) to locate an Orc Soldier, a melee mob that
+spawns in dungeon rooms, within a 2-block radius.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent near melee mob:
+MeleeMobType.ORC_SOLDIER
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+FaceLadderDown
+Skill Type:Navigation
+Description:The agent positions itself adjacent to the downward ladder on the overworld (level 0) and
+rotates to face the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 0) & (agent facing: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 0) & local object exists: ItemType.LADDER_DOWN(Req:
+FindLadderDown)
+51
+===== PAGE 52 =====
+KillOrcWarrior
+Skill Type:Fighting Mobs
+Description:The agent locates and defeats an Orc Warrior, a melee mob that spawns in dungeon rooms on
+level 1.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent killed mob: MeleeMobType.ORC_SOLDIER
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+•C3:(agent level == 1) & agent near melee mob: MeleeMobType.ORC_SOLDIER(Req:
+FindOrcSoldierLevel1)
+OpenChestForBowLevel1
+Skill Type:Resource Gathering
+Description:The agent locates and opens the first chest on the dungeon level (level 1) to obtain a bow.
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent inventory bow >= 1)
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:(agent level == 1) & agent near block: BlockType.CHEST(Req: FindChestLevel1)
+FindFountainLevel1
+Skill Type:Navigation
+Description:The agent leverages its ability to locate dungeon chests to efficiently explore adjacent rooms
+and identify fountains.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent near block: BlockType.FOUNTAIN
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:agent near block: BlockType.CHEST(Req: FindChestLevel1)
+FindDungeonTorch
+Skill Type:Navigation
+Description:The agent explores the dungeon level (level 1) to locate pre-placed torches in room corners,
+serving as navigation landmarks.
+Assigned Reward:1
+Success Condition:(agent level == 1) & stationary object exists: ItemType.TORCH
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+OpenChestForArrowsLevel1
+Skill Type:Resource Gathering
+Description:The agent locates and opens a chest on the dungeon level (level 1) to obtain arrows.
+Assigned Reward:1
+Success Condition:agent inventory arrows >= 1
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:agent near block: BlockType.CHEST(Req: FindChestLevel1)
+52
+===== PAGE 53 =====
+DrinkFromFountainLevel1
+Skill Type:Survivability
+Description:The agent locates a fountain in the dungeon level (level 1) and drinks from it to replenish
+thirst.
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent drink >= (7 + 2 * agent dexterity))
+Starting Conditions:
+•C1:(agent level == 1) & agent near block: BlockType.FOUNTAIN(Req:
+FindFountainLevel1)
+PlaceFurnaceAdjacent
+Skill Type:Crafting
+Description:The agent locates the existing crafting table and strategically places a furnace in an adjacent
+block (including diagonally).
+Assigned Reward:1
+Success Condition:agent near block: BlockType.CRAFTING_TABLE & agent near block:
+BlockType.FURNACE
+Starting Conditions:
+•C1:agent near block: BlockType.CRAFTING_TABLE(Req: PlaceCraftingTable)
+•C2:agent inventory stone >= 1(Req: MineStone)
+CraftIronArmour
+Skill Type:Crafting
+Description:The agent crafts a piece of iron armour at a crafting table while adjacent to a furnace using
+gathered iron and coal resources.
+Assigned Reward:1
+Success Condition:agent inventory armour >= 1
+Starting Conditions:
+•C1:agent inventory iron >= 3(Req: MineIron)
+•C2:agent inventory coal >= 3(Req: MineCoal)
+•C3:agent near block: BlockType.CRAFTING_TABLE(Req: PlaceCraftingTable)
+•C4:agent near block: BlockType.FURNACE(Req: PlaceFurnace)
+CraftIronPickaxe
+Skill Type:Crafting
+Description:The agent crafts an iron pickaxe at a crafting table while ensuring the furnace is placed
+adjacently.
+Assigned Reward:1
+Success Condition:agent inventory pickaxe >= 3
+Starting Conditions:
+•C1-C4:Wood, Stone, Iron, Coal >= 1
+•C5:agent near block: BlockType.CRAFTING_TABLE & agent near block:
+BlockType.FURNACE(Req: PlaceFurnaceAdjacent)
+FindLadderDownLevel1
+Skill Type:Navigation
+Description:The agent explores the dungeon level (level 1) to locate the downward ladder by leveraging
+dungeon torches as navigation landmarks.
+Assigned Reward:1
+Success Condition:(agent level == 1) & local object exists: ItemType.LADDER_DOWN
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:stationary object exists: ItemType.TORCH(Req: FindDungeonTorch)
+53
+===== PAGE 54 =====
+CraftIronSword
+Skill Type:Crafting
+Description:The agent crafts an iron sword at a crafting table while ensuring furnace adjacency.
+Assigned Reward:1
+Success Condition:agent inventory sword >= 3
+Starting Conditions:
+•C1-C4:Wood, Stone, Iron, Coal >= 1
+•C5:agent near block: BlockType.CRAFTING_TABLE & agent near block:
+BlockType.FURNACE(Req: PlaceFurnaceAdjacent)
+StepOntoLadderDownLevel1
+Skill Type:Navigation
+Description:The agent navigates from proximity to the downward ladder on the dungeon level (level 1) to
+stand precisely on the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent standing on: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 1) & local object exists: ItemType.LADDER_DOWN(Req:
+FindLadderDownLevel1)
+FindUpLadderLevel1
+Skill Type:Navigation
+Description:The agent explores the starting room on the dungeon level (level 1) to locate the upward
+ladder.
+Assigned Reward:1
+Success Condition:(agent level == 1) & ladder object exists: ItemType.LADDER_UP
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+MineGrassForSapling
+Skill Type:Resource Gathering
+Description:The agent mines grass blocks in the overworld (level 0) to obtain saplings, a critical resource
+for establishing sustainable food sources.
+Assigned Reward:1
+Success Condition:agent inventory sapling >= 1
+Starting Conditions:
+•C1:(agent level == 0) & agent near block: BlockType.GRASS(Req: FindTree)
+KillOrcMage
+Skill Type:Fighting mobs
+Description:The agent locates and defeats an Orc Mage, a ranged mob that spawns in dungeon rooms on
+level 1.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent killed mob: RangedMobType.ORC_MAGE
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:agent inventory bow >= 1(Req: OpenChestForBowLevel1)
+•C3:agent inventory arrows >= 1(Req: CraftArrow)
+•C4:agent near ranged mob: RangedMobType.ORC_MAGE(Req: FindDungeonTorch)
+54
+===== PAGE 55 =====
+ExitRoomToCorridorLevel1
+Skill Type:Navigation
+Description:The agent learns to exit a dungeon room by moving away from corner torches into the
+connecting corridor.
+Assigned Reward:1
+Success Condition:not stationary object exists: ItemType.TORCH
+Starting Conditions:
+•C1:stationary object exists: ItemType.TORCH(Req: FindDungeonTorch)
+EnterAdjacentRoomLevel1
+Skill Type:Navigation
+Description:The agent navigates from the starting room (containing the upward ladder) on the dungeon
+level to an adjacent room using torch landmarks.
+Assigned Reward:1
+Success Condition:(agent level == 1) & stationary object exists: ItemType.TORCH &
+not ladder object exists: ItemType.LADDER_UP
+Starting Conditions:
+•C1:(agent level == 1) & ladder object exists: ItemType.LADDER_UP(Req:
+FindUpLadderLevel1)
+EnterNewRoomFromCorridorLevel1
+Skill Type:Navigation
+Description:The agent navigates from the dungeon corridor (after exiting a room) on level 1 to enter an
+adjacent room by detecting torches.
+Assigned Reward:1
+Success Condition:stationary object exists: ItemType.TORCH
+Starting Conditions:
+•C1:not stationary object exists: ItemType.TORCH(Req: ExitRoomToCorridorLevel1)
+FindSnailLevel1
+Skill Type:Navigation
+Description:The agent explores the dungeon level (level 1) to locate a snail, a passive mob that spawns in
+dungeon rooms.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent near passive mob:
+PassiveMobType.SNAIL
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:stationary object exists: ItemType.TORCH(Req: FindDungeonTorch)
+KillSnailLevel1
+Skill Type:Fighting mobs
+Description:The agent locates and defeats a snail, a passive mob that spawns in dungeon rooms on level 1,
+to obtain food resources.
+Assigned Reward:1
+Success Condition:(agent level == 1) & agent killed mob: PassiveMobType.SNAIL
+Starting Conditions:
+•C1:(agent level == 1)(Req: DescendLadder)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+•C3:agent near passive mob: PassiveMobType.SNAIL(Req: FindFountainLevel1)
+55
+===== PAGE 56 =====
+EnterNewRoomExcludingUpLadderLevel1
+Skill Type:Navigation
+Description:The agent navigates from the corridor to enter an adjacent room that does not contain the
+upward ladder, confirming new room entry.
+Assigned Reward:1
+Success Condition:(agent level == 1) & stationary object exists: ItemType.TORCH &
+not ladder object exists: ItemType.LADDER_UP
+Starting Conditions:
+•C1:not stationary object exists: ItemType.TORCH(Req: ExitRoomToCorridorLevel1)
+KillEightMobsLevel1
+Skill Type:Fighting mobs
+Description:The agent eliminates 8 hostile or passive mobs to satisfy the requirement for opening the
+downward ladder to level 2.
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent monsters killed level 1 >= 8)
+Starting Conditions:
+•C1:agent level == 1(Req: DescendLadder)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+FaceLadderDownLevel1
+Skill Type:Navigation
+Description:The agent positions itself adjacent to the downward ladder on the dungeon level and rotates
+to face the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent facing: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 1) & local object exists: ItemType.LADDER_DOWN(Req:
+FindLadderDownLevel1)
+ApproachLadderDownLevel1
+Skill Type:Navigation
+Description:The agent navigates from proximity to the downward ladder to a position directly adjacent (1
+block away).
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent adjacent to: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 1) & local object exists: ItemType.LADDER_DOWN(Req:
+FindLadderDownLevel1)
+DescendLadderLevel1
+Skill Type:Navigation
+Description:The agent executes the descend action while positioned on the downward ladder to transition
+to the Gnomish Mines (level 2).
+Assigned Reward:1
+Success Condition:agent level == 2
+Starting Conditions:
+•C1:(agent level == 1) & (agent monsters killed level 1 >= 8)(Req:
+KillEightMobsLevel1)
+•C2:(agent level == 1) & (agent standing on: ItemType.LADDER_DOWN)(Req:
+StepOntoLadderDownLevel1)
+56
+===== PAGE 57 =====
+FindWaterLevel2
+Skill Type:Navigation
+Description:The agent navigates the Gnomish Mines level (level 2) to locate a water pool within a 2-block
+radius.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent near block: BlockType.WATER
+Starting Conditions:
+•C1:(agent level == 2)(Req: DescendLadderLevel1)
+FindUpLadderLevel2
+Skill Type:Navigation
+Description:The agent explores the Gnomish Mines level (level 2) to locate the upward ladder (leading
+back to level 1).
+Assigned Reward:1
+Success Condition:(agent level == 2) & ladder object exists: ItemType.LADDER_UP
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+FindWaterWithTorchLevel2
+Skill Type:Navigation
+Description:The agent leverages placed torches to illuminate the dark Gnomish Mines and locates water
+pools within a 2-block radius.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent near block: BlockType.WATER
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:stationary object exists: ItemType.TORCH(Req: PlaceTorch)
+MoveToEdgeOfLightLevel2
+Skill Type:Navigation
+Description:The agent moves from the spawn point on level 2 to a position where the light level drops
+below 0.5.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent light level < 0.5)
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+FindStalagmiteLevel2
+Skill Type:Navigation
+Description:The agent explores the Gnomish Mines level (level 2) to locate stalagmites within a 2-block
+radius.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent near block: BlockType.STALAGMITE
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+57
+===== PAGE 58 =====
+MineStalagmiteLevel2
+Skill Type:Resource Gathering
+Description:The agent mines stalagmites in the Gnomish Mines (level 2) to obtain stone resources.
+Assigned Reward:1
+Success Condition:agent inventory stone >= 1
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:stationary object exists: ItemType.TORCH(Req: PlaceTorch)
+•C3:agent inventory pickaxe >= 1(Req: CraftWoodPickaxe)
+NavigateToWaterFromStalagmiteLevel2
+Skill Type:Navigation
+Description:The agent leverages stalagmites as environmental landmarks in the Gnomish Mines to
+navigate toward nearby water pools.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent near block: BlockType.WATER
+Starting Conditions:
+•C1:(agent level == 2) & agent near block: BlockType.STALAGMITE(Req:
+FindStalagmiteLevel2)
+•C2:stationary object exists: ItemType.TORCH(Req: PlaceTorch)
+PlaceTorchAtEdgeLevel2
+Skill Type:Navigation
+Description:The agent strategically places a torch at the boundary of existing light (light level < 0.5) in
+the Gnomish Mines.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent standing on: ItemType.TORCH)
+Starting Conditions:
+•C1:(agent level == 2) & (agent light level < 0.5)(Req: MoveToEdgeOfLightLevel2)
+•C2:agent inventory torches >= 1(Req: CraftTorch)
+MoveIntoLitAreaLevel2
+Skill Type:Survivability
+Description:The agent moves from the torch placement position at the edge of darkness into the newly
+illuminated area.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent light level >= 0.5)
+Starting Conditions:
+•C1:(agent level == 2) & (agent light level < 0.5)(Req: MoveToEdgeOfLightLevel2)
+•C2:(agent level == 2) & stationary object exists: ItemType.TORCH(Req:
+PlaceTorchAtEdgeLevel2)
+MoveToNextEdgeOfLightLevel2
+Skill Type:Navigation
+Description:The agent moves from the center of a newly created lit area to the next edge of darkness,
+enabling progressive exploration.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent light level < 0.5)
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:(agent level == 2) & (agent light level >= 0.5)(Req: MoveIntoLitAreaLevel2)
+58
+===== PAGE 59 =====
+MoveAwayFromUpLadderLevel2
+Skill Type:Navigation
+Description:The agent navigates away from the upward ladder spawn point in the Gnomish Mines to a
+position at least 5 blocks distant.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (distance to up ladder >= 5)
+Starting Conditions:
+•C1:(agent level == 2) & ladder object exists: ItemType.LADDER_UP(Req:
+FindUpLadderLevel2)
+FindBatLevel2
+Skill Type:Navigation
+Description:The agent explores the Gnomish Mines level (level 2) by leveraging water pools (located via
+torches) to find bats, passive mobs that spawn near water sources.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent near passive mob: PassiveMobType.BAT
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:(agent level == 2) & agent near block: BlockType.WATER(Req:
+FindWaterWithTorchLevel2)
+MineCoalNearWaterLevel2
+Skill Type:Resource Gathering
+Description:The agent leverages water pools as reliable landmarks in the Gnomish Mines to mine coal
+deposits within stone-rich areas.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent inventory coal >= 1)
+Starting Conditions:
+•C1:agent inventory pickaxe >= 1(Req: CraftWoodPickaxe)
+•C2:stationary object exists: ItemType.TORCH(Req: PlaceTorch)
+•C3:(agent level == 2) & agent near block: BlockType.WATER(Req:
+NavigateToWaterFromStalagmiteLevel2)
+KillGnomeWarriorNearUpLadderLevel2
+Skill Type:Fighting mobs
+Description:The agent remains within the naturally lit area around the upward ladder spawn point and
+eliminates a Gnome Warrior.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent killed mob:
+MeleeMobType.GNOME_WARRIOR
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:(agent level == 2) & ladder object exists: ItemType.LADDER_UP(Req:
+FindUpLadderLevel2)
+•C3:agent inventory sword >= 1(Req: CraftWoodSword)
+59
+===== PAGE 60 =====
+KillBatLevel2
+Skill Type:Fighting mobs
+Description:The agent locates and defeats a bat, a passive mob that spawns near water pools in the
+Gnomish Mines level (level 2), to obtain food resources.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent killed mob: PassiveMobType.BAT
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+•C3:stationary object exists: ItemType.TORCH(Req: PlaceTorch)
+•C4:agent near passive mob: PassiveMobType.BAT(Req: FindBatLevel2)
+CheckLadderInLitAreaLevel2
+Skill Type:Navigation
+Description:After moving into a newly illuminated area in the Gnomish Mines, the agent systematically
+checks for the downward ladder.
+Assigned Reward:1
+Success Condition:(agent level == 2) & local object exists: ItemType.LADDER_DOWN
+Starting Conditions:
+•C1:(agent level == 2) & (agent light level >= 0.5)(Req: MoveIntoLitAreaLevel2)
+DrinkWaterLevel2
+Skill Type:Survivability
+Description:The agent locates a water pool in the Gnomish Mines level (level 2) and drinks from it to
+replenish thirst.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent drink >= (7 + 2 * agent dexterity))
+Starting Conditions:
+•C1:(agent level == 2) & agent near block: BlockType.WATER(Req:
+NavigateToWaterFromStalagmiteLevel2)
+ApproachWaterLevel2
+Skill Type:Survivability
+Description:The agent moves from proximity (within 2 blocks) to a water pool in the Gnomish Mines to
+an adjacent position (1 block away).
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent adjacent to: BlockType.WATER)
+Starting Conditions:
+•C1:(agent level == 2) & agent near block: BlockType.WATER(Req:
+NavigateToWaterFromStalagmiteLevel2)
+CheckLadderAfterTorchLevel2
+Skill Type:Navigation
+Description:After placing a torch at the edge of darkness, the agent immediately checks the full 11x11
+illuminated area for the downward ladder.
+Assigned Reward:1
+Success Condition:(agent level == 2) & stationary object exists:
+ItemType.LADDER_DOWN
+Starting Conditions:
+•C1:(agent level == 2) & stationary object exists: ItemType.TORCH(Req:
+PlaceTorchAtEdgeLevel2)
+60
+===== PAGE 61 =====
+ApproachLadderDownLevel2
+Skill Type:Navigation
+Description:The agent moves from proximity to the downward ladder on the Gnomish Mines level (level
+2) to a position directly adjacent.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent adjacent to: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 2) & local object exists: ItemType.LADDER_DOWN(Req:
+CheckLadderInLitAreaLevel2)
+CheckLadderInFullLitAreaLevel2
+Skill Type:Navigation
+Description:After moving into a newly illuminated area, the agent performs a comprehensive 10-block
+radius scan to detect the downward ladder.
+Assigned Reward:1
+Success Condition:(agent level == 2) & stationary object exists:
+ItemType.LADDER_DOWN
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:(agent level == 2) & (agent light level >= 0.5)(Req: MoveIntoLitAreaLevel2)
+KillEightMobsLevel2
+Skill Type:Fighting mobs
+Description:The agent explores the Gnomish Mines level (level 2) while maintaining position in lit areas
+to eliminate 8 hostile or passive mobs.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent monsters killed level 2 >= 8)
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+•C3:(agent level == 2) & (agent light level >= 0.5)(Req: MoveIntoLitAreaLevel2)
+MineCoalLevel2
+Skill Type:Resource Gathering
+Description:The agent locates and mines coal deposits in the Gnomish Mines (level 2) using a wooden
+pickaxe to obtain coal resources.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent inventory coal > prev inventory
+coal)
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:agent inventory pickaxe >= 1(Req: CraftWoodPickaxe)
+•C3:(agent level == 2) & agent near block: BlockType.COAL(Req:
+FindStalagmiteLevel2)
+FaceLadderDownLevel2
+Skill Type:Navigation
+Description:The agent positions itself adjacent to the downward ladder on the Gnomish Mines level (level
+2) and rotates to face the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent facing: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 2) & (agent adjacent to: ItemType.LADDER_DOWN)(Req:
+ApproachLadderDownLevel2)
+61
+===== PAGE 62 =====
+FaceWaterLevel2
+Skill Type:Survivability
+Description:The agent, when adjacent to a water pool in the Gnomish Mines level (level 2), rotates to face
+the water block.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent facing: BlockType.WATER)
+Starting Conditions:
+•C1:(agent level == 2) & (agent adjacent to: BlockType.WATER)(Req:
+ApproachWaterLevel2)
+ApproachUpLadderLevel2
+Skill Type:Navigation
+Description:The agent moves from proximity to the upward ladder on the Gnomish Mines level (level 2)
+to a position directly adjacent.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent adjacent to: ItemType.LADDER_UP)
+Starting Conditions:
+•C1:(agent level == 2) & ladder object exists: ItemType.LADDER_UP(Req:
+FindUpLadderLevel2)
+MoveForwardAfterTorchLevel2
+Skill Type:Navigation
+Description:After placing a torch at the edge of darkness, the agent moves forward one block into the
+newly illuminated area.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent light level >= 0.5)
+Starting Conditions:
+•C1:(agent level == 2) & (agent light level < 0.5)(Req: PlaceTorchAtEdgeLevel2)
+RecoverManaSafe
+Skill Type:Survivability
+Description:The agent ensures survival intrinsics are fully replenished via SleepToFullEnergy, then
+actively verifies and eliminates threats before recovering mana.
+Assigned Reward:1
+Success Condition:(agent level == 0) & (agent mana >= (6 + agent intelligence))
+Starting Conditions:
+•C1:(agent level == 0) & (agent energy >= (7 + 2 * agent dexterity))(Req:
+SleepToFullEnergy)
+•C2:not agent near melee mob: MeleeMobType.ZOMBIE(Req: KillZombie)
+•C3:not agent near ranged mob: RangedMobType.SKELETON(Req: KillSkeleton)
+StepOntoUpLadderLevel2
+Skill Type:Navigation
+Description:The agent moves from an adjacent position to the upward ladder on the Gnomish Mines level
+(level 2) to stand exactly on the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent standing on: ItemType.LADDER_UP)
+Starting Conditions:
+•C1:(agent level == 2) & (agent adjacent to: ItemType.LADDER_UP)(Req:
+ApproachUpLadderLevel2)
+62
+===== PAGE 63 =====
+FaceUpLadderLevel2
+Skill Type:Navigation
+Description:The agent positions itself adjacent to the upward ladder on the Gnomish Mines level (level 2)
+and rotates to face the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent facing: ItemType.LADDER_UP)
+Starting Conditions:
+•C1:(agent level == 2) & (agent adjacent to: ItemType.LADDER_UP)(Req:
+ApproachUpLadderLevel2)
+AscendLadderLevel2
+Skill Type:Navigation
+Description:The agent executes the ascend action while positioned on the upward ladder in the Gnomish
+Mines to transition back to the dungeon level.
+Assigned Reward:1
+Success Condition:agent level == 1
+Starting Conditions:
+•C1:(agent level == 2) & (agent standing on: ItemType.LADDER_UP)(Req:
+StepOntoUpLadderLevel2)
+ApproachFountainLevel1
+Skill Type:Navigation
+Description:The agent moves from proximity (within 2 blocks) to a fountain in the dungeon level to an
+adjacent position (1 block away).
+Assigned Reward:1
+Success Condition:(agent level == 1) & (agent adjacent to: BlockType.FOUNTAIN)
+Starting Conditions:
+•C1:(agent level == 1) & agent near block: BlockType.FOUNTAIN(Req:
+FindFountainLevel1)
+StepOntoLadderDownLevel2
+Skill Type:Navigation
+Description:The agent moves forward from an adjacent position while facing the downward ladder on the
+Gnomish Mines level to stand exactly on the ladder block.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent standing on: ItemType.LADDER_DOWN)
+Starting Conditions:
+•C1:(agent level == 2) & (agent facing: ItemType.LADDER_DOWN)(Req:
+FaceLadderDownLevel2)
+DrinkWaterLevel2Improved
+Skill Type:Survivability
+Description:The agent, after precisely approaching and correctly facing a water pool in the Gnomish
+Mines, drinks from it to replenish thirst.
+Assigned Reward:1
+Success Condition:(agent level == 2) & (agent drink >= (7 + 2 * agent dexterity))
+Starting Conditions:
+•C1:(agent level == 2) & (agent adjacent to: BlockType.WATER)(Req:
+ApproachWaterLevel2)
+•C2:(agent level == 2) & (agent facing: BlockType.WATER)(Req: FaceWaterLevel2)
+63
+===== PAGE 64 =====
+MoveAwayFromWaterLevel2
+Skill Type:Navigation
+Description:The agent moves from an adjacent position to a water pool to a location where it is no longer
+adjacent, enabling exploration of surrounding areas.
+Assigned Reward:1
+Success Condition:(agent level == 2) & not (agent adjacent to: BlockType.WATER)
+Starting Conditions:
+•C1:(agent level == 2) & (agent adjacent to: BlockType.WATER)(Req:
+ApproachWaterLevel2)
+KillGnomeWarriorInLitAreaLevel2
+Skill Type:Fighting mobs
+Description:The agent, while positioned in a fully illuminated area on the Gnomish Mines level, locates
+and eliminates a Gnome Warrior.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent killed mob:
+MeleeMobType.GNOME_WARRIOR
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+•C3:(agent level == 2) & (agent light level >= 0.5)(Req: MoveIntoLitAreaLevel2)
+•C4:agent near melee mob: MeleeMobType.GNOME_WARRIOR(Req: FindStalagmiteLevel2)
+KillGnomeArcherWithSwordLevel2
+Skill Type:Fighting mobs
+Description:The agent leverages its sword and light management to locate and defeat a Gnome Archer in
+melee range within illuminated areas.
+Assigned Reward:1
+Success Condition:(agent level == 2) & agent killed mob:
+RangedMobType.GNOME_ARCHER
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:agent inventory sword >= 1(Req: CraftWoodSword)
+•C3:(agent level == 2) & (agent light level >= 0.5)(Req: MoveIntoLitAreaLevel2)
+•C4:agent near ranged mob: RangedMobType.GNOME_ARCHER(Req: FindStalagmiteLevel2)
+DescendLadderLevel2
+Skill Type:Navigation
+Description:The agent executes the descend action while positioned on the downward ladder in the
+Gnomish Mines level to transition to the Sewers (level 3).
+Assigned Reward:1
+Success Condition:agent level == 3
+Starting Conditions:
+•C1:agent level == 2(Req: DescendLadderLevel1)
+•C2:(agent level == 2) & (agent monsters killed level 2 >= 8)(Req:
+KillEightMobsLevel2)
+•C3:(agent level == 2) & (agent standing on: ItemType.LADDER_DOWN)(Req:
+StepOntoLadderDownLevel2)
+64

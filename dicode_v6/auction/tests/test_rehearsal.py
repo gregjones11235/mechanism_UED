@@ -92,9 +92,10 @@ class _Cfg:
 def _notebook_with_protected(tmp_path, protected_skills, session=11):
     """Build a SiegeNotebook whose protected_set contains the given skills.
 
-    §2① (2026-07-05): protection now happens via incremental success-experience recording, not a
-    conquest threshold. Session 10 opens the focus; session 11 records it (a focus is recorded the
-    session after it opens, once it has an SR reading), protecting the target + its links.
+    v6fix7 P1a (#8): protection now requires a VERIFIED CONQUEST — the focus must HOLD at/above
+    mastered_sr for conquest_consecutive consecutive snapshots (a one-shot +delta record stays
+    'progress' and protects nothing). Session 10 opens the focus; sessions 11-12 hold it at
+    mastered -> conquered -> target + links protected.
     """
     nb = SiegeNotebook(str(tmp_path / "siege.json"))
     from auction.siege_notebook import MATURITY_MIN_MASTERED, MATURITY_SKILL_SR
@@ -109,8 +110,13 @@ def _notebook_with_protected(tmp_path, protected_skills, session=11):
         {"focus": focus, "prereq_tree": [{"skill": l, "role": "r"} for l in links]},
         num_snapshots=MATURITY_MIN_SNAPSHOTS,
     )
-    # next session: the focus is recorded -> focus + its links go to protected_set.
-    nb.apply_llm_update(session, dict(prof), None, num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    # hold the focus at mastered for two consecutive snapshots -> verified conquest -> protected.
+    conquered = dict(prof)
+    conquered[focus] = 75.0
+    nb.apply_llm_update(session, dict(conquered), None, num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    conquered[focus] = 78.0
+    nb.apply_llm_update(session + 1, dict(conquered), None, num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    assert set(protected_skills).issubset(set(nb.protected_set())), "conquest setup failed"
     return nb
 
 

@@ -31,8 +31,15 @@ def run_session_evaluation(
 	gen_manager: GenManager,
 	current_session_idx: int,
 	global_env_steps: int,
+	wandb_prefix: str = "evaluation",
 ) -> tuple[jax.Array, dict]:
-	"""Runs the standard Craftax evaluation against the current agent state."""
+	"""Runs the standard Craftax evaluation against the current agent state.
+
+	v6fix7 P1d: ``wandb_prefix`` — the standalone offline-eval entry keeps the historical
+	"evaluation" prefix; the in-training siege call (run_dicode Step 4b) passes
+	"evaluation_heldout" so the two different distributions never interleave under one key
+	(the audit found evaluation/* was being double-written every session, polluting curves).
+	"""
 	print("--- [Main Thread] Running evaluation on Craftax... ---")
 
 	if config.training.condition_on_task:
@@ -89,6 +96,12 @@ def run_session_evaluation(
 	behav_steps = evaluation_metrics.pop("_behav_steps", None)
 	behav_names = evaluation_metrics.pop("_behav_names", None)
 	behav_action_names = evaluation_metrics.pop("_behav_action_names", None)
+	# v6fix7 P2 (chain order): pop the per-env first-achievement-step matrix + finished mask BEFORE
+	# the wandb log (big arrays). Same lifecycle as _cooc_* / _behav_*: always popped, only
+	# ACCUMULATED when the siege ChainOrderLog exists — strict no-op on the baseline path.
+	chain_first_step = evaluation_metrics.pop("_chain_first_step", None)
+	chain_finished = evaluation_metrics.pop("_chain_finished", None)
+	chain_names = evaluation_metrics.pop("_chain_names", None)
 	# the notebook + these logs live on gen_manager.task_generator (NOT gen_manager itself — the same
 	# holder distinction that the rehearsal bug tripped over on 2026-07-05). Resolve it once.
 	holder = getattr(gen_manager, "task_generator", None) or gen_manager
@@ -130,10 +143,37 @@ def run_session_evaluation(
 		except Exception as e:  # noqa: BLE001 - fingerprint must never break evaluation
 			print(f"  - [behav] skipped ({type(e).__name__}: {e}).")
 
+	# v6fix7 P2: accumulate directed chains (success 2/3-grams) + per-wall break-link distributions
+	# into the ChainOrderLog on the SAME holder, then deliver the frontier-advance signal to the
+	# notebook (P1a patience for active foci / blacklist escape for retired walls).
+	chain_log = getattr(holder, "_chain_log", None)
+	if chain_log is not None and chain_first_step is not None and chain_finished is not None:
+		try:
+			import numpy as np
+			notebook = getattr(holder, "_siege_notebook", None)
+			targets = notebook.chain_targets() if notebook is not None else {}
+			chain_log.add_session(
+				current_session_idx,
+				np.asarray(chain_first_step).astype(int).tolist(),
+				np.asarray(chain_finished).astype(bool).tolist(),
+				names=chain_names,
+				chain_targets=targets,
+			)
+			advanced = [t for t in targets if chain_log.frontier_advanced(t)]
+			if notebook is not None:
+				for t in advanced:
+					notebook.note_chain_progress(t)
+			print(
+				f"  - [chain] accumulated chain order for session {current_session_idx}; "
+				f"tracked walls={sorted(targets)}; frontier advanced={advanced or 'none'}."
+			)
+		except Exception as e:  # noqa: BLE001 - chain mining must never break evaluation
+			print(f"  - [chain] skipped ({type(e).__name__}: {e}).")
+
 	if config.use_wandb:
 		eval_log_data = {"session": current_session_idx, "global_env_steps": global_env_steps}
 		for key, value in evaluation_metrics.items():
-			eval_log_data[f"evaluation/{key}"] = value
+			eval_log_data[f"{wandb_prefix}/{key}"] = value
 		wandb.log(eval_log_data)
 
 	return rng, evaluation_metrics

@@ -27,7 +27,11 @@ from dicode.evolution_efficient import (
 )
 from dicode.logging_utils import log_session_summary
 from dicode.runtime_analysis import tracker
-from dicode.selection import append_rehearsal_tasks, sample_tasks_for_training
+from dicode.selection import (
+    append_rehearsal_tasks,
+    apply_siege_focus_quota,
+    sample_tasks_for_training,
+)
 from dicode.setup import run_initial_seed_training, setup_experiment
 from dicode.training import run_session_training
 
@@ -172,6 +176,11 @@ def main(config: DictConfig):
         )
         sampled_task_ids = new_task_ids + sampled_from_archive
 
+        # v6fix7 P1b SIEGE QUOTA (siege only): while a wall is under siege, guarantee it keeps
+        # training slots — a saturated drill's p*(1-p)->0 must not evict it before the held-out SR
+        # transfers. Swaps within the batch (size unchanged). Strict no-op when siege off / no focus.
+        sampled_task_ids = apply_siege_focus_quota(gen_manager, config, sampled_task_ids)
+
         # v6 §3.6 REHEARSAL (siege only): APPEND rehearsal levels for protected (conquered) chains
         # WITHOUT shrinking the siege batch above — the siege allotment keeps its full size; rehearsal
         # is extra, clamped to rehearsal_total_cap (e.g. 24). Strict no-op when siege is off / no
@@ -238,6 +247,8 @@ def main(config: DictConfig):
         _cooc_holder = getattr(gen_manager, "task_generator", None) or gen_manager
         if getattr(_cooc_holder, "_cooc_log", None) is not None:
             try:
+                # v6fix7 P1d: distinct wandb prefix — this held-out eval must not interleave with
+                # the training loop's own evaluation/* metrics under the same keys (curve pollution).
                 rng, _siege_eval_metrics = run_session_evaluation(
                     config,
                     rng,
@@ -245,6 +256,7 @@ def main(config: DictConfig):
                     gen_manager,
                     current_session_idx,
                     global_env_steps,
+                    wandb_prefix="evaluation_heldout",
                 )
             except Exception as e:  # noqa: BLE001 - co-occurrence/behaviour collection must never break training
                 print(f"  - [cooc/behav] siege collection eval skipped ({type(e).__name__}: {e}).")

@@ -125,6 +125,36 @@
 
 ---
 
-## 附录：SCALAR / CODE-SHARP PDF 精读补充
+## 附录：SCALAR / CODE-SHARP PDF 精读补充（2026-07-06，本地 PDF 全文精读）
 
-（待补：本地 PDF 精读结论 —— 评测口径、与 v6 的逐点对比、论文里如何回应。）
+### A. SCALAR（arXiv 2603.09036，43 页）
+
+**方法**：LLM(GPT-5 Thinking)读游戏手册→提 STRIPS 式技能算子⟨PRE,EFF+,EFF−⟩→翻译成 JAX termination/reward 代码；STRIPS planner 排序技能；PPO 为**每个技能训独立 actor-critic 头**（MoE 共享 backbone）；**Frontier Checkpointing**=前置首次成立时存环境状态，训练 reset 以 α=0.9 概率直接恢复（状态空投）；**Pivotal Trajectory Analysis(PTA)**=首次非零 SR 时取 10 条成功轨迹喂 LLM 修正算子的资源系数/缺失前置（一次性触发，修完重训）。技能 30% SR 即毕业。LLM 全程不在执行环内（总成本 $2.83）。
+
+**★评测口径（五重不可横比）**：①**per-goal 专家**：每个目标任务（Collect Diamond 等）单独跑 1B 帧、只训该目标关键路径技能；基线反而是全成就通才（作者自认结构优势 p31）。②测试时=**planner 排好的技能序列+per-skill 头逐段切换**，非裸 policy。③**88.2% diamond 是 Craftax-Classic**（钻石保底、10k 步上限）；完整 Craftax 没报 diamond，最深 **Enter Gnomish Mines 9.1%**（第 2 层），去掉 Frontier Checkpointing 掉到 1.3%，**第 3-9 层全空白**。④所有方法观测加了"最近方块/怪物相对位移"增强。⑤256 评测 episode，非 1024 held-out。eval 从真实初始态跑（FC 仅训练用），train−eval gap 有监控（α≤0.99 时 <2%，α=0.999 时 12-18% 过拟合，列为未解 limitation）。
+
+**与 v6 的撞车/佐证**：
+- 真撞点=**PTA**（从 student 轨迹修 LLM 先验，消融显著：diamond 88→67、Mines 9→0）。区分：PTA 一次性触发、修**算子规格**、per-goal 独立运行；我们是跨 session 纵向**能力画像**（掌握/饱和/遗忘/早期误判）、驱动攻坚排程、student 测试零辅助。
+- **给 v6 的外部佐证**：Enter Dungeon 上 SCALAR 58% 反输基线 90-96%（planner 判定战斗非必要前置就完全不练→丢顺带迁移）= v5 负结果同型证据；毕业阈值实验（前置练得越熟目标越强）支持 SR 定压设计。
+- 它的"解法"是**把 scaffold 保留到测试时**（planner 拼链），从不要求裸 policy 内化整条链 —— 与我们的根本分野。
+
+### B. CODE-SHARP（arXiv 2602.10085，64 页，Cully 组）
+
+**方法**：FM(Qwen3-235B)读环境**源码**，维护 SHARP 档案 DAG（每个 SHARP=Python 程序：成功条件+有序(条件,前置 SHARP)对）；**递归转移算子每个环境 step 沿前置链下钻**到第一个条件满足的技能，条件化单一 goal-conditioned PPO-TrXL 并发奖励——**技能程序训练和测试都在环内路由**。发现环=propose/implement/judge 三段 FM 流水线+learnability 准入闸（policy 副本试训 Δρ>0.05 才收）；进化环=按 P∝(1−ρ) 采样变异条件排序/前置。opportunistic sampling+adaptive reward scaling（消融逐项显著）。
+
+**★评测口径（完全不可横比）**：①Classic 对比实验=per-achievement SR、**技能路由程序在环**（成就→语义最近技能条件化 agent），中位数 94.8% vs OMNI 15.8%；Collect Diamond 均值 16%。②Extended 长跑=**强制最低血量阈值（agent 不死）**+测试时 **FM 写 policies-in-code 规划器**编排，自定义 4 benchmark milestone 几何平均分 50.5 vs 重训基线 47.9。③深层实况（带全部辅助）：进 Mines 47-60%、杀 8 gnome 12.6%、**Sewers(第3层) 0.9%、enchantment table 0.1%、diamond 1.3%**，档案最深技能=进第 3 层；benchmark 设计只敢覆盖前四层。④"90+ 技能"含大量微技能（FaceLadderDown 之类）。**全程无 held-out mean return 指标。**
+
+**与 v6 的撞车/佐证**：
+- **★CODE-FRP 消融=「切链必败」已被同行发表**：层级链拍平成固定序列→Classic 94.8→38.9、XLand 79.2→6.1。v5 负结果不能再当独立发现，但这是 v6 motivation 的最强外部弹药。
+- per-skill SR 档案+failed proposals 历史=最接近 SiegeNotebook 的东西，但是**裸数值+失败清单**，无 LLM 诊断语义（无早期误判/焦点管理/遗忘检测）。
+- 无轨迹级分析（变异只看 rollout SR 结果）；链条完整性靠**测试时代码路由**维持，未内化进裸 policy。
+- FM-scaling 消融（Qwen3-30B 档案崩坏）反向说明 FM 质量是瓶颈 → 给多 FM auction 留动机空间。
+
+### C. 对 v6 的威胁评估结论
+
+1. **"深层墙已破"的表面印象可拆解**：两篇带全部结构性辅助也止步第 2-3 层（SCALAR 3 层以下空白；CODE-SHARP Sewers 0.9%）。**在"单一裸 policy、真实初始态、held-out mean return"口径下，墙没有任何人碰过** —— 且"结构性辅助换不来深度"反而强化 v6 动机。
+2. **PTA 概念撞车需主动区分**（见上）；引用定位="轨迹反馈修正 spec 的先例"，我们的贡献收窄为"持久攻坚诊断+保链课程使裸 policy 内化长链"。
+3. **CODE-FRP 抢发"切链必败"**：v5 负结果降级为 motivation（连同 SCALAR Enter Dungeon 反例共三个独立外部证据）。
+4. **多 LLM auction 维度两篇均未触碰**，仍零竞品。
+5. **论文摆法**：单列"评测口径对照表"（单一 policy？测试时辅助？初始态？指标？环境数？可死亡？），让口径差异本身成为我们 setting 更硬的论据。可安全引用的数字：SCALAR 基线行 per-achievement SR；CODE-SHARP 的 CODE-FRP 消融和"带辅助仍 Sewers 0.9%/diamond 1.3%"。
+6. **两条可借鉴机制**：① SCALAR 的 train−eval gap 监控 → 直接可做我们"隔离演练→整合考试"的量化指标（scaffold 态 SR 与裸 eval SR 差距不收敛=没内化）；② CODE-SHARP 的 opportunistic sampling 思想 → 对 eval 中偶然攻破 deep 成就的 episode 加权回放给 modeler。

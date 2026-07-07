@@ -89,6 +89,92 @@ def sample_tasks_for_training(
     return sampled_task_ids
 
 
+def apply_siege_focus_quota(gen_manager, config, batch: list[str]) -> list[str]:
+    """v6fix7 P1b — guarantee the active siege walls keep training slots (drill no-eviction fix).
+
+    The audit found a structural conflict: a drill level that reaches high trained SR gets
+    priority_score = p*(1-p) -> 0 and is systematically squeezed out by PLR ranking — "the drill is
+    learned so it is discarded" — while the wall's HELD-OUT SR has not transferred yet and still
+    needs the clean repetitions. This post-processor enforces a floor on presence (which subsumes a
+    probability floor: guaranteed slots are strictly stronger):
+
+      while any focus is active, at least ``siege_focus_quota`` (default 4) levels in the training
+      batch must TEACH an active focus (level_meta tags first, Relevant-achievements parse as
+      fallback). If the PLR sample fell short, the newest focus-teaching ACTIVE levels are swapped
+      in, replacing the lowest-priority non-focus picks — batch size unchanged.
+
+    The guarantee is tied to "wall not conquered yet": foci leave the notebook on conquest (or
+    retirement), which automatically withdraws the quota — no saturation babysitting. Strict no-op
+    when siege is off / no active focus / quota already met, so baseline & v5y are byte-unchanged.
+    """
+    holder = getattr(gen_manager, "task_generator", None) or gen_manager
+    notebook = getattr(holder, "_siege_notebook", None)
+    if notebook is None or not batch:
+        return batch  # siege off — byte-for-byte silent no-op
+    foci = {s.lower() for s in notebook.focus_skills()}
+    if not foci:
+        return batch
+
+    dm = config.dicode_manager
+    quota = int(getattr(dm, "siege_focus_quota", 4) or 0)
+    if quota <= 0:
+        return batch
+
+    from dicode.dreaming.auction_integration import parse_relevant_achievements
+
+    def _teaches_focus(data: dict) -> bool:
+        tags = {
+            str(data.get("siege_wall", "")).lower(),
+            str(data.get("drill_target", "")).lower(),
+        }
+        if tags & foci:
+            return True
+        return bool(parse_relevant_achievements(data.get("description", "") or "") & foci)
+
+    with gen_manager.archive._lock:
+        node_data = {
+            nid: dict(d) for nid, d in gen_manager.archive.graph.nodes(data=True)
+        }
+
+    in_batch_teaching = [t for t in batch if _teaches_focus(node_data.get(t, {}))]
+    shortfall = quota - len(in_batch_teaching)
+    if shortfall <= 0:
+        return batch
+
+    # Candidates: ACTIVE focus-teaching levels not already in the batch, newest lineage first.
+    candidates = sorted(
+        (
+            nid for nid, d in node_data.items()
+            if d.get("is_active") and nid not in batch and _teaches_focus(d)
+        ),
+        key=lambda nid: node_data[nid].get("session_created", -1),
+        reverse=True,
+    )[:shortfall]
+    if not candidates:
+        print(
+            f"  [Sampling][siege-quota] shortfall {shortfall} but no active focus-teaching level "
+            "outside the batch — nothing to swap in."
+        )
+        return batch
+
+    # Swap out the LOWEST-priority non-focus batch entries (never a focus-teaching one).
+    swappable = sorted(
+        (t for t in batch if t not in in_batch_teaching),
+        key=lambda t: node_data.get(t, {}).get("priority_score", 0.0),
+    )[: len(candidates)]
+    if not swappable:
+        return batch
+    out = list(batch)
+    for victim, incoming in zip(swappable, candidates):
+        out[out.index(victim)] = incoming
+    print(
+        f"  [Sampling][siege-quota] foci={sorted(foci)}: batch had {len(in_batch_teaching)}/"
+        f"{quota} focus-teaching level(s); swapped in {[c for _, c in zip(swappable, candidates)]} "
+        f"for {swappable}."
+    )
+    return out
+
+
 def append_rehearsal_tasks(
     gen_manager, config, siege_batch: list[str]
 ) -> list[str]:

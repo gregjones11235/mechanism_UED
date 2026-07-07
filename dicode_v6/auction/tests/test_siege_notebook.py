@@ -203,8 +203,10 @@ def test_at_most_max_focus_parallel_walls(nb_path):
     nb.apply_llm_update(1, _mature_profile({walls[0]: 8.0}), {"focus": walls[0]},
                         num_snapshots=MATURITY_MIN_SNAPSHOTS)
     # keep every active wall above the expand SR AND rising (so none stalls out), proposing all four.
+    # v6fix7: stay BELOW mastered_sr (70) — holding at mastered for 2 snapshots now CONQUERS a wall
+    # and retires it gracefully, which is not what this cap test is about.
     for i, s in enumerate(range(2, 6)):
-        base = FOCUS_EXPAND_SR + 20 + i * 5  # rising each session -> no stall
+        base = FOCUS_EXPAND_SR + 1 + i * 4  # 51, 55, 59, 63: rising, above expand, below mastered
         prof = _mature_profile({w: base for w in walls})
         nb.apply_llm_update(s, prof, {"foci": [{"skill": w} for w in walls]},
                             num_snapshots=MATURITY_MIN_SNAPSHOTS)
@@ -212,15 +214,17 @@ def test_at_most_max_focus_parallel_walls(nb_path):
 
 
 def test_stalled_focus_retires_and_frees_slot(nb_path):
-    # A focus that stalls FOCUS_MIN_STALL_SESSIONS sessions retires (frees a slot); it is NOT retired
-    # by any SR threshold. After retirement a new wall can be opened.
+    # v6fix7 P1a: retirement now fires after LADDER_L4 consecutive FROZEN sessions (whole-tree
+    # no-progress), not the legacy stall ratchet; it is still never retired by any SR threshold.
+    # After retirement a DIFFERENT wall can be opened at once (the retired one is in cooldown).
+    from auction.siege_notebook import LADDER_L4
     nb = SiegeNotebook(nb_path)
     _set_focus(nb, 1, "defeat_orc_mage")
-    for s in range(2, 2 + FOCUS_MIN_STALL_SESSIONS + 1):
+    for s in range(2, 2 + LADDER_L4 + 1):
         nb.apply_llm_update(
             s, _mature_profile({"defeat_orc_mage": 8.0}), None, num_snapshots=MATURITY_MIN_SNAPSHOTS,
         )
-    assert nb.focus_skills() == []  # stalled -> retired, slot free
+    assert nb.focus_skills() == []  # frozen through the ladder -> retired, slot free
     nb.apply_llm_update(
         99, _mature_profile({"defeat_troll": 3.0}),
         {"foci": [{"skill": "defeat_troll"}]}, num_snapshots=MATURITY_MIN_SNAPSHOTS,
@@ -311,15 +315,16 @@ def test_experience_recorded_incrementally_and_protects(nb_path):
         None, num_snapshots=MATURITY_MIN_SNAPSHOTS,
     )
     snap = nb.snapshot()
-    assert nb.focus == "defeat_gnome_warrior"          # NOT retired by SR (only stall retires)
+    assert nb.focus == "defeat_gnome_warrior"          # NOT retired by SR (only the ladder retires)
     assert len(snap["verified_chains"]) == 1
     chain = snap["verified_chains"][0]
     assert chain["target"] == "defeat_gnome_warrior"
     assert chain["category"] == "combat_milestone"     # §2.5 combat -> milestone
+    assert chain["status"] == "progress"               # v6fix7 (#8): progress, NOT a conquest
     assert set(chain["links"]) == {"collect_diamond", "make_diamond_sword"}
-    # target + links all protected for rehearsal (§3.6)
-    assert "defeat_gnome_warrior" in snap["protected_set"]
-    assert "collect_diamond" in snap["protected_set"]
+    # v6fix7 (#8): nothing protected until the wall HOLDS at mastered for 2 consecutive snapshots —
+    # fix4 poisoned protected/verified at 44% via exactly this path.
+    assert snap["protected_set"] == []
 
 
 def test_experience_dedup_by_target_updates_in_place(nb_path):

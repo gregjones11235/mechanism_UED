@@ -46,6 +46,36 @@ def attempt_to_activate_task(
     active_count = gen_manager.archive.active_task_count
     capacity = config.dicode_manager.active_task_capacity
 
+    # v6fix7 P1b: a SIEGE level (tagged via <level_meta> as attacking / drilling an ACTIVE focus)
+    # skips the learnability score comparison — a clean drill saturates fast, its p*(1-p) collapses,
+    # and the CAS would otherwise refuse to activate exactly the level the siege needs. It still
+    # evicts the worst task when at capacity. Strict no-op when siege is off / no focus / untagged.
+    try:
+        _holder = getattr(gen_manager, "task_generator", None) or gen_manager
+        _nb = getattr(_holder, "_siege_notebook", None)
+        if _nb is not None:
+            _foci = {s.lower() for s in _nb.focus_skills()}
+            if _foci:
+                with gen_manager.archive._lock:
+                    _node = dict(gen_manager.archive.graph.nodes.get(new_task_id, {}))
+                _tags = {
+                    str(_node.get("siege_wall", "")).lower(),
+                    str(_node.get("drill_target", "")).lower(),
+                }
+                if _tags & _foci:
+                    if gen_manager.archive.active_task_count >= capacity:
+                        _worst_id, _ = _find_worst_active_task(gen_manager.archive)
+                        if _worst_id is not None:
+                            gen_manager.archive.set_task_active_status(_worst_id, False)
+                    gen_manager.archive.set_task_active_status(new_task_id, True)
+                    print(
+                        f"  [Activation][siege] {new_task_id} force-activated "
+                        f"(attacks focus {sorted(_tags & _foci)}; learnability comparison skipped)."
+                    )
+                    return True
+    except Exception as _e:  # noqa: BLE001 — activation must never crash the training loop
+        print(f"  [Activation][siege] exemption check failed ({_e}); falling back to normal CAS.")
+
     score_to_beat = -np.inf
     worst_task_id = None
 

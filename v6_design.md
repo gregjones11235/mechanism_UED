@@ -455,6 +455,77 @@ dir `v6fix6_s0`);带上述全部修复。待验证命题=隔离演练能否把 m
 
 ---
 
+### 3.11 v6fix7:攻坚生命周期 + 生态位豁免 + 时序链挖掘(2026-07-06/07,全量实现,待上机)
+
+完整设计见 `fable_research_reports/v6fix7整体修复设计方案.md`;动机 = fix6 审计的 8 项残留隐患
+([[v6fix6-audit-residual-hazards]]) + 前沿调研确认"共现矩阵丢弃时序是最大 naive 点"
+([[frontier-landscape-2026-07-long-chain-curriculum]])。全部改动 siege-gated,baseline 路径字节不变。
+
+**P0 关卡元数据 + validator(隔离演练从"零代码保障"到硬约束)**:
+- `auction/level_meta.py`:proposer 必须在 reasoning 后输出 `<level_meta>{"type","drill_target",
+  "siege_wall"}</level_meta>` 严格 JSON;siege off 时占位符渲染空串(prompt 字节不变)。TYPE 自此
+  机器可读,是 P1b 分区保送与 validator 的前提。
+- `auction/level_validator.py`:四规则(drill 必留执行链/禁 gift 成品;siege 墙禁入 Completed;drill
+  的 Relevant 只含目标技能+其链环;World 供给 Relevant 所需)。违规→拒绝文本回炉重 prompt(≤2 次)→
+  仍违规走 `apply_fallback_fixes` 代码改写兜底,**永不断训练**;违规率是监控指标(`[siege][validator]`)。
+- prompt 矛盾清理:persona 加 PRECEDENCE 块(siege/drill 规则 > TYPE 定义 > 通用 scaffold 原则),
+  scaffold/压缩原则加攻坚豁免,drill 豁免 Relevant superset 规则。
+
+**P1a 攻坚生命周期 = 自适应耐心 + 升级阶梯(替代固定 stall 退休)**:
+- ★frozen 的定义收紧为**全树无进展**:焦点 SR 无新最好(+3pp 棘轮)且 6 点窗口斜率 ≤1pp/session、
+  所有链环 SR 无新最好、断链前沿未前移(P2 信号)——**任一在动,frozen 清零,耐心无上限**(tier4:SR 恒
+  0 但地基在涨/死得更深=健康长攻坚)。三信号各带门槛+棘轮,1024 局 eval 下纯噪声触发均在 4σ 外。
+- 阶梯 L1(3 frozen)=换形或书面辩护 / L2(6)=系统强制换攻击形态 / L3(9)=强制实质新战术(代码比对拒
+  rephrase)/ L4(12)=退休+冷却;累计退休 ≥2 → 黑名单,唯"新证据"(链环 SR 升 或 断链前沿前移)解锁。
+  退休注册表(次数/SR 快照/失败战术≤3条/链快照)渲染进 modeler journal(RETIRED WALLS,fix4 的
+  "retire→同 session 重开"病根=历史不可读)。
+- conquest 收紧:连续 2 个快照 ≥mastered 才 VERIFIED(fix4 曾 44% 就写 verified 毒化 tier4 地基)。
+
+**P1b 生态位豁免(drill/siege 候选不再被通用筛选误杀)**:`<level_meta>` 标记的攻墙/演练候选在
+`_coop_select` 分区保送,训练采样期焦点配额+priority floor;新增 **DRILL-TRANSFER GAP** 信号(SCALAR
+train-eval gap 挪用):drill 关内 SR≥90% 而墙 held-out SR 落后 ≥30pp → 提示 modeler"沙盒赢了不迁移",
+是 drill 的毕业/收敛触发器。
+
+**P1c style_note 生命周期(AutoManual-lite,防笔记变"未验证的自嗨")**:modeler 每 focus 必填
+`evidence_check ∈ {supported, contradicted, no_evidence}`;contradicted → journal 标 [★CONTRADICTED]
+强制重写(拒 rephrase);连续多 session 无证据 → [STALE] 要求从机制+最新数据重推导。
+
+**P1d 毛刺**:`run_session_evaluation` 加 `wandb_prefix`,训练内 Step 4b 走 `evaluation_heldout/*`
+(结束 fix6 审计发现的 evaluation/* 双写污染,判胜负曲线口径唯一化);cooc 预筛 `support>=0` 恒真 →
+`>=1`。
+
+**★P2 时序链挖掘 + 断链前沿(把 (c) 从"相关"升级为"有向+断链定位",本节核心增量)**:
+- **采集**(craftax_evaluation,与 cooc 同一 jit):scan carry 末尾加 `first_ach_step[num_envs,67]`
+  (每步读 `env_state.achievements`,`where(ach & first<0 & active, t, first)`;info 只在 done 步带成就,
+  拿不到顺序,必须读 state)。`_chain_first_step/_chain_finished/_chain_names` 键生命周期与 `_cooc_*`
+  完全一致(总是算、wandb 前必 pop、仅 `_chain_log` 存在才累积)。★列序=Achievement enum **value 序**,
+  与 cooc 的 info-key 序不同,靠 names 显式重映射对齐。
+- **落盘**(`auction/chain_order_log.py`,与 cooc 同构持久化/幂等/MIN_SR=3% 护栏):
+  - 成功局:按首达成步排序 → 相邻**有向 2-gram**(67×67)+3-gram(稀疏,当前仅论文/消融物料);
+    `dominant_path` 从墙向后贪心走 2-gram 图(≥15% 份额,≤3 跳)。
+  - 失败局(对每面墙的有序链):**断链分布** = 最深达成环(modal last_link,渲染用)+缺失环 +
+    **mean_depth = 达成环数均值**。★深度用"达成环数"而非"最深环位置"——**序不变量**,LLM 每 session
+    重提 prereq_tree,只重排不重置对比历史;可比性判据=链环**集合**相等(增删环才重置,分母变了理应重置)。
+    空链焦点(树未回填)直接跳过,不产生"(none) 100%"垃圾条目。(此两点为 2026-07-07 审计修复,防
+    fail-quiet。)
+  - **断链前沿(FRONTIER)前移判定**:最新 session 的 mean_depth ≥ 历史最好(棘轮)+0.25 环,且两边失败局
+    ≥64、链集合相同 → `frontier_advanced=True`。n≈900 时 mean_depth 采样 se≈0.03,0.25≈8σ,抗噪充分。
+    fail_hist 上限 1200 条(~153 session × ≤6 墙,保全程历史,防棘轮短窗化)。
+- **消费(两条线)**:① 前移 → `notebook.note_chain_progress(墙)`:active focus 上=frozen 清零(P1a 耐心
+  信号 (c));retired 墙上=注册表 flag,`_has_new_evidence` 认作黑名单解锁证据(退休墙用退休时冻结的
+  `links_at_retirement` 快照持续被监视,时序稳定)。② modeler prompt 新增 **CHAIN EVIDENCE 块**(≤8 行,
+  附在 cooc hint 后不改 schema):主导成功路径(有向、真实时序)/失败局最常断在哪环缺哪环/前沿 ADVANCING
+  行("0% SR 但死得更深=真进度")。
+- **与 SkillGraph/SCALAR-PTA 的差异化**:链条证据来自 student 自己的 episode 时序,非图先验;断链分布
+  直接驱动焦点选择与耐心,独立可消融。
+
+**验收**:286 单测绿(oscar:dicode_v6fix7);wiring 测试(test_chain_wiring/test_behav_wiring)专防
+"写好没接线"复发。**上机计划**:审核完 prompt 清单 → 提交 fix7 新 run(job 3682819/fix6 不杀,双 GPU
+并行对照);监控新增 `[siege][validator]` 违规率、gap 曲线、`[siege][ladder]` 级别变迁、`[chain]` 断链
+分布/前移。判据不变(§3.8):tier3 战斗类 held-out 裸 SR 破 ~10% + H1"后攻的墙爬得更快"。
+
+---
+
 ## 4. 数据与复现
 - v5yA graphml:`/oscar/scratch/jzhu223/dicode_outputs/v5yA_s0_r2/task_graph.graphml`(670 节点,
   session_created / description / performance_history 字段);解析脚本 scratchpad/_parse_v5yA_levels.py。

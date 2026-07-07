@@ -265,6 +265,13 @@ class Modeler:
             # No length cap (user 2026-07-05): the prompt asks for tight prose, so trust it not to bloat.
             return str(raw_focus.get("style_note", ""))
 
+        def _evidence(raw_focus) -> str:
+            # v6fix7 P1c (AutoManual-lite): the LLM's self-audit of its own tactic against this
+            # session's REAL evidence (behaviour fingerprint / chain data). Unknown values coerce to
+            # "no_evidence" — the notebook then ages the note toward STALE instead of trusting it.
+            v = str(raw_focus.get("evidence_check", "")).strip().lower()
+            return v if v in ("supported", "contradicted", "no_evidence") else "no_evidence"
+
         foci = []
         seen: set[str] = set()
         # multi-focus form takes precedence when present.
@@ -280,6 +287,7 @@ class Modeler:
                     "skill": skill.lower(),
                     "prereq_tree": _clean_tree(f.get("prereq_tree")),
                     "style_note": _style(f),
+                    "evidence_check": _evidence(f),
                 })
         # legacy single-focus form (still emitted by the current prompt).
         focus = raw_su.get("focus")
@@ -288,6 +296,7 @@ class Modeler:
                 "skill": focus.lower(),
                 "prereq_tree": _clean_tree(raw_su.get("prereq_tree")),
                 "style_note": _style(raw_su),
+                "evidence_check": _evidence(raw_su),
             })
         return {"foci": foci}
 
@@ -585,6 +594,21 @@ FOCUS STABILITY (do not thrash):
   when the current focus has clearly stalled for several sessions with no progress, or once it is
   conquered. (The system also enforces this in code — an early switch will simply be ignored.)
 
+THE ESCALATION LADDER (patience is adaptive — obey the level shown in the journal):
+- A focus only counts as "frozen" when its WHOLE attack tree shows no progress — the wall's SR flat
+  AND every chain link flat AND failure episodes not dying any deeper. While ANYTHING is moving,
+  patience is unlimited: a deep wall sitting at 0% while its foundations climb is a HEALTHY long
+  siege, not a stall — do not abandon or reshape it.
+- When the journal marks a focus with a LADDER level, you MUST respond at that level:
+    L1: switch the attack FORM (DEPTH<->CONSOLIDATE) — or DEFEND staying, with a concrete NEW reason
+        and plan written into that focus's style_note. Silent continuation is not allowed.
+    L2 (forced): the system has switched the attack form for that wall; recommend the OTHER form.
+    L3 (forced): write a MATERIALLY DIFFERENT style_note (a rephrase of the old tactic is rejected by
+        code); state what you abandon and what you try instead.
+    L4: the focus retires with a cooldown. Reopening it later requires a tactic genuinely different
+        from the archived failed ones (the journal shows them under RETIRED WALLS) — propose it only
+        with something new, or siege a different wall.
+
 THE PREREQUISITE CHAIN (backtrack the focus):
 - For the current focus, propose its PREREQUISITE CHAIN: the mix of reach/gear/survival skills the
   student must have to even attempt the wall. Infer each link from (a) game MECHANICS (what the fight
@@ -609,7 +633,8 @@ a solid SR before a slot frees for another). Emit a "foci" LIST:
     "foci": [
       { "skill": "<a hard-wall skill you are attacking (a real stuck skill, NEVER an easy/mastered one)>",
         "prereq_tree": [ { "skill": "<a prerequisite skill>", "role": "<short role note>" }, ... ],
-        "style_note": "<the transferable attack know-how for THIS wall — see below>" },
+        "style_note": "<the transferable attack know-how for THIS wall — see below>",
+        "evidence_check": "<supported | contradicted | no_evidence — see THE STYLE NOTE below>" },
       ...  // up to 3 walls; keep the ones from your journal you still want, add at most a new one
     ]
   }
@@ -634,6 +659,16 @@ THE STYLE NOTE (§3.1 — this is the transferable SELF-STYLE, the whole point o
   clauses of concrete tactics over prose. Update it as understanding grows (the journal shows your
   previous note as "style-so-far"; refine it, don't restate it). No fluff, no game-lore, no restating
   the skill name.
+- ★EVIDENCE LIFECYCLE (per focus, REQUIRED field "evidence_check"): audit your CURRENT tactic against
+  THIS session's real evidence before you refine it:
+    "supported"    — the behaviour/SR data actively backs the tactic (say so only when it does);
+    "contradicted" — the data shows the tactic is NOT what wins (e.g. your note says melee-rush but
+                     the winning episodes are ranged) — then REWRITE the note (a materially different
+                     tactic; the system rejects a rephrase);
+    "no_evidence"  — nothing new to judge by this session. A note that stays unsupported for several
+                     sessions is marked STALE in your journal: re-derive it from mechanics + the
+                     latest data instead of continuing to refine an unverified guess.
+  Never claim "supported" without pointing at the evidence in your reasoning.
 """
 
 

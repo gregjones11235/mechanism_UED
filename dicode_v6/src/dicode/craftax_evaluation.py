@@ -104,6 +104,12 @@ def make_evaluate(config, env, env_params):
 		# carry element so every existing final_carry[...] index below is unchanged.
 		accumulated_action_hist = jnp.zeros((num_envs, action_dim), dtype=jnp.float32)
 
+		# v6fix7 P2 (chain order): per-env FIRST step each achievement was reached, -1 = never. Read
+		# straight off env_state.achievements every step (info only carries achievements at the done
+		# step, so it cannot give order). Appended as the LAST carry element, same trick as above.
+		ach_dim = env_state.achievements.shape[-1]
+		first_ach_step = jnp.full((num_envs, ach_dim), -1, dtype=jnp.int32)
+
 		init_runner_state = (
 			train_state,
 			env_state,
@@ -119,6 +125,7 @@ def make_evaluate(config, env, env_params):
 			accumulated_stats,
 			rng,
 			accumulated_action_hist,
+			first_ach_step,
 		)
 
 		# --------------------------
@@ -141,6 +148,7 @@ def make_evaluate(config, env, env_params):
 				acc_stats,
 				rng,
 				acc_action_hist,
+				first_ach_step,
 			) = carry
 
 			# ... (Copy logic from make_train's _env_step) ...
@@ -219,6 +227,13 @@ def make_evaluate(config, env, env_params):
 			action_onehot = jax.nn.one_hot(action, acc_action_hist.shape[1], dtype=jnp.float32)
 			new_acc_action_hist = acc_action_hist + action_onehot * active_mask[:, None]
 
+			# 2c. v6fix7 P2: record the FIRST step each achievement flips true, masked to unfinished
+			# envs via the same active_mask (so the step where done fires still counts, and nothing
+			# after it can — matching the reward/length convention). first<0 keeps only the first hit.
+			ach_now = next_env_state.achievements.astype(jnp.bool_)
+			newly = ach_now & (first_ach_step < 0) & (active_mask > 0)[:, None]
+			new_first_ach_step = jnp.where(newly, step_env_currentloop, first_ach_step)
+
 			# 3. Accumulate Info/Achievements
 			# We iterate over every key in 'info' (Achievements, discount, etc.)
 			# If info contains {k: v}, we do: acc[k] += v * active_mask
@@ -249,6 +264,7 @@ def make_evaluate(config, env, env_params):
 				new_acc_stats,
 				rng,
 				new_acc_action_hist,
+				new_first_ach_step,
 			), _
 
 		(final_carry), _ = jax.lax.scan(
@@ -324,6 +340,14 @@ def make_evaluate(config, env, env_params):
 			metrics["_behav_action"] = multihot.T @ final_action_hist    # [num_ach, action_dim]
 			metrics["_behav_steps"] = multihot.T @ lengths_for_behav     # [num_ach]
 
+		# v6fix7 P2 (chain order): the per-env first-achievement-step matrix + finished mask, for the
+		# CPU-side ChainOrderLog (directed 2/3-gram chains from successes, break-link mining from
+		# failures). Column order == craftax Achievement enum VALUE order (state.achievements index),
+		# NOT the info-key order used by _cooc_* — main() attaches _chain_names accordingly. POPPED by
+		# run_session_evaluation before wandb logging, same lifecycle as _cooc_* / _behav_*.
+		metrics["_chain_first_step"] = final_carry[14]   # [num_envs, num_ach] int32, -1 = never
+		metrics["_chain_finished"] = finished_mask       # [num_envs] bool
+
 		return metrics
 
 	# Return the jittable evaluate() plus the STATIC co-occurrence column labels (jit-external), so the
@@ -366,6 +390,15 @@ def main(config, rng, train_state=None, eval_embedding=None):
 		from auction.behavior_fingerprint_log import ACTION_NAMES
 		metrics["_behav_action_names"] = list(ACTION_NAMES)
 		metrics["_behav_names"] = cooc_names  # row labels (achievements), same as cooc
+	# v6fix7 P2: attach the STATIC column labels for _chain_first_step. Its columns are indexed by
+	# craftax Achievement enum VALUE (state.achievements), which is a DIFFERENT order from the
+	# info-key order in cooc_names — label explicitly so ChainOrderLog remaps by name and a future
+	# enum reorder can't silently misalign the chains.
+	if "_chain_first_step" in metrics:
+		from craftax.craftax.constants import Achievement
+		_val_to_name = {a.value: a.name.lower() for a in Achievement}
+		_n_cols = int(metrics["_chain_first_step"].shape[-1])
+		metrics["_chain_names"] = [_val_to_name.get(i, f"unknown_{i}") for i in range(_n_cols)]
 	return metrics
 
 

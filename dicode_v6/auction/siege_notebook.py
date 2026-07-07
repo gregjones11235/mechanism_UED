@@ -89,11 +89,44 @@ MATURITY_SKILL_SR = 50.0       # a skill counts toward maturity once it is at/ab
 
 # §3.5 focus-switch minimum condition: switch only after the focus has gone this many consecutive
 # recorded sessions without improving (anti-thrash guard).
+# v6fix7 P1a: retained for the LEGACY stall counter (logging/back-compat); ladder escalation and
+# retirement are driven by the FROZEN counter below, not by this.
 FOCUS_MIN_STALL_SESSIONS = 10
 
 # How much the focus's SR must rise between two recorded sessions to count as "improving" (resets the
 # stall counter). Small, to tolerate eval noise but still register real progress.
 FOCUS_IMPROVE_PP = 3.0
+
+# --- v6fix7 P1a: ESCALATION LADDER (adaptive patience; user 2026-07-06) ----------------------------
+# The old binary retire/reopen loop watched ONLY the focus's own SR: a tier4 wall whose SR sits at 0
+# while its foundations climb was mis-read as "stalled", and fix4's iron-pickaxe siege showed the
+# retire->same-session-reopen cycle. The ladder counts FROZEN sessions instead — a session is frozen
+# only when the WHOLE attack tree shows no progress (focus SR flat AND every link flat AND no
+# chain-frontier advance from the failure-episode signal). Patience is therefore unbounded while
+# anything measurable is moving; the ladder escalates the response only on total freeze:
+#   L1 (>= LADDER_L1 frozen): asked to switch form OR defend staying with a NEW plan (accountability);
+#   L2 (>= LADDER_L2): form switch FORCED (DEPTH<->CONSOLIDATE) — code overrides;
+#   L3 (>= LADDER_L3): tactic revision FORCED (style_note must be materially different);
+#   L4 (>= LADDER_L4): retire + cooldown; repeated retirements blacklist until NEW chain evidence.
+LADDER_L1 = 3
+LADDER_L2 = 6
+LADDER_L3 = 9
+LADDER_L4 = 12
+# Windowed-slope progress signal (defeats the fix4 best-SR ratchet: oscillation under an old best is
+# NOT progress; a genuine climb shows a positive recent slope even without a new best).
+SLOPE_WINDOW = 6           # readings in the regression window
+SLOPE_MIN_PP = 1.0         # pp/session; slope above this counts as live progress
+# Retirement aftermath.
+COOLDOWN_SESSIONS = 6      # a retired wall may not reopen for this many sessions
+BLACKLIST_RETIREMENTS = 2  # retired this many times -> blacklisted until new chain evidence
+# Conquest (#8 fix): verified_chains "verified" status + protected_set admission require the wall to
+# HOLD at mastered_sr for this many consecutive snapshots — a one-session +delta record is progress,
+# never conquest (fix4 wrote make_iron_pickaxe into verified_chains/protected at 44%).
+CONQUEST_CONSECUTIVE = 2
+# v6fix7 P1c (AutoManual-lite): a style_note that goes this many sessions without the modeler's
+# evidence_check reporting "supported" is marked STALE — the journal then demands re-derivation
+# instead of further refinement of an unverified guess (self-reinforcing-tactic loop breaker).
+NOTE_STALE_SESSIONS = 4
 
 # --- §2.6 MULTI-FOCUS (user 2026-07-05, 3rd round): parallel sieges + cross-achievement assist ------
 # The siege may attack up to MAX_FOCUS walls at once. A NEW focus may be opened only once ANY existing
@@ -138,6 +171,12 @@ class SiegeThresholds:
         # §2⑥ family-split rehearsal FORGETTING prefilter (user 2026-07-05)
         "forgetting_min_peak", "forgetting_drop_pp",
         "forgetting_combat_min_peak", "forgetting_combat_drop_pp",
+        # v6fix7 P1a escalation ladder + conquest
+        "ladder_l1", "ladder_l2", "ladder_l3", "ladder_l4",
+        "slope_window", "slope_min_pp",
+        "cooldown_sessions", "blacklist_retirements", "conquest_consecutive",
+        # v6fix7 P1c style_note lifecycle
+        "note_stale_sessions",
     )
 
     def __init__(
@@ -157,6 +196,16 @@ class SiegeThresholds:
         forgetting_drop_pp=FORGETTING_DROP_PP,
         forgetting_combat_min_peak=FORGETTING_COMBAT_MIN_PEAK,
         forgetting_combat_drop_pp=FORGETTING_COMBAT_DROP_PP,
+        ladder_l1=LADDER_L1,
+        ladder_l2=LADDER_L2,
+        ladder_l3=LADDER_L3,
+        ladder_l4=LADDER_L4,
+        slope_window=SLOPE_WINDOW,
+        slope_min_pp=SLOPE_MIN_PP,
+        cooldown_sessions=COOLDOWN_SESSIONS,
+        blacklist_retirements=BLACKLIST_RETIREMENTS,
+        conquest_consecutive=CONQUEST_CONSECUTIVE,
+        note_stale_sessions=NOTE_STALE_SESSIONS,
     ):
         self.mastered_sr = float(mastered_sr)
         self.unmastered_sr = float(unmastered_sr)
@@ -176,6 +225,17 @@ class SiegeThresholds:
         self.forgetting_drop_pp = float(forgetting_drop_pp)
         self.forgetting_combat_min_peak = float(forgetting_combat_min_peak)
         self.forgetting_combat_drop_pp = float(forgetting_combat_drop_pp)
+        # v6fix7 P1a escalation ladder + conquest.
+        self.ladder_l1 = int(ladder_l1)
+        self.ladder_l2 = int(ladder_l2)
+        self.ladder_l3 = int(ladder_l3)
+        self.ladder_l4 = int(ladder_l4)
+        self.slope_window = int(slope_window)
+        self.slope_min_pp = float(slope_min_pp)
+        self.cooldown_sessions = int(cooldown_sessions)
+        self.blacklist_retirements = int(blacklist_retirements)
+        self.conquest_consecutive = int(conquest_consecutive)
+        self.note_stale_sessions = int(note_stale_sessions)
 
     @classmethod
     def from_config(cls, dm) -> "SiegeThresholds":
@@ -210,6 +270,16 @@ class SiegeThresholds:
             forgetting_drop_pp=g("siege_forgetting_drop_pp", FORGETTING_DROP_PP),
             forgetting_combat_min_peak=g("siege_forgetting_combat_min_peak", FORGETTING_COMBAT_MIN_PEAK),
             forgetting_combat_drop_pp=g("siege_forgetting_combat_drop_pp", FORGETTING_COMBAT_DROP_PP),
+            ladder_l1=g("siege_ladder_l1", LADDER_L1),
+            ladder_l2=g("siege_ladder_l2", LADDER_L2),
+            ladder_l3=g("siege_ladder_l3", LADDER_L3),
+            ladder_l4=g("siege_ladder_l4", LADDER_L4),
+            slope_window=g("siege_slope_window", SLOPE_WINDOW),
+            slope_min_pp=g("siege_slope_min_pp", SLOPE_MIN_PP),
+            cooldown_sessions=g("siege_cooldown_sessions", COOLDOWN_SESSIONS),
+            blacklist_retirements=g("siege_blacklist_retirements", BLACKLIST_RETIREMENTS),
+            conquest_consecutive=g("siege_conquest_consecutive", CONQUEST_CONSECUTIVE),
+            note_stale_sessions=g("siege_note_stale_sessions", NOTE_STALE_SESSIONS),
         )
 
 
@@ -249,9 +319,13 @@ def _empty_notebook() -> dict:
     return {
         "foci": [],                  # list of focus dicts (see docstring); empty = no active siege
         "verified_chains": [],       # §2.5 success-experience entries (dedup by target; categorised)
-        "protected_set": [],         # list of skill names to rehearse (§3.6; populated on recording)
+        "protected_set": [],         # skill names to rehearse (§3.6; v6fix7: VERIFIED conquests only)
         "last_session": None,        # last session index this notebook was updated at
         "history": [],               # append-only log of focus changes, for offline inspection
+        # v6fix7 P1a: retirement registry — skill -> {count, last_session, sr_at_retirement,
+        # link_sr_at_retirement, failed_notes[<=3]}. Drives cooldown / blacklist / "what's different
+        # this time" checks in _reconcile_foci, and is rendered to the modeler (history made READABLE).
+        "retired": {},
     }
 
 
@@ -261,10 +335,20 @@ def _empty_focus(skill: str, session_idx: int, sr: float | None) -> dict:
         "skill": skill,
         "started_session": session_idx,
         "best_sr": sr,
-        "stall_sessions": 0,
+        "stall_sessions": 0,         # legacy ratchet counter (logging/back-compat only)
         "last_recorded_sr": None,    # §2① no success-experience recorded for it yet
         "prereq_tree": [],           # backtracked chain, filled by the LLM proposal + code flags
         "style_note": "",            # §3.1 self-style: LLM free-text attack know-how for this wall
+        # v6fix7 P1a ladder state:
+        "sr_history": [] if sr is None else [float(sr)],  # recent focus SR readings (slope signal)
+        "link_best": {},             # per-link best SR seen (foundation-progress signal)
+        "frozen_sessions": 0,        # consecutive whole-tree no-progress sessions (drives the ladder)
+        "ladder_level": 0,           # 0 none / 1 defend-or-switch / 2 forced form / 3 forced tactic
+        "last_siege_type": "",       # TYPE of the latest siege level built for this wall (from level_meta)
+        "consecutive_mastered": 0,   # consecutive snapshots at/above mastered_sr (conquest, #8 fix)
+        # v6fix7 P1c style_note lifecycle (AutoManual-lite):
+        "note_status": "active",     # active | stale (long unsupported) | contradicted (must rewrite)
+        "note_last_supported_session": None,  # last session evidence_check said "supported"
     }
 
 
@@ -357,6 +441,130 @@ class SiegeNotebook:
     def verified_chains(self) -> list[dict]:
         return list(self._nb.get("verified_chains", []))
 
+    # ---- v6fix7 P1a: ladder accessors + external progress/type signals --------------------------
+
+    def retired_registry(self) -> dict:
+        """skill -> retirement record (count / last_session / failed_notes / SR snapshots)."""
+        return dict(self._nb.get("retired", {}))
+
+    def ladder_level_of(self, skill: str) -> int:
+        """Current escalation-ladder level (0-3) of an active focus; 0 if not an active focus."""
+        for foc in self._nb.get("foci", []):
+            if str(foc.get("skill", "")).lower() == str(skill).lower():
+                return int(foc.get("ladder_level", 0))
+        return 0
+
+    def required_form(self, skill: str) -> str | None:
+        """L2 forced form switch: the level TYPE siege levels for this wall MUST use now.
+
+        Returns the OPPOSITE of the form that froze (DEPTH<->CONSOLIDATE) once the focus is at
+        ladder level >= 2 and we know which form was being used; None otherwise (no constraint).
+        """
+        for foc in self._nb.get("foci", []):
+            if str(foc.get("skill", "")).lower() != str(skill).lower():
+                continue
+            if int(foc.get("ladder_level", 0)) < 2:
+                return None
+            last = str(foc.get("last_siege_type", "")).upper()
+            if last == "CONSOLIDATE":
+                return "DEPTH"
+            if last == "DEPTH":
+                return "CONSOLIDATE"
+            return None  # form unknown -> cannot force a flip
+        return None
+
+    def note_siege_level_type(self, skill: str, level_type: str) -> None:
+        """Record the TYPE of the latest siege level built for this wall (from <level_meta>).
+
+        This is what makes the L2 forced flip computable — without knowing which form has been
+        attacking the wall, "switch form" is unenforceable.
+        """
+        changed = False
+        for foc in self._nb.get("foci", []):
+            if str(foc.get("skill", "")).lower() == str(skill).lower():
+                lt = str(level_type or "").upper()
+                if lt and foc.get("last_siege_type") != lt:
+                    foc["last_siege_type"] = lt
+                    changed = True
+        if changed:
+            self._save()
+
+    def note_chain_progress(self, skill: str, advanced: bool = True) -> None:
+        """P2 chain-frontier signal: failure episodes are dying DEEPER along this wall's chain.
+
+        For an ACTIVE focus: consumed (and cleared) by the next _update_focus_stall — an advance
+        counts as live progress, so the ladder never escalates while the student is measurably
+        getting closer (SR may still be 0; this is the tier4 patience signal).
+        For a RETIRED wall: recorded on its retirement-registry entry, where _has_new_evidence reads
+        it as the blacklist escape hatch (design §P1a: "blacklisted until new chain evidence OR the
+        break-link frontier advances"). Cleared on the wall's NEXT retirement (stale by then)."""
+        if not advanced:
+            return
+        for foc in self._nb.get("foci", []):
+            if str(foc.get("skill", "")).lower() == str(skill).lower():
+                foc["chain_frontier_advanced"] = True
+                self._save()
+                return
+        for rskill, reg in (self._nb.get("retired") or {}).items():
+            if str(rskill).lower() == str(skill).lower() and isinstance(reg, dict):
+                reg["chain_frontier_advanced"] = True
+                self._save()
+                return
+
+    def _is_conquered_and_held(self, skill: str, latest_profile: dict[str, float]) -> bool:
+        """True when this skill has a VERIFIED conquest entry and its current SR still holds at
+        mastered — conquered ground is not a wall; if it later slips, sieging it again is legal."""
+        for c in self._nb.get("verified_chains", []):
+            if isinstance(c, dict) and str(c.get("target", "")).lower() == str(skill).lower() \
+                    and c.get("status") == "verified":
+                sr = latest_profile.get(str(skill).lower())
+                return sr is not None and sr >= self.th.mastered_sr
+        return False
+
+    def _has_new_evidence(self, skill: str, reg: dict, latest_profile: dict[str, float]) -> bool:
+        """Blacklist escape hatch: has ANYTHING on this wall's chain moved since retirement?
+
+        True if the wall's own SR, or any link SR snapshotted at retirement, has risen by
+        >= focus_improve_pp — or if the P2 break-link frontier advanced (failure episodes dying
+        measurably deeper along the chain, delivered via note_chain_progress; SR may still be 0) —
+        new evidence earns the wall another attempt."""
+        if reg.get("chain_frontier_advanced"):
+            return True
+        base_sr = reg.get("sr_at_retirement")
+        cur = latest_profile.get(str(skill).lower())
+        if cur is not None and base_sr is not None and cur >= float(base_sr) + self.th.focus_improve_pp:
+            return True
+        for lskill, lsr0 in (reg.get("link_sr_at_retirement") or {}).items():
+            cur_l = latest_profile.get(str(lskill).lower())
+            if cur_l is not None and lsr0 is not None and cur_l >= float(lsr0) + self.th.focus_improve_pp:
+                return True
+        return False
+
+    def chain_targets(self) -> dict[str, list[str]]:
+        """P2: the walls whose failure episodes the ChainOrderLog should break-link-mine, each with
+        its ORDERED prereq chain (shallow -> deep): every ACTIVE focus (prereq_tree order) plus every
+        RETIRED wall (its chain snapshotted at retirement — kept under watch so a frontier advance
+        can unlock the blacklist via note_chain_progress even while nobody is sieging it). Retired
+        entries predating the snapshot field fall back to link_sr_at_retirement's key order (built in
+        prereq_tree order, dict order preserved)."""
+        out: dict[str, list[str]] = {}
+        for foc in self._nb.get("foci", []):
+            skill = foc.get("skill")
+            if isinstance(skill, str) and skill:
+                out[skill.lower()] = [
+                    str(l.get("skill")).lower()
+                    for l in foc.get("prereq_tree", []) if isinstance(l.get("skill"), str)
+                ]
+        for rskill, reg in (self._nb.get("retired") or {}).items():
+            sl = str(rskill).lower()
+            if sl in out or not isinstance(reg, dict):
+                continue
+            links = reg.get("links_at_retirement")
+            if not links:
+                links = list((reg.get("link_sr_at_retirement") or {}).keys())
+            out[sl] = [str(l).lower() for l in links]
+        return out
+
     def prereq_links(self) -> list[dict]:
         """Prereq-tree links across ALL active foci (deduped by skill), each with ``skill``/``role``.
 
@@ -437,33 +645,173 @@ class SiegeNotebook:
         )
         return n_decent >= self.th.maturity_min_mastered
 
+    @staticmethod
+    def _slope(readings: list[float]) -> float:
+        """Least-squares slope (pp per session) of a short SR window. <2 points -> 0."""
+        pts = [float(r) for r in readings if isinstance(r, (int, float))]
+        n = len(pts)
+        if n < 2:
+            return 0.0
+        xm = (n - 1) / 2.0
+        ym = sum(pts) / n
+        denom = sum((i - xm) ** 2 for i in range(n))
+        if denom == 0:
+            return 0.0
+        return sum((i - xm) * (pts[i] - ym) for i in range(n)) / denom
+
+    @staticmethod
+    def _notes_similar(a: str, b: str, threshold: float = 0.7) -> bool:
+        """Token-Jaccard similarity check for 'is this tactic materially different?' (L3 / reopen)."""
+        ta = {w for w in str(a or "").lower().split() if len(w) > 2}
+        tb = {w for w in str(b or "").lower().split() if len(w) > 2}
+        if not ta or not tb:
+            return False  # an empty note is never 'the same tactic'
+        return len(ta & tb) / len(ta | tb) >= threshold
+
+    def _ladder_level(self, frozen: int) -> int:
+        if frozen >= self.th.ladder_l3:
+            return 3
+        if frozen >= self.th.ladder_l2:
+            return 2
+        if frozen >= self.th.ladder_l1:
+            return 1
+        return 0
+
     def _update_focus_stall(self, latest_profile: dict[str, float]) -> None:
-        """Per-focus (§2.6): update each active focus's best_sr / stall_sessions from its current SR."""
+        """v6fix7 P1a: per-focus stall — FROZEN counter over the WHOLE attack tree (adaptive patience).
+
+        A session is frozen for a focus only if NONE of three progress signals fires:
+          (a) focus SR — new best (>= +improve_pp) OR positive windowed slope (> slope_min_pp/session;
+              defeats the fix4 ratchet where oscillation under an old best deferred retirement);
+          (b) any prereq link SR making a new best — foundations rising = the siege is biting even
+              while the wall itself sits at 0% (tier4 patience, user 2026-07-06);
+          (c) chain-frontier advance (P2 failure-episode signal) delivered via note_chain_progress().
+        frozen_sessions drives the escalation ladder + retirement; the legacy stall_sessions ratchet
+        is still maintained for logging/back-compat but decides nothing.
+        Also tracks consecutive_mastered for the conquest gate (#8 fix).
+        """
         for foc in self._nb.get("foci", []):
             skill = foc.get("skill")
             sr = latest_profile.get(skill.lower()) if isinstance(skill, str) else None
+            prev_best = foc.get("best_sr")
+            progress = False
+
+            # --- legacy ratchet counter (logging only) ---
             if sr is None:
-                # no reading this session — treat as a non-improving session (counts toward stall)
                 foc["stall_sessions"] = int(foc.get("stall_sessions", 0)) + 1
-                continue
-            best = foc.get("best_sr")
-            if best is None or sr >= best + self.th.focus_improve_pp:
+            elif prev_best is None or sr >= prev_best + self.th.focus_improve_pp:
                 foc["best_sr"] = sr
-                foc["stall_sessions"] = 0  # real improvement -> reset stall
+                foc["stall_sessions"] = 0
             else:
                 foc["stall_sessions"] = int(foc.get("stall_sessions", 0)) + 1
 
-    def _retire_stalled_foci(self, session_idx: int) -> None:
-        """§2.6 + §2⑤: a focus RETIRES only when it has stalled long enough (never by SR threshold).
+            # --- (a) focus SR: new best or live windowed slope ---
+            if sr is not None:
+                hist = [h for h in foc.get("sr_history", []) if isinstance(h, (int, float))]
+                hist.append(float(sr))
+                foc["sr_history"] = hist[-max(2 * self.th.slope_window, 12):]
+                if prev_best is None or sr >= prev_best + self.th.focus_improve_pp:
+                    progress = True
+                elif self._slope(foc["sr_history"][-self.th.slope_window:]) > self.th.slope_min_pp:
+                    progress = True
+                # conquest bookkeeping (#8): consecutive snapshots holding at mastered.
+                if sr >= self.th.mastered_sr:
+                    foc["consecutive_mastered"] = int(foc.get("consecutive_mastered", 0)) + 1
+                else:
+                    foc["consecutive_mastered"] = 0
 
-        Stalled foci are dropped from ``foci`` (their success experience, if any, already lives in
-        verified_chains via §2① incremental recording). This frees a slot for a new focus.
+            # --- (b) foundation progress: any link making a new best ---
+            link_best = foc.setdefault("link_best", {})
+            for link in foc.get("prereq_tree", []):
+                lskill = link.get("skill")
+                if not isinstance(lskill, str):
+                    continue
+                lsr = latest_profile.get(lskill.lower())
+                if lsr is None:
+                    continue
+                lb = link_best.get(lskill.lower())
+                if lb is None:
+                    link_best[lskill.lower()] = float(lsr)  # first reading = baseline, not progress
+                elif lsr >= lb + self.th.focus_improve_pp:
+                    link_best[lskill.lower()] = float(lsr)
+                    progress = True
+
+            # --- (c) external chain-frontier advance (consumed once) ---
+            if foc.pop("chain_frontier_advanced", False):
+                progress = True
+
+            foc["frozen_sessions"] = 0 if progress else int(foc.get("frozen_sessions", 0)) + 1
+            foc["ladder_level"] = self._ladder_level(int(foc["frozen_sessions"]))
+
+    def _verify_conquests(self, session_idx: int, latest_profile: dict[str, float]) -> None:
+        """v6fix7 P1a (#8 fix): a wall is CONQUERED only after holding mastered_sr for
+        conquest_consecutive consecutive snapshots. Only then does its verified_chains entry get
+        status='verified', its skills enter the protected_set (rehearsal), and the focus retires
+        gracefully. A one-session +delta record stays status='progress' and protects nothing —
+        fix4 wrote make_iron_pickaxe into verified/protected at 44%, poisoning the tier4 base."""
+        from auction.craftax_achievements import family_of
+
+        kept = []
+        for foc in self._nb.get("foci", []):
+            skill = foc.get("skill")
+            if not isinstance(skill, str) or int(foc.get("consecutive_mastered", 0)) < self.th.conquest_consecutive:
+                kept.append(foc)
+                continue
+            sl = skill.lower()
+            sr = latest_profile.get(sl)
+            links = [
+                l.get("skill") for l in foc.get("prereq_tree", []) if isinstance(l.get("skill"), str)
+            ]
+            category = "combat_milestone" if family_of(sl) == "COMBAT" else "enabler"
+            self._upsert_experience(
+                session_idx, sl, links, sr if sr is not None else float(self.th.mastered_sr),
+                category, style_note=str(foc.get("style_note", "")), status="verified",
+            )
+            protect = {sl} | {l.lower() for l in links if l}
+            self._nb["protected_set"] = sorted(set(self._nb.get("protected_set", [])) | protect)
+            self._nb.setdefault("history", []).append(
+                {"session": session_idx, "event": "focus_conquered", "focus": sl,
+                 "sr": sr, "held_snapshots": int(foc.get("consecutive_mastered", 0))}
+            )
+            self.last_conquest = f"{sl} CONQUERED (SR {sr}%, held {foc.get('consecutive_mastered')} snapshots)"
+        self._nb["foci"] = kept
+
+    def _retire_stalled_foci(self, session_idx: int) -> None:
+        """v6fix7 P1a L4: retirement fires only after ladder_l4 consecutive FROZEN sessions
+        (whole-tree no-progress — see _update_focus_stall), never from the legacy ratchet.
+
+        Retirement archives the failed tactic + an SR snapshot of the chain into the ``retired``
+        registry, which _reconcile_foci uses for the cooldown / blacklist / "what's different this
+        time" checks, and which render_for_prompt shows the modeler (history made READABLE — the
+        fix4 bug was retire→same-session-reopen because the modeler never saw its own retirement).
         """
         kept = []
         for foc in self._nb.get("foci", []):
-            if int(foc.get("stall_sessions", 0)) >= self.th.focus_min_stall_sessions:
+            frozen = int(foc.get("frozen_sessions", 0))
+            if frozen >= self.th.ladder_l4:
+                skill = str(foc.get("skill") or "")
+                reg = self._nb.setdefault("retired", {}).setdefault(
+                    skill, {"count": 0, "failed_notes": []}
+                )
+                reg["count"] = int(reg.get("count", 0)) + 1
+                reg["last_session"] = session_idx
+                reg["sr_at_retirement"] = foc.get("best_sr")
+                reg["link_sr_at_retirement"] = dict(foc.get("link_best") or {})
+                # P2: an ordered chain snapshot (prereq_tree order, shallow -> deep) so break-link
+                # mining keeps tracking this wall while it rests, and any pre-retirement frontier
+                # flag is stale by definition — the escape hatch must be earned AFTER this point.
+                reg["links_at_retirement"] = [
+                    str(l.get("skill")).lower()
+                    for l in foc.get("prereq_tree", []) if isinstance(l.get("skill"), str)
+                ]
+                reg.pop("chain_frontier_advanced", None)
+                note = str(foc.get("style_note", "")).strip()
+                if note:
+                    reg["failed_notes"] = ([*reg.get("failed_notes", []), note])[-3:]
                 self._nb.setdefault("history", []).append(
-                    {"session": session_idx, "event": "focus_retired_stalled", "focus": foc.get("skill")}
+                    {"session": session_idx, "event": "focus_retired_stalled",
+                     "focus": foc.get("skill"), "frozen_sessions": frozen,
+                     "best_sr": foc.get("best_sr")}
                 )
             else:
                 kept.append(foc)
@@ -486,23 +834,66 @@ class SiegeNotebook:
             for f in foci if isinstance(f.get("skill"), str)
         )
 
-    def _merge_style_notes(self, proposed_foci: list[dict]) -> None:
+    def _merge_style_notes(self, proposed_foci: list[dict], session_idx: int | None = None) -> None:
         """§3.1: copy each proposed focus's fresh ``style_note`` onto the matching ACTIVE focus dict.
 
         Only non-empty notes overwrite (a session where the LLM says nothing new keeps the prior note,
         so know-how accumulates rather than being blanked). Matching is by skill name, so this naturally
-        follows the same dedup-by-target rule as the experience log."""
+        follows the same dedup-by-target rule as the experience log.
+
+        v6fix7 P1c (AutoManual-lite lifecycle): each proposed focus also carries ``evidence_check``
+        (supported / contradicted / no_evidence — the modeler's self-audit of its tactic against this
+        session's REAL evidence). The notebook turns that into a code-tracked note status:
+          - supported     -> note_status=active, note_last_supported_session=now;
+          - contradicted  -> the note MUST be rewritten (materially different — same-tactic rephrase
+                             rejected, like ladder L3); until rewritten it renders as CONTRADICTED;
+          - no_evidence   -> ages toward STALE after note_stale_sessions unsupported sessions.
+        """
         if not proposed_foci:
-            return
+            proposed_foci = []
         by_skill = {
-            str(pf.get("skill", "")).lower(): str(pf.get("style_note", "")).strip()
+            str(pf.get("skill", "")).lower(): pf
             for pf in proposed_foci
             if isinstance(pf, dict) and pf.get("skill")
         }
         for foc in self._nb.get("foci", []):
-            note = by_skill.get(str(foc.get("skill", "")).lower())
-            if note:
-                foc["style_note"] = note
+            pf = by_skill.get(str(foc.get("skill", "")).lower())
+            note = str(pf.get("style_note", "")).strip() if pf else ""
+            evidence = str(pf.get("evidence_check", "")).strip().lower() if pf else ""
+            old_note = str(foc.get("style_note", ""))
+
+            # --- lifecycle bookkeeping (runs even when the note itself is empty) ---
+            if session_idx is not None and pf is not None:
+                if evidence == "supported":
+                    foc["note_last_supported_session"] = session_idx
+                    foc["note_status"] = "active"
+                elif evidence == "contradicted":
+                    foc["note_status"] = "contradicted"
+                else:  # no_evidence / missing -> age toward stale
+                    anchor = foc.get("note_last_supported_session")
+                    if anchor is None:
+                        anchor = foc.get("started_session") or session_idx
+                    if old_note and (session_idx - int(anchor)) >= self.th.note_stale_sessions \
+                            and foc.get("note_status") != "contradicted":
+                        foc["note_status"] = "stale"
+
+            if not note:
+                continue
+            # v6fix7 P1a L3 + P1c contradicted: when a REVISION is demanded (ladder >= 3, or the
+            # modeler itself judged the tactic contradicted by evidence), a note materially the same
+            # as the current one is rejected (kept old + history event) — "refine" is not enough.
+            revision_required = int(foc.get("ladder_level", 0)) >= 3 or \
+                foc.get("note_status") == "contradicted"
+            if revision_required and self._notes_similar(note, old_note):
+                self._nb.setdefault("history", []).append(
+                    {"session": session_idx if session_idx is not None else self._nb.get("last_session"),
+                     "event": "tactic_revision_rejected", "focus": foc.get("skill")}
+                )
+                continue
+            if foc.get("note_status") == "contradicted" and note != old_note:
+                # rewrite accepted: back to active (still unsupported until evidence says otherwise).
+                foc["note_status"] = "active"
+            foc["style_note"] = note
 
     def _record_experience(self, session_idx: int, latest_profile: dict[str, float]) -> None:
         """§2① + §2.5: incrementally record/UPDATE each active focus's success experience.
@@ -535,27 +926,26 @@ class SiegeNotebook:
                 if isinstance(link.get("skill"), str)
             ]
             category = "combat_milestone" if family_of(skill.lower()) == "COMBAT" else "enabler"
+            # v6fix7 P1a (#8 fix): a +delta record is PROGRESS, not conquest. It no longer touches
+            # the protected_set and its chain entry carries status='progress' — only
+            # _verify_conquests (mastered_sr held for conquest_consecutive snapshots) upgrades an
+            # entry to 'verified', protects it, and reports a conquest.
             self._upsert_experience(
                 session_idx, skill.lower(), links, sr, category,
-                style_note=str(foc.get("style_note", "")),
+                style_note=str(foc.get("style_note", "")), status="progress",
             )
             foc["last_recorded_sr"] = sr
-            # protect the recorded target AND its consolidated links so rehearsal (§3.6) keeps them.
-            protect = {skill.lower()} | {l.lower() for l in links if l}
-            merged = set(self._nb.get("protected_set", [])) | protect
-            self._nb["protected_set"] = sorted(merged)
-            self.last_conquest = (
-                f"{skill} (SR {sr}%, category={category}), chain=[{', '.join(links)}]"
-            )
 
     def _upsert_experience(
         self, session_idx: int, target: str, links: list[str], sr: float, category: str,
-        style_note: str = "",
+        style_note: str = "", status: str = "progress",
     ) -> None:
         """Insert or, if ``target`` already recorded, UPDATE its verified_chains entry (dedup by target).
 
         ``style_note`` (§3.1) is the transferable attack know-how. On UPDATE it is overwritten only when
-        the new note is non-empty, so a silent session keeps the prior know-how instead of erasing it."""
+        the new note is non-empty, so a silent session keeps the prior know-how instead of erasing it.
+        v6fix7 (#8): ``status`` distinguishes 'progress' (delta-recorded, NOT reusable as a tier4 base)
+        from 'verified' (conquest gate passed). A 'verified' entry is never downgraded."""
         chains = self._nb.setdefault("verified_chains", [])
         evidence = f"held-out SR {sr}% (recorded at s{session_idx})"
         note = str(style_note or "").strip()
@@ -568,6 +958,10 @@ class SiegeNotebook:
                 merged_links = list(dict.fromkeys([*c.get("links", []), *links]))
                 c["links"] = merged_links
                 c["evidence"] = evidence
+                if status == "verified" or c.get("status") == "verified":
+                    c["status"] = "verified"  # never downgrade a verified conquest
+                else:
+                    c["status"] = "progress"
                 if note:  # keep prior know-how if this session added none
                     c["style_note"] = note
                 return
@@ -580,6 +974,7 @@ class SiegeNotebook:
             "last_recorded_session": session_idx,
             "evidence": evidence,
             "style_note": note,
+            "status": status,
         })
 
     # ---- the one public write path: apply an LLM-proposed update through B-layer rules ----------
@@ -625,13 +1020,16 @@ class SiegeNotebook:
         # 1b. §3.1 self-style: fold this session's fresh notes onto the EXISTING active foci first, so
         #     _record_experience carries the LATEST know-how into verified_chains (not last session's).
         #     A newly-opened focus is merged again in step 6 (it isn't active yet here).
-        self._merge_style_notes(proposed.get("foci") or [])
+        self._merge_style_notes(proposed.get("foci") or [], session_idx=session_idx)
 
         # 2. §2① incremental success-experience recording (replaces the old conquered-retire gate).
         self._record_experience(session_idx, latest_profile)
 
-        # 3. per-focus stall, then retire stalled foci (frees slots; §2⑤, never SR-threshold-driven).
+        # 3. per-focus stall (frozen counter + ladder level), conquest verification (#8), then retire
+        #    exhausted foci (L4; frees slots). Conquest runs BEFORE retirement so a wall that holds
+        #    mastered long enough exits as CONQUERED, never as stalled.
         self._update_focus_stall(latest_profile)
+        self._verify_conquests(session_idx, latest_profile)
         self._retire_stalled_foci(session_idx)
 
         # 4. reconcile the desired foci set against the B-layer gates.
@@ -658,7 +1056,7 @@ class SiegeNotebook:
         #    just-opened). Done last so a newly-opened focus also captures its note this session; it is
         #    then carried into verified_chains by _record_experience NEXT session. LLM owns this text
         #    (A-layer); code only stores the latest non-empty note per target.
-        self._merge_style_notes(proposed.get("foci") or [])
+        self._merge_style_notes(proposed.get("foci") or [], session_idx=session_idx)
 
         self._nb["last_session"] = session_idx
         self._save()
@@ -703,6 +1101,37 @@ class SiegeNotebook:
                     f"scope_rejected({sl}:SR{latest_profile.get(sl)}>=sat{self.th.saturated_sr})"
                 )
                 continue
+            # v6fix7 P1a: a VERIFIED (conquered) wall still held at mastered SR may not reopen — it
+            # is protected ground (rehearsal guards it). Siege it again only if it genuinely slipped.
+            if self._is_conquered_and_held(sl, latest_profile):
+                decisions.append(f"conquered_held({sl}: verified and SR still >= mastered)")
+                continue
+            # v6fix7 P1a: retirement aftermath gates — cooldown, blacklist, and "what's different".
+            reg = (self._nb.get("retired") or {}).get(sl)
+            if reg:
+                last_ret = int(reg.get("last_session", -10**9))
+                cooldown_left = self.th.cooldown_sessions - (session_idx - last_ret)
+                if cooldown_left > 0:
+                    decisions.append(f"cooldown_rejected({sl}: {cooldown_left} session(s) left)")
+                    continue
+                if int(reg.get("count", 0)) >= self.th.blacklist_retirements and not \
+                        self._has_new_evidence(sl, reg, latest_profile):
+                    decisions.append(
+                        f"blacklisted({sl}: retired {reg.get('count')}x, no new chain evidence)"
+                    )
+                    continue
+                new_note = str(pf.get("style_note", "")).strip()
+                if not new_note or any(
+                    self._notes_similar(new_note, old) for old in reg.get("failed_notes", [])
+                ):
+                    decisions.append(
+                        f"reopen_needs_new_tactic({sl}: proposal's tactic is empty or repeats an "
+                        "archived failed tactic — state what is DIFFERENT this time)"
+                    )
+                    self._nb.setdefault("history", []).append(
+                        {"session": session_idx, "event": "reopen_rejected_same_tactic", "focus": sl}
+                    )
+                    continue
             if not self._may_open_new_focus(latest_profile):
                 decisions.append(
                     f"expand_refused({sl}: {len(self._nb.get('foci', []))}/{self.th.max_focus} foci, "
@@ -772,10 +1201,41 @@ class SiegeNotebook:
                 lines.append(
                     f"  * {foc.get('skill')} "
                     f"(started s{foc.get('started_session')}, best SR {foc.get('best_sr')}%, "
-                    f"stalled {foc.get('stall_sessions')} session(s))"
+                    f"frozen {foc.get('frozen_sessions', 0)} session(s) [whole-tree no-progress], "
+                    f"form so far: {foc.get('last_siege_type') or 'unknown'})"
                 )
+                # v6fix7 P1a: the escalation ladder speaks — the modeler MUST see and obey its level.
+                lvl = int(foc.get("ladder_level", 0))
+                if lvl == 1:
+                    lines.append(
+                        "      ★LADDER L1: the whole attack tree has been frozen "
+                        f"{foc.get('frozen_sessions')} sessions. Either switch the attack FORM "
+                        "(DEPTH<->CONSOLIDATE) now, or DEFEND staying: give a concrete NEW reason and "
+                        "plan in this focus's style_note (silently continuing is not allowed)."
+                    )
+                elif lvl == 2:
+                    lines.append(
+                        "      ★LADDER L2 (FORCED): still frozen after your defence. The attack FORM "
+                        "is now switched by the system — recommend the OTHER form for this wall; the "
+                        "proposer will be required to build it."
+                    )
+                elif lvl >= 3:
+                    lines.append(
+                        "      ★LADDER L3 (FORCED): form switch did not unfreeze it. You MUST write a "
+                        "MATERIALLY DIFFERENT style_note (new tactic — a rephrase will be rejected) "
+                        "stating what you abandon and what you try instead. At "
+                        f"{self.th.ladder_l4} frozen sessions this focus retires with a cooldown."
+                    )
                 if foc.get("style_note"):
-                    lines.append(f"      style-so-far: {foc['style_note']}")
+                    status = str(foc.get("note_status", "active"))
+                    if status == "contradicted":
+                        tag = " [★CONTRADICTED by evidence — you MUST rewrite this tactic (a rephrase is rejected)]"
+                    elif status == "stale":
+                        tag = (f" [STALE — unsupported for >= {self.th.note_stale_sessions} sessions: "
+                               "re-derive it from mechanics + the latest data, do not keep refining it]")
+                    else:
+                        tag = ""
+                    lines.append(f"      style-so-far{tag}: {foc['style_note']}")
                 tree = foc.get("prereq_tree") or []
                 if tree:
                     for link in tree:
@@ -795,28 +1255,44 @@ class SiegeNotebook:
         enablers = [c for c in chains if c.get("category") != "combat_milestone"]
         if milestones:
             lines.append(
-                f"CONQUERED COMBAT MILESTONES ({len(milestones)}) — YOUR self-style, the transferable "
-                f"wins to build on:"
+                f"COMBAT MILESTONE EXPERIENCE ({len(milestones)}) — YOUR self-style, the transferable "
+                f"wins to build on. ★Only entries marked VERIFIED are conquered ground that may be "
+                f"legally compressed as a base for deeper walls; PROGRESS entries are NOT yet won:"
             )
             for c in milestones[-6:]:
+                tag = "VERIFIED" if c.get("status") == "verified" else "PROGRESS"
                 lines.append(
-                    f"    - {c.get('target')} via [{', '.join(c.get('links', []))}] "
+                    f"    - [{tag}] {c.get('target')} via [{', '.join(c.get('links', []))}] "
                     f"(SR {c.get('last_recorded_sr')}%, s{c.get('last_recorded_session')})"
                 )
                 if c.get("style_note"):
                     lines.append(f"        style: {c['style_note']}")
         if enablers:
             lines.append(
-                f"ENABLER GROUND HELD ({len(enablers)}) — gear/prereqs already in place (scaffolding, "
-                f"NOT self-style):"
+                f"ENABLER GROUND ({len(enablers)}) — gear/prereqs experience (scaffolding, NOT "
+                f"self-style). ★Only VERIFIED entries are held ground; PROGRESS is still contested:"
             )
             for c in enablers[-6:]:
+                tag = "VERIFIED" if c.get("status") == "verified" else "PROGRESS"
                 lines.append(
-                    f"    - {c.get('target')} via [{', '.join(c.get('links', []))}] "
+                    f"    - [{tag}] {c.get('target')} via [{', '.join(c.get('links', []))}] "
                     f"(SR {c.get('last_recorded_sr')}%, s{c.get('last_recorded_session')})"
                 )
                 if c.get("style_note"):
                     lines.append(f"        note: {c['style_note']}")
         if nb.get("protected_set"):
             lines.append(f"PROTECTED (rehearsal) skills: {', '.join(nb['protected_set'])}")
+        # v6fix7 P1a: retirement history made READABLE — the fix4 bug was retire→same-session-reopen
+        # because the modeler never saw its own retirements or why they failed.
+        retired = nb.get("retired") or {}
+        if retired:
+            lines.append("RETIRED WALLS (failed sieges — do NOT reopen with the same tactic):")
+            for skill, reg in list(retired.items())[-4:]:
+                lines.append(
+                    f"    - {skill}: retired {reg.get('count')}x, last s{reg.get('last_session')}, "
+                    f"best SR reached {reg.get('sr_at_retirement')}%. Reopening requires the cooldown "
+                    "to pass AND a tactic that is genuinely different from the failed ones below."
+                )
+                for note in (reg.get("failed_notes") or [])[-2:]:
+                    lines.append(f"        failed tactic: {note}")
         return "\n".join(lines)

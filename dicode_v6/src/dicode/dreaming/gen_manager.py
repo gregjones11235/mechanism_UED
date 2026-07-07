@@ -237,6 +237,24 @@ class TaskArchive:
 				else:
 					print(f"Warning: Parent task {parent_task} not found in graph.")
 
+	def set_level_meta(self, task_path: str, meta: dict):
+		"""v6fix7 P0.1: persist machine-readable level metadata as node attributes.
+
+		Only called when a <level_meta> block was actually parsed (siege sessions), so the baseline
+		path never writes these attrs and its graphml stays byte-identical. None values are skipped
+		(graphml cannot serialise None).
+		"""
+		with self._lock:
+			if not self.graph.has_node(task_path):
+				return
+			node = self.graph.nodes[task_path]
+			if meta.get("type"):
+				node["level_type"] = str(meta["type"])
+			if meta.get("drill_target"):
+				node["drill_target"] = str(meta["drill_target"])
+			if meta.get("siege_wall"):
+				node["siege_wall"] = str(meta["siege_wall"])
+
 	def update_node_status(self, task_path: str, status: str):
 		"""Updates the status of a task node (e.g., 'success', 'boring', 'failed_compile').
 
@@ -657,6 +675,7 @@ class TaskGenerator:
 		self._siege_notebook = None  # auction.siege_notebook.SiegeNotebook (v6), lazy iff config.siege
 		self._cooc_log = None  # auction.cooccurrence_log.CooccurrenceLog (v6 §3.8 c), lazy iff config.siege
 		self._behav_log = None  # auction.behavior_fingerprint_log.BehaviorFingerprintLog (v6 problem-2), lazy iff config.siege
+		self._chain_log = None  # auction.chain_order_log.ChainOrderLog (v6fix7 P2), lazy iff config.siege
 		# Rotating turn order for the cooperative sequential-fill method (advances once per session).
 		self._coop_turn_offset = 0
 		if config.mode != "reward":
@@ -1098,6 +1117,13 @@ class TaskGenerator:
 
 				self._behav_log = BehaviorFingerprintLog()
 				print("[siege] BehaviorFingerprintLog initialised (problem-2 winning-episode behaviour).")
+				# v6fix7 P2: directed chain order + break-link mining — the temporal upgrade of (c).
+				# Fed by the same held-out eval (run_session_evaluation), read by the siege modeler
+				# (CHAIN EVIDENCE) and by the P1a patience/blacklist machinery (frontier advance).
+				from auction.chain_order_log import ChainOrderLog
+
+				self._chain_log = ChainOrderLog()
+				print("[siege] ChainOrderLog initialised (P2 directed chains + break-link mining).")
 		return self._modeler
 
 	def evolve_mastered_coop(
@@ -1143,7 +1169,18 @@ class TaskGenerator:
 			num_snapshots = len(self._profile_log.recent(10_000)) if self._profile_log else 0
 			combat_targets = self._combat_target_names()
 			cooc_hint = self._render_cooccurrence_hint()
+			# v6fix7 P2: directed CHAIN EVIDENCE (order + break link) — appended to the (c) hint so
+			# the modeler sees it every siege session without a diagnose_siege schema change.
+			chain_hint = self._render_chain_hint()
+			if chain_hint:
+				cooc_hint = (cooc_hint + "\n" + chain_hint) if cooc_hint else chain_hint
 			behav_hint = self._render_behavior_hint()  # v6 problem-2: winning-episode action fingerprint
+			# v6fix7 P1b: drill-transfer GAP signal (SCALAR's train-eval gap, repurposed as the
+			# drill "graduation" trigger) — appended to behav_hint so the modeler sees it every
+			# siege session without a schema change.
+			gap_hint = self._render_siege_gap_hint(latest_profile)
+			if gap_hint:
+				behav_hint = (behav_hint + "\n" + gap_hint) if behav_hint else gap_hint
 			guidance = modeler.diagnose_siege(
 				session_idx, mastered_tasks, parent_context,
 				notebook_text=self._siege_notebook.render_for_prompt(),
@@ -1214,6 +1251,13 @@ class TaskGenerator:
 		# Per-parent record of what earlier proposers already produced this round (for PEER_ALREADY_MADE).
 		peer_made: dict[str, list[str]] = {pid: [] for pid in mastered_tasks}
 
+		# v6fix7 P0.1: on siege sessions (notebook exists <=> siege config on) every proposer is
+		# asked for the machine-readable <level_meta> block and a response without one is re-queried.
+		from auction.level_meta import render_level_meta_spec
+
+		_siege_on = getattr(self, "_siege_notebook", None) is not None
+		_lm_spec = render_level_meta_spec(_siege_on)
+
 		all_parsed: list[dict] = []
 		all_parents: list[list[str]] = []
 		all_examples: list[list[str]] = []
@@ -1240,6 +1284,9 @@ class TaskGenerator:
 					"MY_TURN_ORDER": f"You are proposer {turn_i + 1} of {n_prop} this round.",
 					# v6 §3.4: the siege focus + still-unmastered links this proposer must NOT compress.
 					"SIEGE_DIRECTIVE": siege_directive_text,
+					# v6fix7 P0.1: ask for the machine-readable <level_meta> block on siege sessions
+					# only (notebook exists <=> siege config on). Siege off -> stays "" (baseline).
+					"LEVEL_META_SPEC": _lm_spec,
 				}
 
 			system_prompt = self._build_system_prompt(module)
@@ -1255,11 +1302,29 @@ class TaskGenerator:
 			prev_llm = self.llm
 			self.llm = proposer
 			try:
-				parsed_responses = self._query_and_parse_responses(system_prompt, user_prompts)
+				# v6fix7 P0.2: on siege sessions request an ALIGNED list (None placeholders) so the
+				# validator reroll and the p_sets pairing below can index prompts/parents safely.
+				parsed_responses = self._query_and_parse_responses(
+					system_prompt,
+					user_prompts,
+					require_level_meta=_siege_on,
+					return_aligned=_siege_on,
+				)
+				if _siege_on:
+					parsed_responses = self._siege_validate_and_reroll(
+						parsed_responses,
+						user_prompts,
+						system_prompt,
+						p_sets,
+						proposer_idx,
+						siege_unmastered,
+					)
 			finally:
 				self.llm = prev_llm
 
 			for local_i, parsed in enumerate(parsed_responses):
+				if parsed is None:
+					continue  # aligned siege list: a permanently-failed parse keeps its slot
 				# v6 §3.4 code backstop: pull any still-unmastered siege link the proposer illegally
 				# compressed into `Completed` back into `Relevant` (so it is actually trained). No-op
 				# when siege is off / no focus / no violation, so the v5 coop path is unchanged.
@@ -1273,6 +1338,16 @@ class TaskGenerator:
 							f"[siege][gate] proposer_{proposer_idx}: moved {moved} from Completed to "
 							f"Relevant (unmastered siege links must be trained)."
 						)
+				# v6fix7 P1a: record which FORM attacked each wall (feeds the L2 forced flip).
+				_meta = parsed.get("level_meta") if isinstance(parsed, dict) else None
+				if _meta and _siege_on:
+					_nb = getattr(self, "_siege_notebook", None)
+					if _nb is not None:
+						_walls = {
+							w for w in (_meta.get("siege_wall"), _meta.get("drill_target")) if w
+						}
+						for _w in _walls & {s.lower() for s in _nb.focus_skills()}:
+							_nb.note_siege_level_type(_w, _meta.get("type"))
 				all_parsed.append(parsed)
 				all_parents.append(p_sets[local_i] if local_i < len(p_sets) else [])
 				all_examples.append(e_sets[local_i] if local_i < len(e_sets) else [])
@@ -1315,7 +1390,61 @@ class TaskGenerator:
 		(coop_w_amb / coop_w_lrn), defaulting to 1/1.
 		"""
 		from auction.selectors import GreedyTopKSelector, SelectionContext
-		from .auction_integration import parsed_response_to_proposal, profile_to_target_gap
+
+		try:
+			from .auction_integration import parsed_response_to_proposal, profile_to_target_gap
+		except ImportError:  # spec-from-file loads (unit tests) have no package parent
+			from dicode.dreaming.auction_integration import (
+				parsed_response_to_proposal,
+				profile_to_target_gap,
+			)
+
+		# v6fix7 P1b — SIEGE PARTITION: candidates tagged (via <level_meta>) as attacking or drilling
+		# an ACTIVE focus bypass the learnability cull entirely. Pure-Learnability top-k otherwise
+		# culls by parent-lineage p*(1-p), which systematically kills drill lineages exactly when
+		# their p saturates — "learned, therefore discarded" — while the wall's held-out SR has not
+		# transferred. Siege levels are guaranteed seats; the top-k fills the REMAINING seats from
+		# the non-siege pool (total kept = k, unchanged). No-op when siege off / no focus / untagged.
+		nb = getattr(self, "_siege_notebook", None)
+		foci_l = {s.lower() for s in nb.focus_skills()} if nb is not None else set()
+		if foci_l:
+			def _is_siege(parsed):
+				meta = parsed.get("level_meta") if isinstance(parsed, dict) else None
+				if not meta:
+					return False
+				tags = {
+					str(meta.get("siege_wall") or "").lower(),
+					str(meta.get("drill_target") or "").lower(),
+				}
+				return bool(tags & foci_l)
+
+			siege_idx = [i for i, p in enumerate(all_parsed) if _is_siege(p)]
+			if siege_idx and len(siege_idx) < len(all_parsed):
+				rest_idx = [i for i in range(len(all_parsed)) if i not in set(siege_idx)]
+				rest_k = max(0, k - len(siege_idx))
+				print(
+					f"[coop][select][siege] session={session_idx}: {len(siege_idx)} siege-tagged "
+					f"candidate(s) bypass the cull (guaranteed seats); top-{rest_k} over the "
+					f"remaining {len(rest_idx)}."
+				)
+				if rest_k == 0:
+					keep = sorted(siege_idx)[:k]
+					return (
+						[all_parsed[i] for i in keep],
+						[all_parents[i] for i in keep],
+						[all_examples[i] for i in keep],
+					)
+				sel_p, sel_pa, sel_e = self._coop_select(
+					[all_parsed[i] for i in rest_idx],
+					[all_parents[i] for i in rest_idx],
+					[all_examples[i] for i in rest_idx],
+					rest_k, session_idx, global_agent_profile,
+				)
+				return (
+					[all_parsed[i] for i in siege_idx] + sel_p,
+					[all_parents[i] for i in siege_idx] + sel_pa,
+					[all_examples[i] for i in siege_idx] + sel_e,
+				)
 
 		# Build Proposal objects with a stable index id so we can map winners back to the lists.
 		proposals = []
@@ -1364,6 +1493,69 @@ class TaskGenerator:
 			return ""
 		return f"[reference level {ref}]\n{detail.get('description', '')}"
 
+	def _render_siege_gap_hint(self, latest_profile: dict) -> str:
+		"""v6fix7 P1b — the drill "graduation" trigger (SCALAR's train-eval gap, p18 Fig.9, repurposed).
+
+		For each ACTIVE focus, compare the best TRAINED SR among its siege-tagged levels (what the
+		student achieves inside the scaffolded/drilled level) against the focus's HELD-OUT SR (the
+		real game). A drill that is won in-level (trained >= 90%) while the wall's held-out SR lags
+		far behind (gap >= 30pp) is OVERFIT TO THE CALM SANDBOX — the CONSOLIDATE definition's "add
+		the pressure back as SR rises" clause must fire now, quantified instead of vibes. Rendered
+		into the modeler's siege prompt; empty when siege off / no focus / no trained siege level.
+		"""
+		import json as _json
+
+		nb = getattr(self, "_siege_notebook", None)
+		if nb is None:
+			return ""
+		foci = {s.lower() for s in nb.focus_skills()}
+		if not foci:
+			return ""
+		latest_profile = {str(k).lower(): v for k, v in (latest_profile or {}).items()}
+
+		best_trained: dict[str, float] = {}
+		with self.archive._lock:
+			nodes = list(self.archive.graph.nodes(data=True))
+		for _nid, data in nodes:
+			tags = {
+				str(data.get("siege_wall", "")).lower(),
+				str(data.get("drill_target", "")).lower(),
+			} & foci
+			if not tags:
+				continue
+			ph = data.get("performance_history")
+			try:
+				ph = _json.loads(ph) if isinstance(ph, str) else (ph or [])
+			except (TypeError, ValueError):
+				ph = []
+			srs = [r.get("sr") for r in ph if isinstance(r, dict) and r.get("sr") is not None]
+			if not srs:
+				continue
+			trained_pct = float(srs[-1]) * 100.0
+			for wall in tags:
+				best_trained[wall] = max(best_trained.get(wall, 0.0), trained_pct)
+
+		lines = []
+		for wall, trained in sorted(best_trained.items()):
+			held = latest_profile.get(wall)
+			if held is None:
+				continue
+			gap = trained - float(held)
+			if trained >= 90.0 and gap >= 30.0:
+				lines.append(
+					f"  - {wall}: best siege-level TRAINED SR {trained:.0f}% vs HELD-OUT {held:.0f}% "
+					f"(gap {gap:.0f}pp) — the drill is won in its calm sandbox but NOT transferring. "
+					"Per the CONSOLIDATE definition, ADD THE PRESSURE BACK now (reintroduce mobs/"
+					"night/hunger stepwise) and converge toward the full game."
+				)
+			elif trained > 0:
+				lines.append(
+					f"  - {wall}: best siege-level trained SR {trained:.0f}% vs held-out {held:.0f}%."
+				)
+		if not lines:
+			return ""
+		return "DRILL-TRANSFER GAP (trained-in-level vs held-out real game):\n" + "\n".join(lines)
+
 	def _render_cooccurrence_hint(self) -> str:
 		"""v6 §3.8 (c): the (c) co-occurrence evidence text for the siege modeler.
 
@@ -1380,8 +1572,10 @@ class TaskGenerator:
 		if focus:
 			targets.append(focus)
 		# a few deep combat targets with real support, so the modeler has co-occurrence to reason with
+		# (v6fix7 P1d: was `>= 0`, which is always true — the intended prefilter never filtered;
+		# render_prereq_hint's MIN_SR guard was silently doing all the work).
 		for name in self._combat_target_names():
-			if name != focus and log.support(name) >= 0:
+			if name != focus and log.support(name) >= 1:
 				targets.append(name)
 		lines = []
 		for name in targets:
@@ -1395,6 +1589,35 @@ class TaskGenerator:
 		return (
 			"REAL-TRAJECTORY CO-OCCURRENCE (from the student's own held-out successes — use this to "
 			"pick the prereq chain from what it ACTUALLY strings together, not what you imagine):\n"
+			+ "\n".join(lines)
+		)
+
+	def _render_chain_hint(self) -> str:
+		"""v6fix7 P2: the CHAIN EVIDENCE block for the siege modeler — DIRECTED order upgrade of (c).
+
+		For every active focus (and the tracked retired walls, capped): the dominant success path
+		(time-ordered, from real winning episodes), where failing episodes most often break, and
+		whether the break-link frontier is advancing (the "0% SR but dying deeper = progress" patience
+		signal). Empty when the log is absent or no wall has trustworthy data — phased fallback to
+		(b)+(c), same as every other hint."""
+		log = getattr(self, "_chain_log", None)
+		if log is None:
+			return ""
+		targets: list[str] = []
+		if self._siege_notebook is not None:
+			targets = list(self._siege_notebook.chain_targets().keys())
+		lines: list[str] = []
+		for name in targets:
+			hint = log.render_chain_hint(name)
+			if hint:
+				lines.extend(f"  - {ln}" for ln in hint.splitlines())
+			if len(lines) >= 8:  # keep the prompt bounded
+				break
+		if not lines:
+			return ""
+		return (
+			"CHAIN EVIDENCE (directed, from real episode ORDER — stronger than co-occurrence: use it "
+			"to pick WHICH link to train and to read progress on a wall whose SR is still 0%):\n"
 			+ "\n".join(lines)
 		)
 
@@ -1460,8 +1683,12 @@ class TaskGenerator:
 			if tree:
 				lines.append("Prerequisite chain (train the whole chain up to the wall, don't just gift the last jump):")
 				for link in tree:
+					# v6fix7 P0.3: the old blanket "mastered — may be scaffolded/compressed" tag
+					# directly contradicted the isolation-drill rule (a drill must PERFORM its own
+					# chain, mastered or not). Scope the permission to non-drill levels explicitly.
 					tag = "STILL-UNMASTERED — MUST be trained (Relevant, NOT Completed)" \
-						if link.get("state") != "CONSOLIDATED" else "mastered — may be scaffolded/compressed"
+						if link.get("state") != "CONSOLIDATED" \
+						else "mastered — may be scaffolded/compressed in DEPTH/BREADTH levels; in a CONSOLIDATE drill of this wall it stays in Relevant and is performed"
 					lines.append(f"  - {link.get('skill')} [{tag}] role={link.get('role') or '-'}")
 			# §3.1 self-style: hand the proposer the modeler's accumulated ATTACK TACTIC for this wall —
 			# the know-how distilled from the student's real winning episodes (action mix / pacing / what
@@ -1475,6 +1702,24 @@ class TaskGenerator:
 				lines.append(
 					f"ATTACK TACTIC for {foc.get('skill')} (modeler's know-how from real winning episodes "
 					f"— shape the level to enact it): {style}"
+				)
+			# v6fix7 P1a: the escalation ladder binds the PROPOSER too. At L2+ the attack form for
+			# this wall is FORCED (the other form froze); the validator rejects a siege level for
+			# this wall built in the frozen form.
+			lvl = int(foc.get("ladder_level", 0) or 0)
+			req = nb.required_form(str(foc.get("skill", "")))
+			if req:
+				lines.append(
+					f"★LADDER (frozen {foc.get('frozen_sessions', 0)} sessions): REQUIRED FORM for "
+					f"{foc.get('skill')} = {req}. The previous form froze; if your level targets this "
+					f"wall you MUST build a {req} level (this overrides MODELER_GUIDANCE and is "
+					f"code-enforced)."
+				)
+			elif lvl >= 1:
+				lines.append(
+					f"LADDER NOTE: {foc.get('skill')} has been frozen {foc.get('frozen_sessions', 0)} "
+					"session(s) (whole attack tree, no progress). Prefer a materially different level "
+					"design for it this round — more of the same has not moved it."
 				)
 		if unmastered:
 			lines.append(
@@ -1626,6 +1871,9 @@ class TaskGenerator:
 				# unless the siege path overrides it per parent; _safe_format drops it for non-siege
 				# personas. Empty == baseline scaffold behaviour (no siege directive).
 				"SIEGE_DIRECTIVE": "",
+				# v6fix7 P0.1: <level_meta> output spec. Empty unless the siege path overrides it
+				# (siege off -> placeholder renders empty -> prompt byte-unchanged).
+				"LEVEL_META_SPEC": "",
 			}
 			if extra_fields_per_parent and mastered_task in extra_fields_per_parent:
 				fields.update(extra_fields_per_parent[mastered_task])
@@ -1742,8 +1990,127 @@ class TaskGenerator:
 			API_DOCS=API_DOCS,
 		)
 
+	def _siege_validate_and_reroll(
+		self,
+		parsed_responses: list,
+		user_prompts: list[str],
+		system_prompt: str,
+		p_sets: list[list[str]],
+		proposer_idx: int,
+		siege_unmastered: set,
+		max_rerolls: int = 2,
+	) -> list:
+		"""v6fix7 P0.2 — run the SiegeLevelValidator on each parsed proposal; reroll violators.
+
+		Called INSIDE the coop loop's try block (self.llm is still routed to the current proposer).
+		``parsed_responses`` must be ALIGNED with ``user_prompts`` (None placeholders allowed).
+		Violating proposals are re-queried with explicit violation feedback appended to their own
+		user prompt (at most ``max_rerolls`` rounds); leftovers get the mechanical fallback
+		(Completed->Relevant moves) + a WARN. Strict no-op when siege is off or no focus is active,
+		so the baseline / v5y path is unchanged.
+		"""
+		notebook = getattr(self, "_siege_notebook", None)
+		if notebook is None or not parsed_responses:
+			return parsed_responses
+		_foci_attr = getattr(notebook, "foci", None)
+		foci = _foci_attr() if callable(_foci_attr) else (_foci_attr or [])
+		if not foci:
+			return parsed_responses
+
+		from auction.level_validator import (
+			apply_fallback_fixes,
+			render_violation_feedback,
+			reroll_worthy,
+			validate_level,
+		)
+
+		try:
+			from .auction_integration import parse_relevant_achievements
+		except ImportError:  # spec-from-file loads (unit tests) have no package parent
+			from dicode.dreaming.auction_integration import parse_relevant_achievements
+
+		def _parent_relevant(i: int) -> set | None:
+			pid = p_sets[i][0] if i < len(p_sets) and p_sets[i] else None
+			if not pid:
+				return None
+			try:
+				desc = self.archive.get_task_descriptions([pid]).get(pid) or ""
+			except Exception:
+				return None
+			achs = parse_relevant_achievements(desc)
+			return set(achs) if achs else None
+
+		# v6fix7 P1a L2: ladder-forced attack forms for frozen walls (empty dict when no wall is at L2+).
+		required_forms = {}
+		for _foc in foci:
+			_skill = str(_foc.get("skill", ""))
+			_req = notebook.required_form(_skill)
+			if _req:
+				required_forms[_skill.lower()] = _req
+
+		current = list(parsed_responses)
+		for round_i in range(max_rerolls + 1):
+			pending: list[tuple[int, list]] = []
+			for i, parsed in enumerate(current):
+				if not isinstance(parsed, dict) or not parsed.get("description"):
+					continue
+				violations = validate_level(
+					parsed["description"],
+					parsed.get("level_meta"),
+					foci,
+					unmastered=siege_unmastered,
+					parent_relevant=_parent_relevant(i),
+					required_forms=required_forms,
+				)
+				if violations and reroll_worthy(violations):
+					pending.append((i, violations))
+				elif violations:
+					for v in violations:
+						print(
+							f"[siege][validator] proposer_{proposer_idx} warn ({v.rule}): {v.message}"
+						)
+			if not pending:
+				return current
+			if round_i == max_rerolls:
+				for i, violations in pending:
+					fixed, moved = apply_fallback_fixes(current[i]["description"], violations)
+					if moved:
+						current[i]["description"] = fixed
+					rules = ",".join(sorted({v.rule for v in violations}))
+					print(
+						f"[siege][validator] proposer_{proposer_idx} FALLBACK after {max_rerolls} "
+						f"rerolls (rules={rules}; moved={moved}) — accepted with mechanical fix only."
+					)
+				return current
+			idxs = [i for i, _ in pending]
+			reroll_prompts = [
+				user_prompts[i] + render_violation_feedback(violations) for i, violations in pending
+			]
+			print(
+				f"[siege][validator] proposer_{proposer_idx} reroll {round_i + 1}/{max_rerolls} for "
+				f"{len(idxs)} level(s); rules="
+				f"{sorted({v.rule for _, violations in pending for v in violations})}"
+			)
+			replacements = self._query_and_parse_responses(
+				system_prompt,
+				reroll_prompts,
+				max_retries=3,
+				require_level_meta=True,
+				return_aligned=True,
+			)
+			for j, rep in enumerate(replacements):
+				if isinstance(rep, dict) and rep.get("description"):
+					current[idxs[j]] = rep
+				# else: keep the old (violating) version — the fallback round will fix what it can.
+		return current
+
 	def _query_and_parse_responses(
-		self, system_prompt: str, user_prompts: list[str], max_retries: int = 10
+		self,
+		system_prompt: str,
+		user_prompts: list[str],
+		max_retries: int = 10,
+		require_level_meta: bool = False,
+		return_aligned: bool = False,
 	) -> list[dict]:
 		"""Queries the LLM and parses responses with a retry loop for failed parses.
 
@@ -1751,10 +2118,21 @@ class TaskGenerator:
 			system_prompt: The system prompt for the LLM.
 			user_prompts: List of user prompts to send to the LLM.
 			max_retries: Maximum number of retry attempts for failed parses.
+			require_level_meta: v6fix7 P0.1 — when True (siege sessions, where the prompt contains
+				the {LEVEL_META_SPEC} block), a response without a usable <level_meta> block counts
+				as a parse failure and is re-queried, so TYPE-dependent enforcement always has data.
+				False (default) keeps every non-siege call site byte-for-byte unchanged.
+			return_aligned: v6fix7 P0.2 — when True, return a list the SAME length/order as
+				``user_prompts`` with None placeholders for permanently-failed parses, so callers
+				(validator reroll, p_sets pairing) can index prompts/parents safely. Default False
+				keeps the historical filtered return for all existing call sites.
 
 		Returns:
-			A list of successfully parsed response dictionaries.
+			A list of successfully parsed response dictionaries (filtered), or the aligned list
+			with None placeholders when ``return_aligned`` is True.
 		"""
+		from auction.level_meta import level_meta_complete
+
 		responses = self.llm.query(system_prompt, user_prompts)
 
 		final_parsed_responses = [None] * len(responses)
@@ -1764,7 +2142,9 @@ class TaskGenerator:
 			for i, original_index in enumerate(indices_to_retry):
 				response = responses[i]
 				parsed_data = self._parse_generation_response(response)
-				if parsed_data.get("description") is not None:
+				if parsed_data.get("description") is not None and (
+					not require_level_meta or level_meta_complete(parsed_data.get("level_meta"))
+				):
 					final_parsed_responses[original_index] = parsed_data
 
 			indices_to_retry = [
@@ -1788,6 +2168,8 @@ class TaskGenerator:
 					f"after {max_retries} attempts."
 				)
 
+		if return_aligned:
+			return final_parsed_responses
 		return [res for res in final_parsed_responses if res is not None]
 
 	def _format_file_mastered_task(self, example_paths: list[str]) -> str:
@@ -1936,6 +2318,12 @@ class TaskGenerator:
 		if desc_match:
 			parsed_data["description"] = desc_match.group(1).strip()
 
+		# v6fix7 P0.1: machine-readable level metadata. Tolerant — siege-off responses were never
+		# asked for the block, so absence is normal and parses to None (baseline path unchanged).
+		from auction.level_meta import parse_level_meta
+
+		parsed_data["level_meta"] = parse_level_meta(response_content)
+
 		return parsed_data
 
 	def _organize_data(
@@ -1977,6 +2365,13 @@ class TaskGenerator:
 				session_id=session_idx,
 			)
 
+			# v6fix7 P0.1: persist the machine-readable level metadata on the archive node so the
+			# validator / siege quota / selection can act on TYPE. Absent (siege off) -> no attrs
+			# written -> graphml byte-unchanged on the baseline path.
+			level_meta = parsed_data.get("level_meta")
+			if level_meta:
+				self.archive.set_level_meta(new_task_id, level_meta)
+
 			# Get the single parent ID
 			parent_id = parent_tasks[0] if parent_tasks else None
 
@@ -1994,6 +2389,8 @@ class TaskGenerator:
 					"reasoning": parsed_data.get("reasoning"),
 					"docstring": description,
 					"examples": example_sets[i],  # Keep track of examples used
+					# v6fix7 P0.1: carried through so the coop selector / validator see it too.
+					"level_meta": level_meta,
 				}
 			)
 

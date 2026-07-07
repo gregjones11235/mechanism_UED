@@ -92,9 +92,10 @@ def test_full_chain_noop_when_no_focus(tmp_path):
 
 
 def test_after_breakthrough_links_are_protected_and_no_longer_forbidden(tmp_path):
-    # §2① (2026-07-05): the focus is NOT retired by an SR threshold — it keeps being attacked and its
-    # success experience is RECORDED (protecting target + links). Once the links themselves are
-    # mastered, the Completed gate forbids nothing (they may be compressed), even while the focus stays.
+    # v6fix7 P1a (#8): a breakthrough is recorded as PROGRESS immediately, but protection requires a
+    # VERIFIED CONQUEST — the wall must HOLD at mastered for conquest_consecutive (2) consecutive
+    # snapshots. Then the focus retires gracefully (conquered ground is not a wall), target + links
+    # enter the protected set, and the Completed gate forbids nothing.
     nb = SiegeNotebook(str(tmp_path / "siege.json"))
     profile = _mature({
         "defeat_gnome_warrior": 6.0, "collect_diamond": 80.0,
@@ -115,10 +116,17 @@ def test_after_breakthrough_links_are_protected_and_no_longer_forbidden(tmp_path
     })
     nb.apply_llm_update(11, won, None, num_snapshots=MATURITY_MIN_SNAPSHOTS)
     snap = nb.snapshot()
-    assert nb.focus == "defeat_gnome_warrior"  # still active (only stall retires, never SR)
+    # 1st mastered snapshot: recorded as PROGRESS; nothing protected yet; focus still active.
+    assert nb.focus == "defeat_gnome_warrior"
     assert snap["verified_chains"] and snap["verified_chains"][0]["target"] == "defeat_gnome_warrior"
-    # the recorded target + its links are now protected for rehearsal (§3.6)
+    assert snap["verified_chains"][0]["status"] == "progress"
+    assert snap["protected_set"] == []
+    # 2nd consecutive mastered snapshot: VERIFIED conquest.
+    nb.apply_llm_update(12, won, None, num_snapshots=MATURITY_MIN_SNAPSHOTS)
+    snap = nb.snapshot()
+    assert nb.foci() == []  # conquered ground is not a wall — graceful retirement
+    assert snap["verified_chains"][0]["status"] == "verified"
     for s in ("defeat_gnome_warrior", "collect_diamond", "make_diamond_sword", "place_torch"):
         assert s in snap["protected_set"]
-    # all links are now mastered (SR high) -> the gate forbids nothing, even with the focus active.
+    # no active foci -> the gate forbids nothing (links may be compressed as a conquered base).
     assert nb.unmastered_links(won) == set()

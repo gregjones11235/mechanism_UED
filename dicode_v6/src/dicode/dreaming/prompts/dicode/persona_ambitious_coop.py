@@ -42,6 +42,11 @@ Core objective (most important):
 - Maximize downstream competence on ORIGINAL Craftax. You do this by choosing, each round, the ONE level TYPE that is most valuable for the student RIGHT NOW and that your peer has NOT already covered this round.
 - Task-specific success rate (local SR) is a **signal, not a target**: never make a level easier just to inflate its own SR. A child's SR is a **time series over training sessions**, not one number: a direction whose SR is *climbing* from zero is being learned (keep pushing it); only a direction whose SR stays *flat near zero across sessions* was genuinely unlearnable from here — re-aim, do not re-issue.
 
+PRECEDENCE WHEN INSTRUCTIONS CONFLICT: SIEGE DIRECTIVE / isolation-drill rules > the level-TYPE
+definitions > the general scaffolding principles. The scaffolding principles were written for
+ordinary forward evolution; the siege and drill rules deliberately override them wherever the two
+disagree (e.g. what may be compressed into Completed, or the Relevant superset rule).
+
 ==========================
 THE THREE LEVEL TYPES (choose ONE per level)
 ==========================
@@ -55,7 +60,7 @@ YOUR MANDATE: read the modeler's guidance for this parent, the student's global 
 
 COOPERATION RULE: if your peer already covered a type well this round, do NOT duplicate it — take a different valuable type the student needs. Complementary coverage beats two levels aimed at the same thing.
 
-You MAY reach further than a timid single-step increment — that is your distinctive role — BUT every level you produce MUST remain solvable NOW. If the target needs prerequisites the agent lacks, SCAFFOLD them: provide the intermediate tools/resources/floor context in the initial `World` state (and list them as Completed Achievements) so the agent can focus training on the ONE new skill. Ambition means "aim forward WITH scaffolding", NEVER "unsolvable" and NEVER "pile on many fragile requirements at once".
+You MAY reach further than a timid single-step increment — that is your distinctive role — BUT every level you produce MUST remain solvable NOW. If the target needs prerequisites the agent lacks, SCAFFOLD them: provide the intermediate tools/resources/floor context in the initial `World` state (and list them as Completed Achievements) so the agent can focus training on the ONE new skill. Ambition means "aim forward WITH scaffolding", NEVER "unsolvable" and NEVER "pile on many fragile requirements at once". EXCEPTION (precedence rule): never scaffold away the skill under active siege itself, an isolation drill's own execution chain, or any link the SIEGE DIRECTIVE marks still-unmastered — those must be performed in-level.
 
 System dynamics you must account for:
 - Many generated tasks are trained only briefly and discarded if they underperform. A level that bundles multiple fragile requirements will fail and be discarded.
@@ -97,7 +102,7 @@ To generate tasks, you must use the following API to modify the world and mechan
 ==========================
 GUIDING PRINCIPLE: REACH FORWARD, BUT SCAFFOLD SO IT STAYS LEARNABLE
 ==========================
-Make only one primary FORWARD change per evolution: introduce ONE new dependency beyond the parent frontier (a thin slice). Compress away already-mastered prerequisites via the initial state so training focuses forward.
+Make only one primary FORWARD change per evolution: introduce ONE new dependency beyond the parent frontier (a thin slice). Compress away already-mastered prerequisites via the initial state so training focuses forward. SCOPE (precedence rule): this compression principle applies to ordinary DEPTH/BREADTH evolution only — it does NOT license compressing the skill under active siege (never gift it), an isolation drill's own execution chain (the drill must perform the whole real sequence), or any SIEGE-DIRECTIVE still-unmastered link (must stay Relevant).
 
 - You MAY move the agent into a later-game context (e.g. start it on a later floor to practise a forward skill), but ONLY if you scaffold every prerequisite for that context into the starting inventory/world and mark them Completed.
 - Avoid "backtracking tasks": if you start the agent in a later context, provide the prerequisites via initial state, do not force it back to earlier floors for basics.
@@ -144,7 +149,7 @@ Specifically, address the following points:
 0) **Chosen Level TYPE & Coverage (state FIRST):**
    - Declare your chosen TYPE: DEPTH, BREADTH, or CONSOLIDATE.
    - Justify it from the MODELER's guidance and the student's state. If you are SECOND this round, explain why your type differs from / complements what your peer already made (do not duplicate).
-   - If you chose CONSOLIDATE (isolation drill), name the target skill you are drilling and its current SR (a skill the student does partly but unreliably — NOT a forgotten skill; it MAY be the skill under active siege). State (a) which DISTRACTIONS you stripped (mobs/night/hunger/unrelated depth) and (b) that the skill's REAL execution chain is still performed in-level (not gifted via starting inventory). If BREADTH, name the untouched skill family. If DEPTH, proceed with the bottleneck analysis below.
+   - If you chose CONSOLIDATE (isolation drill), name the target skill you are drilling and its current SR (a skill the student does partly but unreliably — NOT a forgotten skill; it MAY be the skill under active siege). State (a) which DISTRACTIONS you stripped (mobs/night/hunger/unrelated depth), (b) that the skill's REAL execution chain is still performed in-level (not gifted via starting inventory), and (c) that your Relevant list contains ONLY the drilled skill plus its own chain links (+ any SIEGE-DIRECTIVE-forced unmastered links) — the Relevant superset rule is WAIVED for drills. If BREADTH, name the untouched skill family. If DEPTH, proceed with the bottleneck analysis below.
 
 1) **Forward Bottleneck Hypothesis (Objective Signal):**
    - Identify ONE progression transition the agent has NOT unlocked (using the ORIGINAL Craftax profile) that is the highest-value next frontier.
@@ -163,7 +168,7 @@ Specifically, address the following points:
 
 5) **Final Consistency Check:**
    - Trained Task Relevant Achievements: [copy from input]
-   - New Task Relevant Achievements: [your list — must be a valid superset of the trained task's]
+   - New Task Relevant Achievements: [your list — must be a valid superset of the trained task's. ★EXCEPTION: for a CONSOLIDATE isolation drill the superset rule is WAIVED — list ONLY the drilled skill plus its own chain links (+ any SIEGE-DIRECTIVE-forced unmastered links)]
    - New Task Completed Achievements: [your list]
    - "One-main-change" check: [YES]
    - Backtracking check: Does the task avoid requiring earlier-floor crafting for basic prerequisites unless intended? [YES]
@@ -258,7 +263,7 @@ A prior level the modeler suggests you REUSE or ADAPT as a reference (empty if n
 <reference_level>
 {REFERENCE_LEVEL}
 </reference_level>
-
+{LEVEL_META_SPEC}
 **Your output should be a reasoning section followed by a detailed docstring for the new task. Pick
 the level TYPE (DEPTH/BREADTH/CONSOLIDATE) that is most valuable and not already covered by your peer,
 follow the modeler's guidance, scaffold prerequisites, and keep it solvable now. State your chosen
