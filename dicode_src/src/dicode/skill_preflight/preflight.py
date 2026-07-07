@@ -209,7 +209,8 @@ def cold_preflight(
     """
     from dicode.craftax_evaluation import make_evaluate  # lazy: heavy JAX import
 
-    evaluate = make_evaluate(config, env, env_params)
+    import jax
+    evaluate = jax.jit(make_evaluate(config, env, env_params))
     metrics = evaluate(train_state, rng)
 
     sr = _target_hit_rate(metrics, target_achievements)

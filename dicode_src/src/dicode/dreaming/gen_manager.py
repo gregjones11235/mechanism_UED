@@ -656,6 +656,7 @@ class TaskGenerator:
 		self._profile_log = None  # auction.student_profile_log.StudentProfileLog, lazily constructed
 		# Rotating turn order for the cooperative sequential-fill method (advances once per session).
 		self._coop_turn_offset = 0
+		self.current_skill_target = None  # [A] skill-graph target injected per session
 		if config.mode != "reward":
 			self.evolve_mastered_prompt = importlib.import_module(
 				self.config.prompts.evolve_mastered
@@ -784,6 +785,9 @@ class TaskGenerator:
 		example_sets = []
 
 		global_profile_str = self._format_global_agent_profile(global_agent_profile)
+		_skill_hint = getattr(self, "current_skill_target", None)  # [A-2]
+		if _skill_hint:
+			global_profile_str = global_profile_str + "\n\n[Curriculum focus]\n" + _skill_hint
 
 		for mastered_task in mastered_tasks:
 			task_examples = self.selector.select_similar_desc_tasks(
@@ -1348,6 +1352,9 @@ class TaskGenerator:
 		parent_sets: list[list[str]] = []
 		example_sets: list[list[str]] = []
 		global_profile_str = self._format_global_agent_profile(global_agent_profile)
+		_skill_hint = getattr(self, "current_skill_target", None)  # [A-2]
+		if _skill_hint:
+			global_profile_str = global_profile_str + "\n\n[Curriculum focus]\n" + _skill_hint
 		# NOTE (v3, 2026-07-02): the prompt-side ability gate is GONE. Persona templates no longer
 		# carry an {ABILITY_GATE} placeholder — over-reach control is bid-side only (ambition.py's
 		# reachable_ceiling discount), matching baseline's plain evolve prompt (no tier constraint).
@@ -2070,8 +2077,25 @@ class EnvGenerator:
 			return None
 		code_match = re.search(r"<code>\s*(.*?)\s*</code>", content, re.DOTALL)
 		if code_match:
-			return code_match.group(1).strip()
-		return content
+			extracted = code_match.group(1).strip()
+		else:
+			extracted = content
+		return self._strip_code_fences(extracted)
+
+	def _strip_code_fences(self, code: str | None) -> str | None:
+		"""Removes leaked Markdown code fences (e.g. ```python ... ```) that
+		small models often emit inside <code> tags. Without this the fence
+		line reaches the compiler as line 1 and raises SyntaxError.
+		"""
+		if code is None:
+			return None
+		text = code.strip()
+		fence = re.search(r"```[a-zA-Z]*\s*(.*?)```", text, re.DOTALL)
+		if fence is not None:
+			text = fence.group(1)
+		text = re.sub(r"^\s*```[a-zA-Z]*[ \t]*\r?\n?", "", text)
+		text = re.sub(r"(?m)^[ \t]*```[ \t]*\r?$", "", text)
+		return text.strip()
 
 
 class GenManager:

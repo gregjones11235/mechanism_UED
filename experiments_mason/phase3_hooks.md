@@ -1,7 +1,8 @@
 # Phase 3：Hook 集成方案（skill_scheduler + preflight 接入主循环）
 
-> 基于 pod 上真实代码定位（run_dicode.py 主循环 + evolution_efficient.py）。
+> 基于 pod 上真实代码逐行核对（run_dicode.py 主循环 + gen_manager.py + craftax_evaluation.py）。
 > 两处 hook 都在**主循环、单线程**，不碰后台 worker 线程（关键：避免 policy 并发问题）。
+> **本版已把原占位符替换为核对过的真实接口**；仅剩 1 处需在 pod 上确认（见文末）。
 > baseline 停止后再 apply + 跑验证。
 
 ---
@@ -19,9 +20,49 @@ policy 在主循环训练中不断更新。**在后台线程读边训边变的 p
 
 ---
 
+## 接口核对结论（已确认无误，直接能接）
+
+| 调用 | 真实签名/返回 | 状态 |
+| --- | --- | --- |
+| `skill_scheduler.pick_target(evaluation_metrics)` | 返回 `SchedulerTarget(tier, target_achievements, tier_mastery, frontier_mastery, gap_type)` | ✅ 与方案一致 |
+| `skill_scheduler.format_target_for_prompt(target)` | 返回 str | ✅ |
+| `preflight.cold_preflight(env, env_params, train_state, rng, config, target_achievements)` | 返回 `PreflightResult(action, reason, sr, any_partial_progress, n_episodes, extra)` | ✅ 位置参数与返回字段一致 |
+| `archive.update_node_status(task_path, status)` | 存在（gen_manager.py:240） | ✅ |
+
+**核对中发现并已修正的 4 处**（旧版方案里是错的/缺的）：
+
+1. **对象错配**：★A 的 target 必须存到 **`gen_manager.task_generator`**（GenManager 持有 `self.task_generator`=TaskGenerator、`self.env_generator`=EnvGenerator，是两个子对象）。描述生成在 `TaskGenerator.evolve_mastered`。旧版设在 `gen_manager` 上、又在 `EnvGenerator.self` 上读 → 永远读不到。
+2. **注入点**：`evolve_mastered` 的 prompt **没有 `TASK_DESCRIPTION` 占位符**，用的是 `MASTERED_TASK / TASK_PERFORMANCE_CONTEXT / GLOBAL_AGENT_PROFILE`。最小改动是把 skill hint **追加到 `global_profile_str`**（两个分支都经过它，不改 prompt 模板）。
+3. **取 env**：archive **没有** `get_task_env`。真实路径是 `Task(smart_absolute_path(tid)).env` + `BatchEnvWrapper` + `default_params.replace(...)`（照 craftax_evaluation.py:273 的 make_evaluate 调用点）。
+4. **make_evaluate 要 jit**：真实调用点是 `jax.jit(make_evaluate(...))`。cold_preflight 里未 jit，每候选跑未编译 eval 会极慢——加 jit。
+
+---
+
+## ★0：Config flag（消融必需 —— 旧版遗漏）
+
+三组消融（纯 baseline / +A / +A+B）**靠 config 开关切**，不靠 try/except。
+新建 `conf/skill_preflight/default.yaml`（或加进主 config，确保 `skill_preflight` 节点存在）：
+
+```yaml
+skill_preflight:
+  use_scheduler: false   # ★A  baseline=false, +A=true, +A+B=true
+  use_preflight: false   # ★B  baseline=false, +A=false, +A+B=true
+```
+
+> flag 默认 false ⇒ 不翻开关时行为与原版 DiCode 逐字节一致（= 干净 baseline）。
+> 所以这份 hook 可以**现在就 push**，待验证的代码在翻开关前处于休眠。
+
+---
+
 ## ★A：Skill Graph Scheduler（注入生成 target）
 
-### A-1. run_dicode.py —— Step 2 `dispatch_evolution_worker` 调用**之前**插入
+### A-0. `TaskGenerator.__init__`（gen_manager.py，L626 那个 __init__）末尾加默认
+
+```python
+        self.current_skill_target = None
+```
+
+### A-1. run_dicode.py —— Step 2 `dispatch_evolution_worker` **之前**插入
 
 在这一段之前：
 ```python
@@ -33,44 +74,41 @@ policy 在主循环训练中不断更新。**在后台线程读边训边变的 p
             )
 ```
 
-插入：
+插入（注意 `_sched` 提到循环作用域，★B 要复用；存到 **task_generator**）：
 ```python
         # ★A: Skill Graph Scheduler — 用上一轮评估的 per-achievement SR 定位学习前沿，
-        #     存到 gen_manager 供生成 prompt 读取（不改 dispatch 链签名，改动最小）。
-        try:
-            from dicode.skill_preflight.skill_scheduler import (
-                pick_target, format_target_for_prompt,
-            )
-            if evaluation_metrics:                      # 第一轮可能还没 eval，跳过
+        #     存到 task_generator 供 design prompt 读取。
+        _sched = None
+        gen_manager.task_generator.current_skill_target = None
+        if config.skill_preflight.get("use_scheduler", False) and evaluation_metrics:
+            try:
+                from dicode.skill_preflight.skill_scheduler import (
+                    pick_target, format_target_for_prompt,
+                )
                 _sched = pick_target(evaluation_metrics)
-                gen_manager.current_skill_target = format_target_for_prompt(_sched)
+                gen_manager.task_generator.current_skill_target = format_target_for_prompt(_sched)
                 print(f"  [SkillGraph] frontier tier {_sched.tier}, "
                       f"targets: {_sched.target_achievements}")
-            else:
-                gen_manager.current_skill_target = None
-        except Exception as e:
-            print(f"  [SkillGraph] scheduler skipped: {e}")
-            gen_manager.current_skill_target = None
+            except Exception as e:
+                print(f"  [SkillGraph] scheduler skipped: {e}")
 ```
 
-### A-2. gen_manager.py —— 生成 user_prompt 处，把 target 拼进去
+### A-2. gen_manager.py —— `TaskGenerator.evolve_mastered` 里，`global_profile_str` 构造**之后**
 
-在 `EnvGenerator.generate`（或 `evolve_tasks` 构造 user_prompt 的地方），找到
-`user_prompt.format(CODE_EXAMPLES=..., TASK_DESCRIPTION=...)` 那处，改成把 skill target 附加进
-TASK_DESCRIPTION（或 prompt 末尾）：
-
+找到（L786 附近）：
 ```python
-        # 读取 skill graph 目标（可能为 None）
+        global_profile_str = self._format_global_agent_profile(global_agent_profile)
+```
+紧跟其后插入（追加 hint，两个 `.format()` 分支都经过 `GLOBAL_AGENT_PROFILE`，无需改模板）：
+```python
+        # ★A-2: 把 skill graph 目标追加进 profile（可能为 None）
         _skill_hint = getattr(self, "current_skill_target", None)
-        _task_desc = state["task_info"]["description"]
         if _skill_hint:
-            _task_desc = _task_desc + "\n\n[Curriculum focus]\n" + _skill_hint
-        # 用 _task_desc 替换原来的 TASK_DESCRIPTION 入参
-        ... user_prompt.format(CODE_EXAMPLES=example_str, TASK_DESCRIPTION=_task_desc) ...
+            global_profile_str = global_profile_str + "\n\n[Curriculum focus]\n" + _skill_hint
 ```
 
-> ⚠️ apply 时对着 gen_manager.py 里真实的 user_prompt.format 调用微调（占位符名以实际为准）。
-> `EnvGenerator.__init__` 里加一行 `self.current_skill_target = None` 作为默认，防止属性不存在。
+> 若想让 target 成为独立字段而非塞进 profile：在 `evolve_mastered_prompt` 模板加 `{CURRICULUM_FOCUS}`
+> 占位符并在两处 `.format(...)` 传入——更显式但要动模板文件。MVP 用上面的追加法即可。
 
 ---
 
@@ -88,21 +126,24 @@ TASK_DESCRIPTION（或 prompt 末尾）：
         sampled_task_ids = new_task_ids + sampled_from_archive
 ```
 
-在 `sampled_task_ids = new_task_ids + sampled_from_archive` 之前插入 preflight 过滤：
+在 `sampled_task_ids = new_task_ids + sampled_from_archive` 之前插入（`jax` 已 import）：
 ```python
-        # ★B: Preflight Gate — 用当前 policy 对新任务 cold rollout，只保留"可学习"的。
+        # ★B: Preflight Gate — 当前 policy 对新任务 cold rollout，只保留"可学习"的。
         #     policy(rl_train_state) 在此作用域现成、单线程，无并发问题。
-        try:
-            from dicode.skill_preflight.preflight import cold_preflight
-            if new_task_ids:
+        if config.skill_preflight.get("use_preflight", False) and new_task_ids:
+            try:
+                from dicode.dreaming.gen_manager import Task, smart_absolute_path
+                from dicode.wrappers import BatchEnvWrapper
+                from dicode.skill_preflight.preflight import cold_preflight
+                _target_ach = _sched.target_achievements if _sched is not None else []
                 _kept = []
                 for _tid in new_task_ids:
-                    _env, _env_params = gen_manager.archive.get_task_env(_tid)   # ← 见注1
-                    _target_ach = getattr(_sched, "target_achievements", []) \
-                        if 'evaluation_metrics' in dir() and evaluation_metrics else []
-                    _res = cold_preflight(
-                        _env, _env_params, rl_train_state, rng, config, _target_ach,
-                    )
+                    rng, _pf_rng = jax.random.split(rng)          # 别复用训练的 rng
+                    _raw = Task(smart_absolute_path(_tid)).env    # ← Task 加载器（archive 无 get_task_env）
+                    _eparams = _raw.default_params.replace(       # ← ⚠ pod 上确认 default_params（见文末）
+                        max_timesteps=config.evaluation.get("max_timesteps", 8192))
+                    _env = BatchEnvWrapper(_raw, num_envs=config.evaluation.num_envs)
+                    _res = cold_preflight(_env, _eparams, rl_train_state, _pf_rng, config, _target_ach)
                     if _res.action == "accept":
                         _kept.append(_tid)
                     else:
@@ -110,33 +151,52 @@ TASK_DESCRIPTION（或 prompt 末尾）：
                         print(f"  [Preflight] reject {_tid}: {_res.reason} (sr={_res.sr:.2f})")
                 print(f"  [Preflight] kept {len(_kept)}/{len(new_task_ids)} new tasks")
                 new_task_ids = _kept
-        except Exception as e:
-            print(f"  [Preflight] skipped (kept all): {e}")   # 出错则不过滤，保守放行
+            except Exception as e:
+                print(f"  [Preflight] skipped (kept all): {e}")   # 出错则不过滤，保守放行
 ```
 
-> **注1**：`gen_manager.archive.get_task_env(_tid)` 是**占位**——apply 时要确认 archive 怎么从
-> task_id 拿到可跑的 env + env_params（可能是 `archive.get_task_code` 后 `Task(...)`，或已有方法）。
-> 这是 ★B 落地时唯一需要对着真实 archive API 敲定的点。
->
-> **注2**：`cold_preflight` 内部 `make_evaluate(config, env, env_params)(rl_train_state, rng)` 的调用，
-> 需对照 `run_session_training` 里 make_evaluate 的真实用法微调（train_state/rng 传法）。
->
-> **注3**：MVP 阶段若 cold_preflight 接起来复杂，可先只跑 ★A（skill graph）+ preflight 的
-> 纯静态过滤（去重/编译，已有），cold rollout 版作为 Phase 3b。preflight.py 的 route/partial_progress
-> 逻辑已单测通过，只等 env+policy 接上。
+### B-2. preflight.py —— `cold_preflight` 里给 make_evaluate 加 jit
+
+把：
+```python
+    evaluate = make_evaluate(config, env, env_params)
+    metrics = evaluate(train_state, rng)
+```
+改成：
+```python
+    import jax
+    evaluate = jax.jit(make_evaluate(config, env, env_params))
+    metrics = evaluate(train_state, rng)
+```
+
+> 效率备注（呼应旧版注3）：B-1 现在每候选跑**完整** `config.evaluation` 规模 eval。先接起来验证；
+> 若 12 候选太慢，给 preflight 单独配小 `num_envs`/`num_steps`，或接 `staged_preflight` 的 L2/L3 漏斗（Phase 3b）。
+
+---
+
+## ⚠ 唯一需在 pod 上确认的一点
+
+`MiniCraftaxTrain.default_params` 是否存在——canonical eval 路径（craftax_evaluation.py:267）用的是
+`CraftaxAugObsTrain().default_params`，而 Task 的 env 是 `MiniCraftaxTrain(task=...)`。gymnax 风格 env 一般都有，
+但翻 ★B 开关前，先跑：
+```python
+python -c "from dicode.dreaming.gen_manager import Task, smart_absolute_path; \
+t=Task(smart_absolute_path('<某个已有task路径>')); print(hasattr(t.env,'default_params'))"
+```
+若为 False，就照 `run_session_training` 里给 sampled task 造 env_params 的方式复用（B-1 只这一处 env_params 取法要换）。
 
 ---
 
 ## Apply 顺序（baseline 停止后）
 
-1. `EnvGenerator.__init__` 加 `self.current_skill_target = None`。
-2. 应用 A-1（run_dicode Step 2 前）+ A-2（gen_manager user_prompt）。
-3. 先只测 ★A：短 run 看日志有没有 `[SkillGraph] frontier tier ...` + 生成是否受 target 影响、能否编译。
-4. ★A 通过后，应用 B-1，敲定注1（get_task_env）+ 注2（make_evaluate 调用）。
-5. 短 run 看 `[Preflight] kept X/Y`，确认不崩、过滤合理。
-6. 都通过后，跑三组消融（纯baseline / +A / +A+B）。
+1. 加 ★0 config + A-0（TaskGenerator.__init__ 默认）。
+2. 应用 A-1 + A-2。
+3. **只开 `use_scheduler`** 短 run：看日志有无 `[SkillGraph] frontier tier ...`，生成是否受 target 影响、能否编译。
+4. ★A 通过后，应用 B-1 + B-2，并按文末确认 `default_params`。
+5. **再开 `use_preflight`** 短 run：看 `[Preflight] kept X/Y`，被 reject 的任务状态标 `preflight_*`，确认不崩。
+6. 都通过 → 跑三组消融（纯 baseline=都关 / +A=开 scheduler / +A+B=都开）。
 
 ## 验证要点
 - ★A：日志出现 frontier tier 打印；生成的关卡围绕 target tier。
-- ★B：日志出现 kept X/Y；被 reject 的任务状态标 `preflight_*`。
+- ★B：日志出现 `kept X/Y`；被 reject 的任务状态标 `preflight_*`。
 - 整条 run 不崩、能落 WandB、能出 checkpoint。

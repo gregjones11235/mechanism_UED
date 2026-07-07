@@ -131,19 +131,35 @@ def main(config: DictConfig):
 
             if evolve_future is not None:
                 wait_start = time.time()
-                worker_results = evolve_future.result()  # Blocks until done
-                wait_end = time.time()
+                worker_timeout = config.dicode_manager.get("worker_sync_timeout_s", 600)
+                try:
+                    worker_results = evolve_future.result(timeout=worker_timeout)
+                    wait_end = time.time()
 
-                current_worker_wait_time = wait_end - wait_start
-                current_worker_total_time = wait_end - worker_start_time
-                evolve_future = None
+                    current_worker_wait_time = wait_end - wait_start
+                    current_worker_total_time = wait_end - worker_start_time
+                    evolve_future = None
 
-                print(f"  [Timing] Waited: {current_worker_wait_time:.2f}s | "
-                      f"Total: {current_worker_total_time:.2f}s")
+                    print(f"  [Timing] Waited: {current_worker_wait_time:.2f}s | "
+                          f"Total: {current_worker_total_time:.2f}s")
 
-                new_task_ids, compiled_count = _process_worker_results(
-                    worker_results, gen_manager, config
-                )
+                    new_task_ids, compiled_count = _process_worker_results(
+                        worker_results, gen_manager, config
+                    )
+                except concurrent.futures.TimeoutError:
+                    wait_end = time.time()
+                    current_worker_wait_time = wait_end - wait_start
+                    current_worker_total_time = wait_end - worker_start_time
+                    print(
+                        f"  [Sync] WARNING: evolution worker did not finish within "
+                        f"{worker_timeout}s (waited {current_worker_wait_time:.2f}s). "
+                        f"Skipping new tasks this session and training on the existing "
+                        f"archive. Worker keeps running in the background and is re-polled "
+                        f"on the next sync."
+                    )
+                    # Keep evolve_future alive so we do NOT dispatch a duplicate job;
+                    # new_task_ids/compiled_count stay at their empty defaults so
+                    # training proceeds on the archive instead of blocking.
 
             sessions_since_evolution = 1
         else:
@@ -151,6 +167,22 @@ def main(config: DictConfig):
                   "Skipping new tasks.")
             sessions_since_evolution += 1
 
+        # [A] Skill Graph Scheduler: locate the learning frontier from last eval's
+        #     per-achievement SR; stash on task_generator for the design prompt.
+        #     Flag-gated (default off) -> baseline behaviour unchanged.
+        _sched = None
+        gen_manager.task_generator.current_skill_target = None
+        if config.get("skill_preflight", {}).get("use_scheduler", False) and evaluation_metrics:
+            try:
+                from dicode.skill_preflight.skill_scheduler import (
+                    pick_target, format_target_for_prompt,
+                )
+                _sched = pick_target(evaluation_metrics)
+                gen_manager.task_generator.current_skill_target = format_target_for_prompt(_sched)
+                print(f"  [SkillGraph] frontier tier {_sched.tier}, "
+                      f"targets: {_sched.target_achievements}")
+            except Exception as e:
+                print(f"  [SkillGraph] scheduler skipped: {e}")
         # --- Step 2: Dispatch new evolution worker if needed ---
         if evolve_future is None:
             worker_start_time = time.time()
@@ -170,6 +202,33 @@ def main(config: DictConfig):
         sampled_from_archive = sample_tasks_for_training(
             gen_manager, config, num_to_sample_from_archive
         )
+        # [B] Preflight Gate: cold-rollout new tasks with the CURRENT policy; keep only
+        #     learnable ones. Single-threaded here, policy in hand (no worker-thread races).
+        #     Flag-gated (default off) -> baseline behaviour unchanged.
+        if config.get("skill_preflight", {}).get("use_preflight", False) and new_task_ids:
+            try:
+                from dicode.dreaming.gen_manager import Task
+                from dicode.dreaming.utils import smart_absolute_path
+                from dicode.wrappers import BatchEnvWrapper
+                from dicode.skill_preflight.preflight import cold_preflight
+                _target_ach = _sched.target_achievements if _sched is not None else []
+                _kept = []
+                for _tid in new_task_ids:
+                    rng, _pf_rng = jax.random.split(rng)
+                    _raw = Task(smart_absolute_path(_tid)).env
+                    _eparams = _raw.default_params.replace(
+                        max_timesteps=config.evaluation.get("max_timesteps", 8192))
+                    _env = BatchEnvWrapper(_raw, num_envs=config.evaluation.num_envs)
+                    _res = cold_preflight(_env, _eparams, rl_train_state, _pf_rng, config, _target_ach)
+                    if _res.action == "accept":
+                        _kept.append(_tid)
+                    else:
+                        gen_manager.archive.update_node_status(_tid, f"preflight_{_res.reason}")
+                        print(f"  [Preflight] reject {_tid}: {_res.reason} (sr={_res.sr:.2f})")
+                print(f"  [Preflight] kept {len(_kept)}/{len(new_task_ids)} new tasks")
+                new_task_ids = _kept
+            except Exception as e:
+                print(f"  [Preflight] skipped (kept all): {e}")
         sampled_task_ids = new_task_ids + sampled_from_archive
 
         if not sampled_task_ids:
