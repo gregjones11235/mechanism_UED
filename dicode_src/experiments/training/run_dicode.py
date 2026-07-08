@@ -202,33 +202,70 @@ def main(config: DictConfig):
         sampled_from_archive = sample_tasks_for_training(
             gen_manager, config, num_to_sample_from_archive
         )
-        # [B] Preflight Gate: cold-rollout new tasks with the CURRENT policy; keep only
-        #     learnable ones. Single-threaded here, policy in hand (no worker-thread races).
+        # [B] Preflight Gate (v2): score new tasks with the CURRENT policy and keep
+        #     only learnable ones. Reuses the codebase's own machinery end-to-end:
+        #     load_tasks_from_env_codes (env from archived code) -> evaluate_new_tasks
+        #     (batched frozen-policy rollouts, embeddings, masks) ->
+        #     calculate_scores_from_snapshot (per-task SR) -> route() (accept/reject).
         #     Flag-gated (default off) -> baseline behaviour unchanged.
         if config.get("skill_preflight", {}).get("use_preflight", False) and new_task_ids:
             try:
-                from dicode.dreaming.gen_manager import Task
-                from dicode.dreaming.utils import smart_absolute_path
-                from dicode.wrappers import BatchEnvWrapper
-                from dicode.skill_preflight.preflight import cold_preflight
-                _target_ach = _sched.target_achievements if _sched is not None else []
-                _kept = []
-                for _tid in new_task_ids:
+                from dicode.evaluation import evaluate_new_tasks
+                from dicode.scoring import calculate_scores_from_snapshot
+                from dicode.task_utils import load_tasks_from_env_codes
+                from dicode.skill_preflight.preflight import route
+
+                if "validation" not in config:
+                    raise RuntimeError(
+                        "config.validation missing - add `+validation=default` to the "
+                        "run command (preflight needs validation.rollout_updates)")
+
+                _pf_t0 = time.time()
+                # Resolve which ids actually load, in order (index-aligns with scores)
+                _pf_classes, _pf_ok_ids = load_tasks_from_env_codes(
+                    gen_manager.archive, new_task_ids)
+                # Ids whose code failed to load: keep (same as baseline; they will be
+                # skipped again by the training loader anyway)
+                _kept = [t for t in new_task_ids if t not in _pf_ok_ids]
+
+                if _pf_ok_ids:
                     rng, _pf_rng = jax.random.split(rng)
-                    _raw = Task(smart_absolute_path(_tid)).env
-                    _eparams = _raw.default_params.replace(
-                        max_timesteps=config.evaluation.get("max_timesteps", 8192))
-                    _env = BatchEnvWrapper(_raw, num_envs=config.evaluation.num_envs)
-                    _res = cold_preflight(_env, _eparams, rl_train_state, _pf_rng, config, _target_ach)
-                    if _res.action == "accept":
-                        _kept.append(_tid)
+                    _pf_raw = evaluate_new_tasks(
+                        config, _pf_rng, rl_train_state, _pf_ok_ids,
+                        gen_manager.archive, gen_manager.selector.embedding_model,
+                    )
+                    _pf_swd = _pf_raw.get("scoring_window_data")
+                    if _pf_swd is None:
+                        print("  [Preflight] WARNING: rollouts returned no scoring data; "
+                              "keeping all new tasks")
+                        _kept = list(new_task_ids)
                     else:
-                        gen_manager.archive.update_node_status(_tid, f"preflight_{_res.reason}")
-                        print(f"  [Preflight] reject {_tid}: {_res.reason} (sr={_res.sr:.2f})")
-                print(f"  [Preflight] kept {len(_kept)}/{len(new_task_ids)} new tasks")
+                        _pf_scores = calculate_scores_from_snapshot(
+                            _pf_swd, len(_pf_ok_ids),
+                            _pf_raw["task_achievement_mask"],
+                            _pf_raw["task_completed_mask"],
+                            config,
+                        )
+                        for _pf_i, _tid in enumerate(_pf_ok_ids):
+                            _sr = float(_pf_scores.get(str(_pf_i), {}).get("sr", -1.0))
+                            # sr < 0 => no episode finished => no partial progress
+                            _d = route(max(_sr, 0.0), any_partial_progress=(_sr >= 0.0))
+                            if _d.action == "accept":
+                                _kept.append(_tid)
+                                _clip = min(max(_sr, 0.0), 1.0)
+                                gen_manager.archive.update_node_learnability(
+                                    _tid, _clip * (1.0 - _clip))
+                            else:
+                                gen_manager.archive.update_node_status(
+                                    _tid, f"preflight_{_d.reason}")
+                                gen_manager.archive.set_task_active_status(_tid, False)
+                                print(f"  [Preflight] reject {_tid}: {_d.reason} "
+                                      f"(sr={_sr:.2f})")
+                print(f"  [Preflight] kept {len(_kept)}/{len(new_task_ids)} new tasks "
+                      f"({time.time() - _pf_t0:.1f}s)")
                 new_task_ids = _kept
             except Exception as e:
-                print(f"  [Preflight] skipped (kept all): {e}")
+                print(f"  [Preflight] ERROR (kept all, gate inactive!): {e}")
         sampled_task_ids = new_task_ids + sampled_from_archive
 
         if not sampled_task_ids:
