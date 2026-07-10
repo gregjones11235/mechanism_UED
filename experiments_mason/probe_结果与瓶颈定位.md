@@ -3,7 +3,7 @@
 > 2026-07-09。probe 臂 = +A+B + `mastery_threshold=0.2`（wandb `oun2yfm6`，改名 `AB_threshold02_probe`）。
 > 对照 = u1gjqror（同配置，threshold 0.60），同 seed=1 同环境单 flag 差。
 > 数据：`experiments_mason/eval/eval_PROBET02_seed0.json`、`run_probe_t02.log`、probe task_graph.graphml。
-> **本文档结论：机制臂 ~30 平台的成因最终定位为"生成任务的脚手架泄漏"——有 14B 自写代码注释级的实锤。**
+> **本文档结论：机制臂 ~30 平台的成因最终定位为"生成任务的脚手架泄漏"——且全量审计（302 任务/4 臂）显示泄漏率 100%（含无定向 baseline）：脚手架是本范式的固有生成模式，非机制诱发。**
 
 ---
 
@@ -39,7 +39,7 @@
 
 **证据链**（每环第一手）：
 1. 调度器忠实指向 tier 3（22/25 session，targets 为真身枚举名，含 `defeat_orc_solider` 源码拼法）；
-2. 14B 照 target 生成 → **生成代码内建脚手架**。probe task_graph 抽查实录（14B 自写注释原文）：
+2. 14B 生成的任务代码**系统性内建脚手架**。probe task_graph 抽查实录（14B 自写注释原文）：
 
 ```python
 # task_19 "MAKE_DIAMOND_SWORD" — generate_world():
@@ -50,9 +50,28 @@ builder.set_player_inventory({"pickaxe": 1, "coal": 50})
 builder.add_mobs_randomly_near(..., min_dist=4, max_dist=8, ...)
 # --- END SCAFFOLDING ---
 ```
-   并且 `completed_achievements` 预标记前置链（task_20 一次预标 **14 个**前置成就；task_17 预标 MAKE_WOOD_SWORD）——前置依赖被代码级跳过；
+   并且 `completed_achievements` 预标记前置链（task_20 一次预标 **14 个**前置成就）——前置依赖被代码级跳过；
 3. 任务因此可解 → **preflight 全收**（sr≥0.05 恰恰由脚手架制造）；
 4. policy 学会"持现成资源做最后一步"→ 裸 held-out 需从空手走完整链 → **技能不迁移** → 平台。
+
+### 3.1 ★ 全量审计（302 任务 / 4 臂）：泄漏率 100%，范式固有
+
+静态 AST 审计（`scaffold_audit.py`，四签名：S1 送库存 / S2 预标成就 / S3 近距刷怪 min_dist≤8 / S4 起始层>0）：
+
+| 臂 | 生成任务 | 泄漏率 | S1/S2/S3/S4 | 预标均数 |
+|---|---|---|---|---|
+| probe (t=0.2) | 74 | **100%** | 73/74/72/58 | 4.4 |
+| ARMAB (t=0.6) | 68 | **100%** | 66/64/68/34 | 4.4 |
+| ARMA_ext | 79 | **100%** | 79/77/78/41 | 4.6 |
+| **BASE_ext（无定向）** | 81 | **100%** | 80/75/76/51 | 4.2 |
+
+各深度分桶（tier0 到 tier3）**全部 100%**。
+
+**因果修正**（推翻本文初版的"定向诱发"假说）：baseline 无任何 target 注入、tier-0 任务（收木头级）同样 100% 泄漏 → **脚手架不是对"够不着的目标"的压力反应，是 14B 在本管线 prompt 范式下的默认生成形态**（最可能源头：种子任务示例 / evolve prompt 本身示范了"设场景+给工具+预标前置"的模式——prompt 溯源为最便宜的修复候选，待查）。唯一非饱和信号：S4 起始层跳跃随定向深度上升（probe 78% vs ARMAB 50%）——"深度→更重脚手架"仅存此残余证据。
+
+**随之必须回答的反问：泄漏率同为 100%，机制臂凭什么 +12 分？** 答：泄漏率相同，但**脚手架残余的迁移价值不同**。机制臂的任务终端瞄准 tier-2/3 技能（probe 63/74 为 tier-3 定向）——即便前置链被跳过，policy 至少反复练习了**最后一步**（打蜥蜴/开箱/射箭）；短链技能（tier-2.5：dungeon/bow/chest，脚手架后仅剩一两步）因此迁移成功（→60%+），长链技能（tier-3，被跳过的部分太长）迁移失败（→0）。baseline 的任务连终端都未瞄准深层。**机制的 +12 分 = 终端技能定向的收益；脚手架吃掉的 = 前置链的学习。** 这同时解释了 tier-2.5 成功与 tier-3 失败的分界线位置。
+
+**升维含义**：本管线（含全部五臂、且很可能含同范式先行工作）生成的从来不是"裸课程"，而是 100% 脚手架化课程——所有成绩都是**脚手架课程的迁移残余**。fidelity gate 由"补丁"升格为"必需品"。
 
 **两条正交质量轴**（本轮最重要的概念产出）：
 - **可解性（learnability）**：当前 policy 能否推进——编译校验、C-0 lint、preflight 全部只覆盖此轴；
@@ -77,13 +96,15 @@ builder.add_mobs_randomly_near(..., min_dist=4, max_dist=8, ...)
 
 平台成因既定为忠实性缺陷，下一机制的规格随之明确（候选，待排序）：
 
-- **C-2 忠实性闸（fidelity gate）**：候选任务在**裸初始条件**下复验——静态层：AST 检查 `set_player_inventory` / `completed_achievements` 预标 / 近距刷怪等脚手架模式（脚手架有清晰代码签名,14B 还自写注释,检测成本低）；动态层：将任务的 init 替换为裸初始态后重跑 preflight rollout，SR 崩塌幅度即"脚手架依赖度"量化指标；
+- **prompt 溯源（新增，最便宜候选）**：grep 种子任务与 evolve/craftax_coder prompt 是否示范了 `set_player_inventory` / `completed_achievements` 预标模式——若是，"14B 学坏"实为"prompt 教的"，修 prompt 即可能大幅降泄漏，成本近零；
+- **C-2 忠实性闸（fidelity gate）**：候选任务在**裸初始条件**下复验——静态层：`scaffold_audit.py` 已就绪（四签名 AST 检测，302 任务实测零 LLM 成本）；动态层：将任务 init 替换为裸初始态后重跑 preflight rollout，SR 崩塌幅度即"脚手架依赖度"量化指标；
 - **脚手架递减课程（方案二升级版）**：不禁止脚手架，prompt/代码层要求随 session 递减（对齐 v6 线"隔离演练→代码保障"思路，两线可合写）；
 - 判据：fidelity gate 上线后，tier-3 定向任务的"裸复验 SR"与 held-out tier-3 技能增长应恢复相关。
 
 ## 6. 局限
 
 1. 全部 n=1；probe vs 0.6 臂差异多在 ±1.5 噪声带内。
-2. 脚手架抽查 n=3（task_17/19/20，全部命中）——泄漏率的系统统计未做（可对 graphml 全量跑静态检测，~1 小时脚本活）。
-3. 振荡期（session 1-4）的混合课程效应与 0.2 阈值本身的效应未分离。
-4. "预算不足"假设未完全排除（tier-3 链条长），但脚手架实锤使其从主嫌疑降为次要因素。
+2. ~~脚手架抽查 n=3~~ → **已完成全量审计（302 任务，§3.1）**；但四签名清单可能不完备（未检测的脚手架形态，如地形捷径/资源密度操纵）。
+3. "终端技能定向解释 +12 分"为事后解释（post-hoc）——可检验预测：若成立，机制臂收益应集中在 target 过的终端技能上（可对 eval JSON 做技能级归因验证）。
+4. 振荡期（session 1-4）的混合课程效应与 0.2 阈值本身的效应未分离。
+5. "预算不足"假设未完全排除，但 100% 泄漏使其进一步边缘化。
