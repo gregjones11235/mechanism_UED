@@ -187,3 +187,32 @@ tail -f /workspace/run_AB.log | grep -aiE "SkillGraph|Preflight|designs created|
    ↓
 第4节：三组进同一 wandb workspace 对比 tier2-4 held-out SR + mean_performance
 ```
+
+# checklist 追加段（贴到 methods_run_checklist.md 末尾）
+
+## N. Migrate 后标准验收（本周两次 migrate 实战总结，2026-07-10/11）
+
+任何训练/评测前三查（主机名变了 = 必查）：
+```bash
+curl -s http://localhost:11434/api/ps          # 双模型驻留:14B size_vram≈15.3G + nomic
+grep -a "offloaded" /workspace/ollama_server.log | tail -3   # 14B 必须 49/49(注意 tail -1 可能抓到 nomic 的 13/13)
+python -c "import jax; print(jax.__version__, jax.devices())"  # 0.6.2 + CudaDevice
+```
+已知恢复项：
+- **Ollama 二进制在系统盘,migrate 必丢** → `curl -fsSL https://ollama.com/install.sh | sh` 重装 + 双预热(generate + embeddings);冷启动读网络卷 15G 需 1-5 分钟,显存不动先看日志再判卡死;
+- **jax cuSPARSE not found → CPU 回退** → 修复已固化进 `/workspace/venv/bin/activate`(LD_LIBRARY_PATH 指向 venv 内 nvidia/*/lib),source 即自动生效;
+- 模型文件/venv/代码/输出全在网络卷,不丢。
+
+## N+1. 长跑断点保险（resume,已实测 2026-07-11）
+
+- 代码自带全量恢复:同 `hydra.run.dir=<原输出目录>` + 同配置重启 → 恢复 train_state/步数/session/task graph,回退到最近 checkpoint 重跑该 session;日志凭证 `Agent state loaded from checkpoint, skipping initial seed training`;
+- **只用于同配置断点续跑**;跨配置(如改 total_timesteps)续跑会产生杂交 LR schedule,禁止;
+- 重启后 wandb 会新开 run(曲线分段,按 global_env_steps 拼看);rng 流重置(记录注明);
+- 2e9 长跑期间每日一查:主机名 + `ps aux | grep run_dicode`,挂了即同目录重启。
+
+## N+2. 已知坑
+
+- **`use_wandb=false` 路径损坏**:训练内层某 jax callback 有裸 wandb.log(未包开关),false 会崩(`You must call wandb.init()`)——一律 `use_wandb=true`,smoke/临时 run 用完在 wandb 网页删;待办:grep 出该调用包一层开关;
+- 2e9 主循环按 `while global_env_steps < total_timesteps` 自动停,无需手动 pkill;
+- checkpoint 体积 ~56MB/个,2e9 全程 ~60 个 ≈ 3.4G,150G 卷无压力(当前用量 55G)。
+
