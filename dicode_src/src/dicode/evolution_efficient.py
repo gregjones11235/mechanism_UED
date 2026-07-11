@@ -200,6 +200,70 @@ def evolve_and_validate_tasks(
 
     print("    WORKER: Validation complete.")
     tracker.stop_timer("Compilation (LLM)", session_idx)
+
+    # [C2lite §3 / C-0] Scaffold gate: static fidelity check on every compiled candidate,
+    # with evidence-carrying regeneration (<= scaffold_gate_retries attempts) before drop.
+    # Flag-gated (+skill_preflight.use_scaffold_gate=true, default off -> path unchanged).
+    _sp_cfg = {}
+    try:
+        _sp_cfg = gen_manager.config_.get("skill_preflight", {}) or {}
+    except Exception:
+        pass
+    if _sp_cfg.get("use_scaffold_gate", False) and metrics:
+        try:
+            from dicode.skill_preflight.scaffold_gate import check_code, snapshot_from_metrics
+
+            _snapshot = snapshot_from_metrics(metrics)
+            _max_repairs = int(_sp_cfg.get("scaffold_gate_retries", 2))
+            _n_checked = _n_violated = _n_repaired = _n_dropped = 0
+            for res in generation_results:
+                code = res.get("code_string")
+                if not res.get("compiled") or not code:
+                    continue
+                _n_checked += 1
+                verdict = check_code(code, _snapshot)
+                if verdict.ok:
+                    continue
+                _n_violated += 1
+                fixed = False
+                for _attempt in range(_max_repairs):
+                    new_code = gen_manager.env_generator.repair_scaffold_violations(
+                        res.get("docstring", ""), code, verdict.evidence
+                    )
+                    if not new_code:
+                        continue
+                    ok_compile, compile_err = gen_manager.env_generator.check_compilation(
+                        new_code
+                    )
+                    if not ok_compile:
+                        # Repair broke compilation: keep the indictment, note the breakage
+                        # for the next attempt, do not adopt the broken code.
+                        verdict.evidence += (
+                            f"\n(Additionally, your previous repair attempt failed to "
+                            f"compile: {compile_err})"
+                        )
+                        continue
+                    re_verdict = check_code(new_code, _snapshot)
+                    code = new_code  # compiled: adopt as the new best attempt either way
+                    if re_verdict.ok:
+                        fixed = True
+                        break
+                    verdict = re_verdict  # updated indictment for the next attempt
+                if fixed:
+                    res["code_string"] = code
+                    res["code"] = code
+                    _n_repaired += 1
+                else:
+                    res["compiled"] = False
+                    res["error"] = "scaffold_gate: " + ",".join(verdict.violations)
+                    _n_dropped += 1
+            print(
+                f"    WORKER: [ScaffoldGate] checked {_n_checked}, violations "
+                f"{_n_violated}, repaired {_n_repaired}, dropped {_n_dropped}."
+            )
+        except Exception as e:
+            print(f"    WORKER: [ScaffoldGate] ERROR (gate inactive, all kept): {e}")
+
     return generation_results
 
 

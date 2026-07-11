@@ -1944,16 +1944,20 @@ class EnvGenerator:
 		print(f"    WORKER (Thread): Generating code for {len(tasks_to_generate)} tasks...")
 
 		# 1. Prepare a batch of prompts
+		# [C2lite §2] one-step scaffold rules for the coder stage. Set per-session by
+		# evolve_tasks (flag-gated); None -> baseline prompt, byte-identical to old runs.
+		_scaffold_rules = getattr(self, "scaffold_rules_block", None)
 		user_prompts = []
 		code_example_strs = []
 		for task_info in tasks_to_generate:
 			example_str = self._format_code_examples(task_info["examples"])
 			code_example_strs.append(example_str)
-			user_prompts.append(
-				self.gen_env_prompt.user_prompt.format(
-					CODE_EXAMPLES=example_str, TASK_DESCRIPTION=task_info["description"]
-				)
+			_up = self.gen_env_prompt.user_prompt.format(
+				CODE_EXAMPLES=example_str, TASK_DESCRIPTION=task_info["description"]
 			)
+			if _scaffold_rules:
+				_up = _up + _scaffold_rules
+			user_prompts.append(_up)
 
 		system_prompt = self.gen_env_prompt.system_prompt.format(
 			CRAFTAX_CODE=self.craftax_mechanics, MINICRAFTAX_CODE=self.wrapper_mechanics, MOBS=MOBS_CODE,
@@ -1972,6 +1976,30 @@ class EnvGenerator:
 
 		print("    WORKER (Thread): Code generation complete.")
 		return results
+
+	def repair_scaffold_violations(
+		self, task_desc: str, prior_code: str, evidence: str
+	) -> str | None:
+		"""[C2lite §3] One targeted regeneration for a scaffold-gate violator.
+
+		Reuses the existing non-compilation reflection template with the gate's evidence as
+		the ERROR block, plus the current session's scaffold rules if set. Returns the newly
+		extracted code, or None if extraction failed. Caller owns recompile/regate/retry-cap.
+		"""
+		prompt = self._build_reflection_prompt(
+			failed_response_content=prior_code,
+			error_msg=evidence,
+			code_examples_str="",
+			task_desc=task_desc,
+		)
+		_scaffold_rules = getattr(self, "scaffold_rules_block", None)
+		if _scaffold_rules:
+			prompt = prompt + _scaffold_rules
+		system_prompt = self.gen_env_prompt.system_prompt.format(
+			CRAFTAX_CODE=self.craftax_mechanics, MINICRAFTAX_CODE=self.wrapper_mechanics, MOBS=MOBS_CODE,
+		)
+		responses = self.llm.query(system_prompt, [prompt])
+		return self._extract_file(responses[0].get("content")) if responses else None
 
 	def _build_reflection_prompt(
 		self, failed_response_content: str, error_msg: str, code_examples_str: str, task_desc: str

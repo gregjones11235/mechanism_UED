@@ -172,18 +172,44 @@ def main(config: DictConfig):
         #     Flag-gated (default off) -> baseline behaviour unchanged.
         _sched = None
         gen_manager.task_generator.current_skill_target = None
+        gen_manager.env_generator.scaffold_rules_block = None  # [C2lite §2] reset per session
         if config.get("skill_preflight", {}).get("use_scheduler", False) and evaluation_metrics:
             try:
                 from dicode.skill_preflight.skill_scheduler import (
-                    pick_target, format_target_for_prompt,
+                    pick_target,
+                    format_target_for_prompt,
+                    format_target_for_prompt_one_step,
+                    format_scaffold_rules_for_coder,
                 )
+                _sp = config.get("skill_preflight", {})
+                _frontier_mode = _sp.get("frontier_mode", "tier")
                 _sched = pick_target(
                     evaluation_metrics,
-                    threshold=config.get("skill_preflight", {}).get("mastery_threshold", 0.60),
+                    threshold=_sp.get("mastery_threshold", 0.60),
+                    frontier_mode=_frontier_mode,
+                    prereq_threshold=_sp.get("prereq_threshold", 0.3),
                 )
-                gen_manager.task_generator.current_skill_target = format_target_for_prompt(_sched)
-                print(f"  [SkillGraph] frontier tier {_sched.tier}, "
-                      f"targets: {_sched.target_achievements}")
+                # [C2lite §2] one-step scaffold prompt rides the prereq criterion by default
+                # (scaffold_prompt: "auto"); force "one_step"/"legacy" for single-layer arms.
+                _sp_prompt = _sp.get("scaffold_prompt", "auto")
+                _one_step = (
+                    _sp_prompt == "one_step"
+                    or (_sp_prompt == "auto" and _frontier_mode == "prereq")
+                )
+                if _one_step:
+                    gen_manager.task_generator.current_skill_target = (
+                        format_target_for_prompt_one_step(_sched)
+                    )
+                    gen_manager.env_generator.scaffold_rules_block = (
+                        format_scaffold_rules_for_coder(_sched.sr_snapshot)
+                    )
+                else:
+                    gen_manager.task_generator.current_skill_target = (
+                        format_target_for_prompt(_sched)
+                    )
+                print(f"  [SkillGraph] mode={_sched.mode} frontier tier {_sched.tier}, "
+                      f"targets: {_sched.target_achievements}"
+                      + (" (one-step scaffold prompt)" if _one_step else ""))
             except Exception as e:
                 print(f"  [SkillGraph] scheduler skipped: {e}")
         # --- Step 2: Dispatch new evolution worker if needed ---
