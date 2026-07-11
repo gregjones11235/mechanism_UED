@@ -67,11 +67,36 @@ builder.add_mobs_randomly_near(..., min_dist=4, max_dist=8, ...)
 
 各深度分桶（tier0 到 tier3）**全部 100%**。
 
-**因果修正**（推翻本文初版的"定向诱发"假说）：baseline 无任何 target 注入、tier-0 任务（收木头级）同样 100% 泄漏 → **脚手架不是对"够不着的目标"的压力反应，是 14B 在本管线 prompt 范式下的默认生成形态**（最可能源头：种子任务示例 / evolve prompt 本身示范了"设场景+给工具+预标前置"的模式——prompt 溯源为最便宜的修复候选，待查）。唯一非饱和信号：S4 起始层跳跃随定向深度上升（probe 78% vs ARMAB 50%）——"深度→更重脚手架"仅存此残余证据。
+**因果修正**（推翻本文初版的"定向诱发"假说）：baseline 无任何 target 注入、tier-0 任务（收木头级）同样 100% 泄漏 → **脚手架不是对"够不着的目标"的压力反应，是 14B 在本管线 prompt 范式下的默认生成形态**。
+
+**溯源已结案（2026-07-10，双重教学实证）**：
+1. **few-shot 教的**：四个种子任务（src/minicraftax/tasks/seed_tasks/*.py，模型看到的全部示例）每一个都包含 set_player_inventory + completed_achievements 预标 + add_mobs_randomly_near；
+2. **指令明文教的**：persona prompt 原文——`persona_ambitious_coop.py`: "aim forward **WITH scaffolding**, NEVER 'unsolvable'"、"If the target needs prerequisites the agent lacks, **SCAFFOLD them**: provide the intermediate tools/resources/floor... and **list them as Completed Achievements**"；`persona_feasible.py` / `evolve_mastered_r.py` 同类措辞。S1/S2/S4 三种签名被逐字规定。
+→ **责任归属修正：14B 无罪，脚手架是 DiCode 范式的显式设计意图**；缺陷不在"坏示范"，而在范式未闭合的假设（见核心命题）。修复语义 = 补全缺失的另一半（递减/验证），而非删除 scaffold 哲学（它保障可学性，有其道理）。
+唯一非饱和信号：S4 起始层跳跃随定向深度上升（probe 78% vs ARMAB 50%）——"深度→更重脚手架"仅存此残余证据。
 
 **随之必须回答的反问：泄漏率同为 100%，机制臂凭什么 +12 分？** 答：泄漏率相同，但**脚手架残余的迁移价值不同**。机制臂的任务终端瞄准 tier-2/3 技能（probe 63/74 为 tier-3 定向）——即便前置链被跳过，policy 至少反复练习了**最后一步**（打蜥蜴/开箱/射箭）；短链技能（tier-2.5：dungeon/bow/chest，脚手架后仅剩一两步）因此迁移成功（→60%+），长链技能（tier-3，被跳过的部分太长）迁移失败（→0）。baseline 的任务连终端都未瞄准深层。**机制的 +12 分 = 终端技能定向的收益；脚手架吃掉的 = 前置链的学习。** 这同时解释了 tier-2.5 成功与 tier-3 失败的分界线位置。
 
 **升维含义**：本管线（含全部五臂、且很可能含同范式先行工作）生成的从来不是"裸课程"，而是 100% 脚手架化课程——所有成绩都是**脚手架课程的迁移残余**。fidelity gate 由"补丁"升格为"必需品"。
+
+### 3.2 ★ 裸复验（C-2 动态层原型）：三个 regime，与迁移模式逐点对齐
+
+工具 = `bare_reverify.py`（剥除 S1 送库存 + 清空 S2 预标，保留刷怪/起始层；冻结 probe 终版 checkpoint(2400)，同 rng 配对 rollout；胶水全部复用 eval_checkpoints / evaluate_new_tasks 生产路径）。10 任务两轮结果：
+
+| regime | 代表任务 | SR(原版)→SR(裸版) | 含义 |
+|---|---|---|---|
+| **已内化** | task_14 / task_8（tier-2.5 族） | 0.76→0.70 / 0.95→0.58 | 技能真学会 = **迁移成功的那批** |
+| **脚手架承重** | task_25 | **0.65→0.01（崩塌 0.64）** | 表现是借来的 = **迁移断裂的位置** |
+| **给脚手架也不会** | task_17/19/20（钻石剑族） | ~0→~0 | **准入时"可学"≠预算内"可掌握"**（tier-3 长链，连脚手架版都未学会） |
+
+两个独立测量（裸复验 vs held-out 迁移）讲同一个故事 → 裸复验 = 逐任务"脚手架依赖度"测量仪，**C-2 动态层原型已验证可用**。局限：单 checkpoint、每桶 2-3 任务、任务按关键词选取较粗。（task_25 的 0.65 注：relevant 为双成就 DIAMOND_SWORD+DEFEAT_ORC_SOLIDER，高分来自脚手架装备下的战斗半；剥除后两半全崩。）
+
+### 3.3 与主线 v6fix7 的关系（分层防御）
+
+主线已有直接尝试：v6fix7 的 SiegeLevelValidator（已实现+测试+接入 gen_manager），哲学 = 不禁脚手架、保护"焦点技能的直接执行链"（真采真熔真造：焦点及直接前置禁入 Completed）。**关键差异：它守在 docstring 层（声明式、LLM 自查），本线审计在代码层（AST 实测）**——docstring 干净不保证代码干净（S1/S3/S4 完全不查，S2 仅选择性保护），该假设无人验过。
+→ 防御纵深三层两线正好拼齐：**docstring 语义规则(v6fix7) / 代码 AST 审计(scaffold_audit) / 行为层裸复验(C-2)**——联合论文"layered defense"一节的骨架。
+→ 现成跨线实验：用 scaffold_audit 审主线 fix7 前后 task graph，一条命令量化 docstring 防御的代码层效果（待与 Alec 对接）。
+另注：v6fix7"保护直接链"的设计选择恰被本线断裂带数据背书（短链迁移成功、长链失败——保的正是能活下来的那段）。
 
 **两条正交质量轴**（本轮最重要的概念产出）：
 - **可解性（learnability）**：当前 policy 能否推进——编译校验、C-0 lint、preflight 全部只覆盖此轴；
