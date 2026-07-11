@@ -24,8 +24,15 @@ version DiCode pins; see auction/craftax_achievements.py header for the same pin
     floor5 troll mines = troll/deep_thing/bat; floor6 fire = pigman/fire_elemental;
     floor7 ice = frost_troll/ice_elemental; floor8 graveyard = necromancer.
     NOTE the counter-intuitive ground truth: ORCS ARE ON FLOOR 1 (dungeon), gnomes on floor 2.
-  * Books/potions/gems drop from chests (game_logic loot: books/potions/sapphire/ruby);
-    chests appear from floor 1 -> open_chest gates the book/potion/gem line.
+  * Books/potions/gems/bow drop from chests (game_logic loot fields incl. bow); chests
+    appear from floor 1 -> open_chest gates the book/potion/gem/bow line. NOTE the
+    COLLECT_*/FIND_BOW/MAKE_* family are INVENTORY-STATE achievements (fire on
+    inventory.x > 0 / gear level, game_logic ~2871-2972) — chest loot legitimately grants
+    them, which also makes ITEM_*_GRANTS below literally game-true, not an approximation.
+  * 2026-07-11 autoextract-spike corrections (prereq_autoextract_spike.py found three
+    missed station edges + one imprecise edge vs. do_crafting ground truth): iron armour
+    needs table AND furnace (l.713); diamond armour and torch need table; find_bow's
+    precise edge is open_chest (was the looser enter_dungeon).
   * Enchantment tables (world_gen_configs.py): ICE table in SEWERS (floor 3, consumes
     sapphire), FIRE table in VAULTS (floor 4, consumes ruby). Canonical (cheapest) enchant
     path = sewers + sapphire.
@@ -80,12 +87,14 @@ DIRECT_PREREQS: dict[str, frozenset[str]] = {
         "place_table", "place_furnace",
     }),
     "make_arrow": frozenset({"collect_wood", "collect_stone", "place_table"}),
-    "make_torch": frozenset({"collect_wood", "collect_coal"}),
+    "make_torch": frozenset({"collect_wood", "collect_coal", "place_table"}),
     "place_torch": frozenset({"make_torch"}),
-    "make_iron_armour": frozenset({"collect_iron", "collect_coal", "place_furnace"}),
+    "make_iron_armour": frozenset({
+        "collect_iron", "collect_coal", "place_table", "place_furnace",
+    }),
     "enter_dungeon": frozenset(),              # overworld down-ladder; no hard gate
     "enter_gnomish_mines": frozenset({"enter_dungeon"}),
-    "find_bow": frozenset({"enter_dungeon"}),
+    "find_bow": frozenset({"open_chest"}),      # FIND_BOW = inventory.bow>0; bow is chest loot
     "fire_bow": frozenset({"find_bow", "make_arrow"}),
     "eat_bat": frozenset({"enter_gnomish_mines"}),      # bats: floors 2/5/6/7, earliest = 2
     "eat_snail": frozenset({"enter_dungeon"}),          # snails: floors 1/3/4, earliest = 1
@@ -95,7 +104,7 @@ DIRECT_PREREQS: dict[str, frozenset[str]] = {
     "collect_diamond": frozenset({"make_iron_pickaxe"}),
     "make_diamond_sword": frozenset({"collect_wood", "collect_diamond", "place_table"}),
     "make_diamond_pickaxe": frozenset({"collect_wood", "collect_diamond", "place_table"}),
-    "make_diamond_armour": frozenset({"collect_diamond"}),
+    "make_diamond_armour": frozenset({"collect_diamond", "place_table"}),
     "enter_sewers": frozenset({"enter_gnomish_mines"}),
     "enter_vault": frozenset({"enter_sewers"}),
     "enter_troll_mines": frozenset({"enter_vault"}),

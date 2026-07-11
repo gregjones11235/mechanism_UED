@@ -41,6 +41,11 @@ def test_known_chains():
     assert DIRECT_PREREQS["defeat_orc_solider"] == {"enter_dungeon"}
     assert DIRECT_PREREQS["defeat_gnome_warrior"] == {"enter_gnomish_mines"}
     assert DIRECT_PREREQS["defeat_lizard"] == {"enter_sewers"}
+    # 2026-07-11 autoextract-spike corrections (stations verified in do_crafting):
+    assert "place_table" in DIRECT_PREREQS["make_torch"]
+    assert {"place_table", "place_furnace"} <= DIRECT_PREREQS["make_iron_armour"]
+    assert "place_table" in DIRECT_PREREQS["make_diamond_armour"]
+    assert DIRECT_PREREQS["find_bow"] == {"open_chest"}  # bow is chest loot
     # Floor ladder is a strict chain.
     for i in range(1, len(FLOOR_ENTRY_LADDER)):
         assert FLOOR_ENTRY_LADDER[i - 1] in DIRECT_PREREQS[FLOOR_ENTRY_LADDER[i]]
