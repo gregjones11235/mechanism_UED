@@ -177,7 +177,10 @@ def main(config: DictConfig):
                 from dicode.skill_preflight.skill_scheduler import (
                     pick_target, format_target_for_prompt,
                 )
-                _sched = pick_target(evaluation_metrics)
+                _sched = pick_target(
+                    evaluation_metrics,
+                    threshold=config.get("skill_preflight", {}).get("mastery_threshold", 0.60),
+                )
                 gen_manager.task_generator.current_skill_target = format_target_for_prompt(_sched)
                 print(f"  [SkillGraph] frontier tier {_sched.tier}, "
                       f"targets: {_sched.target_achievements}")

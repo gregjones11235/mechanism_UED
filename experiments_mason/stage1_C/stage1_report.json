@@ -1,0 +1,438 @@
+{
+  "summary": {
+    "n": 30,
+    "lint_detection_rate": 1.0,
+    "repair_success_rate_given_detected": 1.0,
+    "mean_repair_tokens": 2127.8,
+    "organic_inventory": {
+      "Achievement": {
+        "DESCEND": 5,
+        "DEFEAT_ORC_SOLDIER": 9,
+        "DEFEND_SKELETON": 2,
+        "DESCENT": 1,
+        "DEFEAT_BAT": 2,
+        "COLLECT_BAT": 1
+      },
+      "BlockType": {
+        "FLOOR": 1,
+        "TORCH": 2,
+        "LADDER_DOWN": 17,
+        "BOW": 10,
+        "ITEM_BOW": 1,
+        "BAT": 2,
+        "NONE": 1,
+        "DIRT": 1
+      }
+    },
+    "prompt_cross_reference": {
+      "Achievement": {
+        "hallucinated_but_in_prompt": [],
+        "real_missing_from_prompt": [],
+        "prompt_extra_not_real": [
+          "ACHIEVEMENT_REWARD_MAP",
+          "INTERMEDIATE_ACHIEVEMENTS",
+          "LEVEL_ACHIEVEMENT_MAP",
+          "MOB_ACHIEVEMENT_MAP",
+          "VERY_ADVANCED_ACHIEVEMENTS"
+        ]
+      },
+      "BlockType": {
+        "hallucinated_but_in_prompt": [],
+        "real_missing_from_prompt": [],
+        "prompt_extra_not_real": []
+      }
+    }
+  },
+  "rows": [
+    {
+      "task": "task_1",
+      "fault": [
+        "BlockType",
+        "ITEM_BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1117,
+      "tok_out": 837
+    },
+    {
+      "task": "task_27",
+      "fault": [
+        "BlockType",
+        "FLOOR"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1189,
+      "tok_out": 910
+    },
+    {
+      "task": "task_18",
+      "fault": [
+        "Achievement",
+        "COLLECT_BAT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1264,
+      "tok_out": 866
+    },
+    {
+      "task": "task_29",
+      "fault": [
+        "BlockType",
+        "FLOOR"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1071,
+      "tok_out": 792
+    },
+    {
+      "task": "task_32",
+      "fault": [
+        "BlockType",
+        "DIRT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1132,
+      "tok_out": 853
+    },
+    {
+      "task": "task_22",
+      "fault": [
+        "BlockType",
+        "BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1212,
+      "tok_out": 934
+    },
+    {
+      "task": "task_48",
+      "fault": [
+        "BlockType",
+        "BAT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1083,
+      "tok_out": 805
+    },
+    {
+      "task": "task_44",
+      "fault": [
+        "Achievement",
+        "DEFEAT_ORC_SOLDIER"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1648,
+      "tok_out": 1242
+    },
+    {
+      "task": "task_8",
+      "fault": [
+        "BlockType",
+        "BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1330,
+      "tok_out": 1051
+    },
+    {
+      "task": "task_6",
+      "fault": [
+        "BlockType",
+        "DIRT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1086,
+      "tok_out": 807
+    },
+    {
+      "task": "task_13",
+      "fault": [
+        "Achievement",
+        "DESCEND"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1252,
+      "tok_out": 858
+    },
+    {
+      "task": "task_17",
+      "fault": [
+        "BlockType",
+        "DIRT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1017,
+      "tok_out": 738
+    },
+    {
+      "task": "task_51",
+      "fault": [
+        "Achievement",
+        "DEFEND_SKELETON"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1480,
+      "tok_out": 1076
+    },
+    {
+      "task": "task_2",
+      "fault": [
+        "BlockType",
+        "ITEM_BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1123,
+      "tok_out": 843
+    },
+    {
+      "task": "task_40",
+      "fault": [
+        "Achievement",
+        "DEFEAT_BAT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1346,
+      "tok_out": 946
+    },
+    {
+      "task": "task_34",
+      "fault": [
+        "BlockType",
+        "BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1423,
+      "tok_out": 1140
+    },
+    {
+      "task": "task_10",
+      "fault": [
+        "BlockType",
+        "ITEM_BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1143,
+      "tok_out": 863
+    },
+    {
+      "task": "task_4",
+      "fault": [
+        "BlockType",
+        "TORCH"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 921,
+      "tok_out": 641
+    },
+    {
+      "task": "task_28",
+      "fault": [
+        "BlockType",
+        "NONE"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1290,
+      "tok_out": 1013
+    },
+    {
+      "task": "task_39",
+      "fault": [
+        "BlockType",
+        "BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1286,
+      "tok_out": 1009
+    },
+    {
+      "task": "task_5",
+      "fault": [
+        "Achievement",
+        "DEFEAT_ORC_SOLDIER"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1201,
+      "tok_out": 795
+    },
+    {
+      "task": "task_46",
+      "fault": [
+        "Achievement",
+        "DEFEAT_ORC_SOLDIER"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1310,
+      "tok_out": 904
+    },
+    {
+      "task": "task_7",
+      "fault": [
+        "Achievement",
+        "DEFEAT_BAT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1195,
+      "tok_out": 795
+    },
+    {
+      "task": "task_24",
+      "fault": [
+        "BlockType",
+        "DIRT"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1394,
+      "tok_out": 1115
+    },
+    {
+      "task": "task_14",
+      "fault": [
+        "Achievement",
+        "DESCEND"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1278,
+      "tok_out": 884
+    },
+    {
+      "task": "task_19",
+      "fault": [
+        "Achievement",
+        "DEFEAT_ORC_SOLDIER"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1194,
+      "tok_out": 788
+    },
+    {
+      "task": "task_12",
+      "fault": [
+        "Achievement",
+        "DESCEND"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1119,
+      "tok_out": 725
+    },
+    {
+      "task": "task_49",
+      "fault": [
+        "BlockType",
+        "NONE"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1352,
+      "tok_out": 1075
+    },
+    {
+      "task": "task_37",
+      "fault": [
+        "BlockType",
+        "ITEM_BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1189,
+      "tok_out": 909
+    },
+    {
+      "task": "task_42",
+      "fault": [
+        "BlockType",
+        "BOW"
+      ],
+      "detected": true,
+      "repaired": true,
+      "why": "ok",
+      "attempts": 1,
+      "tok_in": 1129,
+      "tok_out": 846
+    }
+  ]
+}
