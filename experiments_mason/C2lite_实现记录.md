@@ -48,7 +48,6 @@ python experiments/training/run_dicode.py \
   seed=1 \
   use_wandb=true wandb_entity=mechanism_UED wandb_project=Skill_Preflight_UED \
   training.total_timesteps=140000000 \
-  +validation=default \
   gen_manager/llm@gen_manager.task_generator=local_qwen14b \
   gen_manager/llm@gen_manager.env_generator=local_qwen14b \
   gen_manager.embedding_model.model=nomic-embed-text \
@@ -62,7 +61,7 @@ python experiments/training/run_dicode.py \
   +skill_preflight.use_scaffold_gate=true
 ```
 
-(140M = 13.7M/session × 10 折算,按 checklist 实际 session 边界微调;tmux 包装/日志路径照抄 checklist。)
+(140M = 13.7M/session × 10 折算;实跑 9 sessions 打满善终。注意:**不要加 `+validation=default`** —— conf/config.yaml defaults 已内置 validation,重复声明 hydra 启动即死,2026-07-12 首次点火实测。tmux 包装/日志路径照抄 checklist。)
 
 三判据读数位置:
 1. **泄漏语义**:跑完用 `scaffold_audit.py` 复扫新 task_graph → "预标已掌握技能"比例应显著 ↓(闸+prompt 双重作用);
