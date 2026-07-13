@@ -1,0 +1,13 @@
+# DeepSeek V4 Pro pinned generation config for dspro substitution baseline.
+# This config pins to the exact model ID with no aliases or fallbacks.
+# Model: deepseek-v4-pro (official V4 Pro model ID via api.deepseek.com)
+# deepseek-chat is a LEGACY ALIAS → deepseek-v4-flash (rejected by gate)
+
+provider: deepseek
+base_url: ${oc.env:EXP_DEEPSEEK_BASE_URL,https://api.deepseek.com/v1}
+model: deepseek-v4-pro
+llm_type: generation
+max_tokens: 32768
+temperature: 0.6
+top_p: 0.95
+think: false

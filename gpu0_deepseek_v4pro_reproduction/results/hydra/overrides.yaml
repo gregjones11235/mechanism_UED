@@ -1,0 +1,3 @@
+- gen_manager=dspro_substitution
+- seed=0
+- training.total_timesteps=2005401600

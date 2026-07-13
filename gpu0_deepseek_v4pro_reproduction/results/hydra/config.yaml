@@ -1,0 +1,177 @@
+dicode_manager:
+  max_updates_per_session: 100
+  reset_opt_state: false
+  evolution_interval: 2
+  training_sample_size_n: 16
+  active_task_capacity: 100
+  min_entry_score_threshold: 0
+  score_function: learnability
+  staleness_coeff: 0.3
+  prioritization_temperature: 1.0
+  prioritization_method: rank
+  topk_k: 64
+  completion_bonus_scale: 2.0
+  completion_bonus_min: 20.0
+  bonus_type: dynamic
+  dynamic_bonus_k: 2.0
+  mode: None
+  original_task_proportion: 0.2
+  num_generation_tasks: 10
+  additional_num_parents: 2
+  parent_selection: strict
+gen_manager:
+  task_generator:
+    provider: deepseek
+    base_url: ${oc.env:EXP_DEEPSEEK_BASE_URL,https://api.deepseek.com/v1}
+    model: deepseek-v4-pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false
+  env_generator:
+    provider: deepseek
+    base_url: ${oc.env:EXP_DEEPSEEK_BASE_URL,https://api.deepseek.com/v1}
+    model: deepseek-v4-pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false
+  interestingness_critic:
+    provider: deepseek
+    base_url: ${oc.env:EXP_DEEPSEEK_BASE_URL,https://api.deepseek.com/v1}
+    model: deepseek-v4-pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false
+  embedding_model:
+    provider: local
+    base_url: ${oc.env:EMBEDDING_SERVER_URL,http://localhost:5000/v1}
+    model: Qwen/Qwen3-Embedding-0.6B
+    llm_type: embedding
+    embedding_size: 1024
+  tags:
+  - dspro
+  - substitution-baseline
+  - deepseek-v4-pro
+  num_generations: 5
+  num_examples: 6
+  num_parents: 1
+  mode: ${dicode_manager.mode}
+  graph_path: task_graph.graphml
+  example_paths:
+  - src/minicraftax/tasks/seed_tasks/collecting.py
+  - src/minicraftax/tasks/seed_tasks/combat.py
+  - src/minicraftax/tasks/seed_tasks/crafting.py
+  - src/minicraftax/tasks/seed_tasks/survive.py
+  prompts:
+    env_generation: dicode.dreaming.prompts.cl_.gen_env
+    wrapper_mechanics: dicode.dreaming.prompts.cl_.minicraftax_coder
+    wrapper_mechanics_r: dicode.dreaming.prompts.cl_.minicraftax_coder_r
+    craftax_mechanics: dicode.dreaming.prompts.cl_.knowledge_base_designer
+    craftax_code: dicode.dreaming.prompts.cl_.craftax_coder
+    evolve_mastered: dicode.dreaming.prompts.dicode.evolve
+    evolve_mastered_r: dicode.dreaming.prompts.cl_.evolve_mastered_r
+    ablation: dicode.dreaming.prompts.dicode.ablation
+training:
+  env_name: Craftax-Symbolic-v1
+  lr: 0.0002
+  min_lr: 2.0e-06
+  num_envs: 1024
+  num_steps: 128
+  total_timesteps: 2005401600
+  update_epochs: 4
+  num_minibatches: 8
+  gamma: 0.999
+  gae_lambda: 0.8
+  clip_eps: 0.2
+  ent_coef: 0.002
+  vf_coef: 0.5
+  max_grad_norm: 1.0
+  activation: relu
+  anneal_lr: true
+  qkv_features: 256
+  embed_size: 256
+  num_heads: 8
+  num_layers: 2
+  hidden_layers: 256
+  window_mem: 128
+  window_grad: 64
+  gating: true
+  gating_bias: 2.0
+  optimistic_reset_ratio: 16
+  use_wandb: true
+  wandb_project: SIACE
+  wandb_entity: airl-lab
+  debug: true
+  num_repeats: 1
+  checkpoint_dir: rl_checkpoints/
+  checkpoint_interval_updates: 100
+  checkpoint_keep_period: 300
+  max_checkpoints_to_keep: 10
+  load_checkpoint: false
+  jit: true
+  save_policy: false
+  anneal_method: linear
+  lr_decay_rate: 0.99
+  condition_on_task: true
+  conditioning_type: one_hot
+  use_optimistic_resets: true
+  scoring_window_updates: 40
+  mode: ${dicode_manager.mode}
+  bonus_type: ${dicode_manager.bonus_type}
+  dynamic_bonus_k: ${dicode_manager.dynamic_bonus_k}
+  completion_bonus_scale: ${dicode_manager.completion_bonus_scale}
+  completion_bonus_min: ${dicode_manager.completion_bonus_min}
+  max_updates_per_session: ${dicode_manager.max_updates_per_session}
+evaluation:
+  num_steps: 8192
+  num_envs: 1024
+  optimistic_reset_ratio: 16
+validation:
+  rollout_updates: 40
+  num_envs: 1024
+  num_steps: 128
+  optimistic_reset_ratio: 16
+  layer_size: 512
+  gamma: 0.99
+  gae_lambda: 0.95
+  condition_on_task: ${training.condition_on_task}
+  anneal_lr: false
+  lr: 0.0
+  lr_decay_rate: 0.99
+  max_grad_norm: 0.5
+  mode: ${dicode_manager.mode}
+visualize:
+  checkpoint_path: ''
+  fps: 50
+  save_video: false
+  output_video_path: transtaformer_standard.mp4
+aggregation:
+  enabled: false
+  mode: robust_weighted
+  w_progression: 0.34
+  w_retention: 0.33
+  w_novelty: 0.33
+  w_critic: 0.01
+  w_monopoly: 0.01
+  retention_trigger: 0.15
+  temperature: 1.0
+  entropy_regularization: 0.0
+  max_source_share: 0.5
+  max_signal_share: 0.5
+  use_llm_cache: false
+  llm_weight_progression: 0.5
+  llm_weight_novelty: 0.5
+  llm_weight_critic: 0.5
+  llm_weight_retention: 0.2
+  llm_cache_path: /root/experiments/dreaming-in-code-coop/mechanism_logs/llm_judgments_cache.jsonl
+use_wandb: true
+wandb_project: DiCode
+wandb_entity: airl-lab
+seed: 0
+ablation: false
+checkpoint_dir: rl_checkpoints/

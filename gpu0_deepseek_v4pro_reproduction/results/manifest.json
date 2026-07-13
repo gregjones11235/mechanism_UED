@@ -1,0 +1,43 @@
+{
+  "manifest_schema_version": "1.0.0",
+  "run_id": "dspro-gpu0-g3-seed0-20260712T041233Z",
+  "timestamp_utc": "2026-07-12T04:12:33.167318+00:00",
+  "branch": "exp/dicode-dspro",
+  "commit": "88bec3aad1bd7343bf36c9ccced17d050281ba0c",
+  "base_approved_commit": "f838946f2cb508bcdbf529b6394e7c1b753d3d61",
+  "python_version": "3.10.20",
+  "experiment_label": "DiCode DeepSeek-V4-Pro substitution baseline",
+  "is_substitution_baseline": true,
+  "provider": "deepseek",
+  "requested_model": "deepseek-v4-pro",
+  "model_id": "deepseek-v4-pro",
+  "dspro_role_judge_max_tokens": 2048,
+  "seed": 0,
+  "max_environment_steps": 500000,
+  "mandatory_in_run_gate_steps": 50000,
+  "phase": "G3",
+  "phase_status": "RUNNING",
+  "output_path": "/root/experiments/dicode_runs/dspro/dspro-gpu0-g3-seed0-20260712T041233Z",
+  "api_budget_mode": "USER_AUTHORIZED_UNLIMITED",
+  "physical_gpu": 0,
+  "api_call_count": 0,
+  "api_input_tokens": 0,
+  "api_output_tokens": 0,
+  "api_estimated_cost": 0.0,
+  "cache_hits": 0,
+  "cache_misses": 0,
+  "prior_failed_attempts": [
+    "dspro-gpu0-g3-seed0-20260712T005241Z",
+    "dspro-gpu0-g3-seed0-20260712T011127Z"
+  ],
+  "environment": {
+    "CUDA_VISIBLE_DEVICES": "0",
+    "LD_PRELOAD": "/usr/local/cuda-12.8/lib64/libcusparse.so.12",
+    "PYTHONPATH": "/root/experiments/dicode-dspro/src"
+  },
+  "probes": {
+    "jax_gpu": "GPU:gpu:0",
+    "dicode_path": "dicode: /root/experiments/dicode-dspro/src/dicode/__init__.py",
+    "model_config": "model: deepseek-v4-pro provider: deepseek"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "run_id": "dspro-gpu0-g3-seed0-20260712T041233Z",
+  "status": "TRAINING_TARGET_REACHED_WITH_INCOMPLETE_TERMINAL_MARKER",
+  "verdict": "PASS_WITH_MINOR_ISSUES",
+  "branch": "exp/dicode-dspro",
+  "commit": "88bec3aad1bd7343bf36c9ccced17d050281ba0c",
+  "seed": 0,
+  "requested_model": "deepseek-v4-pro",
+  "configured_returned_model_id": "deepseek-v4-pro",
+  "is_original_model_reproduction": false,
+  "experiment_label": "DiCode DeepSeek-V4-Pro substitution baseline",
+  "training": {
+    "global_updates": 15300,
+    "environment_steps": 2005401600,
+    "num_envs": 1024,
+    "steps_per_worker": 128,
+    "sessions_observed": 151,
+    "successful_chat_completion_http_calls": 1824,
+    "generated_code_batches_completed": 76,
+    "final_checkpoint": "checkpoint_15300",
+    "checkpoint_files": 16,
+    "checkpoint_remote_bytes": 46492451
+  },
+  "final_target_evaluation": {
+    "mean_episode_return": 46.32880593643708,
+    "mean_return_percentage": 20.499471653290744,
+    "average_episode_length": 1806.9795918367347,
+    "task_success_rate": 0.0,
+    "make_iron_sword_success_pct": 63.605442176870746,
+    "make_iron_armour_success_pct": 25.85034013605442,
+    "make_diamond_sword_success_pct": 6.802721088435374,
+    "defeat_gnome_warrior_success_pct": 0.0,
+    "defeat_gnome_archer_success_pct": 0.0,
+    "enter_dungeon_success_pct": 96.42857142857143,
+    "enter_gnomish_mines_success_pct": 26.020408163265305,
+    "collect_iron_success_pct": 82.65306122448979,
+    "collect_diamond_success_pct": 30.952380952380953,
+    "collect_ruby_success_pct": 26.19047619047619,
+    "collect_sapphire_success_pct": 26.19047619047619
+  },
+  "paper_reference": {
+    "title": "Dreaming in Code for Curriculum Learning in Open-Ended Worlds",
+    "url": "https://arxiv.org/abs/2602.08194",
+    "protocol": "2e9 environment steps, 5 seeds, Qwen3-235B generator, fixed held-out 1024-world evaluation",
+    "dicode_final_mean_return": 48.33,
+    "ppo_gtrxl_final_mean_return": 41.54,
+    "make_iron_armour_success_pct": 45.0,
+    "make_diamond_sword_success_pct": 6.0,
+    "defeat_gnome_warrior_success_pct": 11.0,
+    "defeat_gnome_archer_success_pct": 9.0
+  },
+  "validity_notes": [
+    "This is one seed and cannot reproduce the paper's five-seed mean or standard error.",
+    "The foundation model is DeepSeek-V4-Pro rather than the paper's Qwen3-235B, so this is a substitution baseline.",
+    "The 15300-step Orbax checkpoint finalized successfully and the target 2005401600 environment steps were logged.",
+    "The process exited without an explicit overall completion marker after entering final generated-task validation.",
+    "Historical tracebacks exist in the long-lived log, but no traceback or error occurred in the 72 lines after the final 15300-update record.",
+    "Two NaN tokens after the final update are the logged lp metric; no NaN/Inf training crash was observed.",
+    "No potential credential strings were found in the exported text artifacts.",
+    "No performance-improvement claim is made from this single substituted seed."
+  ]
+}
