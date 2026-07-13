@@ -45,7 +45,10 @@ def test_known_chains():
     assert "place_table" in DIRECT_PREREQS["make_torch"]
     assert {"place_table", "place_furnace"} <= DIRECT_PREREQS["make_iron_armour"]
     assert "place_table" in DIRECT_PREREQS["make_diamond_armour"]
-    assert DIRECT_PREREQS["find_bow"] == {"open_chest"}  # bow is chest loot
+    assert DIRECT_PREREQS["find_bow"] == {"open_chest"}  # bow is chest loot (floor-1 first chest)
+    # 2026-07-13 hotfix: books are floor-3/4 first-chest loot -> magic line needs sewers.
+    assert "enter_sewers" in DIRECT_PREREQS["learn_fireball"]
+    assert "enter_sewers" in DIRECT_PREREQS["learn_iceball"]
     # Floor ladder is a strict chain.
     for i in range(1, len(FLOOR_ENTRY_LADDER)):
         assert FLOOR_ENTRY_LADDER[i - 1] in DIRECT_PREREQS[FLOOR_ENTRY_LADDER[i]]

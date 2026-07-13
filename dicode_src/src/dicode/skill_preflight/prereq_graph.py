@@ -29,6 +29,14 @@ version DiCode pins; see auction/craftax_achievements.py header for the same pin
     COLLECT_*/FIND_BOW/MAKE_* family are INVENTORY-STATE achievements (fire on
     inventory.x > 0 / gear level, game_logic ~2871-2972) — chest loot legitimately grants
     them, which also makes ITEM_*_GRANTS below literally game-true, not an approximation.
+  * 2026-07-13 HOTFIX (found via C2lite_full_2e9 magic-line flat-zero autopsy): chest loot
+    is FLOOR-GATED for two item classes (game_logic l.144-152): bow = floor-1 first chest;
+    BOOKS = floor-3/4 (sewers/vault) FIRST chest ONLY. Gems/potions/resources are
+    probability-gated, no floor condition (consistent with sapphire/ruby rising in the run
+    while learn_* stayed hard-zero). learn_fireball/learn_iceball therefore additionally
+    require enter_sewers. Both the hand curation AND the autoextract spike missed the floor
+    gate (the extractor read loot FIELDS but not the level condition on the loot line) —
+    extractor must capture player_level gates; add to the half-day B-tier work.
   * 2026-07-11 autoextract-spike corrections (prereq_autoextract_spike.py found three
     missed station edges + one imprecise edge vs. do_crafting ground truth): iron armour
     needs table AND furnace (l.713); diamond armour and torch need table; find_bow's
@@ -117,9 +125,9 @@ DIRECT_PREREQS: dict[str, frozenset[str]] = {
     "defeat_troll": frozenset({"enter_troll_mines"}),
     "collect_sapphire": frozenset({"open_chest"}),        # canonical: chest loot
     "collect_ruby": frozenset({"open_chest"}),            # canonical: chest loot
-    "learn_fireball": frozenset({"open_chest"}),          # books are chest loot
+    "learn_fireball": frozenset({"open_chest", "enter_sewers"}),  # books: floor-3/4 FIRST chest only
     "cast_fireball": frozenset({"learn_fireball"}),
-    "learn_iceball": frozenset({"open_chest"}),
+    "learn_iceball": frozenset({"open_chest", "enter_sewers"}),   # same floor gate as fireball
     "cast_iceball": frozenset({"learn_iceball"}),
     "drink_potion": frozenset({"open_chest"}),
     "enchant_sword": frozenset({"make_wood_sword", "collect_sapphire", "enter_sewers"}),

@@ -55,3 +55,9 @@ pip download craftax==1.4.5 --no-deps -d /tmp && unzip -o /tmp/craftax-1.4.5*.wh
 PYTHONPATH=src:. python prereq_autoextract_spike.py --craftax-src /tmp/craftax_pkg/craftax/craftax --diff
 ```
 期望:auto-covered 55/67,exact 48,extra 7(5 真或路径 + 2 窗口噪声),missing 1(place_torch 的 make_torch,同窗口噪声)。
+
+**2026-07-13 追记(2e9 魔法线全零尸检的教训)**:宝箱掉落存在**楼层门控**(书 = 3/4 层首箱专属,
+game_logic l.150-152),手工图与本抽取器**双双漏检**——E1 组件只抽了掉落字段、没解析掉落行上的
+player_level 条件,导致 learn_* 的边少了 enter_sewers,调度器从 ~200M 起持续给不可达技能发任务。
+教训入账:①B 档工作追加"掉落/合成条件里的 player_level 门控抽取";②CI 平价测试(抽取图逐边等于
+DIRECT_PREREQS)的优先级从"建议"升为"必做"——这类错误静态测试抓不到,只有源码级对账能抓。
