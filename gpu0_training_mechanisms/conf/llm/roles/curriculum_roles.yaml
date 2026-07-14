@@ -1,0 +1,18 @@
+schema_version: 1
+
+roles:
+  generator:
+    purpose: generate_executable_curriculum_tasks
+    output_schema: generated_task_v1
+
+  tutor:
+    purpose: estimate_learnability_and_progression
+    output_schema: role_judgment_v2
+
+  critic:
+    purpose: detect_too_hard_mastered_invalid_or_metric_hacking_tasks
+    output_schema: role_judgment_v2
+
+  explorer:
+    purpose: estimate_novelty_skill_coverage_and_generalization
+    output_schema: role_judgment_v2

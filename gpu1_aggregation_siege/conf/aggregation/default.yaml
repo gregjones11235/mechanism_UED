@@ -1,0 +1,54 @@
+# conf/aggregation/default.yaml
+#
+# Aggregation configuration for curriculum task selection.
+#
+# When enabled=false, the original PLR-style sampling is used unchanged.
+# When enabled=true, select_tasks_with_aggregation() is called instead.
+#
+# Modes:
+#   raw_weighted             - A1: Linear combination of raw signal scores
+#   robust_weighted          - A2: Linear combination with robust normalization
+#   soft_copeland            - A3: Pairwise Soft Copeland scores
+#   budgeted_soft_copeland   - A4: Soft Copeland + source/signal budget caps
+#   budgeted_retention_trigger - A5: A4 + anti-forgetting retention trigger
+#   entropy_regularized      - A6: A5 + entropy-regularized softmax
+
+enabled: false
+
+# Aggregation mode (ignored when enabled=false)
+mode: "robust_weighted"
+
+# Signal weights (should sum to ~1.0 for benefits and penalties separately)
+w_progression: 0.34    # Weight for priority/learnability score
+w_retention: 0.33      # Weight for retention/replay signal
+w_novelty: 0.33        # Weight for novelty signal
+w_critic: 0.01         # Penalty weight for critic signal
+w_monopoly: 0.01       # Penalty weight for monopoly signal
+
+# Anti-forgetting trigger threshold
+# If forgetting_index > this value, retention weight increases
+retention_trigger: 0.15
+
+# Softmax temperature for sampling
+# Lower = more greedy, higher = more exploratory
+temperature: 1.0
+
+# Entropy regularization coefficient (A6 only)
+# 0.0 = no regularization, 0.1 = 10% uniform component
+entropy_regularization: 0.0
+
+# Budget caps (A4/A5/A6)
+max_source_share: 0.5   # Max fraction from one source type
+max_signal_share: 0.5   # Max fraction from one signal type
+
+# --- LLM Role Collaboration (cached, no API calls during training) ---
+use_llm_cache: false
+
+# Blend weights for LLM vs rule-based scores
+llm_weight_progression: 0.5
+llm_weight_novelty: 0.5
+llm_weight_critic: 0.5
+llm_weight_retention: 0.2
+
+# LLM cache path
+llm_cache_path: "/root/experiments/dreaming-in-code-coop/mechanism_logs/llm_judgments_cache.jsonl"

@@ -1,0 +1,35 @@
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+outputs
+blob
+*.sif
+.env
+# Migrated server local files
+.env
+.env.*
+secrets/
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime artifacts
+wandb/
+outputs/
+multirun/
+checkpoints/
+*.ckpt
+*.tmp

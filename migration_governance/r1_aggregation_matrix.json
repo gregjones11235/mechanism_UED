@@ -1,0 +1,25 @@
+{
+  "phase": "R1",
+  "objective": "Establish whether competitive curriculum aggregation improves over unmodified DiCode selector",
+  "commit": "460ccb6",
+  "shared_config": {
+    "gpu": "GPU1 (UUID: GPU-f4d0f435-b393-6405-cb6d-7b4e787335de)",
+    "candidate_count": 32, "selected_count": 8,
+    "ppo_envs": 256, "ppo_steps": 64,
+    "frozen_cache": "/root/experiments/dicode_runs/siege_aggregation/frozen_immutable_cache",
+    "frozen_cache_entries": 96, "frozen_cache_hit_rate": 1.0
+  },
+  "mechanisms": [
+    {"id": "M0", "name": "Original DiCode", "aggregation": "disabled", "cache_reads": 0},
+    {"id": "M1", "name": "Soft Copeland", "aggregation": "soft_copeland", "cache_reads": 1},
+    {"id": "M2", "name": "Budgeted Soft Copeland", "aggregation": "budgeted_copeland", "cache_reads": 1},
+    {"id": "M3", "name": "Auction raw", "aggregation": "auction_raw", "cache_reads": 1},
+    {"id": "M4", "name": "Budgeted Auction", "aggregation": "auction_budgeted", "cache_reads": 1}
+  ],
+  "training_candidates": {
+    "LPG_HRL": {"name": "Layered Policy Gradient HRL", "status": "screening_manifest_pending"},
+    "TSER_PPO": {"name": "TSER-PPO", "status": "screening_manifest_pending"},
+    "LPAC": {"name": "LPAC (fallback only per Directive 023)", "status": "fallback"}
+  },
+  "status": "R1_commands_prepared_R0_passed"
+}

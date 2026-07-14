@@ -1,0 +1,16 @@
+{
+  "timestamp": 1784023570.7351012,
+  "commit": "b1647b66529558be8d37f10494badd7bcd264330",
+  "treatment": "T1 LPG-HRL",
+  "seed": 0,
+  "env_steps": 16384,
+  "horizon": 16384,
+  "gpu_uuid": "GPU-83d39a25-90a3-b18c-4235-1e624434bdfe",
+  "lpg_leaves": 10,
+  "gradient_norm": 0.0012888137716799974,
+  "loss": 0.0006092859548516572,
+  "params_changed_by_optimizer": true,
+  "checkpoint_verified": true,
+  "elapsed_s": 144.32778978347778,
+  "status": "PASS"
+}

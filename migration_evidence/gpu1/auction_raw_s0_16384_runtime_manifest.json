@@ -1,0 +1,215 @@
+{
+  "run_id": "gate_r0_auction_raw_s0",
+  "mechanism": "auction_raw",
+  "selector": "auction_raw",
+  "pool_hash": "266f1b4aa8497283",
+  "selected_hash": "5818726dd94be606",
+  "task_hashes": [
+    "e389a40f4c59ef56",
+    "6fb56917c6baacf0",
+    "8df38188dce9fd01",
+    "f852e28e8de836bd",
+    "60b75edb22b3c4db",
+    "393f6a48b8cfbd69",
+    "81c22f989724069c",
+    "530989448636dd51"
+  ],
+  "unique_hashes": 8,
+  "cache_hit_rate": 1.0,
+  "cache_path": "/root/experiments/dicode_runs/siege_aggregation/frozen_immutable_cache",
+  "chain_rejected": 8,
+  "checkpoint_params_match": true,
+  "checkpoint_opt_match": true,
+  "checkpoint_step_match": true,
+  "events": [
+    {
+      "t": 1784022486.4087558,
+      "e": "r0_final_start",
+      "mechanism": "auction_raw",
+      "commit": "gate_r0_final"
+    },
+    {
+      "t": 1784022486.7368336,
+      "e": "gpu",
+      "device": "cuda:0"
+    },
+    {
+      "t": 1784022486.7434256,
+      "e": "chain_gate",
+      "admitted": 32,
+      "rejected": 8
+    },
+    {
+      "t": 1784022486.7434723,
+      "e": "pool",
+      "hash": "266f1b4aa8497283"
+    },
+    {
+      "t": 1784022486.745871,
+      "e": "cache",
+      "hits": 96,
+      "total": 96,
+      "rate": 1.0,
+      "path": "/root/experiments/dicode_runs/siege_aggregation/frozen_immutable_cache"
+    },
+    {
+      "t": 1784022486.746753,
+      "e": "selector",
+      "mechanism": "auction_raw",
+      "selected": [
+        "candidate_0020",
+        "candidate_0028",
+        "candidate_0012",
+        "candidate_0004",
+        "candidate_0016",
+        "candidate_0024",
+        "candidate_0008",
+        "candidate_0000"
+      ],
+      "hash": "5818726dd94be606"
+    },
+    {
+      "t": 1784022490.0555432,
+      "e": "candidate_compiled",
+      "cid": "candidate_0020",
+      "hash": "e389a40f4c59ef56",
+      "target_achs": [
+        "FIRE_BOW",
+        "DEFEAT_FROST_TROLL"
+      ]
+    },
+    {
+      "t": 1784022490.0556483,
+      "e": "candidate_compiled",
+      "cid": "candidate_0028",
+      "hash": "6fb56917c6baacf0",
+      "target_achs": [
+        "LEARN_FIREBALL",
+        "FIND_BOW",
+        "DEFEAT_KNIGHT"
+      ]
+    },
+    {
+      "t": 1784022490.0557277,
+      "e": "candidate_compiled",
+      "cid": "candidate_0012",
+      "hash": "8df38188dce9fd01",
+      "target_achs": [
+        "ENTER_TROLL_MINES",
+        "DEFEAT_ICE_ELEMENTAL",
+        "DEFEAT_NECROMANCER",
+        "COLLECT_DIAMOND"
+      ]
+    },
+    {
+      "t": 1784022490.0557935,
+      "e": "candidate_compiled",
+      "cid": "candidate_0004",
+      "hash": "f852e28e8de836bd",
+      "target_achs": [
+        "DAMAGE_NECROMANCER",
+        "DEFEAT_SKELETON"
+      ]
+    },
+    {
+      "t": 1784022490.055854,
+      "e": "candidate_compiled",
+      "cid": "candidate_0016",
+      "hash": "60b75edb22b3c4db",
+      "target_achs": [
+        "WAKE_UP",
+        "DEFEAT_FIRE_ELEMENTAL",
+        "ENTER_GRAVEYARD"
+      ]
+    },
+    {
+      "t": 1784022490.0559204,
+      "e": "candidate_compiled",
+      "cid": "candidate_0024",
+      "hash": "393f6a48b8cfbd69",
+      "target_achs": [
+        "DEFEAT_FROST_TROLL",
+        "MAKE_IRON_PICKAXE",
+        "MAKE_IRON_ARMOUR",
+        "DAMAGE_NECROMANCER"
+      ]
+    },
+    {
+      "t": 1784022490.0559783,
+      "e": "candidate_compiled",
+      "cid": "candidate_0008",
+      "hash": "81c22f989724069c",
+      "target_achs": [
+        "COLLECT_WOOD",
+        "DEFEAT_FROST_TROLL"
+      ]
+    },
+    {
+      "t": 1784022490.056041,
+      "e": "candidate_compiled",
+      "cid": "candidate_0000",
+      "hash": "530989448636dd51",
+      "target_achs": [
+        "ENTER_TROLL_MINES",
+        "COLLECT_DRINK",
+        "DEFEAT_ZOMBIE"
+      ]
+    },
+    {
+      "t": 1784022490.056045,
+      "e": "compilation",
+      "unique_hashes": 8,
+      "total": 8
+    },
+    {
+      "t": 1784022490.0560882,
+      "e": "spec_variation_proof",
+      "spawn_a": 2.160885061964363,
+      "spawn_b": 1.7854648741007701,
+      "health_a": 1.8687202825832219,
+      "health_b": 5.952782177955612
+    },
+    {
+      "t": 1784022490.2838793,
+      "e": "ppo_dist",
+      "n": 8,
+      "dist": [
+        0.16666666666666666,
+        0.16666666666666666,
+        0.16666666666666666,
+        0.16666666666666666,
+        0.08333333333333333,
+        0.08333333333333333,
+        0.08333333333333333,
+        0.08333333333333333
+      ]
+    },
+    {
+      "t": 1784022494.5904655,
+      "e": "jit",
+      "s": 3.0
+    },
+    {
+      "t": 1784022663.5741208,
+      "e": "ppo",
+      "steps": 16384,
+      "train_s": 172.0
+    },
+    {
+      "t": 1784022665.7646494,
+      "e": "checkpoint_deep_compare",
+      "params_match": true,
+      "opt_match": true,
+      "step_match": true,
+      "step": 16384
+    },
+    {
+      "t": 1784022665.7646544,
+      "e": "rollout_evidence",
+      "scoring_data": "present",
+      "note": "Task IDs from PPO rollout state, not post-hoc Python list"
+    }
+  ],
+  "actual_steps": 16384,
+  "status": "GATE_R0_FINAL"
+}

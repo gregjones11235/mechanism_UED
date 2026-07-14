@@ -1,0 +1,18 @@
+experiment_id: role_rotation_a
+
+assignments:
+  generator:
+    provider: deepseek
+    model_tier: strong
+
+  tutor:
+    provider: deepseek
+    model_tier: strong
+
+  critic:
+    provider: zhipu
+    model_tier: strong
+
+  explorer:
+    provider: qwen
+    model_tier: balanced

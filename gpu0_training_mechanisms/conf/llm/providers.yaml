@@ -1,0 +1,39 @@
+schema_version: 1
+
+providers:
+  deepseek:
+    api_type: openai_compatible
+    api_key_env: EXP_DEEPSEEK_API_KEY
+    base_url_env: EXP_DEEPSEEK_BASE_URL
+
+    model_catalog:
+      economy:
+        model: deepseek-v4-flash
+      strong:
+        model: deepseek-v4-pro
+
+  qwen:
+    api_type: openai_compatible
+    api_key_env: EXP_QWEN_API_KEY
+    base_url_env: EXP_QWEN_BASE_URL
+
+    model_catalog:
+      economy:
+        model: qwen3.6-flash
+      balanced:
+        model: qwen3.7-plus
+      strong:
+        model: qwen3.7-max
+
+  zhipu:
+    api_type: openai_compatible
+    api_key_env: EXP_ZHIPU_API_KEY
+    base_url_env: EXP_ZHIPU_BASE_URL
+
+    model_catalog:
+      economy:
+        model: glm-4.7-flash
+      balanced:
+        model: glm-4.5-air
+      strong:
+        model: glm-5.2
