@@ -257,7 +257,10 @@ def run_gate_r0(mechanism: str, total_steps: int = 16384, seed: int = 0):
 
     # PPO training
     from dicode.ppo_tr import make_train
-    ne, ns = 256, 64; nu = 1
+    ne, ns = 256, 64
+    steps_per_update = ne * ns  # 16384
+    nu = max(1, total_steps // steps_per_update)
+    actual_horizon = nu * steps_per_update
     cfg = type('C', (), {
         'num_envs': ne, 'num_steps': ns, 'num_minibatches': 4, 'update_epochs': 4,
         'gamma': 0.99, 'gae_lambda': 0.95, 'clip_eps': 0.2, 'ent_coef': 0.01, 'vf_coef': 0.5,
@@ -267,8 +270,8 @@ def run_gate_r0(mechanism: str, total_steps: int = 16384, seed: int = 0):
         'gating': True, 'gating_bias': 1.0, 'condition_on_task': 'onehot',
         'completion_bonus_scale': 0.1, 'completion_bonus_min': 0.0,
         'bonus_type': 'none', 'dynamic_bonus_k': 0, 'optimistic_reset_ratio': 16,
-        'scoring_window_updates': 1, 'total_timesteps': ne * ns,
-        'max_updates_per_session': 1, 'mode': 'achievement', 'debug': False, 'use_wandb': False})()
+        'scoring_window_updates': max(1, nu // 2), 'total_timesteps': actual_horizon,
+        'max_updates_per_session': nu, 'mode': 'achievement', 'debug': False, 'use_wandb': False})()
 
     rng_key = jax.random.PRNGKey(seed)
     print("JIT+PPO...")
@@ -366,8 +369,9 @@ def main():
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--mechanism", required=True, choices=ALL_MECHANISMS)
+    p.add_argument("--steps", type=int, default=16384, help="Total environment steps (default: 16384)")
     args = p.parse_args()
-    run_gate_r0(args.mechanism)
+    run_gate_r0(args.mechanism, total_steps=args.steps)
 
 
 if __name__ == "__main__":

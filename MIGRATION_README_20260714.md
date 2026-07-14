@@ -21,7 +21,7 @@ contain credentials, writable caches, experiment outputs or checkpoints.
 
 - Local directory: `gpu1_aggregation_siege/`
 - Server branch: `exp/siege-aggregation-sota`
-- Server commit: `69f26a38a3200951f125e4d01c92ceb5e79fc5cc`
+- Server commit: `52a252989015144cbd3a892f57efcb9e6e7a048b`
 - Purpose: Original, Soft Copeland, Budgeted Soft Copeland, raw/budgeted
   Auction, SIEGE integration, R0 production dispatch and R1 comparisons.
 
@@ -95,6 +95,29 @@ Bounded runtime evidence included for resume validation:
 
 These small manifests do not replace the full checkpoints. Re-run restore tests
 after copying the checkpoint directories separately.
+
+## Latest completed screening state
+
+This Git snapshot was refreshed after both S2 matrices completed on 2026-07-14.
+
+- GPU0 training-mechanism matrix: Original PPO, LPG-HRL, TSER-PPO and LPAC all
+  completed seed 0 at an actual PPO-aligned horizon of 98,304 environment
+  steps. The requested horizon was 100,000. Runtime commit, physical GPU UUID,
+  finite metrics and model/optimizer/global-step restore gates passed.
+- GPU1 aggregation matrix: Original, Soft Copeland and Budgeted Auction all
+  completed seed 0 at an actual PPO-aligned horizon of 98,304 environment
+  steps with the same frozen pool and immutable cache. Original had zero cache
+  influence; enhanced treatments recorded 100 percent cache hits.
+- Budgeted Copeland was excluded from S2 performance comparison because all 32
+  frozen candidates shared the same source identifier, so source-budget caps
+  did not change its selected set relative to Soft Copeland. Do not label that
+  treatment budgeted performance evidence until a frozen pool with at least
+  two relevant source identifiers proves a binding selection change.
+- The tracked GPU1 report is
+  `gpu1_aggregation_siege/agent_notes/s2_100k_screening_manifest.md`.
+
+These are single-seed screening results, not SOTA or formal performance claims.
+The full S2 checkpoints and runtime outputs remain non-Git migration data.
 
 ## Resume order
 
