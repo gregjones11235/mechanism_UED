@@ -110,6 +110,7 @@ def check_code(
     sr_snapshot: Mapping[str, float],
     *,
     mastered_cut: float = MASTERED_SR_CUT,
+    mastered_prereq_exemption: bool = False,
 ) -> GateVerdict:
     """Run the R1-R3 fidelity rules against one generated task's code.
 
@@ -119,6 +120,14 @@ def check_code(
             from evaluation metrics via skill_scheduler._sr_map).
         mastered_cut: SR at/above which a skill counts as mastered (default 0.70, shared
             with the one-step prompt so the gate enforces exactly what the prompt asked).
+        mastered_prereq_exemption: [v2, R3-exemption] when True, an immediate prerequisite
+            that the agent already MASTERS (SR >= mastered_cut) MAY be scaffolded away
+            (floor start / premark / inventory) without tripping R3. Rationale: leakage is
+            defined as compressing UNMASTERED steps (bare re-verify collapse 0.65->0.01
+            happened exclusively there); compressing a genuinely mastered prefix is the
+            legitimate use of scaffolding and removes the "replay the mastered descent
+            every episode" sampling tax that the 2e9 gap decomposition attributed the
+            iron/gnomish consolidation deficit to. Default False -> v1 byte-identical.
 
     Returns:
         GateVerdict. ``ok=True`` also for unparseable code — a syntax failure is the
@@ -161,7 +170,10 @@ def check_code(
     scaffolded = premarked | inv_grants | flr_grants
     r3_pairs = []
     for f in focus:
-        hit = sorted(DIRECT_PREREQS[f] & scaffolded)
+        hit = sorted(
+            p for p in DIRECT_PREREQS[f] & scaffolded
+            if not (mastered_prereq_exemption and sr[p] >= mastered_cut)
+        )
         if hit:
             r3_pairs.append((f, hit))
     if r3_pairs:

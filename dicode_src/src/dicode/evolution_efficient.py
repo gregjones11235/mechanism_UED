@@ -201,6 +201,53 @@ def evolve_and_validate_tasks(
     print("    WORKER: Validation complete.")
     tracker.stop_timer("Compilation (LLM)", session_idx)
 
+    # [v2 / C-1] API-hallucination repair: compile failures matching the three hallucination
+    # classes (enum member / builder method / ctor kwarg) get a dynamic-whitelist indictment
+    # and <= api_repair_retries regeneration attempts before falling back to the old drop
+    # path. Flag-gated (+skill_preflight.use_api_repair=true, default off).
+    _sp_cfg0 = {}
+    try:
+        _sp_cfg0 = gen_manager.config_.get("skill_preflight", {}) or {}
+    except Exception:
+        pass
+    if _sp_cfg0.get("use_api_repair", False):
+        try:
+            from dicode.skill_preflight.api_lint import diagnose
+
+            _max_r = int(_sp_cfg0.get("api_repair_retries", 2))
+            _n_fail = _n_hallu = _n_fixed = 0
+            for res in generation_results:
+                code = res.get("code_string")
+                if res.get("compiled") or not code:
+                    continue
+                _n_fail += 1
+                evidence = diagnose(code, res.get("error") or "")
+                if not evidence:
+                    continue  # not a hallucination-class failure -> old drop path
+                _n_hallu += 1
+                for _ in range(_max_r):
+                    new_code = gen_manager.env_generator.repair_scaffold_violations(
+                        res.get("docstring", ""), code, evidence
+                    )
+                    if not new_code:
+                        continue
+                    ok_c, err_c = gen_manager.env_generator.check_compilation(new_code)
+                    if ok_c:
+                        res["code_string"] = new_code
+                        res["code"] = new_code
+                        res["compiled"] = True
+                        res["error"] = None
+                        _n_fixed += 1
+                        break
+                    code = new_code
+                    evidence = diagnose(new_code, err_c) or evidence
+            print(
+                f"    WORKER: [ApiRepair] compile-failures {_n_fail}, hallucination-class "
+                f"{_n_hallu}, repaired {_n_fixed}."
+            )
+        except Exception as e:
+            print(f"    WORKER: [ApiRepair] ERROR (repair inactive): {e}")
+
     # [C2lite §3 / C-0] Scaffold gate: static fidelity check on every compiled candidate,
     # with evidence-carrying regeneration (<= scaffold_gate_retries attempts) before drop.
     # Flag-gated (+skill_preflight.use_scaffold_gate=true, default off -> path unchanged).
@@ -215,13 +262,14 @@ def evolve_and_validate_tasks(
 
             _snapshot = snapshot_from_metrics(metrics)
             _max_repairs = int(_sp_cfg.get("scaffold_gate_retries", 2))
+            _r3_exempt = bool(_sp_cfg.get("r3_mastered_exemption", False))
             _n_checked = _n_violated = _n_repaired = _n_dropped = 0
             for res in generation_results:
                 code = res.get("code_string")
                 if not res.get("compiled") or not code:
                     continue
                 _n_checked += 1
-                verdict = check_code(code, _snapshot)
+                verdict = check_code(code, _snapshot, mastered_prereq_exemption=_r3_exempt)
                 if verdict.ok:
                     continue
                 _n_violated += 1
@@ -243,7 +291,7 @@ def evolve_and_validate_tasks(
                             f"compile: {compile_err})"
                         )
                         continue
-                    re_verdict = check_code(new_code, _snapshot)
+                    re_verdict = check_code(new_code, _snapshot, mastered_prereq_exemption=_r3_exempt)
                     code = new_code  # compiled: adopt as the new best attempt either way
                     if re_verdict.ok:
                         fixed = True

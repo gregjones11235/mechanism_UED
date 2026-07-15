@@ -187,7 +187,9 @@ def _snapshot_lines(sr: Mapping[str, float]) -> tuple[str, str, str]:
     return fmt(mastered), learning_fmt, fmt(unacquired)
 
 
-def format_target_for_prompt_one_step(target: SchedulerTarget) -> str:
+def format_target_for_prompt_one_step(
+    target: SchedulerTarget, *, mastered_exemption: bool = False
+) -> str:
     """One-step variant of the [Curriculum focus] block (design/docstring stage).
 
     Injects the mastery snapshot explicitly (the profile string upstream omits 0% skills,
@@ -207,9 +209,15 @@ def format_target_for_prompt_one_step(target: SchedulerTarget) -> str:
         f"\n"
         f"SCAFFOLDING CONTRACT (one bare step):\n"
         f"1. The task must expose EXACTLY ONE unmastered step bare: the focus skill and its "
-        f"immediate prerequisites must be performed by the agent during the episode, from the "
+        + ("immediate prerequisites that the agent has NOT yet mastered "
+           if mastered_exemption else "immediate prerequisites ")
+        + f"must be performed by the agent during the episode, from the "
         f"resources the world provides — never granted in the starting inventory and never "
-        f"listed as completed/prerequisite achievements.\n"
+        f"listed as completed/prerequisite achievements."
+        + (" Prerequisites the agent already MASTERS (>= 70%) MAY be provided or skipped "
+           "(e.g. starting floor, inventory) so the episode's practice budget concentrates "
+           "on the unmastered step." if mastered_exemption else "")
+        + f"\n"
         f"2. You MAY scaffold prerequisites that are deeper in the chain ONLY if the agent has "
         f"NOT acquired them (< 30%) and they are not the training focus.\n"
         f"3. Do NOT pre-mark or provision skills the agent already MASTERS (>= 70%): the agent "
@@ -219,7 +227,9 @@ def format_target_for_prompt_one_step(target: SchedulerTarget) -> str:
     )
 
 
-def format_scaffold_rules_for_coder(sr: Mapping[str, float]) -> str:
+def format_scaffold_rules_for_coder(
+    sr: Mapping[str, float], *, mastered_exemption: bool = False
+) -> str:
     """Scaffolding constraint block appended to the CODE-generation user prompt.
 
     The coder stage sees few-shot code examples that all demonstrate the leak pattern
@@ -237,7 +247,10 @@ def format_scaffold_rules_for_coder(sr: Mapping[str, float]) -> str:
         "achievement and NEVER pre-mark a relevant achievement.\n"
         "2. Do NOT grant items via `set_player_inventory` that substitute a relevant "
         "achievement or its immediate prerequisite (e.g. no pre-made iron pickaxe when the "
-        "task trains make_iron_pickaxe or collect_diamond).\n"
+        "task trains make_iron_pickaxe or collect_diamond)."
+        + (" EXCEPTION: prerequisites in the MASTERS list above may be provided or skipped "
+           "— e.g. a starting floor that skips a mastered descent is encouraged."
+           if mastered_exemption else "") + "\n"
         "3. If the code examples above pre-mark achievements or hand out inventory more "
         "liberally, IGNORE that pattern — these constraints take precedence."
     )

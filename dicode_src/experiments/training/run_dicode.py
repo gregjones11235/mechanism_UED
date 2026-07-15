@@ -196,12 +196,17 @@ def main(config: DictConfig):
                     _sp_prompt == "one_step"
                     or (_sp_prompt == "auto" and _frontier_mode == "prereq")
                 )
+                _r3_exempt = bool(_sp.get("r3_mastered_exemption", False))
                 if _one_step:
                     gen_manager.task_generator.current_skill_target = (
-                        format_target_for_prompt_one_step(_sched)
+                        format_target_for_prompt_one_step(
+                            _sched, mastered_exemption=_r3_exempt
+                        )
                     )
                     gen_manager.env_generator.scaffold_rules_block = (
-                        format_scaffold_rules_for_coder(_sched.sr_snapshot)
+                        format_scaffold_rules_for_coder(
+                            _sched.sr_snapshot, mastered_exemption=_r3_exempt
+                        )
                     )
                 else:
                     gen_manager.task_generator.current_skill_target = (
