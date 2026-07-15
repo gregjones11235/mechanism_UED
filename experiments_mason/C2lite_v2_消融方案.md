@@ -22,9 +22,21 @@
 - hook 在 evolution_efficient 编译循环后、脚手架闸前;复用 repair_scaffold_violations 同一套
   修复回路;打印 [ApiRepair] compile-failures/hallucination-class/repaired 三个数。
 
-## 消融配置
+## 消融配置(2026-07-14 修正:total_timesteps 不砍)
 
-2e9 定稿命令原样 + `training.total_timesteps=300000000` + 两个新 flag。seed 1(与主跑同)。
+2e9 定稿命令**逐位原样**(含 `training.total_timesteps=2000000000`)+ 两个新 flag,seed 1;
+**跑到 session ≈23(≈3e8)手动 kill**(mon.sh CUTOFF=23)。
+
+**为什么 total_timesteps 必须保持 2e9**(baseline_v2 记录 §4.2 的家规):LR schedule 按
+total_timesteps 归一化——砍到 3e8 会把 schedule 压 6.7 倍,①训练动力学变形(当年 5e8→3e6
+压 167 倍直接训炸);②本消融的判据是与 2e9 主跑**同期**比巩固斜率,主跑前 3e8 走的是
+2e9 归一化 schedule,消融必须同 schedule 才是单变量对比。时长一律靠手动停止控制
+(五臂消融的既有标准)。诚实注记:短跑当时用了 140M 作 total,偏离此纪律——未出事是因为
+判据效应量大(iron 提前 ~50M)+ 两条判据为机制行为而非斜率精比;v2 消融是斜率对比,
+不再占这个便宜。
+
+对照基线:主跑前 3e8 官方离线点(update 300/900/1500/2100 = 12.5/25.4/31.0/32.3,
+eval_C2LITE2E9_seed0.json)+ wandb 在线段。
 
 ## 判据(止损线写死)
 
