@@ -24,12 +24,24 @@ import importlib
 import re
 
 # error patterns ---------------------------------------------------------------------------
+# NOTE: check_compilation returns f"Compilation error: {str(e)}" — str(e) carries NO
+# exception-class prefix. The 3e8 ablation ran with prefix-required patterns and C-1 was
+# silently inert (hallucination-class 0/45 while the log held 28 AttributeErrors). All
+# prefixes are therefore OPTIONAL; the phrasings are distinctive enough without them.
 _RE_TYPE_ATTR = re.compile(
-    r"AttributeError: type object '(\w+)' has no attribute '(\w+)'")
+    r"(?:AttributeError:\s*)?type object '(\w+)' has no attribute '(\w+)'")
 _RE_OBJ_ATTR = re.compile(
-    r"AttributeError: '(\w+)' object has no attribute '(\w+)'")
+    r"(?:AttributeError:\s*)?'(\w+)' object has no attribute '(\w+)'")
 _RE_CTOR_KW = re.compile(
-    r"TypeError: (\w+)\.__init__\(\) got an unexpected keyword argument '(\w+)'")
+    r"(?:TypeError:\s*)?(\w+)\.__init__\(\) got an unexpected keyword argument '(\w+)'")
+_RE_NAME_UNDEF = re.compile(
+    r"(?:NameError:\s*)?name '(\w+)' is not defined")
+
+_COMMON_IMPORTS = {
+    "jnp": "import jax.numpy as jnp",
+    "np": "import numpy as np",
+    "jax": "import jax",
+}
 
 # fallback module map for symbols whose import the AST scan can't resolve (e.g. injected
 # into the exec namespace rather than imported in the task file itself)
@@ -102,6 +114,15 @@ def diagnose(code: str, error_msg: str) -> str | None:
             f"(often borrowed from other games' APIs). Valid `{cls}` options closest to "
             f"what you wrote: {_format_options(bad, members)}. Replace the hallucinated "
             f"reference with a real one that fits the task's intent; change nothing else."
+        )
+
+    m = _RE_NAME_UNDEF.search(error_msg)
+    if m and "object" not in error_msg and "attribute" not in error_msg:
+        bad = m.group(1)
+        hint = _COMMON_IMPORTS.get(bad, "add the appropriate import at module top")
+        return (
+            f"[api-lint] name `{bad}` is undefined — a missing import (H4). Add the "
+            f"import at the top of the file ({hint}); change nothing else."
         )
 
     m = _RE_CTOR_KW.search(error_msg)

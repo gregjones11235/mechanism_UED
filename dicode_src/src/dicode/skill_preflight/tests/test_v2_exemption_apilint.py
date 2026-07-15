@@ -127,7 +127,34 @@ def test_h3_ctor_kwarg_hallucination():
         assert "LEVEL fields" in ev
 
 
+def test_real_world_error_format_no_prefix():
+    """Pin the ACTUAL format check_compilation produces: 'Compilation error: ' + str(e),
+    i.e. NO exception-class prefix. The 3e8 ablation ran inert because the patterns
+    required prefixes — this test locks the fix."""
+    import sys, types
+    fake = types.ModuleType("fake_game.constants")
+    class BlockType:
+        LADDER_UP = 1; LADDER_DOWN_BROKEN = 2
+    fake.BlockType = BlockType
+    sys.modules["fake_game.constants"] = fake
+    try:
+        code = "from fake_game.constants import BlockType\nclass Env: pass\n"
+        ev = diagnose(code, "Compilation error: type object 'BlockType' has no attribute 'LADDER_DOWN'")
+        assert ev and "LADDER_DOWN" in ev
+    finally:
+        del sys.modules["fake_game.constants"]
+    ev = diagnose("class E: pass",
+                  "Compilation error: Inventory.__init__() got an unexpected keyword argument 'wood_sword'")
+    if ev is not None:
+        assert "wood_sword" in ev
+
+
+def test_h4_missing_import():
+    ev = diagnose("class E: pass", "Compilation error: name 'jnp' is not defined")
+    assert ev and "jnp" in ev and "import jax.numpy as jnp" in ev
+    assert diagnose("class E: pass", "Compilation error: name 'foo' is not defined") is not None
+
+
 def test_non_hallucination_errors_pass_through():
     assert diagnose("x=", "SyntaxError: invalid syntax") is None
-    assert diagnose("class E: pass", "NameError: name 'foo' is not defined") is None
     assert diagnose("class E: pass", "") is None
