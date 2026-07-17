@@ -31,6 +31,7 @@ def run_session_evaluation(
 	gen_manager: GenManager,
 	current_session_idx: int,
 	global_env_steps: int,
+	detail: bool = False,
 ) -> tuple[jax.Array, dict]:
 	"""Runs the standard Craftax evaluation against the current agent state."""
 	print("--- [Main Thread] Running evaluation on Craftax... ---")
@@ -71,7 +72,8 @@ def run_session_evaluation(
 
 	rng, eval_rng = jax.random.split(rng)
 	evaluation_metrics = evaluate(
-		config, eval_rng, train_state=rl_train_state, eval_embedding=eval_embedding_replicated
+		config, eval_rng, train_state=rl_train_state, eval_embedding=eval_embedding_replicated,
+		detail=detail,
 	)
 	# evaluation_metrics = process_evaluation_metrics(eval_metrics_raw)
 	print(f"  - Evaluation Metrics: {evaluation_metrics}")

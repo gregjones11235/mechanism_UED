@@ -12,9 +12,20 @@ from minicraftax.envs.craftax import CraftaxAugObsTrain
 # Imported from dicode.network
 
 
-def make_evaluate(config, env, env_params):
+def make_evaluate(config, env, env_params, detail=False):
+	# detail=True additionally returns per-env first-episode forensics in metrics['_details']
+	# (return / length / finished / died / floor_at_done / max_floor) for failure autopsies.
+	# Default False -> byte-identical to the original aggregate-only path.
 	num_envs = config.evaluation.num_envs
 	num_steps = config.evaluation.num_steps
+
+	def _state_core(st):
+		# walk wrapper nesting (0-2 levels) until the CraftaxState with player_level
+		for _ in range(3):
+			if hasattr(st, "player_level"):
+				return st
+			st = getattr(st, "env_state")
+		raise AttributeError("player_level not found in env state pytree")
 	def evaluate(train_state, rng):
 		network = ActorCriticTransformer(
 			action_dim=env.action_space(env_params).n,
@@ -73,6 +84,9 @@ def make_evaluate(config, env, env_params):
 		accumulated_reward = jnp.zeros((num_envs,), dtype=jnp.float32)
 		accumulated_length = jnp.zeros((num_envs,), dtype=jnp.float32)
 		done_prev = jnp.zeros((num_envs,), dtype=jnp.bool_)
+		floor_at_done = jnp.zeros((num_envs,), dtype=jnp.int32)
+		health_at_done = jnp.zeros((num_envs,), dtype=jnp.float32)
+		max_floor = jnp.zeros((num_envs,), dtype=jnp.int32)
 
 		init_runner_state = (
 			train_state,
@@ -196,6 +210,15 @@ def make_evaluate(config, env, env_params):
 			# 4. Update Finished Mask
 			next_finished_mask = jnp.logical_or(finished_mask, next_done)
 
+			# 4b. [detail] first-episode forensics
+			core = _state_core(next_env_state)
+			lvl = core.player_level.astype(jnp.int32)
+			hp = core.player_health.astype(jnp.float32)
+			first_done_now = jnp.logical_and(next_done, jnp.logical_not(finished_mask))
+			floor_at_done = jnp.where(first_done_now, lvl, floor_at_done)
+			health_at_done = jnp.where(first_done_now, hp, health_at_done)
+			max_floor = jnp.where(finished_mask, max_floor, jnp.maximum(max_floor, lvl))
+
 			return (
 				train_state,
 				next_env_state,
@@ -221,6 +244,9 @@ def make_evaluate(config, env, env_params):
 		final_raw_lengths = final_carry[10]
 		final_stats = final_carry[11]
 		finished_mask = final_carry[8]
+		_floor_at_done = final_carry[12]
+		_health_at_done = final_carry[13]
+		_max_floor = final_carry[14]
 
 		count_finished = finished_mask.sum()
 		
@@ -248,12 +274,18 @@ def make_evaluate(config, env, env_params):
 				mean_stat = jnp.where(count_finished > 0, valid_stats.sum() / count_finished, 0.0)
 				metrics[f"skill_{skill_name_raw}"] = mean_stat
 
+		if detail:
+			metrics["_details"] = {
+				"return": final_raw_rewards, "length": final_raw_lengths,
+				"finished": finished_mask, "died": _health_at_done <= 0,
+				"floor_at_done": _floor_at_done, "max_floor": _max_floor,
+			}
 		return metrics
 
 	return evaluate
 
 
-def main(config, rng, train_state=None, eval_embedding=None):
+def main(config, rng, train_state=None, eval_embedding=None, detail=False):
 	# 1. Create the base environment
 	if eval_embedding is not None:
 		embedding_size = eval_embedding.shape[1]
@@ -274,7 +306,7 @@ def main(config, rng, train_state=None, eval_embedding=None):
 
 
 	rng, _rng = jax.random.split(rng)
-	evaluate_jit = jax.jit(make_evaluate(config, env, env_params))
+	evaluate_jit = jax.jit(make_evaluate(config, env, env_params, detail=detail))
 	metrics = evaluate_jit(train_state, _rng)
 	return metrics
 

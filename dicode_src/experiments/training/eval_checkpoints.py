@@ -64,6 +64,7 @@ def main(config: DictConfig) -> None:
     )
 
     results = {}
+    raw_details = {}
     for step in steps:
         ckpt_path = os.path.join(ckpt_root, str(step))
         if not os.path.isdir(ckpt_path):
@@ -79,13 +80,17 @@ def main(config: DictConfig) -> None:
         # deterministic per-step seed so both runs see the SAME held-out worlds
         rng = jax.random.PRNGKey(seed)
         _, metrics = run_session_evaluation(
-            config, rng, rl_train_state, gen_manager, step, 0
+            config, rng, rl_train_state, gen_manager, step, 0,
+            detail=bool(config.eval.get("details", False)),
         )
         mr = float(metrics.get("mean_return", float("nan")))
         mp = float(metrics.get("mean_performance", float("nan")))
         el = float(metrics.get("average_episode_length", float("nan")))
         print(f"[RESULT] tag={tag} step={step} mean_return={mr:.4f} "
               f"mean_performance={mp:.4f} avg_ep_len={el:.1f}")
+        _det = metrics.pop("_details", None)
+        if _det is not None:
+            raw_details[step] = _det
         results[step] = {"mean_return": mr, "mean_performance": mp,
                          "average_episode_length": el,
                          "skills": {k: float(v) for k, v in metrics.items()
@@ -99,6 +104,14 @@ def main(config: DictConfig) -> None:
     with open(out_json, "w") as f:
         json.dump(results, f, indent=2)
     print(f"[saved] {out_json}")
+    if raw_details:
+        import numpy as _np
+        det_all = {str(k): {kk: _np.asarray(vv).tolist() for kk, vv in v.items()}
+                   for k, v in raw_details.items()}
+        det_json = out_json.replace(".json", "_details.json")
+        with open(det_json, "w") as f:
+            json.dump(det_all, f)
+        print(f"[saved] {det_json}")
     print("EVAL_DONE")
 
 
