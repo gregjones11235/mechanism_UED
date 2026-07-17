@@ -101,6 +101,9 @@ def make_evaluate(config, env, env_params, detail=False):
 			accumulated_reward,
 			accumulated_length,
 			accumulated_stats,
+			floor_at_done,
+			health_at_done,
+			max_floor,
 			rng,
 		)
 
@@ -122,6 +125,9 @@ def make_evaluate(config, env, env_params, detail=False):
 				acc_reward,
 				acc_length,
 				acc_stats,
+				floor_at_done,
+				health_at_done,
+				max_floor,
 				rng,
 			) = carry
 
@@ -232,6 +238,9 @@ def make_evaluate(config, env, env_params, detail=False):
 				new_acc_reward,
 				new_acc_length,
 				new_acc_stats,
+				floor_at_done,
+				health_at_done,
+				max_floor,
 				rng,
 			), _
 

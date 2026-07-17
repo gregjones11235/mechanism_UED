@@ -158,3 +158,15 @@ def test_h4_missing_import():
 def test_non_hallucination_errors_pass_through():
     assert diagnose("x=", "SyntaxError: invalid syntax") is None
     assert diagnose("class E: pass", "") is None
+
+
+def test_eval_detail_carry_threading_structural():
+    """Pin the autopsy trackers into ALL carry positions of craftax_evaluation.
+    Guards against the silent str.replace no-op that shipped an UnboundLocalError:
+    each tracker must appear in init tuple + unpack + step-return + update (>=4 hits)."""
+    import os
+    src = open(os.path.join(os.path.dirname(__file__),
+               "../../craftax_evaluation.py")).read()
+    for name in ("floor_at_done", "health_at_done", "max_floor"):
+        assert src.count(name) >= 4, f"{name} not threaded through eval carry"
+    assert "final_carry[14]" in src and '"_details"' in src
