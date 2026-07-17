@@ -51,6 +51,43 @@ class GymnaxWrapper:
 		return getattr(self._env, name)
 
 
+class DepthPotentialWrapper(GymnaxWrapper):
+	"""[Phase-2 / plan-A] Potential-based depth shaping: r' = r + gamma*phi(s')*(1-done) - phi(s),
+	phi(s) = c * player_level  (Ng et al. 1999 -> optimal policy invariant).
+
+	Targets the learned-retreat pathology from the deep-failure autopsy (151/168 gnomish
+	entrants die retreating upward): descending yields immediate positive signal, retreating
+	is auto-penalised, terminal transitions claw back the accumulated potential.
+
+	TRAINING ENV ONLY: wrapped between the base multi-task env and the Optimistic wrapper
+	in ppo_tr.make_train, flag-gated by +training.depth_potential_c (0/absent = wrapper not
+	constructed = v1 byte-identical). The official evaluation path (craftax_evaluation /
+	online_evaluation) and the preflight admission path (AllTasks wrapper) NEVER see this
+	wrapper -- eval protocol and learnability measurement stay canonical.
+	"""
+
+	def __init__(self, env, c: float, gamma: float):
+		super().__init__(env)
+		self.c = float(c)
+		self.gamma = float(gamma)
+
+	@staticmethod
+	def _level(state):
+		st = state
+		for _ in range(4):
+			if hasattr(st, "player_level"):
+				return st.player_level
+			st = getattr(st, "env_state")
+		raise AttributeError("player_level not reachable from training env state")
+
+	def step(self, rng, state, action, params=None):
+		phi_s = self.c * self._level(state).astype(jnp.float32)
+		obs, next_state, reward, done, info = self._env.step(rng, state, action, params)
+		phi_sp = self.c * self._level(next_state).astype(jnp.float32)
+		shaped = reward + self.gamma * phi_sp * (1.0 - done.astype(jnp.float32)) - phi_s
+		return obs, next_state, shaped, done, info
+
+
 class BatchEnvWrapper(GymnaxWrapper):
 	"""Batches reset and step functions"""
 

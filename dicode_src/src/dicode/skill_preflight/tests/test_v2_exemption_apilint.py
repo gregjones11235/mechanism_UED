@@ -170,3 +170,43 @@ def test_eval_detail_carry_threading_structural():
     for name in ("floor_at_done", "health_at_done", "max_floor"):
         assert src.count(name) >= 4, f"{name} not threaded through eval carry"
     assert "final_carry[14]" in src and '"_details"' in src
+
+
+def test_depth_potential_wrapper_math():
+    """φ-shaping math on a fake env: r' = r + γ·c·lvl(s')·(1-done) − c·lvl(s).
+    Runs on pod (jax present); skips hermetically where jax is unavailable."""
+    import pytest
+    jnp = pytest.importorskip("jax.numpy")
+    from dicode.wrappers import DepthPotentialWrapper
+
+    class _St:
+        def __init__(self, lvl): self.player_level = jnp.array(lvl)
+
+    class _FakeEnv:
+        def step(self, rng, state, action, params=None):
+            nxt = _St(state.player_level + 1)          # always descend one floor
+            done = jnp.array(0.0)
+            return None, nxt, jnp.array(1.0), done, {}
+
+    w = DepthPotentialWrapper(_FakeEnv(), c=0.5, gamma=0.99)
+    _, nxt, r, d, _ = w.step(None, _St(1.0), None)
+    # r' = 1 + 0.99*0.5*2*(1-0) - 0.5*1 = 1 + 0.99 - 0.5 = 1.49
+    assert abs(float(r) - 1.49) < 1e-5
+    # terminal: φ(s') zeroed by (1-done)
+    class _FakeEnvDone(_FakeEnv):
+        def step(self, rng, state, action, params=None):
+            return None, _St(state.player_level + 1), jnp.array(1.0), jnp.array(1.0), {}
+    w2 = DepthPotentialWrapper(_FakeEnvDone(), c=0.5, gamma=0.99)
+    _, _, r2, _, _ = w2.step(None, _St(2.0), None)
+    assert abs(float(r2) - (1.0 - 1.0)) < 1e-5   # 1 + 0 - 0.5*2 = 0
+
+
+def test_depth_potential_isolation_structural():
+    """Shaping must NEVER touch the official eval or preflight-admission paths."""
+    import os
+    base = os.path.join(os.path.dirname(__file__), "../../..")
+    for f in ("dicode/craftax_evaluation.py", "dicode/evaluation/online_evaluation.py"):
+        assert "DepthPotential" not in open(os.path.join(base, f)).read(), f
+    ppo = open(os.path.join(base, "dicode/ppo_tr.py")).read()
+    assert ppo.count("DepthPotentialWrapper(base_env") == 1   # train path only, not AllTasks
+    assert 'config.get("depth_potential_c", 0.0)' in ppo       # flag-gated, default off

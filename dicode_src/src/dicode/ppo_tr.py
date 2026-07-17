@@ -103,6 +103,13 @@ def make_train(
 		# Default to uniform distribution if not provided
 		task_distribution_proportions = jnp.ones(num_tasks) / num_tasks
 
+	# [Phase-2 / plan-A] depth-potential shaping, training env only (+training.depth_potential_c)
+	_dp_c = float(config.get("depth_potential_c", 0.0) or 0.0)
+	if _dp_c > 0:
+		from dicode.wrappers import DepthPotentialWrapper
+		base_env = DepthPotentialWrapper(base_env, c=_dp_c, gamma=config.gamma)
+		print(f"  [DepthPotential] ACTIVE c={_dp_c} gamma={config.gamma} (training env only)")
+
 	env = DistributedMultiTaskOptimisticLogWrapper(
 		base_env,
 		jax.random.PRNGKey(0),  # We need a key for the permutation in the wrapper
