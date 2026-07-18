@@ -268,7 +268,7 @@ def test_combat_bounty_isolation_structural():
     for f in ("dicode/craftax_evaluation.py", "dicode/evaluation/online_evaluation.py"):
         assert "CombatBounty" not in open(os.path.join(base, f)).read(), f
     ppo = open(os.path.join(base, "dicode/ppo_tr.py")).read()
-    assert ppo.count("CombatBountyWrapper(base_env") == 1
+    assert ppo.count("CombatBountyWrapper(base_env") == 2   # combat + placebo gates
     assert 'config.get("combat_bounty", 0.0)' in ppo
 
 
@@ -305,3 +305,15 @@ def test_shaping_survives_vmapped_stepenv_capture():
     wp = DepthPotentialWrapper(_Fake(), c=0.5, gamma=0.99)
     _, _, rp, _, _ = jax.vmap(wp.step_env, in_axes=(0, 0, 0, None, None))(keys, batch, acts, None, None)
     assert jnp.allclose(rp, 1.0 + 0.99 * 0.5 * 1.0), f"phi lost under capture: {rp}"
+
+
+def test_rarity_bounty_placebo_structural():
+    """Placebo flag: gated, mutually exclusive with combat_bounty, 8-name non-combat set,
+    reuses the same (already liveness-proven) wrapper class."""
+    import os
+    ppo = open(os.path.join(os.path.dirname(__file__), "../../..", "dicode/ppo_tr.py")).read()
+    assert 'config.get("rarity_bounty", 0.0)' in ppo
+    assert "mutually exclusive" in ppo
+    assert ppo.count("CombatBountyWrapper(base_env") == 2   # combat gate + placebo gate
+    for n in ("COLLECT_DIAMOND", "ENCHANT_ARMOUR", "MAKE_DIAMOND_ARMOUR"):
+        assert n in ppo

@@ -117,6 +117,23 @@ def make_train(
 		base_env = CombatBountyWrapper(base_env, bounty=_cb)
 		print(f"  [CombatBounty] ACTIVE bounty={_cb} (deep DEFEAT_* first-kills, training env only)")
 
+	# [Phase-2 / placebo] rarity bounty on NON-combat rare achievements (+training.rarity_bounty)
+	# Mechanism discriminator for the combat-bounty effect: same wrapper, same magnitude,
+	# disjoint index set. placebo ~= A-arm -> combat-specific; placebo ~= bounty-arm ->
+	# generic rarity re-weighting (and the 2e9 proposal switches configuration).
+	_rb = float(config.get("rarity_bounty", 0.0) or 0.0)
+	if _rb > 0:
+		assert _cb == 0, "single-variable discipline: combat_bounty and rarity_bounty are mutually exclusive"
+		from craftax.craftax.constants import Achievement
+		_names = {"COLLECT_DIAMOND", "COLLECT_SAPPHIRE", "COLLECT_RUBY",
+			"MAKE_DIAMOND_PICKAXE", "MAKE_DIAMOND_SWORD", "MAKE_DIAMOND_ARMOUR",
+			"ENCHANT_SWORD", "ENCHANT_ARMOUR"}
+		_found = [a for a in Achievement if a.name in _names]
+		assert len(_found) == len(_names), f"placebo set mismatch: {sorted(a.name for a in _found)}"
+		from dicode.wrappers import CombatBountyWrapper
+		base_env = CombatBountyWrapper(base_env, bounty=_rb, indices=[a.value for a in _found])
+		print(f"  [RarityBounty/PLACEBO] ACTIVE bounty={_rb} on {len(_found)} non-combat rare achievements (training env only)")
+
 	env = DistributedMultiTaskOptimisticLogWrapper(
 		base_env,
 		jax.random.PRNGKey(0),  # We need a key for the permutation in the wrapper
