@@ -1,3 +1,9 @@
+> ⚠️ **勘误(2026-07-17 深夜):本文件全部"裁决"作废。** 事后发现整形 wrapper 只覆写了
+> `step`,而真实训练链(wrappers_cl 的 Distributed wrapper)调用 `step_env` ——
+> `__getattr__` 委托导致整形层被无声绕过,φ 从未真正作用于任何一步训练。本 run 实为
+> v1 复读;"零效应"是 bug 不是结论。修复(step_env 拦截 + 结构测试钉死)后重测。
+> 发现者:Mason(从 mean_return 曲线的异常平稳嗅出);详见 wrapper_bypass 勘误 commit。
+
 # fork-φ 裁决:不过线 —— φ 深度势能双 regime 证伪,正式归档
 
 > 2026-07-17 深夜。φ 臂 = 从 v1 ckpt 6900(总 13700,dungeon 96%)分叉,v1 flags +

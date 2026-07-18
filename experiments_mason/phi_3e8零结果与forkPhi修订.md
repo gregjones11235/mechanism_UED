@@ -1,3 +1,9 @@
+> ⚠️ **勘误(2026-07-17 深夜):本文件全部"裁决"作废。** 事后发现整形 wrapper 只覆写了
+> `step`,而真实训练链(wrappers_cl 的 Distributed wrapper)调用 `step_env` ——
+> `__getattr__` 委托导致整形层被无声绕过,φ 从未真正作用于任何一步训练。本 run 实为
+> v1 复读;"零效应"是 bug 不是结论。修复(step_env 拦截 + 结构测试钉死)后重测。
+> 发现者:Mason(从 mean_return 曲线的异常平稳嗅出);详见 wrapper_bypass 勘误 commit。
+
 # φ-shaping 3e8 消融:零结果裁决 + 判据修订(fork-φ)
 
 > 2026-07-17。run 2026-07-17_074431_277912(v1 全家桶 + depth_potential_c=0.5,26 session

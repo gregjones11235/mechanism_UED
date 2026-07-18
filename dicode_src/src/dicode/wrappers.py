@@ -87,6 +87,16 @@ class DepthPotentialWrapper(GymnaxWrapper):
 		shaped = reward + self.gamma * phi_sp * (1.0 - done.astype(jnp.float32)) - phi_s
 		return obs, next_state, shaped, done, info
 
+	def step_env(self, key, state, action, params=None, task_embeddings=None):
+		# THE live path: DistributedMultiTaskOptimisticLogWrapper vmaps _env.step_env
+		# (5-arg). Overriding only step() gets silently bypassed via __getattr__ --
+		# the bug that inertized three shaping runs. Shape here.
+		phi_s = self.c * self._level(state).astype(jnp.float32)
+		obs, next_state, reward, done, info = self._env.step_env(key, state, action, params, task_embeddings)
+		phi_sp = self.c * self._level(next_state).astype(jnp.float32)
+		shaped = reward + self.gamma * phi_sp * (1.0 - done.astype(jnp.float32)) - phi_s
+		return obs, next_state, shaped, done, info
+
 
 class CombatBountyWrapper(GymnaxWrapper):
 	"""[Phase-2 / shot-2] Deep-combat achievement bounty: +bounty whenever a DEFEAT_* achievement
@@ -124,6 +134,15 @@ class CombatBountyWrapper(GymnaxWrapper):
 	def step(self, rng, state, action, params=None):
 		ach_s = self._ach(state)[..., self._idx].astype(jnp.bool_)
 		obs, next_state, reward, done, info = self._env.step(rng, state, action, params)
+		ach_sp = self._ach(next_state)[..., self._idx].astype(jnp.bool_)
+		new_kills = jnp.logical_and(ach_sp, jnp.logical_not(ach_s))
+		shaped = reward + self.bounty * new_kills.sum(axis=-1).astype(jnp.float32)
+		return obs, next_state, shaped, done, info
+
+	def step_env(self, key, state, action, params=None, task_embeddings=None):
+		# THE live path (see DepthPotentialWrapper.step_env note).
+		ach_s = self._ach(state)[..., self._idx].astype(jnp.bool_)
+		obs, next_state, reward, done, info = self._env.step_env(key, state, action, params, task_embeddings)
 		ach_sp = self._ach(next_state)[..., self._idx].astype(jnp.bool_)
 		new_kills = jnp.logical_and(ach_sp, jnp.logical_not(ach_s))
 		shaped = reward + self.bounty * new_kills.sum(axis=-1).astype(jnp.float32)

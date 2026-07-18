@@ -187,9 +187,13 @@ def test_depth_potential_wrapper_math():
             nxt = _St(state.player_level + 1)          # always descend one floor
             done = jnp.array(0.0)
             return None, nxt, jnp.array(1.0), done, {}
+        def step_env(self, key, state, action, params=None, task_embeddings=None):
+            return self.step(key, state, action, params)
 
     w = DepthPotentialWrapper(_FakeEnv(), c=0.5, gamma=0.99)
     _, nxt, r, d, _ = w.step(None, _St(1.0), None)
+    _, _, r_env, _, _ = w.step_env(None, _St(1.0), None)
+    assert abs(float(r_env) - float(r)) < 1e-6
     # r' = 1 + 0.99*0.5*2*(1-0) - 0.5*1 = 1 + 0.99 - 0.5 = 1.49
     assert abs(float(r) - 1.49) < 1e-5
     # terminal: φ(s') zeroed by (1-done)
@@ -225,17 +229,37 @@ def test_combat_bounty_wrapper_math():
         def __init__(self, before, after): self.b, self.a = before, after
         def step(self, rng, state, action, params=None):
             return None, _St(self.a), jnp.array(1.0), jnp.array(0.0), {}
+        def step_env(self, key, state, action, params=None, task_embeddings=None):
+            return self.step(key, state, action, params)
 
     # indices 2,3 selected; bit2 flips 0->1 (+bounty), bit3 already latched (no pay)
     env = _FakeEnv([0, 1, 0, 1], [0, 1, 1, 1])
     w = CombatBountyWrapper(env, bounty=2.0, indices=[2, 3])
     _, _, r, _, _ = w.step(None, _St([0, 1, 0, 1]), None)
     assert abs(float(r) - 3.0) < 1e-6      # 1 + 2.0*1
+    _, _, r_env, _, _ = w.step_env(None, _St([0, 1, 0, 1]), None)
+    assert abs(float(r_env) - 3.0) < 1e-6  # live path pays too
     # no flips -> base reward only
     env2 = _FakeEnv([0, 1, 1, 1], [0, 1, 1, 1])
     w2 = CombatBountyWrapper(env2, bounty=2.0, indices=[2, 3])
     _, _, r2, _, _ = w2.step(None, _St([0, 1, 1, 1]), None)
     assert abs(float(r2) - 1.0) < 1e-6
+
+
+def test_shaping_wrappers_intercept_live_path():
+    """The training chain calls step_env (wrappers_cl Distributed vmaps _env.step_env).
+    A wrapper overriding only step() is silently bypassed via __getattr__ -- the bug
+    that inertized three shaping runs. Pin: both wrappers define step_env themselves,
+    and the live wrapper really does route through step_env."""
+    import os
+    base = os.path.join(os.path.dirname(__file__), "../../..")
+    w = open(os.path.join(base, "dicode/wrappers.py")).read()
+    for cls in ("DepthPotentialWrapper", "CombatBountyWrapper"):
+        body = w.split(f"class {cls}")[1].split("\nclass ")[0]
+        assert "def step_env(" in body, f"{cls} lacks step_env -- would be bypassed"
+        assert "_env.step_env(" in body, f"{cls}.step_env must delegate to inner step_env"
+    cl = open(os.path.join(base, "dicode/wrappers_cl.py")).read()
+    assert "self._env.step_env" in cl
 
 
 def test_combat_bounty_isolation_structural():
