@@ -270,3 +270,38 @@ def test_combat_bounty_isolation_structural():
     ppo = open(os.path.join(base, "dicode/ppo_tr.py")).read()
     assert ppo.count("CombatBountyWrapper(base_env") == 1
     assert 'config.get("combat_bounty", 0.0)' in ppo
+
+
+def test_shaping_survives_vmapped_stepenv_capture():
+    """Replicates the EXACT capture semantics of wrappers_cl's Distributed wrapper:
+    jax.vmap(wrapper.step_env, in_axes=(0,0,0,None,None)) over a batch.
+    Shaping must survive this capture -- the liveness proof the ACTIVE print never was."""
+    import pytest
+    jax = pytest.importorskip("jax")
+    jnp = jax.numpy
+    from dicode.wrappers import CombatBountyWrapper, DepthPotentialWrapper
+
+    class _St:
+        def __init__(self, ach, lvl):
+            self.achievements = ach; self.player_level = lvl
+        def tree_flatten(self): return ((self.achievements, self.player_level), None)
+        @classmethod
+        def tree_unflatten(cls, aux, ch): return cls(*ch)
+    jax.tree_util.register_pytree_node(_St, _St.tree_flatten, _St.tree_unflatten)
+
+    class _Fake:
+        def step_env(self, key, state, action, params=None, task_embeddings=None):
+            nxt = _St(state.achievements.at[2].set(1), state.player_level + 1)
+            return jnp.zeros(3), nxt, jnp.array(1.0), jnp.array(0.0), {}
+
+    batch = _St(jnp.zeros((4, 5), dtype=jnp.int32), jnp.zeros((4,)))
+    keys = jax.random.split(jax.random.PRNGKey(0), 4)
+    acts = jnp.zeros((4,), dtype=jnp.int32)
+
+    wb = CombatBountyWrapper(_Fake(), bounty=2.0, indices=[2, 3])
+    _, _, r, _, _ = jax.vmap(wb.step_env, in_axes=(0, 0, 0, None, None))(keys, batch, acts, None, None)
+    assert jnp.allclose(r, 3.0), f"bounty lost under vmapped step_env capture: {r}"
+
+    wp = DepthPotentialWrapper(_Fake(), c=0.5, gamma=0.99)
+    _, _, rp, _, _ = jax.vmap(wp.step_env, in_axes=(0, 0, 0, None, None))(keys, batch, acts, None, None)
+    assert jnp.allclose(rp, 1.0 + 0.99 * 0.5 * 1.0), f"phi lost under capture: {rp}"
