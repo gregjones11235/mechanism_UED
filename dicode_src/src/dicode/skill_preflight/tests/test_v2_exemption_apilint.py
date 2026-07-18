@@ -210,3 +210,39 @@ def test_depth_potential_isolation_structural():
     ppo = open(os.path.join(base, "dicode/ppo_tr.py")).read()
     assert ppo.count("DepthPotentialWrapper(base_env") == 1   # train path only, not AllTasks
     assert 'config.get("depth_potential_c", 0.0)' in ppo       # flag-gated, default off
+
+
+def test_combat_bounty_wrapper_math():
+    """Bounty fires only on 0->1 flips of selected achievement bits; latched bits pay nothing."""
+    import pytest
+    jnp = pytest.importorskip("jax.numpy")
+    from dicode.wrappers import CombatBountyWrapper
+
+    class _St:
+        def __init__(self, ach): self.achievements = jnp.array(ach)
+
+    class _FakeEnv:
+        def __init__(self, before, after): self.b, self.a = before, after
+        def step(self, rng, state, action, params=None):
+            return None, _St(self.a), jnp.array(1.0), jnp.array(0.0), {}
+
+    # indices 2,3 selected; bit2 flips 0->1 (+bounty), bit3 already latched (no pay)
+    env = _FakeEnv([0, 1, 0, 1], [0, 1, 1, 1])
+    w = CombatBountyWrapper(env, bounty=2.0, indices=[2, 3])
+    _, _, r, _, _ = w.step(None, _St([0, 1, 0, 1]), None)
+    assert abs(float(r) - 3.0) < 1e-6      # 1 + 2.0*1
+    # no flips -> base reward only
+    env2 = _FakeEnv([0, 1, 1, 1], [0, 1, 1, 1])
+    w2 = CombatBountyWrapper(env2, bounty=2.0, indices=[2, 3])
+    _, _, r2, _, _ = w2.step(None, _St([0, 1, 1, 1]), None)
+    assert abs(float(r2) - 1.0) < 1e-6
+
+
+def test_combat_bounty_isolation_structural():
+    import os
+    base = os.path.join(os.path.dirname(__file__), "../../..")
+    for f in ("dicode/craftax_evaluation.py", "dicode/evaluation/online_evaluation.py"):
+        assert "CombatBounty" not in open(os.path.join(base, f)).read(), f
+    ppo = open(os.path.join(base, "dicode/ppo_tr.py")).read()
+    assert ppo.count("CombatBountyWrapper(base_env") == 1
+    assert 'config.get("combat_bounty", 0.0)' in ppo

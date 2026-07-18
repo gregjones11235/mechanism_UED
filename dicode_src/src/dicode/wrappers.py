@@ -88,6 +88,48 @@ class DepthPotentialWrapper(GymnaxWrapper):
 		return obs, next_state, shaped, done, info
 
 
+class CombatBountyWrapper(GymnaxWrapper):
+	"""[Phase-2 / shot-2] Deep-combat achievement bounty: +bounty whenever a DEFEAT_* achievement
+	bit (excluding surface ZOMBIE/SKELETON) flips 0->1 during a step.
+
+	Deliberately NON-potential: the phi verdict showed Ng-safe shaping provably cannot flip a
+	(near-)optimal retreat; this wrapper changes the optimal policy ON PURPOSE, overweighting
+	deep-combat first-kills (~3x at bounty=2.0) to buy combat-capability acquisition.
+	Honest scope note: achievement bits latch, so this is FIRST-KILL-PER-TYPE reweighting,
+	not true per-kill density (per-kill needs mob-array diffing -- escalation candidate).
+	Farming-proof by construction (a bit flips once per episode).
+
+	TRAINING ENV ONLY, flag +training.combat_bounty (absent/0 = not constructed = v1 identical).
+	"""
+
+	def __init__(self, env, bounty: float, indices=None):
+		super().__init__(env)
+		self.bounty = float(bounty)
+		if indices is None:
+			from craftax.craftax.constants import Achievement
+			indices = [a.value for a in Achievement
+					if a.name.startswith("DEFEAT_")
+					and a.name not in ("DEFEAT_ZOMBIE", "DEFEAT_SKELETON")]
+		self._idx = jnp.array(sorted(int(i) for i in indices))
+
+	@staticmethod
+	def _ach(state):
+		st = state
+		for _ in range(4):
+			if hasattr(st, "achievements"):
+				return st.achievements
+			st = getattr(st, "env_state")
+		raise AttributeError("achievements not reachable from training env state")
+
+	def step(self, rng, state, action, params=None):
+		ach_s = self._ach(state)[..., self._idx].astype(jnp.bool_)
+		obs, next_state, reward, done, info = self._env.step(rng, state, action, params)
+		ach_sp = self._ach(next_state)[..., self._idx].astype(jnp.bool_)
+		new_kills = jnp.logical_and(ach_sp, jnp.logical_not(ach_s))
+		shaped = reward + self.bounty * new_kills.sum(axis=-1).astype(jnp.float32)
+		return obs, next_state, shaped, done, info
+
+
 class BatchEnvWrapper(GymnaxWrapper):
 	"""Batches reset and step functions"""
 

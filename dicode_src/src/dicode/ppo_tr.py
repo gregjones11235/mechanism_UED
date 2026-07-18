@@ -110,6 +110,13 @@ def make_train(
 		base_env = DepthPotentialWrapper(base_env, c=_dp_c, gamma=config.gamma)
 		print(f"  [DepthPotential] ACTIVE c={_dp_c} gamma={config.gamma} (training env only)")
 
+	# [Phase-2 / shot-2] deep-combat achievement bounty, training env only (+training.combat_bounty)
+	_cb = float(config.get("combat_bounty", 0.0) or 0.0)
+	if _cb > 0:
+		from dicode.wrappers import CombatBountyWrapper
+		base_env = CombatBountyWrapper(base_env, bounty=_cb)
+		print(f"  [CombatBounty] ACTIVE bounty={_cb} (deep DEFEAT_* first-kills, training env only)")
+
 	env = DistributedMultiTaskOptimisticLogWrapper(
 		base_env,
 		jax.random.PRNGKey(0),  # We need a key for the permutation in the wrapper
