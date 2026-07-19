@@ -74,11 +74,19 @@ class ActorCriticRNN(nn.Module):
 
 		pi = distrax.Categorical(logits=actor_mean)
 
+		# [Crash-fix arm F] critic gradient firewall: stop critic-loss gradients from
+		# propagating into the shared trunk (Dense+RNN). Targets the reproduced
+		# schedule-end death chain: value_loss 1.5e10 -> grad 2.5e10 -> entropy 0.
+		# Flag +training.critic_grad_firewall (absent/false = byte-identical to v1).
+		critic_in = embedding
+		if bool(self.config.get("critic_grad_firewall", False)):
+			critic_in = jax.lax.stop_gradient(embedding)
+
 		critic = nn.Dense(
 			self.config.layer_size,
 			kernel_init=orthogonal(2),
 			bias_init=constant(0.0),
-		)(embedding)
+		)(critic_in)
 		critic = nn.relu(critic)
 		critic = nn.Dense(
 			self.config.layer_size,

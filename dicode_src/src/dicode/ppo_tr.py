@@ -534,8 +534,18 @@ def make_train(
 						value_pred_clipped = traj_batch_r.value + (value - traj_batch_r.value).clip(
 							-config.clip_eps, config.clip_eps
 						)
-						value_losses = jnp.square(value - targets_r)
-						value_losses_clipped = jnp.square(value_pred_clipped - targets_r)
+						# [Crash-fix arm S] batch-adaptive value-loss normalization (PopArt-lite):
+						# squared errors divided by stop-gradient batch std of targets, bounding
+						# loss/gradient scale when value targets explode at schedule end.
+						# Honest naming: adaptive scaling, NOT full PopArt (no output-layer
+						# re-preservation). Flag +training.adaptive_value_scale (absent = v1).
+						_vscale = 1.0
+						if bool(config.get("adaptive_value_scale", False)):
+							_vscale = jax.lax.stop_gradient(
+								jnp.maximum(jnp.std(targets_r), 1.0)
+							)
+						value_losses = jnp.square((value - targets_r) / _vscale)
+						value_losses_clipped = jnp.square((value_pred_clipped - targets_r) / _vscale)
 						value_loss = 0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
 
 						# Actor Loss

@@ -330,3 +330,17 @@ def test_online_eval_leak_fix_structural():
     assert 'f"evaluation_shaped/{key}"' in rd             # shaped channel renamed
     assert rd.count('f"evaluation/{key}"') == 0           # no direct evaluation/* from training slots
     assert "LEAK FIX" in rd
+
+
+def test_crash_fix_arms_structural():
+    """Both crash-fix arms flag-gated, default off = v1-identical math."""
+    import os
+    base = os.path.join(os.path.dirname(__file__), "../../..")
+    net = open(os.path.join(base, "dicode/network.py")).read()
+    assert 'self.config.get("critic_grad_firewall", False)' in net
+    assert "stop_gradient(embedding)" in net and ")(critic_in)" in net
+    assert ")(embedding)\n\t\tcritic = nn.relu" not in net   # critic head no longer reads trunk directly
+    ppo = open(os.path.join(base, "dicode/ppo_tr.py")).read()
+    assert 'config.get("adaptive_value_scale", False)' in ppo
+    assert "jnp.maximum(jnp.std(targets_r), 1.0)" in ppo
+    assert "_vscale = 1.0" in ppo                             # default path divides by exactly 1.0
