@@ -335,14 +335,33 @@ def main(config: DictConfig):
             last_known_original_return = evaluation_metrics["mean_return"]
             print(f"  Updated Original Task Return: {last_known_original_return:.2f}")
 
-        # Log evaluation metrics
+        # [LEAK FIX 2026-07-18] The per-session "evaluation" numbers were never an
+        # independent eval: they are extracted from the original_craftax slot of the
+        # TRAINING env -- which is wrapped by reward-shaping wrappers, so shaped
+        # bounties leaked into evaluation/mean_return (achievements stayed clean;
+        # gap == bounty arithmetic; priming eval was the only true eval).
+        # Fix: run the real held-out evaluation (same function priming uses) each
+        # session -> posts clean evaluation/* internally; keep the training-slot
+        # numbers under evaluation_shaped/* (per-session leak-model verification).
+        rng, _clean_eval_metrics = run_session_evaluation(
+            config,
+            rng,
+            rl_train_state,
+            gen_manager,
+            current_session_idx,
+            global_env_steps,
+        )
+        if "mean_return" in _clean_eval_metrics:
+            last_known_original_return = _clean_eval_metrics["mean_return"]
+
+        # Log training-slot (shaped) metrics under a truthful name
         if config.use_wandb and evaluation_metrics:
             eval_log_data = {
                 "session": current_session_idx,
                 "global_env_steps": global_env_steps,
             }
             for key, value in evaluation_metrics.items():
-                eval_log_data[f"evaluation/{key}"] = value
+                eval_log_data[f"evaluation_shaped/{key}"] = value
             wandb.log(eval_log_data)
 
         # --- Step 5: Post-Training Activation (Compare-and-Swap) ---

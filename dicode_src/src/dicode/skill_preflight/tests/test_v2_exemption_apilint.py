@@ -317,3 +317,16 @@ def test_rarity_bounty_placebo_structural():
     assert ppo.count("CombatBountyWrapper(base_env") == 2   # combat gate + placebo gate
     for n in ("COLLECT_DIAMOND", "ENCHANT_ARMOUR", "MAKE_DIAMOND_ARMOUR"):
         assert n in ppo
+
+
+def test_online_eval_leak_fix_structural():
+    """Structural test #3: the per-session evaluation/* channel must be a REAL held-out
+    eval (run_session_evaluation), and the training-slot (shaped) numbers must live
+    under evaluation_shaped/*. Guards the original_craftax-slot leak from recurring."""
+    import os
+    rd = open(os.path.join(os.path.dirname(__file__),
+              "../../../../experiments/training/run_dicode.py")).read()
+    assert rd.count("run_session_evaluation(") >= 2       # priming + in-loop
+    assert 'f"evaluation_shaped/{key}"' in rd             # shaped channel renamed
+    assert rd.count('f"evaluation/{key}"') == 0           # no direct evaluation/* from training slots
+    assert "LEAK FIX" in rd
