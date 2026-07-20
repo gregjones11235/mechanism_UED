@@ -344,3 +344,14 @@ def test_crash_fix_arms_structural():
     assert 'config.get("adaptive_value_scale", False)' in ppo
     assert "jnp.maximum(jnp.std(targets_r), 1.0)" in ppo
     assert "_vscale = 1.0" in ppo                             # default path divides by exactly 1.0
+
+
+def test_lr_schedule_clamped():
+    """The 7x same-position crash root cause: unclamped anneal -> negative LR ->
+    gradient ascent. Pin the clamp; in-horizon math is identity, so this is a pure
+    bug fix requiring no flag."""
+    import os
+    ppo = open(os.path.join(os.path.dirname(__file__), "../../..",
+               "dicode/ppo_tr.py")).read()
+    seg = ppo.split("def linear_schedule")[1].split("return")[0]
+    assert "jnp.maximum(" in seg and "0.0" in seg, "anneal must be clamped at zero"

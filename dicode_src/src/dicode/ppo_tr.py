@@ -172,8 +172,18 @@ def make_train(
 	) * config.max_updates_per_session
 
 	def linear_schedule(count):
-		frac = (
-			1.0 - (count // (config.num_minibatches * config.update_epochs)) / TOTAL_GLOBAL_UPDATES
+		# [ROOT-CAUSE FIX] Unclamped anneal: past the schedule horizon frac goes
+		# NEGATIVE -> lr drops below min_lr and then below ZERO -> Adam performs
+		# gradient ASCENT: value_loss is actively maximised (1.5e10), the
+		# -ent_coef*entropy term drives entropy to zero on purpose, policy
+		# collapses to -0.90 flatline. Deterministic in update count => the
+		# 7x same-position (~total 15300-15500 = horizon ~15258) crash across
+		# every run regardless of weights/shaping. In-horizon behaviour is
+		# bit-identical (max is identity for frac>=0); past-horizon trains on
+		# at min_lr instead of exploding.
+		frac = jnp.maximum(
+			0.0,
+			1.0 - (count // (config.num_minibatches * config.update_epochs)) / TOTAL_GLOBAL_UPDATES,
 		)
 		return config.min_lr + (config.lr - config.min_lr) * frac
 
