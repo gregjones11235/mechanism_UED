@@ -8,6 +8,7 @@ from flax.linen.initializers import constant, orthogonal
 from dicode.network import ActorCriticTransformer, Transition
 from dicode.wrappers import BatchEnvWrapper
 from minicraftax.envs.craftax import CraftaxAugObsTrain
+from dicode.necropsy import necro_init, necro_step
 # --- 2. Transformer Network Class ---
 # Imported from dicode.network
 
@@ -87,6 +88,7 @@ def make_evaluate(config, env, env_params, detail=False):
 		floor_at_done = jnp.zeros((num_envs,), dtype=jnp.int32)
 		health_at_done = jnp.zeros((num_envs,), dtype=jnp.float32)
 		max_floor = jnp.zeros((num_envs,), dtype=jnp.int32)
+		necro = necro_init(num_envs, _state_core(env_state), detail)
 
 		init_runner_state = (
 			train_state,
@@ -104,6 +106,7 @@ def make_evaluate(config, env, env_params, detail=False):
 			floor_at_done,
 			health_at_done,
 			max_floor,
+			necro,
 			rng,
 		)
 
@@ -128,6 +131,7 @@ def make_evaluate(config, env, env_params, detail=False):
 				floor_at_done,
 				health_at_done,
 				max_floor,
+				necro,
 				rng,
 			) = carry
 
@@ -224,6 +228,7 @@ def make_evaluate(config, env, env_params, detail=False):
 			floor_at_done = jnp.where(first_done_now, lvl, floor_at_done)
 			health_at_done = jnp.where(first_done_now, hp, health_at_done)
 			max_floor = jnp.where(finished_mask, max_floor, jnp.maximum(max_floor, lvl))
+			necro = necro_step(necro, _state_core(env_state), core, active_mask, first_done_now, detail)
 
 			return (
 				train_state,
@@ -241,6 +246,7 @@ def make_evaluate(config, env, env_params, detail=False):
 				floor_at_done,
 				health_at_done,
 				max_floor,
+				necro,
 				rng,
 			), _
 
@@ -256,6 +262,7 @@ def make_evaluate(config, env, env_params, detail=False):
 		_floor_at_done = final_carry[12]
 		_health_at_done = final_carry[13]
 		_max_floor = final_carry[14]
+		_necro = final_carry[15]
 
 		count_finished = finished_mask.sum()
 		
@@ -287,7 +294,7 @@ def make_evaluate(config, env, env_params, detail=False):
 			metrics["_details"] = {
 				"return": final_raw_rewards, "length": final_raw_lengths,
 				"finished": finished_mask, "died": _health_at_done <= 0,
-				"floor_at_done": _floor_at_done, "max_floor": _max_floor,
+				"floor_at_done": _floor_at_done, "max_floor": _max_floor, **_necro,
 			}
 		return metrics
 
@@ -308,7 +315,7 @@ def main(config, rng, train_state=None, eval_embedding=None, detail=False):
 		env = CraftaxAugObsTrain()
 
 	env_params = env.default_params.replace(
-		max_timesteps=8192,
+		max_timesteps=int(config.eval.get("max_timesteps", 8192)) if hasattr(config, "eval") else 8192,
 	)
 
 	env = BatchEnvWrapper(env, num_envs=config.evaluation.num_envs)
