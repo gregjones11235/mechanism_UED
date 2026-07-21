@@ -129,6 +129,12 @@ def run_session_training(
     if config.dicode_manager.reset_opt_state:
         rl_train_state = _reset_optimizer_state(config, rl_train_state)
 
+    # [SIL v1] session-level BC phase on the golden buffer (flag-gated,
+    # +training.sil_coef>0 enables; absent/0 = this block is a no-op).
+    if float(config.training.get("sil_coef", 0.0) or 0.0) > 0.0:
+        from dicode.sil_bc import run_sil_phase
+        rl_train_state = run_sil_phase(config, rl_train_state)
+
     # Update global counters
     num_updates_in_session = int(session_results["metrics"]["num_updates_done"])
     num_env_steps_in_session = int(session_results["metrics"]["num_env_steps_done"])
