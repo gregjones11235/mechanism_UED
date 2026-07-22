@@ -27,7 +27,7 @@ from omegaconf import DictConfig
 from dicode.network import ActorCriticTransformer
 from dicode.wrappers import BatchEnvWrapper
 from dicode.utils.general.train_state_utils import load_weights_only
-from dicode.task_utils import EMBEDDING_SIZE, get_achievement_multi_hot
+from dicode.task_utils import EMBEDDING_SIZE
 from minicraftax.envs.craftax import CraftaxAugObsTrain
 
 K_PRE, K_POST = 48, 16
@@ -72,7 +72,6 @@ def make_collect(config, env, env_params, num_envs, num_steps):
             step=jnp.zeros((), dtype=jnp.int32),
             ring_obs=jnp.zeros((num_envs, K, obs_dim), dtype=jnp.float32),
             ring_act=jnp.zeros((num_envs, K), dtype=jnp.int32),
-            ring_cum=jnp.zeros((num_envs, K), dtype=jnp.float32),
             wptr=jnp.zeros((num_envs,), dtype=jnp.int32),
             crossed1=jnp.zeros((num_envs,), dtype=jnp.bool_),
             e1food=jnp.zeros((num_envs,), dtype=jnp.float32),
@@ -82,7 +81,6 @@ def make_collect(config, env, env_params, num_envs, num_steps):
             captured=jnp.zeros((num_envs,), dtype=jnp.bool_),
             cap_obs=jnp.zeros((num_envs, K, obs_dim), dtype=jnp.float32),
             cap_act=jnp.zeros((num_envs, K), dtype=jnp.int32),
-            cap_cum=jnp.zeros((num_envs, K), dtype=jnp.float32),
             cap_wptr=jnp.zeros((num_envs,), dtype=jnp.int32),
             cross_step=jnp.zeros((num_envs,), dtype=jnp.int32),
             max_floor=jnp.zeros((num_envs,), dtype=jnp.int32),
@@ -122,8 +120,6 @@ def make_collect(config, env, env_params, num_envs, num_steps):
                 jnp.where(active[:, None], c["obs"], c["ring_obs"][ar, slot]))
             ring_act = c["ring_act"].at[ar, slot].set(
                 jnp.where(active, action, c["ring_act"][ar, slot]))
-            ring_cum = c["ring_cum"].at[ar, slot].set(
-                jnp.where(active, c["ret"], c["ring_cum"][ar, slot]))
             wptr = c["wptr"] + active.astype(jnp.int32)
 
             core = _state_core(nstate)
@@ -142,7 +138,6 @@ def make_collect(config, env, env_params, num_envs, num_steps):
             snap = counting & ((postcnt <= 0) | ndone)
             cap_obs = jnp.where(snap[:, None, None], ring_obs, c["cap_obs"])
             cap_act = jnp.where(snap[:, None], ring_act, c["cap_act"])
-            cap_cum = jnp.where(snap[:, None], ring_cum, c["cap_cum"])
             cap_wptr = jnp.where(snap, wptr, c["cap_wptr"])
             cross_step = jnp.where(x2, c["step"], c["cross_step"])
             captured = c["captured"] | snap
@@ -153,15 +148,15 @@ def make_collect(config, env, env_params, num_envs, num_steps):
             c2 = dict(c)
             c2.update(env_state=nstate, obs=nobs, done=ndone, mem=mem, mmask=mmask, midx=midx,
                       finished=finished, ret=ret, step=c["step"] + 1,
-                      ring_obs=ring_obs, ring_act=ring_act, ring_cum=ring_cum, wptr=wptr,
+                      ring_obs=ring_obs, ring_act=ring_act, wptr=wptr,
                       crossed1=crossed1, e1food=e1food, e1drink=e1drink,
                       crossed2=crossed2, postcnt=postcnt, captured=captured,
-                      cap_obs=cap_obs, cap_act=cap_act, cap_cum=cap_cum, cap_wptr=cap_wptr,
+                      cap_obs=cap_obs, cap_act=cap_act, cap_wptr=cap_wptr,
                       cross_step=cross_step, max_floor=max_floor, rng=rng)
             return c2, None
 
         c, _ = jax.lax.scan(_step, c, None, num_steps)
-        keys = ["cap_obs", "cap_act", "cap_cum", "cap_wptr", "captured", "finished", "ret",
+        keys = ["cap_obs", "cap_act", "cap_wptr", "captured", "finished", "ret",
                 "e1food", "e1drink", "cross_step", "max_floor", "crossed2"]
         return {k: c[k] for k in keys}
 
@@ -187,22 +182,11 @@ def main(config: DictConfig) -> None:
         emb = config.gen_manager.embedding_model.embedding_size
     else:
         emb = EMBEDDING_SIZE  # 67 one-hot, matches training obs dims
-    # [v1.2] Condition EXACTLY like the official bare-chain eval (one_hot ->
-    # multi-hot of the original task's relevant achievements). v1 fed zeros:
-    # OOD conditioning that suppressed descent for BOTH donors (training-seed
-    # reached2 2.6-4.4% vs official touched2 15-16%).
-    if config.training.conditioning_type == "one_hot":
-        emb_vec = jnp.asarray(get_achievement_multi_hot(
-            CraftaxAugObsTrain().relevant_achievements))
-    else:
-        emb_vec = jnp.zeros((emb,))
-    print(f"[SIL-COLLECT] conditioning={config.training.conditioning_type} "
-          f"vec_sum={float(emb_vec.sum()):.0f}")
     env = CraftaxAugObsTrain(
         condition_on_task=config.training.condition_on_task,
         conditioning_type=config.training.conditioning_type,
         embedding_size=emb,
-        task_embeddings=jnp.tile(emb_vec[None, :], (num_envs, 1)),
+        task_embeddings=jnp.zeros((1, emb)),
     )
     env_params = env.default_params.replace(max_timesteps=num_steps)
     env = BatchEnvWrapper(env, num_envs=num_envs)
@@ -225,7 +209,7 @@ def main(config: DictConfig) -> None:
         thr = float(np.percentile(rets[fin], 90)) if fin.sum() else float("inf")
         keep = capd & (rets >= thr) & (out["e1food"] >= fmin) & (out["e1drink"] >= dmin)
         existing = {s["key"] for s in index["segments"]}
-        segs_o, segs_a, segs_r, metas = [], [], [], []
+        segs_o, segs_a, metas = [], [], []
         for e in np.nonzero(keep)[0]:
             wp = int(out["cap_wptr"][e])
             order = (np.arange(wp - K, wp)) % K
@@ -234,7 +218,6 @@ def main(config: DictConfig) -> None:
                 continue
             segs_o.append(out["cap_obs"][e][order].astype(np.float16))
             segs_a.append(out["cap_act"][e][order].astype(np.int16))
-            segs_r.append((float(rets[e]) - out["cap_cum"][e][order]).astype(np.float16))
             metas.append(dict(key=key, ret=float(rets[e]), e1food=float(out["e1food"][e]),
                               e1drink=float(out["e1drink"][e]),
                               cross_step=int(out["cross_step"][e]),
@@ -243,9 +226,7 @@ def main(config: DictConfig) -> None:
         if metas:
             fn = f"seg_{tag}_{seed}.npz"
             np.savez_compressed(os.path.join(out_dir, fn),
-                                obs=np.stack(segs_o), act=np.stack(segs_a),
-                                rtg=np.stack(segs_r),
-                                ret=np.array([m["ret"] for m in metas], dtype=np.float32))
+                                obs=np.stack(segs_o), act=np.stack(segs_a))
             for m in metas:
                 m["file"] = fn
             index["segments"].extend(metas)
