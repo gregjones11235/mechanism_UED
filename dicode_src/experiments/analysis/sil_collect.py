@@ -42,7 +42,7 @@ def _state_core(st):
     raise AttributeError("player_level not found")
 
 
-def make_collect(config, env, env_params, num_envs, num_steps):
+def make_collect(config, env, env_params, num_envs, num_steps, mode="descend"):
     tcfg = config.training
 
     def collect(train_state, rng):
@@ -79,6 +79,8 @@ def make_collect(config, env, env_params, num_envs, num_steps):
             e1drink=jnp.zeros((num_envs,), dtype=jnp.float32),
             crossed2=jnp.zeros((num_envs,), dtype=jnp.bool_),
             postcnt=jnp.zeros((num_envs,), dtype=jnp.int32),
+            stay_cnt=jnp.zeros((num_envs,), dtype=jnp.int32),
+            prev_drink=jnp.full((num_envs,), 9.0),
             captured=jnp.zeros((num_envs,), dtype=jnp.bool_),
             cap_obs=jnp.zeros((num_envs, K, obs_dim), dtype=jnp.float32),
             cap_act=jnp.zeros((num_envs, K), dtype=jnp.int32),
@@ -134,17 +136,35 @@ def make_collect(config, env, env_params, num_envs, num_steps):
             e1drink = jnp.where(x1, core.player_drink.astype(jnp.float32), c["e1drink"])
             crossed1 = c["crossed1"] | x1
 
-            x2 = active & (~c["crossed2"]) & (lvl >= 2)
-            crossed2 = c["crossed2"] | x2
-            postcnt = jnp.where(x2, K_POST, c["postcnt"])
-            counting = crossed2 & (~c["captured"]) & active
-            postcnt = jnp.where(counting & (~x2), postcnt - 1, postcnt)
-            snap = counting & ((postcnt <= 0) | ndone)
+            if mode == "descend":
+                x2 = active & (~c["crossed2"]) & (lvl >= 2)
+                crossed2 = c["crossed2"] | x2
+                postcnt = jnp.where(x2, K_POST, c["postcnt"])
+                counting = crossed2 & (~c["captured"]) & active
+                postcnt = jnp.where(counting & (~x2), postcnt - 1, postcnt)
+                snap = counting & ((postcnt <= 0) | ndone)
+                stay_cnt = c["stay_cnt"]; prev_drink = c["prev_drink"]; mark = x2
+            elif mode == "stay":
+                # 64-step continuous floor-2 residence window
+                on2 = active & (lvl >= 2)
+                stay_cnt = jnp.where(on2, c["stay_cnt"] + 1, 0)
+                crossed2 = c["crossed2"] | on2
+                snap = active & (~c["captured"]) & (stay_cnt >= K)
+                postcnt = c["postcnt"]; prev_drink = c["prev_drink"]; mark = snap
+            elif mode == "resource":
+                # thirst-refill event: drink rose while previously < 3
+                drink = core.player_drink.astype(jnp.float32)
+                snap = active & (~c["captured"]) & (c["prev_drink"] < 3.0) & (drink > c["prev_drink"] + 0.5)
+                prev_drink = jnp.where(active, drink, c["prev_drink"])
+                crossed2 = c["crossed2"] | (active & (lvl >= 2))
+                postcnt = c["postcnt"]; stay_cnt = c["stay_cnt"]; mark = snap
+            else:
+                raise ValueError(f"unknown sil.mode {mode!r}")
             cap_obs = jnp.where(snap[:, None, None], ring_obs, c["cap_obs"])
             cap_act = jnp.where(snap[:, None], ring_act, c["cap_act"])
             cap_cum = jnp.where(snap[:, None], ring_cum, c["cap_cum"])
             cap_wptr = jnp.where(snap, wptr, c["cap_wptr"])
-            cross_step = jnp.where(x2, c["step"], c["cross_step"])
+            cross_step = jnp.where(mark, c["step"], c["cross_step"])
             captured = c["captured"] | snap
 
             finished = c["finished"] | ndone
@@ -156,6 +176,7 @@ def make_collect(config, env, env_params, num_envs, num_steps):
                       ring_obs=ring_obs, ring_act=ring_act, ring_cum=ring_cum, wptr=wptr,
                       crossed1=crossed1, e1food=e1food, e1drink=e1drink,
                       crossed2=crossed2, postcnt=postcnt, captured=captured,
+                      stay_cnt=stay_cnt, prev_drink=prev_drink,
                       cap_obs=cap_obs, cap_act=cap_act, cap_cum=cap_cum, cap_wptr=cap_wptr,
                       cross_step=cross_step, max_floor=max_floor, rng=rng)
             return c2, None
@@ -178,6 +199,7 @@ def main(config: DictConfig) -> None:
     rollouts = int(sil.get("rollouts", 4))
     out_dir = str(sil.get("out", "/workspace/golden_buffer"))
     tag = str(sil.get("tag", "run"))
+    mode = str(sil.get("mode", "descend"))
     fmin = float(sil.get("food_min", 5.0))
     dmin = float(sil.get("drink_min", 5.0))
     cap = int(sil.get("capacity", 512))
@@ -208,10 +230,10 @@ def main(config: DictConfig) -> None:
     env = BatchEnvWrapper(env, num_envs=num_envs)
 
     ckpt = os.path.join(str(sil.ckpt_root), str(sil.step))
-    print(f"[SIL-COLLECT] donor={tag} ckpt={ckpt} envs={num_envs} steps={num_steps} "
+    print(f"[SIL-COLLECT] donor={tag} mode={mode} ckpt={ckpt} envs={num_envs} steps={num_steps} "
           f"rollouts={rollouts} K={K_PRE}+{K_POST}")
     ts = load_weights_only(ckpt, env, env_params, config.training)
-    collect_jit = jax.jit(make_collect(config, env, env_params, num_envs, num_steps))
+    collect_jit = jax.jit(make_collect(config, env, env_params, num_envs, num_steps, mode))
 
     index_path = os.path.join(out_dir, "index.json")
     index = json.load(open(index_path)) if os.path.exists(index_path) else {"segments": []}
@@ -223,7 +245,9 @@ def main(config: DictConfig) -> None:
         capd = out["captured"].astype(bool) & fin & (out["cap_wptr"] >= K)
         rets = out["ret"]
         thr = float(np.percentile(rets[fin], 90)) if fin.sum() else float("inf")
-        keep = capd & (rets >= thr) & (out["e1food"] >= fmin) & (out["e1drink"] >= dmin)
+        keep = capd & (rets >= thr)
+        if mode == "descend":
+            keep = keep & (out["e1food"] >= fmin) & (out["e1drink"] >= dmin)
         existing = {s["key"] for s in index["segments"]}
         segs_o, segs_a, segs_r, metas = [], [], [], []
         for e in np.nonzero(keep)[0]:
