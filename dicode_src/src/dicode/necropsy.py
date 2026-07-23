@@ -25,6 +25,7 @@ def necro_init(num_envs, core, detail):
         min_melee_dist_death=jnp.full((num_envs,), 99.0),
         min_ranged_dist_death=jnp.full((num_envs,), 99.0),
         food_at_death=z(), drink_at_death=z(),
+        ach_at_done=jnp.zeros((num_envs, core.achievements.shape[1]), dtype=jnp.float32),
     )
 
 
@@ -64,4 +65,5 @@ def necro_step(necro, prev, nxt, active, first_done, detail):
     out["min_ranged_dist_death"] = jnp.where(first_done, _mindist(nxt.ranged_mobs, lvl, nxt.player_position), necro["min_ranged_dist_death"])
     out["food_at_death"] = jnp.where(first_done, nxt.player_food.astype(jnp.float32), necro["food_at_death"])
     out["drink_at_death"] = jnp.where(first_done, nxt.player_drink.astype(jnp.float32), necro["drink_at_death"])
+    out["ach_at_done"] = jnp.where(first_done[:, None], nxt.achievements.astype(jnp.float32), necro["ach_at_done"])
     return out
