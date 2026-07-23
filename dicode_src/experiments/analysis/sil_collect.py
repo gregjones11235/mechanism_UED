@@ -42,7 +42,7 @@ def _state_core(st):
     raise AttributeError("player_level not found")
 
 
-def make_collect(config, env, env_params, num_envs, num_steps, mode="descend"):
+def make_collect(config, env, env_params, num_envs, num_steps, mode="descend", skill_idx=0):
     tcfg = config.training
 
     def collect(train_state, rng):
@@ -81,6 +81,7 @@ def make_collect(config, env, env_params, num_envs, num_steps, mode="descend"):
             postcnt=jnp.zeros((num_envs,), dtype=jnp.int32),
             stay_cnt=jnp.zeros((num_envs,), dtype=jnp.int32),
             prev_drink=jnp.full((num_envs,), 9.0),
+            skill_prev=jnp.zeros((num_envs,), dtype=jnp.bool_),
             captured=jnp.zeros((num_envs,), dtype=jnp.bool_),
             cap_obs=jnp.zeros((num_envs, K, obs_dim), dtype=jnp.float32),
             cap_act=jnp.zeros((num_envs, K), dtype=jnp.int32),
@@ -136,6 +137,7 @@ def make_collect(config, env, env_params, num_envs, num_steps, mode="descend"):
             e1drink = jnp.where(x1, core.player_drink.astype(jnp.float32), c["e1drink"])
             crossed1 = c["crossed1"] | x1
 
+            skill_prev = c["skill_prev"]
             if mode == "descend":
                 x2 = active & (~c["crossed2"]) & (lvl >= 2)
                 crossed2 = c["crossed2"] | x2
@@ -158,6 +160,14 @@ def make_collect(config, env, env_params, num_envs, num_steps, mode="descend"):
                 prev_drink = jnp.where(active, drink, c["prev_drink"])
                 crossed2 = c["crossed2"] | (active & (lvl >= 2))
                 postcnt = c["postcnt"]; stay_cnt = c["stay_cnt"]; mark = snap
+            elif mode == "skill":
+                # snapshot the 64-step window ending at the target
+                # achievement's first flip (prep -> craft execution)
+                bit = core.achievements[:, skill_idx] > 0.5
+                snap = active & (~c["captured"]) & bit & (~c["skill_prev"])
+                skill_prev = c["skill_prev"] | (bit & active)
+                crossed2 = c["crossed2"] | (active & (lvl >= 2))
+                postcnt = c["postcnt"]; stay_cnt = c["stay_cnt"]; prev_drink = c["prev_drink"]; mark = snap
             else:
                 raise ValueError(f"unknown sil.mode {mode!r}")
             cap_obs = jnp.where(snap[:, None, None], ring_obs, c["cap_obs"])
@@ -176,7 +186,7 @@ def make_collect(config, env, env_params, num_envs, num_steps, mode="descend"):
                       ring_obs=ring_obs, ring_act=ring_act, ring_cum=ring_cum, wptr=wptr,
                       crossed1=crossed1, e1food=e1food, e1drink=e1drink,
                       crossed2=crossed2, postcnt=postcnt, captured=captured,
-                      stay_cnt=stay_cnt, prev_drink=prev_drink,
+                      stay_cnt=stay_cnt, prev_drink=prev_drink, skill_prev=skill_prev,
                       cap_obs=cap_obs, cap_act=cap_act, cap_cum=cap_cum, cap_wptr=cap_wptr,
                       cross_step=cross_step, max_floor=max_floor, rng=rng)
             return c2, None
@@ -200,6 +210,13 @@ def main(config: DictConfig) -> None:
     out_dir = str(sil.get("out", "/workspace/golden_buffer"))
     tag = str(sil.get("tag", "run"))
     mode = str(sil.get("mode", "descend"))
+    skill_name = str(sil.get("skill", "MAKE_IRON_ARMOUR"))
+    if mode == "skill":
+        from craftax.craftax.constants import Achievement
+        skill_idx = int(Achievement[skill_name].value)
+        print(f"[SIL-COLLECT] skill target: {skill_name} (idx {skill_idx})")
+    else:
+        skill_idx = 0
     fmin = float(sil.get("food_min", 5.0))
     dmin = float(sil.get("drink_min", 5.0))
     cap = int(sil.get("capacity", 512))
@@ -233,7 +250,7 @@ def main(config: DictConfig) -> None:
     print(f"[SIL-COLLECT] donor={tag} mode={mode} ckpt={ckpt} envs={num_envs} steps={num_steps} "
           f"rollouts={rollouts} K={K_PRE}+{K_POST}")
     ts = load_weights_only(ckpt, env, env_params, config.training)
-    collect_jit = jax.jit(make_collect(config, env, env_params, num_envs, num_steps, mode))
+    collect_jit = jax.jit(make_collect(config, env, env_params, num_envs, num_steps, mode, skill_idx))
 
     index_path = os.path.join(out_dir, "index.json")
     index = json.load(open(index_path)) if os.path.exists(index_path) else {"segments": []}
