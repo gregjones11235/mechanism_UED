@@ -188,6 +188,7 @@ def main(config: DictConfig):
                     threshold=_sp.get("mastery_threshold", 0.60),
                     frontier_mode=_frontier_mode,
                     prereq_threshold=_sp.get("prereq_threshold", 0.3),
+                    max_target_achievements=int(_sp.get("max_target_achievements", 6)),
                 )
                 # [C2lite §2] one-step scaffold prompt rides the prereq criterion by default
                 # (scaffold_prompt: "auto"); force "one_step"/"legacy" for single-layer arms.

@@ -32,10 +32,89 @@ from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
 from dicode.dreaming.llm import LLM
 from dicode.dreaming.prompts.dicode.constants import context as CONSTANTS
 from dicode.dreaming.prompts.dicode.minicraftax_api import context as API_DOCS
+
+import os as _os_api
+
+# --- auto-generated API reference (flag: DICODE_API_REF=1) -------------------
+# minicraftax_api omits Inventory entirely and never lists BlockType /
+# Achievement members, so the FM invents names (67 such failures measured).
+# Introspected from the real classes, so it cannot drift from source.
+def _dicode_api_ref():
+    import dataclasses as _dc, importlib as _il
+    out = []
+    try:
+        from craftax.craftax.constants import BlockType as _BT, Achievement as _AC
+        out.append("BlockType members -- use exactly these names:\n"
+                   + ", ".join(b.name for b in _BT))
+        out.append("Achievement members -- use exactly these names:\n"
+                   + ", ".join(a.name for a in _AC))
+    except Exception as _e:
+        out.append("(enum introspection failed: %r)" % (_e,))
+    specs = (
+        ("craftax.craftax.craftax_state", "Inventory",
+         "IMPORTANT: pickaxe, sword and armour are integer TIER LEVELS "
+         "(1=wood, 2=stone, 3=iron, 4=diamond). There is no iron_pickaxe or "
+         "stone_pickaxe field -- set pickaxe=3 for an iron pickaxe."),
+        ("minicraftax.craftax_state", "TaskParams", ""),
+        ("minicraftax.craftax_state", "EnvState", ""),
+    )
+    for _mod, _cls, _note in specs:
+        try:
+            _c = getattr(_il.import_module(_mod), _cls)
+            _txt = _cls + " fields (" + _mod + "):\n" + ", ".join(
+                x.name for x in _dc.fields(_c))
+            if _note:
+                _txt += "\n" + _note
+            out.append(_txt)
+        except Exception as _e:
+            out.append("(" + _cls + " introspection failed: %r)" % (_e,))
+    return "\n\n".join(out)
+
+if _os_api.environ.get("DICODE_API_REF", "") == "1":
+    _ref = _dicode_api_ref()
+    API_DOCS = (API_DOCS
+                + "\n\n=== EXACT API REFERENCE (auto-generated from source) ===\n"
+                + _ref)
+    print("[api-ref] ON: appended %d chars to API_DOCS" % len(_ref))
+# ----------------------------------------------------------------------------
 from dicode.dreaming.prompts.dicode.mobs import context as MOBS
 from dicode.dreaming.prompts.dicode.mobs_code import context as MOBS_CODE
 from dicode.dreaming.prompts.dicode.step_fn_nl import context as GAME_MECHANICS
 from dicode.dreaming.prompts.dicode.world_gen_nl import context as WORLD_GEN
+
+import os as _os
+
+# --- floor-guide reveal (experiment flag: DICODE_TUTORIAL_REVEAL=1) ----------
+# Appends the tutorial paragraphs for floors the agent has ALREADY demonstrably
+# reached to the natural-language mechanics block. Floors it has never reached
+# are withheld, so no depth structure is revealed that the student has not
+# itself discovered. Off unless the env var is set.
+_DICODE_GUIDE_SECTIONS = ("Basic Mechanics", "Floor 0", "Floor 1", "Floor 2")
+
+def _dicode_floor_guide(sections=_DICODE_GUIDE_SECTIONS):
+    import re as _re
+    from dicode.dreaming.prompts.cl_.knowledge_base_designer import (
+        knowledge_base_designer as _kb_raw,
+    )
+    _kb = _kb_raw.replace("\r\n", "\n")
+    _out = []
+    for _m in _re.finditer(r"(?m)^## (.+)$", _kb):
+        _name = _m.group(1).strip()
+        if not any(_name.startswith(_s) for _s in sections):
+            continue
+        _nxt = _kb.find("\n## ", _m.end())
+        _out.append("## " + _name + _kb[_m.end(): _nxt if _nxt > 0 else len(_kb)])
+    return "\n".join(_out)
+
+if _os.environ.get("DICODE_TUTORIAL_REVEAL", "") == "1":
+    _guide = _dicode_floor_guide()
+    GAME_MECHANICS = (
+        GAME_MECHANICS
+        + "\n\n=== FLOOR GUIDE (floors the agent has demonstrably reached) ===\n"
+        + _guide
+    )
+    print(f"[tutorial-reveal] ON: appended {len(_guide)} chars to GAME_MECHANICS")
+# ----------------------------------------------------------------------------
 from dicode.dreaming.utils import distances_from_embeddings, smart_absolute_path
 from minicraftax.envs.base import MiniCraftaxTrain
 
