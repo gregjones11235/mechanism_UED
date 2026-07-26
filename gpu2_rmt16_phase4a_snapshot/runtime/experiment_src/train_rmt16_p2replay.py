@@ -24,7 +24,23 @@ import os, sys, json, time, hashlib, pickle, argparse
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--carry_mode", required=True, choices=["persistent", "reset128"])
-ap.add_argument("--replay", required=True, choices=["on", "off"])
+# ---- Phase4A-v2 (CC2 directive §四): EXPLICIT replay mode (replaces ambiguous --replay on/off) ----
+# required=True with NO default -> a missing --replay_mode is a hard argparse failure (exit 2).
+# No old parameter is auto-inferred: the mode is taken verbatim, nothing else implies it.
+ap.add_argument("--replay_mode", required=True,
+                choices=["off", "original_vtrace", "full_p2_legacy"],
+                help="off=online PPO only (no replay learner/hindsight/AWR); "
+                     "original_vtrace=online PPO + Original-goal Replay V-trace (Hindsight calls==0, "
+                     "AWR calls==0, no relabeled sample, no second relabeled RMT scan); "
+                     "full_p2_legacy=V-trace+AWR audit/legacy path, DEFAULT-FORBIDDEN for formal "
+                     "science, requires --allow-full-p2-legacy.")
+ap.add_argument("--allow-full-p2-legacy", action="store_true",
+                help="EXPLICIT authorization required to run --replay_mode full_p2_legacy (GATE 15).")
+# ---- Phase4A-v2 (CC2 directive §六): EXPLICIT formal sequence length ----
+ap.add_argument("--sequence_length", type=int, default=129,
+                help="Replay loss-window length. Phase4A-v2 formal clean Carry experiment is "
+                     "PRE-REGISTERED at 129 (crosses one 128-step RMT segment boundary). 512 is "
+                     "retained only as ENGINEERING_LONG_WINDOW_MODE.")
 ap.add_argument("--ckpt17500", required=True)
 ap.add_argument("--out", required=True)
 ap.add_argument("--gpu_uuid", required=True)
@@ -39,6 +55,13 @@ ap.add_argument("--early_stop_len", type=int, default=0,
 ap.add_argument("--equiv_dump", action="store_true",
                 help="emit per-update deterministic equivalence hashes for the A/B no-perturbation gate")
 args = ap.parse_args()
+
+# ---- Phase4A-v2 (CC2 directive §四): replay-mode validation (no auto-inference) ----
+REPLAY_MODE = args.replay_mode
+if REPLAY_MODE == "full_p2_legacy" and not args.allow_full_p2_legacy:
+    # GATE 15: full_p2_legacy is default-forbidden for formal science.
+    ap.error("--replay_mode full_p2_legacy requires explicit --allow-full-p2-legacy "
+             "(default-forbidden for formal science).")
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_uuid
 os.environ["XLA_FLAGS"] = "--xla_gpu_deterministic_ops=true"
@@ -67,12 +90,26 @@ import rmt_hindsight as RH
 from rmt_replay_buffer import RMTReplayBuffer
 from full_p2_learner import FullP2Config, build_optimizer
 from rmt_memory_anchor import make_apply_eval_rmt
+# Phase4A-v2 (CC2 directive §三/§八): split counters + Hindsight/AWR firewall.
+from phase4a_v2_counters import Phase4ACounters
 
-REPLAY_ON = (args.replay == "on")
+REPLAY_ON = (REPLAY_MODE != "off")                       # any active replay channel
+REPLAY_USES_HINDSIGHT = (REPLAY_MODE == "full_p2_legacy")  # ONLY the legacy path touches Hindsight/AWR
 PROBE = bool(args.probe)
 if PROBE:
-    assert args.replay == "off", "probe requires --replay off (replay learner + hindsight must be OFF)"
-ARM = f"RMT16-{args.carry_mode.capitalize()}{'-P2Replay' if REPLAY_ON else '-PPO'}"
+    assert REPLAY_MODE == "off", "probe requires --replay_mode off (replay learner + hindsight must be OFF)"
+# Phase4A-v2 (§六): pre-registered formal sequence length + segment-boundary provenance.
+SEQUENCE_LENGTH = int(args.sequence_length)
+SEGMENT_LEN = 128                                          # RMT16 segment boundary (ANCHOR_INTERVAL)
+ENGINEERING_LONG_WINDOW_MODE = 512                         # legacy engineering window (NOT the formal one)
+if REPLAY_MODE == "original_vtrace" and SEQUENCE_LENGTH <= SEGMENT_LEN:
+    # The formal clean Carry experiment must CROSS one 128-step boundary (step 129 reads the
+    # cross-segment token). Guard against an accidental non-crossing pre-registration.
+    raise SystemExit(f"FATAL: replay_mode=original_vtrace requires sequence_length > {SEGMENT_LEN} "
+                     f"(got {SEQUENCE_LENGTH}); the formal Carry experiment crosses one boundary.")
+ARM_REPLAY_TAG = {"off": "-PPO", "original_vtrace": "-OrigVtrace",
+                  "full_p2_legacy": "-P2ReplayLegacy"}[REPLAY_MODE]
+ARM = f"RMT16-{args.carry_mode.capitalize()}{ARM_REPLAY_TAG}"
 
 # ----------------------- config (bakeoff frozen + P2 frozen) -----------------------
 class Cfg:
@@ -153,7 +190,8 @@ def _merge(base, full):
 # ----------------------- env + network + compat init -----------------------
 print("=" * 78, flush=True)
 print(f"{ARM}  driver  (Phase4A)", flush=True)
-print(f"  carry_mode={args.carry_mode} replay={args.replay} gpu={args.gpu_uuid}", flush=True)
+print(f"  carry_mode={args.carry_mode} replay_mode={REPLAY_MODE} "
+      f"sequence_length={SEQUENCE_LENGTH} gpu={args.gpu_uuid}", flush=True)
 print(f"  devices={[str(d) for d in jax.devices()]}", flush=True)
 print("=" * 78, flush=True)
 
@@ -247,7 +285,15 @@ replay_update_success_count = 0
 replay_first_success_update = None
 replay_last_sampled_seq_len = None
 replay_last_sampled_traj_len = None
+replay_sequences_consumed = 0          # Phase4A-v2 (§七): MATCHED_REPLAY_EXPOSURE numerator
 ever_eligible_512 = False
+# ---- Phase4A-v2 (CC2 directive §三): authoritative SPLIT counters (replace overloaded update_count) ----
+counters = Phase4ACounters()
+# Phase4A-v2 (§七): a DEDICATED, deterministically-seeded RNG for eligible-only replay sampling.
+# Given the same buffer state + this RNG state, sample_eligible produces bit-identical
+# sample_ids/start_offsets/sequence_lengths. Seeded from args.seed so it is reproducible and
+# independent of the JAX rollout/action RNG streams.
+replay_sample_rng = np.random.RandomState(args.seed + 7)
 persistent_carry_nonzero_all = True     # persistent: carried RMT tokens nonzero every rollout
 reset128_boundary_clear_all = True      # reset128: carried RMT tokens strictly zero every rollout
 gtrxl_window_finite_all = True
@@ -319,6 +365,24 @@ probe_completed_episodes = []     # cumulative per-episode termination records
 probe_first_ge512 = None          # first length>=512 episode (RECORD only; never a stop)
 
 # ----------------------- checkpoint -----------------------
+def _phase4a_v2_manifest_fields():
+    """Phase4A-v2 (CC2 directive §六): provenance fields recorded in every checkpoint manifest.
+
+    sequence_length, segment_len=128, crosses_boundary (= sequence_length > 128), replay_mode,
+    and the structural hindsight/awr flags. For replay_mode in {off, original_vtrace} hindsight
+    and awr are STRUCTURALLY False (the path never references them); only full_p2_legacy sets
+    them True."""
+    return dict(
+        sequence_length=SEQUENCE_LENGTH,
+        segment_len=SEGMENT_LEN,
+        crosses_boundary=bool(SEQUENCE_LENGTH > SEGMENT_LEN),
+        replay_mode=REPLAY_MODE,
+        hindsight=bool(REPLAY_USES_HINDSIGHT),
+        awr=bool(REPLAY_USES_HINDSIGHT),
+        w_original_vtrace=float(RL.W_ORIGINAL_VTRACE),
+        allow_full_p2_legacy=bool(args.allow_full_p2_legacy))
+
+
 def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag):
     d = os.path.join(CKPT_DIR, str(step)); os.makedirs(d, exist_ok=True)
     p_sha = _params_sha(params)
@@ -326,9 +390,10 @@ def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag)
     with open(os.path.join(d, "full_state.pkl"), "wb") as f:
         pickle.dump({"params": _to_np(params),
                      "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
-                                  "carry_mode": args.carry_mode, "replay": args.replay,
+                                  "carry_mode": args.carry_mode, "replay_mode": REPLAY_MODE,
                                   "gpu_uuid": args.gpu_uuid, "seed": args.seed,
                                   "config": {k: v for k, v in vars(cfg).items()},
+                                  "phase4a_v2": _phase4a_v2_manifest_fields(),
                                   "tag": tag}}, f, protocol=4)
     # train_state.pkl for exact resume (opt/EMA/replay/rng/counters)
     with open(os.path.join(d, "train_state.pkl"), "wb") as f:
@@ -341,12 +406,18 @@ def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag)
                      "memories": np.asarray(memories), "mem_mask": np.asarray(mem_mask),
                      "mem_idx": np.asarray(mem_idx),
                      "rmt_state": _to_np(rmt_state), "obsv": np.asarray(obsv),
+                     # GATE 12: checkpoint carries params/PPO opt/Replay opt/EMA/RNG/action RNG/
+                     # buffer/pending episodes/GTrXL state/RMT state AND all split counters.
                      "counters": {"accepted_policy_updates": accepted_policy_updates,
                                   "kl_rejected_updates": kl_rejected_updates,
                                   "hindsight_eligible": hindsight_eligible,
-                                  "hindsight_attempts": hindsight_attempts},
+                                  "hindsight_attempts": hindsight_attempts,
+                                  "replay_sequences_consumed": replay_sequences_consumed,
+                                  "replay_sample_rng_state": replay_sample_rng.get_state(),
+                                  "phase4a_v2": counters.snapshot()},
                      "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
-                                  "carry_mode": args.carry_mode, "replay": args.replay}},
+                                  "carry_mode": args.carry_mode, "replay_mode": REPLAY_MODE,
+                                  "phase4a_v2": _phase4a_v2_manifest_fields()}},
                     f, protocol=4)
     print(f"[ckpt] step={step} params_sha={p_sha[:16]} tag={tag}", flush=True)
     return p_sha
@@ -362,7 +433,11 @@ for u in range(args.total_updates):
         env, env_state, network, params, obsv, memories, mem_mask, mem_idx, rmt_state,
         rng, action_rng, pending, target_achievement_1d, cfg.num_steps, cfg.window_mem,
         cfg.num_heads, rmt_cfg, args.carry_mode, collected_update_count=update_count,
-        apply_eval_rmt=apply_eval_rmt, env_params=env_params)
+        apply_eval_rmt=apply_eval_rmt, env_params=env_params,
+        # Phase4A-v2 (§二/§三): episode update index = outer loop index; pending-episode
+        # policy_version = ACCEPTED policy version (not the loop index). In replay_mode=off
+        # these coincide with the legacy values -> bit-exact (GATE 13).
+        outer_update_index=u, policy_version=counters.policy_version)
     env_state = carry["env_state"]; obsv = carry["obsv"]
     memories = carry["memories"]; mem_mask = carry["mem_mask"]
     mem_idx = carry["mem_idx"]; rmt_state = carry["rmt_state"]; rng = carry["rng"]
@@ -384,7 +459,13 @@ for u in range(args.total_updates):
             if probe_first_ge512 is None and int(_ep["length"]) >= PROBE_GE_LEN:
                 probe_first_ge512 = dict(
                     first_ge512_update=int(_ep["update_index"]),
+                    # Phase4A-v2 (§二): PRECISE resolved env step (authoritative).
+                    first_ge512_resolved_env_step=int(_ep["completion_resolved_env_step"]),
+                    # DEPRECATED (§二): kept only for historical recomparison.
                     first_ge512_global_step=int(_ep["completion_global_step"]),
+                    first_ge512_global_step_deprecated=True,
+                    first_ge512_env_id=int(_ep["env_id"]),
+                    first_ge512_rollout_step=int(_ep["rollout_step"]),
                     first_ge512_episode_id=int(_ep["episode_id"]),
                     first_ge512_length=int(_ep["length"]))
         _lens = [int(_e["length"]) for _e in probe_completed_episodes]
@@ -423,6 +504,11 @@ for u in range(args.total_updates):
         ppo_cfg, rmt_cfg, args.carry_mode, rng)
     update_count += 1
     online_ppo_update_count += 1
+    # Phase4A-v2 (§三): one outer rollout+PPO iteration completed; PPO always commits its
+    # policy step -> policy_version advances. (off-path: policy_version stays == legacy
+    # update_count, bit-exact.)
+    counters.on_outer_update(cfg.num_envs, cfg.num_steps)
+    counters.on_ppo_accepted()
     assert ppo_metrics["ppo_finite"], "HARD STOP NaN/Inf in PPO update"
     # ---- A/B training-no-perturbation gate artifacts (CC2 addendum; only with --equiv_dump) ----
     # Deterministic hashes of the rollout + post-update params/optimizer/RMT state. A (probe OFF)
@@ -447,71 +533,131 @@ for u in range(args.total_updates):
         with open(equiv_path, "a") as f:
             f.write(json.dumps(equiv, default=str) + "\n")
 
-    # 3. replay update (P2-Full-A frozen channel)
+    # 3. replay update (Phase4A-v2: mode-dispatched; CC2 directive §四/§五/§七/§八)
     rep = {}
     # ---- Replay eligibility instrumentation (every update, every arm; read-only query) ----
     _rstats = _replay_stats(replay._buffer)
     _pending_traj_count = sum(1 for _ps in pending.slots if len(_ps["obs"]) > 0)
     if _rstats["replay_eligible_count_512"] > 0:
         ever_eligible_512 = True
-    if REPLAY_ON and replay.can_sample():
-        so, sr = [], []
-        # PRECISE DRIVER-ONLY GUARD (CC2 directive): skip Replay ONLY when no trajectory
-        # can satisfy the requested L_SEQ. Explicit eligibility query (preferred path):
-        if _rstats["replay_eligible_count_512"] == 0:
+    did_replay_update = False
+    if REPLAY_ON and REPLAY_MODE == "original_vtrace":
+        # ============ ORIGINAL-GOAL V-TRACE ONLY (no relabel, no AWR; firewall §八) ============
+        # Eligible-ONLY deterministic sampling (§七): pre-filters length>=SEQUENCE_LENGTH, fixed
+        # batch size, explicit NOT_READY (no random-short-then-retry, no silent redraw).
+        _batch = replay.sample_eligible(SEQUENCE_LENGTH, replay_sample_rng, K_BATCH)
+        if _batch.status == "NOT_READY":
             replay_not_ready_skip_count += 1
-            print(f"REPLAY_NOT_READY requested_sequence_length={L_SEQ} "
+            print(f"REPLAY_NOT_READY requested_sequence_length={SEQUENCE_LENGTH} "
                   f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
-                  f"eligible_count_512={_rstats['replay_eligible_count_512']}", flush=True)
+                  f"eligible_count={_batch.eligible_count}", flush=True)
         else:
-            _too_short_prefix = f"sequence_length {L_SEQ} > trajectory length"
-            for _ in range(K_BATCH):
-                hindsight_attempts += 1
-                try:
-                    s = replay.sample(sequence_length=L_SEQ)
-                except ValueError as _e:
-                    # TEMPORARY COMPAT GUARD (driver-only): sample() selects uniformly among
-                    # trajectories >= MIN_SEQUENCE_LENGTH; a random pick can be < L_SEQ and raise.
-                    # ONLY the precise "requested {L_SEQ} > picked trajectory length" case is a
-                    # benign redraw -> retry. ANY other ValueError is re-raised UNCHANGED.
-                    if str(_e).startswith(_too_short_prefix):
-                        continue
-                    raise
-                replay_sample_success_count += 1
-                replay_last_sampled_seq_len = int(getattr(s, "length", L_SEQ))
-                _src = replay._get_by_id(getattr(s, "source_trajectory_id", None))
-                replay_last_sampled_traj_len = int(_src.length) if _src is not None else None
-                try:
-                    rel = RH.relabel_sample_rmt(s, embedding_size=EMB)   # min achieved goal (Gate 5/6)
-                except ValueError:
-                    continue                            # not relabelable -> skip
-                hindsight_eligible += 1
-                so.append(s); sr.append(rel)
-        if len(so) >= 2:
-            params, target_params, replay_opt_state, m = RL.full_p2_update_rmt(
+            so = _batch.samples
+            counters.on_replay_attempt(len(so))
+            replay_sample_success_count += len(so)
+            replay_last_sampled_seq_len = SEQUENCE_LENGTH
+            _src0 = replay._get_by_id(_batch.sample_ids[0]) if _batch.sample_ids else None
+            replay_last_sampled_traj_len = int(_src0.length) if _src0 is not None else None
+            params, target_params, replay_opt_state, m = RL.original_vtrace_update_rmt(
                 network, params, target_params, replay_opt_state, replay_opt,
-                apply_eval_rmt, scan_fn, so, sr, fp_cfg, rmt_cfg, args.carry_mode, update_count)
+                apply_eval_rmt, scan_fn, so, fp_cfg, rmt_cfg, args.carry_mode)
             update_count += 1
-            assert bool(m["finite"]), "HARD STOP NaN/Inf in replay loss"
+            counters.on_replay_update_executed()
+            did_replay_update = True
+            assert bool(m["finite"]), "HARD STOP NaN/Inf in original_vtrace replay loss"
             if bool(m.get("policy_committed")):
                 assert float(m["policy_kl"]) <= fp_cfg.kl_replay_max + 1e-12, \
                     f"HARD STOP accepted policy_kl={float(m['policy_kl']):.5f} > {fp_cfg.kl_replay_max}"
                 accepted_policy_updates += 1
+                counters.on_replay_policy_committed()
             if bool(m.get("kl_rejected_update")):
                 assert not bool(m.get("policy_committed")), "HARD STOP KL-rejected committed policy"
                 kl_rejected_updates += 1
+                counters.on_replay_kl_rejected()   # policy_version does NOT advance on rollback
             assert float(m["entropy"]) >= fp_cfg.ent_floor, \
                 f"HARD STOP entropy collapse {float(m['entropy']):.4f} < {fp_cfg.ent_floor}"
             rep = {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
                    for k, v in m.items() if not isinstance(v, (list, dict))}
             rep["batch"] = len(so)
+            rep["replay_sample_ids"] = list(_batch.sample_ids)
+            rep["replay_start_offsets"] = list(_batch.start_offsets)
+            rep["replay_sequence_lengths"] = list(_batch.sequence_lengths)
             replay_update_success_count += 1
+            replay_sequences_consumed += len(so)
             if replay_first_success_update is None:
                 replay_first_success_update = update_count
-    elif REPLAY_ON:
-        # EMA still tracks params on PPO-only updates
-        target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
-    if (not REPLAY_ON):
+            # ---- Hindsight/AWR firewall (§八): original_vtrace MUST keep all four == 0 ----
+            counters.assert_hindsight_awr_disabled()
+    elif REPLAY_ON and REPLAY_MODE == "full_p2_legacy":
+        # ============ LEGACY V-trace+AWR (audit only; GATE 15 requires explicit flag) ============
+        # Preserves the original K_BATCH relabel path for audit/legacy comparison. This is the
+        # ONLY path that touches Hindsight/AWR; it is default-forbidden for formal science.
+        if replay.can_sample():
+            so, sr = [], []
+            if _rstats["replay_eligible_count_512"] == 0:
+                replay_not_ready_skip_count += 1
+                print(f"REPLAY_NOT_READY requested_sequence_length={L_SEQ} "
+                      f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
+                      f"eligible_count_512={_rstats['replay_eligible_count_512']}", flush=True)
+            else:
+                _too_short_prefix = f"sequence_length {L_SEQ} > trajectory length"
+                for _ in range(K_BATCH):
+                    hindsight_attempts += 1
+                    counters.on_hindsight_attempt(1)
+                    try:
+                        s = replay.sample(sequence_length=L_SEQ)
+                    except ValueError as _e:
+                        # Legacy benign redraw: a random pick can be < L_SEQ and raise. ONLY the
+                        # precise "requested {L_SEQ} > picked trajectory length" case retries; any
+                        # other ValueError is re-raised UNCHANGED. (original_vtrace never reaches
+                        # this — sample_eligible pre-filters and never draws a short trajectory.)
+                        if str(_e).startswith(_too_short_prefix):
+                            continue
+                        raise
+                    replay_sample_success_count += 1
+                    replay_last_sampled_seq_len = int(getattr(s, "length", L_SEQ))
+                    _src = replay._get_by_id(getattr(s, "source_trajectory_id", None))
+                    replay_last_sampled_traj_len = int(_src.length) if _src is not None else None
+                    try:
+                        rel = RH.relabel_sample_rmt(s, embedding_size=EMB)   # min achieved goal
+                    except ValueError:
+                        continue                            # not relabelable -> skip
+                    hindsight_eligible += 1
+                    counters.on_hindsight_eligible(1)
+                    counters.on_relabeled_sample(1)
+                    so.append(s); sr.append(rel)
+            if len(so) >= 2:
+                params, target_params, replay_opt_state, m = RL.full_p2_update_rmt(
+                    network, params, target_params, replay_opt_state, replay_opt,
+                    apply_eval_rmt, scan_fn, so, sr, fp_cfg, rmt_cfg, args.carry_mode, update_count)
+                update_count += 1
+                counters.on_replay_attempt(len(so))
+                counters.on_replay_update_executed()
+                counters.on_awr_update(1)
+                did_replay_update = True
+                assert bool(m["finite"]), "HARD STOP NaN/Inf in replay loss"
+                if bool(m.get("policy_committed")):
+                    assert float(m["policy_kl"]) <= fp_cfg.kl_replay_max + 1e-12, \
+                        f"HARD STOP accepted policy_kl={float(m['policy_kl']):.5f} > {fp_cfg.kl_replay_max}"
+                    accepted_policy_updates += 1
+                    counters.on_replay_policy_committed()
+                if bool(m.get("kl_rejected_update")):
+                    assert not bool(m.get("policy_committed")), "HARD STOP KL-rejected committed policy"
+                    kl_rejected_updates += 1
+                    counters.on_replay_kl_rejected()
+                assert float(m["entropy"]) >= fp_cfg.ent_floor, \
+                    f"HARD STOP entropy collapse {float(m['entropy']):.4f} < {fp_cfg.ent_floor}"
+                rep = {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
+                       for k, v in m.items() if not isinstance(v, (list, dict))}
+                rep["batch"] = len(so)
+                replay_update_success_count += 1
+                replay_sequences_consumed += len(so)
+                if replay_first_success_update is None:
+                    replay_first_success_update = update_count
+    # ---- EMA target tracking on PPO-only outer iterations (no replay update this iteration) ----
+    # Identical to legacy off-path (GATE 13): replay_mode=off EMAs every iteration; a replay
+    # update performs its own EMA internally, so we skip the PPO-only EMA on those iterations.
+    if not did_replay_update:
         target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
 
     # ---- RMT read-path monitor probe (post-update params + carried state) ----
@@ -616,7 +762,7 @@ if PROBE:
     probe_summary = dict(
         arm=ARM, carry_mode=args.carry_mode, probe="REACHABILITY_ONLY",
         not_for_formal_science=True,
-        replay=args.replay,
+        replay_mode=REPLAY_MODE,
         replay_note="replay learner + hindsight OFF; buffer collection of complete done episodes ON",
         total_updates=args.total_updates,
         total_env_steps=args.total_updates * STEPS_PER_UPDATE,
@@ -682,7 +828,18 @@ print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
       f"reset128_boundary_clear_all={reset128_boundary_clear_all} "
       f"ever_eligible_512={ever_eligible_512}", flush=True)
 # ----------------------- summary -----------------------
-summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
+# Phase4A-v2 (§八): FINAL Hindsight/AWR firewall. For replay_mode in {off, original_vtrace} the
+# four firewall counters MUST be 0 for the entire run (structural non-entry). Any breach here is
+# a HARD STOP. full_p2_legacy is the only mode permitted to make them nonzero.
+if REPLAY_MODE in ("off", "original_vtrace"):
+    counters.assert_hindsight_awr_disabled()
+# Phase4A-v2 (§七): MATCHED_REPLAY_EXPOSURE readiness. A formal two-arm Carry causal
+# conclusion requires the Persistent and Reset128 arms to have consumed IDENTICAL replay
+# exposure: persistent_replay_update_count == reset128_replay_update_count AND
+# persistent_replay_sequences_consumed == reset128_replay_sequences_consumed. Each arm records
+# its own (replay_update_success_count, replay_sequences_consumed); the cross-arm equality is
+# adjudicated host-side from the two summaries. This arm reports its values + the protocol flag.
+summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
                total_updates=args.total_updates, global_step=args.total_updates * STEPS_PER_UPDATE,
                final_params_sha256=_params_sha(params), base_sha256=base_sha,
                accepted_policy_updates=accepted_policy_updates,
@@ -690,6 +847,16 @@ summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
                hindsight_eligible=hindsight_eligible, hindsight_attempts=hindsight_attempts,
                replay_buffer_hash=replay.hash_digest() if REPLAY_ON else None,
                config={k: v for k, v in vars(cfg).items()},
+               phase4a_v2=_phase4a_v2_manifest_fields(),
+               phase4a_v2_counters=counters.snapshot(),
+               replay_update_count=counters.replay_update_count,
+               accepted_replay_policy_update_count=counters.accepted_replay_policy_update_count,
+               replay_attempt_count=counters.replay_attempt_count,
+               replay_sequences_consumed=replay_sequences_consumed,
+               policy_version=counters.policy_version,
+               outer_update_index=counters.outer_update_index,
+               global_env_steps=counters.global_env_steps,
+               matched_replay_protocol_ready=bool(REPLAY_MODE == "original_vtrace"),
                p2_frozen=dict(rho_bar=fp_cfg.rho_bar, c_bar=fp_cfg.c_bar, beta=fp_cfg.beta,
                               w_max=fp_cfg.w_max, w_vtrace=fp_cfg.w_vtrace, w_awr=fp_cfg.w_awr,
                               kl_replay_max=fp_cfg.kl_replay_max, ema_tau=fp_cfg.ema_tau,
