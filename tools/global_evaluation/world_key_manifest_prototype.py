@@ -1,40 +1,67 @@
 #!/usr/bin/env python
-"""CC4 world-set materialization -- recipe-frozen, fail-closed, two-independent-run.
-
-Task: GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING (section six).
-
-This script is PREPARED ONLY. It is NOT executed for real in the premerge-hardening
-round (no JAX/jaxlib/craftax on this host). Running it for real requires a JAX +
-craftax==1.4.5 host with the environment wrapper source available.
-
-Implements the 17 frozen requirements:
-   1. only generate the world set
-   2. do NOT load any checkpoint
-   3. do NOT train
-   4. do NOT formally evaluate
-   5. use the frozen seed and fold_in rule  (jax.random.fold_in(PRNGKey(wrapper_seed), world_index))
-   6. fixed world order (0..255 ascending)
-   7. stable serialization of each world
-   8. SHA256 per world
-   9. ordered world_set_hash
-  10. run twice in INDEPENDENT PROCESSES
-  11. compare per-world hashes across the two runs
-  12. compare the total hash across the two runs
-  13. record JAX version
-  14. record Craftax version
-  15. record environment source SHA
-  16. record generation script SHA
-  17. fail closed on ANY missing version / source identity
-
-Modes:
-  --dry-run        validate dependencies, parameters, and output paths ONLY; generate NO formal hash.
-  --single-run     one materialization pass writing world_hashes.json into --out (used by the orchestrator).
-  --orchestrate    spawn THIS script twice as independent subprocesses (--single-run), then compare
-                   the two runs per-world and in total; fail closed on any mismatch. (default formal mode)
-
-Exit codes: 0 = success / dry-run validations passed; 2 = fail-closed (missing dep / version / identity /
-mismatch); 3 = usage error.
 """
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!  DEPRECATED_INVALID_FOR_WORLD_SET_HASH  --  DO NOT USE AS A MATERIALIZER  !!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Status: OLD_WORLD_KEY_PROTOTYPE = DEPRECATED_INVALID_FOR_WORLD_SET_HASH
+        All outputs of this script are NON_SCIENTIFIC_PROTOTYPE.
+
+Renamed (git mv, history preserved) from materialize_world_set_twice.py during
+GLOBAL_WORLD_MATERIALIZER_CORRECTION_V2. The original content is retained below
+ONLY for transparency / audit trail -- it is NOT a valid world materializer and
+MUST NOT be executed to produce any world_set_hash.
+
+WHY THIS IS INVALID (methodological error in the original):
+  * It hashes ONLY:
+      - the jax.random.fold_in(PRNGKey(wrapper_seed), world_index) PRNG key bytes;
+      - a recipe descriptor (frozen recipe + world_index + seed label);
+    It does NOT create a Craftax environment, does NOT call the real evaluator's
+    reset / world-generation path, and does NOT generate or serialize any actual
+    EnvState / TaskParams / world params.
+  * Therefore its hashes are PRNG-key / recipe-descriptor identity hashes, NOT
+    hashes of real evaluation worlds. They MUST NOT be used for GLOBAL_WORLD_SET_HASH.
+  * Two-run agreement here ONLY proves the key/descriptor code is deterministic;
+    it does NOT prove anything about real Craftax worlds.
+  * evaluation_seed was written ONLY into the descriptor text and did NOT enter
+    the PRNGKey / world-generation RNG path. Changing the numeric evaluation_seed
+    while keeping the label did NOT change the old "hash" -- proof it was not bound
+    to real world generation.
+
+Correct classification of anything this script produces:
+    WORLD_KEY_MANIFEST_PROTOTYPE  (NOT  WORLD_SET_MATERIALIZER_READY)
+
+Replacement (actual Craftax world materializer):
+    tools/global_evaluation/materialize_craftax_world_set_twice.py
+
+This entry point now FAILS CLOSED immediately (exit 2) so it can never be mistaken
+for a working materializer. The archived prototype functions are left intact below
+the guard for historical inspection only.
+"""
+import argparse
+import hashlib
+import importlib
+import json
+import os
+import subprocess
+import sys
+
+_DEPRECATED = "DEPRECATED_INVALID_FOR_WORLD_SET_HASH"
+
+
+def _fail_closed_deprecated():
+    sys.stderr.write(
+        "\n"
+        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+        "!!  %s\n"
+        "!!  This is the OLD world-KEY-manifest prototype. It does NOT\n"
+        "!!  generate Craftax worlds and MUST NOT produce a world_set_hash.\n"
+        "!!  All of its outputs are NON_SCIENTIFIC_PROTOTYPE.\n"
+        "!!  Use tools/global_evaluation/materialize_craftax_world_set_twice.py.\n"
+        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+        % _DEPRECATED
+    )
+    return 2
 import argparse
 import hashlib
 import importlib
@@ -337,4 +364,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # FAIL CLOSED: this prototype must never run as a materializer.
+    sys.exit(_fail_closed_deprecated())

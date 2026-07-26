@@ -1,77 +1,42 @@
-# World-set materialization runbook (CC4 premerge hardening -- six)
+# World-set materialization runbook (round-6 revision -- eleven)
 
-- UTC: `2026-07-26T13:30:17Z`
-- **Status: NOT_EXECUTED_THIS_ROUND** (prepared only).
-- Reason: JAX/jaxlib/craftax/jaxnav/flax/optax/chex ABSENT on this host; a formal run requires a JAX + craftax==1.4.5 host. A formal run here would **FAIL CLOSED** (verified via --dry-run).
+- UTC: `2026-07-26T15:10:12Z`
+- status: **IMPLEMENTED_STATIC; REAL_RUN_NOT_EXECUTED; GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED**
+- script: `tools/global_evaluation/materialize_craftax_world_set_twice.py` ; deprecated: `tools/global_evaluation/world_key_manifest_prototype.py (DO NOT USE; fails closed exit 2)`
+- canonical reset path: `split(split(split(PRNGKey(evaluation_seed))[1])[1],256)[world_index] then reset_env split (multitask:129) + generate_world split (s4:39) -- PURE split, NO fold_in`
+- serializer schema: `mechanism_UED.craftax_materialized_world/v1 (full 53-field initial EnvState snapshot; arrays bind dtype+shape+C-order bytes; sorted keys; no pickle)`
 
-## Script
-- Path: `tools/global_evaluation/materialize_world_set_twice.py`
-- SHA256: `6631f5ddc8be42a93136919ebd0f135665b168309685c172675a6ac5689289de`
-- Placement rationale: placed under `tools/global_evaluation/` (the directive's allowed alternative) rather than the frozen `audit_outputs/global_remediation_20260726T095819Z/tools/`, to avoid changing that frozen directory's SHA inventory semantics. Recorded here per directive.
-- Compiles: YES ; dry-run demonstrated: YES (verdict here = VALIDATIONS_INCOMPLETE => formal would fail closed).
+## Revised preconditions for a REAL run
+- 1. evaluator + world-builder SOURCE IDENTITY confirmed: eval_phase2_unified.py sha256 224514026aefd273...; wrapper byte-identical 2ded41d8...; task canonical 45fdd17c... (NOT the P2-v0 invalid df7cde78...); env multitask.py c8f2d5c3...
+- 2. the ACTUAL Craftax reset path is the canonical split chain above (verified line-by-line); NO fold_in; materializer reproduces the whole 256-way batch (env.reset(reset_rng) once, then index [i])
+- 3. serializer schema = mechanism_UED.craftax_materialized_world/v1 serializes the COMPLETE initial EnvState (53 fields); no result-affecting initial field dropped
+- 4. seed-semantics tests: label-only change -> hash unchanged (PASS); numeric seed change -> real RNG change (must be re-asserted on the JAX host; BLOCKED_ENVIRONMENT here); GATE18 must reach PASS only on a real host
+- 5. two INDEPENDENT processes agree (do_orchestrate): count/index order/per-world/total/source SHA/versions/numeric seed all equal; any diff -> fail closed (TWO_PROCESS_REAL_WORLD_AGREEMENT=NOT_RUN here)
+- 6. negative tests (10) FAIL=0 (PASS=8 BLOCKED=2 here); the 2 BLOCKED must convert to PASS only on a real host, never faked
+- 7. JAX + craftax==1.4.5 host; CC4_S4_TASK_PATH set to the canonical s4_task_code.py (sha prefix 45fdd17c)
+- 8. ALL OUTPUT REVIEWED BY 总控 before any world_set_hash is accepted into evidence
 
-## Frozen recipe reference
-- `audit_outputs/global_world_set_v1/world_manifest.json` (fold_in(PRNGKey(wrapper_seed=0), world_index); condition_on_task; optimistic_reset_ratio=16; mode=score; bonus_type=none; max_timesteps=4096; num_worlds=256; order 0..255; sets seed42 / seed100000).
+## Over-claim corrections
+- WORLD_SET_MATERIALIZER_READY (round-5 implicit) -> WRONG; was only WORLD_KEY_MANIFEST_PROTOTYPE
+- key hash == world hash -> WRONG; explicitly forbidden
+- evaluation_seed bound to world gen -> was NOT (old prototype put seed only in descriptor text); NOW bound via PRNGKey(evaluation_seed) split chain
+- code implemented == world hash available -> WRONG; GLOBAL_WORLD_SET_HASH stays BLOCKED_SOURCE_UNVERIFIED until a real authorized run + 总控 review
 
-## The 17 requirements -> implementation
-
-| # | Requirement | Implementation |
-|---|---|---|
-| 1 | only generate the world set | main() only builds per-world identity + hashes; no other artifact |
-| 2 | do NOT load any checkpoint | no checkpoint path argument; materialize_world_set never opens a checkpoint |
-| 3 | do NOT train | no training loop / optimizer step anywhere in the script |
-| 4 | do NOT formally evaluate | no evaluator invocation; no success metric computed |
-| 5 | frozen seed + fold_in rule | jax.random.fold_in(PRNGKey(wrapper_seed=0), world_index); ALLOWED_SEEDS={seed42,seed100000} |
-| 6 | fixed world order | for world_index in range(256) ascending; ordered_hashes preserves order |
-| 7 | stable serialization per world | canonical sort_keys JSON descriptor + folded-key bytes |
-| 8 | SHA256 per world | per_world[str(world_index)] = sha256(blob) |
-| 9 | ordered world_set_hash | world_set_hash = sha256(concat of ascending per-world hashes) |
-| 10 | two independent processes | --orchestrate spawns this script twice via subprocess (--single-run) into run_A/run_B |
-| 11 | compare per-world hashes | require(a['per_world_hashes'] == b['per_world_hashes']) |
-| 12 | compare total hash | require(a['world_set_hash'] == b['world_set_hash']) |
-| 13 | record JAX version | ident['jax_version'] / jaxlib_version via probe_version |
-| 14 | record Craftax version | ident['craftax_version']; must equal 1.4.5 |
-| 15 | record environment source SHA | ident['env_source_sha256'] = sha256(--env-source); required |
-| 16 | record generation script SHA | ident['generation_script_sha256'] = sha256(this file) |
-| 17 | fail closed on missing version/identity | assert_formal_identity raises FailClosed -> exit 2 |
-
-## Preconditions for a real run
-- JAX + jaxlib importable (version recorded)
-- craftax==1.4.5 importable (version recorded; mismatch => fail closed)
-- environment wrapper source (DistributedMultiTaskOptimisticLogWrapper) available; --env-source points to it (SHA recorded)
-- generation script SHA recorded automatically
-- no checkpoint, no training, no formal evaluation invoked
+## Host run boundary (this host jax=False craftax=False)
+- allowed: compileall; static source review; pure-Python serializer unit tests (self-test PASS); serializer mock tests; import/source analysis; dry-run; static anchor-check PASS; confirm a formal run FAILS CLOSED
+- forbidden: deriving MATERIALIZER_RUNTIME_PASS from mock/fake worlds; emitting any world_set_hash
+- correct labels: {"MATERIALIZER_STATIC_TESTS": "PASS", "MATERIALIZER_REAL_CRAFTAX_RUN": "NOT_RUN", "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED"}
 
 ## Commands on a JAX host
 ```
-# 0. dry-run first (no hash generated)
-python tools/global_evaluation/materialize_world_set_twice.py --seed seed42 --out audit_outputs/world_materialization/seed42 --env-source <path/to/wrapper.py> --dry-run
-python tools/global_evaluation/materialize_world_set_twice.py --seed seed100000 --out audit_outputs/world_materialization/seed100000 --env-source <path/to/wrapper.py> --dry-run
-# 1. formal two-independent-run materialization (seed42 then seed100000; never pooled)
-python tools/global_evaluation/materialize_world_set_twice.py --seed seed42 --out audit_outputs/world_materialization/seed42 --env-source <path/to/wrapper.py> --orchestrate
-python tools/global_evaluation/materialize_world_set_twice.py --seed seed100000 --out audit_outputs/world_materialization/seed100000 --env-source <path/to/wrapper.py> --orchestrate
-# 2. verify world_set_agreement.json shows per_world_hash_agreement=true and world_set_hash_agreement=true for BOTH seeds
+python materialize_craftax_world_set_twice.py --self-test
 ```
-
-## Expected outputs
-- `audit_outputs/world_materialization/seed42/run_A/world_hashes.json`
-- `audit_outputs/world_materialization/seed42/run_B/world_hashes.json`
-- `audit_outputs/world_materialization/seed42/world_set_agreement.json`
-- `audit_outputs/world_materialization/seed100000/run_A/world_hashes.json`
-- `audit_outputs/world_materialization/seed100000/run_B/world_hashes.json`
-- `audit_outputs/world_materialization/seed100000/world_set_agreement.json`
-
-## Recorded in each world_hashes.json
-- JAX version; jaxlib version; craftax version (==1.4.5); environment source SHA; generation script SHA; frozen recipe; 256 per-world hashes; ordered world_set_hash.
-
-## Global labels
-- GLOBAL_WORLD_RECIPE = PASS (already).
-- GLOBAL_WORLD_SET_HASH = BLOCKED_SOURCE_UNVERIFIED now; moves to PASS ONLY after two-independent-run agreement for BOTH seed42 and seed100000.
-
-## Discipline
-- NOT executed this round
-- no checkpoint loaded, no training, no formal evaluation
-- no fabricated/placeholder hashes; fail closed instead
-- seed42 and seed100000 generated separately and never pooled/paired
-- BLOCKED_SOURCE_UNVERIFIED != FAIL
-- does NOT modify the 54 frozen files; does NOT rewrite any SHA256SUMS
+```
+python materialize_craftax_world_set_twice.py --anchor-check --eval-source <eval> --wrapper-source <wrappers_cl.py> --task-source <s4_task_code.py>
+```
+```
+CC4_S4_TASK_PATH=<canonical s4> python materialize_craftax_world_set_twice.py --orchestrate --seed seed42 --out <dir> --eval-source <eval> --wrapper-source <wrappers_cl.py> --task-source <s4> --env-source <multitask.py>
+```
+```
+python world_materializer_negative_tests.py --eval-source ... (expect NEG02/NEG09 to convert appropriately on a real host)
+```

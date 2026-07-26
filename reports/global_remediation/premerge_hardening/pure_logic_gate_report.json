@@ -1,138 +1,216 @@
 {
-  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
-  "section": "十 pure-logic gates",
-  "utc": "2026-07-26T13:36:53Z",
-  "regression_gates_summary": {
+  "task": "GLOBAL_WORLD_MATERIALIZER_CORRECTION_V2",
+  "section": "十三 gates (round-6 revision of the round-5 pure-logic gate report)",
+  "utc": "2026-07-26T15:10:12Z",
+  "frozen_gates_1_15_summary": {
     "PASS": 13,
     "PARTIAL": 1,
     "BLOCKED": 1,
     "FAIL": 0,
     "total": 15
   },
-  "PURE_LOGIC_GATE_PASS_COUNT": 13,
-  "PURE_LOGIC_GATE_PARTIAL_COUNT": 1,
-  "PURE_LOGIC_GATE_BLOCKED_COUNT": 1,
-  "PURE_LOGIC_GATE_FAIL_COUNT": 0,
-  "allowed_final_state_satisfied": true,
-  "regression_gates": [
+  "frozen_gates_1_15": [
+    "GATE1   PASS     CANONICAL_EVALUATOR_SINGLE_SOURCE",
+    "GATE2   PASS     WORLD_MANIFEST_FROZEN",
+    "GATE3   PARTIAL  WORLD_SET_HASH_AVAILABLE",
+    "GATE4   PASS     PARTIAL_RESTORE_HARD_FAIL",
+    "GATE5   PASS     MEMORY_ISOLATION_PROBE",
+    "GATE6   PASS     DONE_RESET_PROBE",
+    "GATE7   PASS     OFFICIAL_TIER_SOURCE",
+    "GATE8   PASS     TIER_COUNTS_AND_FROZEN_FACTS",
+    "GATE9   PASS     BASELINE_SINGLE_IDENTITY",
+    "GATE10  PASS     PAIRED_COMPARISON_ELIGIBILITY",
+    "GATE11  BLOCKED  RESUME_STATE_TESTS_PRESENT",
+    "GATE12  PASS     RAW_DATA_BEFORE_STRONG_CLAIM",
+    "GATE13  PASS     ACTION_MODE_EXPLICIT",
+    "GATE14  PASS     EXACT_RESUME_MISSING_COMPONENT_DETECT",
+    "GATE15  PASS     MATCHED_REPLAY_CONFIG_MATCHES_P2_EXCEPT_NETWORK"
+  ],
+  "frozen_gates_note": "GATE1-15 come from the FROZEN tools/regression_gates.py (NOT modified). Re-run live this round: PARTIAL=1 (GATE3 WORLD_SET_HASH_AVAILABLE), BLOCKED=1 (GATE11 RESUME_STATE_TESTS_PRESENT), FAIL=0. No threshold lowered.",
+  "GATE3_status": "PARTIAL (retained; GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED)",
+  "cc4_addendum_gates_16_19": [
     {
-      "id": "GATE1",
+      "id": "GATE16",
+      "status": "PASS_STATIC_IMPLEMENTATION",
+      "name": "ACTUAL_CRAFTAX_WORLD_MATERIALIZATION_PATH",
+      "evidence": "materializer implemented + compiles + self-test PASS + anchor-check vs real canonical sources PASS; reset chain verbatim-anchored; real run NOT_RUN (no JAX/craftax)."
+    },
+    {
+      "id": "GATE17",
       "status": "PASS",
-      "name": "CANONICAL_EVALUATOR_SINGLE_SOURCE"
+      "name": "KEY_ONLY_HASH_REJECTED",
+      "evidence": "assert_materialized rejects prototype shape=True; prototype entry fails closed exit2=True; NEG06 PASS."
     },
     {
-      "id": "GATE2",
-      "status": "PASS",
-      "name": "WORLD_MANIFEST_FROZEN"
+      "id": "GATE18",
+      "status": "PARTIAL_ENVIRONMENT_BLOCKED",
+      "name": "EVALUATION_SEED_ENTERS_REAL_RNG_PATH",
+      "evidence": "STATIC: EVAL_SEED=42 -> PRNGKey -> split chain confirmed in source (anchor-check). REAL per-world bytes change on numeric-seed change NOT verifiable on this JAX-less host (NEG02=BLOCKED_ENVIRONMENT). NOT asserted PASS."
     },
     {
-      "id": "GATE3",
-      "status": "PARTIAL",
-      "name": "WORLD_SET_HASH_AVAILABLE"
-    },
-    {
-      "id": "GATE4",
-      "status": "PASS",
-      "name": "PARTIAL_RESTORE_HARD_FAIL"
-    },
-    {
-      "id": "GATE5",
-      "status": "PASS",
-      "name": "MEMORY_ISOLATION_PROBE"
-    },
-    {
-      "id": "GATE6",
-      "status": "PASS",
-      "name": "DONE_RESET_PROBE"
-    },
-    {
-      "id": "GATE7",
-      "status": "PASS",
-      "name": "OFFICIAL_TIER_SOURCE"
-    },
-    {
-      "id": "GATE8",
-      "status": "PASS",
-      "name": "TIER_COUNTS_AND_FROZEN_FACTS"
-    },
-    {
-      "id": "GATE9",
-      "status": "PASS",
-      "name": "BASELINE_SINGLE_IDENTITY"
-    },
-    {
-      "id": "GATE10",
-      "status": "PASS",
-      "name": "PAIRED_COMPARISON_ELIGIBILITY"
-    },
-    {
-      "id": "GATE11",
+      "id": "GATE19",
       "status": "BLOCKED",
-      "name": "RESUME_STATE_TESTS_PRESENT"
-    },
-    {
-      "id": "GATE12",
-      "status": "PASS",
-      "name": "RAW_DATA_BEFORE_STRONG_CLAIM"
-    },
-    {
-      "id": "GATE13",
-      "status": "PASS",
-      "name": "ACTION_MODE_EXPLICIT"
-    },
-    {
-      "id": "GATE14",
-      "status": "PASS",
-      "name": "EXACT_RESUME_MISSING_COMPONENT_DETECT"
-    },
-    {
-      "id": "GATE15",
-      "status": "PASS",
-      "name": "MATCHED_REPLAY_CONFIG_MATCHES_P2_EXCEPT_NETWORK"
+      "name": "MATERIALIZER_EVALUATOR_SHARED_BUILDER",
+      "evidence": "strict shared importable builder=BLOCKED (evaluator read-only + inline, task via exec of absolute path). Weak honest substitute: static anchor test PASS (12 anchors, 0 mismatches); wrapper byte-identical (2ded41d8) to the copy the evaluator loads."
     }
   ],
-  "partial_gate": "GATE3 WORLD_SET_HASH_AVAILABLE (JAX absent; GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED)",
-  "blocked_gate": "GATE11 RESUME_STATE_TESTS_PRESENT (no resume-state tests / 0 binaries; REAL_EXACT_RESUME_EXECUTION=NOT_RUN)",
-  "self_tests": {
-    "baseline_identity": {
-      "rc": 0,
-      "marker_present": true,
-      "result": "PASS"
-    },
-    "action_mode_consistency": {
-      "rc": 0,
-      "marker_present": true,
-      "result": "PASS"
-    },
-    "tier_registry": {
-      "rc": 0,
-      "marker_present": true,
-      "result": "PASS"
-    },
-    "exact_resume_harness_self_test": {
-      "rc": 0,
-      "marker_present": true,
-      "result": "PASS"
-    },
-    "canonical_evaluator_schema": {
-      "rc": 0,
-      "result": "PASS"
-    }
+  "cc4_addendum_summary": {
+    "PASS": 1,
+    "PASS_STATIC_IMPLEMENTATION": 1,
+    "PARTIAL_ENVIRONMENT_BLOCKED": 1,
+    "BLOCKED": 1,
+    "FAIL": 0
   },
-  "compileall": {
-    "frozen_tools_rc": 0,
-    "new_script_rc": 0,
-    "result": "PASS"
+  "ALL_FAIL_ZERO": true,
+  "negative_tests_summary": {
+    "PASS": 8,
+    "BLOCKED": 2,
+    "FAIL": 0
   },
-  "git_diff_check": {
-    "rc": 0,
-    "output": "(clean)",
-    "result": "PASS"
-  },
-  "statement": "No gate was lowered to convert PARTIAL/BLOCKED into PASS. PARTIAL=1 (world_set_hash) and BLOCKED=1 (resume-state tests) are retained; FAIL=0. tier_registry GATE7/8 vs installed craftax = BLOCKED_ON_CRAFTAX (craftax ABSENT), NOT FAIL.",
+  "serializer_self_test": "PASS",
+  "anchor_check_vs_real_sources": "PASS",
   "discipline": [
-    "read-only gate re-run",
-    "no gate threshold lowered",
-    "FAIL=0 required and met"
-  ]
+    "frozen GATE1-15 unmodified",
+    "no gate lowered to PASS",
+    "FAIL=0 required and met",
+    "BLOCKED / PARTIAL_ENVIRONMENT_BLOCKED used where environment-blocked, never relabeled PASS"
+  ],
+  "round5_baseline": {
+    "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+    "section": "十 pure-logic gates",
+    "utc": "2026-07-26T13:36:53Z",
+    "regression_gates_summary": {
+      "PASS": 13,
+      "PARTIAL": 1,
+      "BLOCKED": 1,
+      "FAIL": 0,
+      "total": 15
+    },
+    "PURE_LOGIC_GATE_PASS_COUNT": 13,
+    "PURE_LOGIC_GATE_PARTIAL_COUNT": 1,
+    "PURE_LOGIC_GATE_BLOCKED_COUNT": 1,
+    "PURE_LOGIC_GATE_FAIL_COUNT": 0,
+    "allowed_final_state_satisfied": true,
+    "regression_gates": [
+      {
+        "id": "GATE1",
+        "status": "PASS",
+        "name": "CANONICAL_EVALUATOR_SINGLE_SOURCE"
+      },
+      {
+        "id": "GATE2",
+        "status": "PASS",
+        "name": "WORLD_MANIFEST_FROZEN"
+      },
+      {
+        "id": "GATE3",
+        "status": "PARTIAL",
+        "name": "WORLD_SET_HASH_AVAILABLE"
+      },
+      {
+        "id": "GATE4",
+        "status": "PASS",
+        "name": "PARTIAL_RESTORE_HARD_FAIL"
+      },
+      {
+        "id": "GATE5",
+        "status": "PASS",
+        "name": "MEMORY_ISOLATION_PROBE"
+      },
+      {
+        "id": "GATE6",
+        "status": "PASS",
+        "name": "DONE_RESET_PROBE"
+      },
+      {
+        "id": "GATE7",
+        "status": "PASS",
+        "name": "OFFICIAL_TIER_SOURCE"
+      },
+      {
+        "id": "GATE8",
+        "status": "PASS",
+        "name": "TIER_COUNTS_AND_FROZEN_FACTS"
+      },
+      {
+        "id": "GATE9",
+        "status": "PASS",
+        "name": "BASELINE_SINGLE_IDENTITY"
+      },
+      {
+        "id": "GATE10",
+        "status": "PASS",
+        "name": "PAIRED_COMPARISON_ELIGIBILITY"
+      },
+      {
+        "id": "GATE11",
+        "status": "BLOCKED",
+        "name": "RESUME_STATE_TESTS_PRESENT"
+      },
+      {
+        "id": "GATE12",
+        "status": "PASS",
+        "name": "RAW_DATA_BEFORE_STRONG_CLAIM"
+      },
+      {
+        "id": "GATE13",
+        "status": "PASS",
+        "name": "ACTION_MODE_EXPLICIT"
+      },
+      {
+        "id": "GATE14",
+        "status": "PASS",
+        "name": "EXACT_RESUME_MISSING_COMPONENT_DETECT"
+      },
+      {
+        "id": "GATE15",
+        "status": "PASS",
+        "name": "MATCHED_REPLAY_CONFIG_MATCHES_P2_EXCEPT_NETWORK"
+      }
+    ],
+    "partial_gate": "GATE3 WORLD_SET_HASH_AVAILABLE (JAX absent; GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED)",
+    "blocked_gate": "GATE11 RESUME_STATE_TESTS_PRESENT (no resume-state tests / 0 binaries; REAL_EXACT_RESUME_EXECUTION=NOT_RUN)",
+    "self_tests": {
+      "baseline_identity": {
+        "rc": 0,
+        "marker_present": true,
+        "result": "PASS"
+      },
+      "action_mode_consistency": {
+        "rc": 0,
+        "marker_present": true,
+        "result": "PASS"
+      },
+      "tier_registry": {
+        "rc": 0,
+        "marker_present": true,
+        "result": "PASS"
+      },
+      "exact_resume_harness_self_test": {
+        "rc": 0,
+        "marker_present": true,
+        "result": "PASS"
+      },
+      "canonical_evaluator_schema": {
+        "rc": 0,
+        "result": "PASS"
+      }
+    },
+    "compileall": {
+      "frozen_tools_rc": 0,
+      "new_script_rc": 0,
+      "result": "PASS"
+    },
+    "git_diff_check": {
+      "rc": 0,
+      "output": "(clean)",
+      "result": "PASS"
+    },
+    "statement": "No gate was lowered to convert PARTIAL/BLOCKED into PASS. PARTIAL=1 (world_set_hash) and BLOCKED=1 (resume-state tests) are retained; FAIL=0. tier_registry GATE7/8 vs installed craftax = BLOCKED_ON_CRAFTAX (craftax ABSENT), NOT FAIL.",
+    "discipline": [
+      "read-only gate re-run",
+      "no gate threshold lowered",
+      "FAIL=0 required and met"
+    ]
+  }
 }

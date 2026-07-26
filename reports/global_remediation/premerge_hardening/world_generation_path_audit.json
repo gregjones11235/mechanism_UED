@@ -1,0 +1,580 @@
+{
+  "task": "GLOBAL_WORLD_MATERIALIZER_CORRECTION_V2",
+  "section": "三+四 world-generation path audit + world-identity schema",
+  "utc": "2026-07-26T15:04:30Z",
+  "WORLD_GENERATION_SOURCE_PATH": "FOUND",
+  "WORLD_MATERIALIZER_IMPLEMENTATION": "PROCEEDS_STATIC (source FOUND; static implementation done; real run NOT_RUN on this JAX-less host)",
+  "method_note": "Located from ACTUAL repo source (dicode_src/, dicode_v6/) + read-only tar extract; NOT a guessed path. Every claim line-anchored + SHA-pinned. Two independent Explore agents cross-confirmed; CC4 hand-verified the eval-script lines and all SHAs.",
+  "canonical_evaluator": {
+    "path": "D:/Projects/dicode-codex-director/audit_outputs/global_raw_data_extract_20260726T110032Z/home/oseasy/experiments/student_upgrade_wave1_4gpu/eval_phase2_unified.py",
+    "sha256": "224514026aefd273a6647e055fc2e1a434760dc5f4b6b9acd0624bbba57035a1",
+    "anchor_match_224514026aefd273": true,
+    "protocol": "CANONICAL_EVALUATOR_V1",
+    "constants": {
+      "DK": "Achievement.DEFEAT_KOBOLD (:73)",
+      "SEWERS": "Achievement.ENTER_SEWERS (:74)",
+      "NUM_ENVS": "256 (:75)",
+      "NUM_STEPS": "4096 (:76)",
+      "EVAL_SEED": "42 hardcoded (:77)",
+      "EVAL_SHA256_self_hash": "(:79-80)"
+    },
+    "imports": {
+      "Achievement": "craftax.craftax.constants (:45)",
+      "EnvParams/StaticEnvParams": "craftax.craftax.craftax_state (:46)",
+      "get_achievement_multi_hot": "dicode.task_utils (:48)",
+      "MultiTaskMiniCraftaxEnv": "minicraftax.envs.multitask (:51)"
+    },
+    "cli_args": "only --out (:288-290); EVAL_SEED is NOT a CLI arg",
+    "per_world_outputs": "success_per_world/floor3_per_world/died_per_world (:206-208); success=seen|(info_acc>0) (:190); policy_mode='stochastic', spawn_floor=2 (:200)"
+  },
+  "env_construction": {
+    "function": "MultiTaskMiniCraftaxEnv",
+    "source": "dicode_src/src/minicraftax/envs/multitask.py:57-120",
+    "source_sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+    "call_in_eval": "s4_base = MultiTaskMiniCraftaxEnv([S4Cls], StaticEnvParams(), ctor, True, conditioning_type='embedding', embedding_size=EMB)  (:86-87)",
+    "ctor": "EnvParams(max_timesteps=4096)  (:82)",
+    "condition_on_task": true,
+    "conditioning_type": "embedding",
+    "embedding_size": "EMB=67 (DEFEAT_KOBOLD multi-hot table :83-84)",
+    "inheritance": "MultiTaskMiniCraftaxEnv -> MiniCraftaxTrain(base.py:38) -> CraftaxSymbolicEnvNoAutoReset -> craftax EnvironmentNoAutoReset",
+    "task_binding": "self.tasks=[cls(StaticEnvParams(),EnvParams())] (:75); world_gen_fns=tuple(t.generate_world) (:79); stacked_task_params (:87-90)"
+  },
+  "wrapper_construction": {
+    "function": "DistributedMultiTaskOptimisticLogWrapper",
+    "source": "dicode_src/src/dicode/wrappers_cl.py:169-223",
+    "source_sha256": "2ded41d81a98c712620dc1633262f2d185ce7dd22e7cc447db22a6ad04b0ddd8",
+    "byte_identical_copies_found": 6,
+    "byte_identity_note": "dicode_src == dicode_v6 == dicode_v7fix58_armB (the copy the evaluator loads via V7_SRC sys.path[0]) == gpu0/gpu1 mirrors; all sha256 prefix 2ded41d8",
+    "call_in_eval": "env = DistributedMultiTaskOptimisticLogWrapper(s4_base, jax.random.PRNGKey(0), NUM_ENVS, 1, 16, jnp.array([1.0]), table)  (:121-122)",
+    "args_meaning": "(env, rng=PRNGKey(0), num_envs=256, num_tasks=1, reset_ratio=16, proportions=[1.0], task_embeddings=table)",
+    "PRNGKey0_role": "ONLY jax.random.permutation(rng, task_ids) at :218; identity when num_tasks=1; HARDCODED 0 independent of any seed; does NOT enter the per-world reset key",
+    "log_state": "LogEnvState(env_state, episode_returns=zeros, episode_lengths=zeros, running_original_return=zeros) (:20-25, :232-237)"
+  },
+  "task_construction": {
+    "mechanism": "exec(open(S4_TASK_PATH).read()); S4Cls=ns['Env']  (eval:85); S4_TASK_PATH='/home/oseasy/experiments/p2_v1_20260722/evidence/s4_task_code.py' (eval:63, server-absolute)",
+    "canonical_task_source": "D:/Projects/dicode-codex-director/audit_outputs/global_raw_data_extract_20260726T110032Z/home/oseasy/experiments/p2_v1_20260722/evidence/s4_task_code.py",
+    "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "canonical_task_sha_prefix": "45fdd17c5b34b9f3",
+    "canonical_task_lines": 49,
+    "MUST_NOT_use_invalid_copy": {
+      "path": "D:/Projects/dicode-codex-director/audit_outputs/global_raw_data_extract_20260726T110032Z/home/oseasy/experiments/P2-v0-exploratory-invalid-for-attribution/evidence/s4_task_code.py",
+      "sha256": "df7cde78bc4ce1067a543063d0a23037046ea9a5975ca953076e59f93e29e6f5",
+      "reason": "P2-v0-exploratory-INVALID-for-attribution (34 lines); different content; NOT the canonical eval task"
+    },
+    "crlf_note": "the cc4tmp raw_sources mirror of the canonical task (0df86b26...) is the SAME content CRLF-mangled (CR=49); extract LF copy 45fdd17c... (CR=0) is canonical; identical after CRLF normalization",
+    "task_class_def": "class Env(BaseTask): relevant_achievements=[DEFEAT_KOBOLD]; get_task_params()->TaskParams(needs_depletion_multiplier=0.3); generate_world(rng): rng,_r=split(rng); WorldBuilder(_r,static,params); set_starting_floor(2); set_monsters_killed(2,8); set_player_inventory({wood7,stone27,coal3,iron3,sapling1,pickaxe3,sword3,bow1,arrows7,torches10}); s=b.build(rng); return s.replace(item_map=s.item_map.at[2,up[0],up[1]].set(ItemType.NONE.value))",
+    "base_task_source": "dicode_src/src/minicraftax/tasks/base_task.py:10-81",
+    "base_task_sha256": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa",
+    "taskparams_def": "minicraftax/craftax_state.py:9-38; 12 fields; monsters_killed_to_clear_level=8; needs_depletion_multiplier default 1.0 (s4 overrides 0.3)",
+    "taskparams_state_sha256": "7ed6eed02495fa6f0992ebe3e7a2c89b56d2c8d0798915fed76c60e3a5be770b"
+  },
+  "EnvParams": {
+    "source": "craftax.craftax.craftax_state (upstream craftax==1.4.5, NOT vendored locally)",
+    "used_value": "EnvParams(max_timesteps=4096)",
+    "note": "upstream default max_timesteps=100000; eval pins 4096"
+  },
+  "StaticEnvParams": {
+    "source": "craftax.craftax.craftax_state",
+    "map_size": [
+      48,
+      48
+    ],
+    "num_levels": 9,
+    "max_melee_mobs": 3,
+    "max_passive_mobs": 3,
+    "max_growing_plants": 10,
+    "max_ranged_mobs": 2,
+    "max_mob_projectiles": 3,
+    "max_player_projectiles": 3,
+    "note": "defaults used (eval:86 StaticEnvParams())"
+  },
+  "condition_on_task": true,
+  "optimistic_reset_ratio": 16,
+  "max_timesteps": 4096,
+  "num_worlds": 256,
+  "reset_rng_derivation": {
+    "method": "PURE POSITIONAL jax.random.split chain. NO fold_in anywhere (grep: 0 hits in dicode_src/src AND in all 4 evaluators). NO categorical task sampling at reset (task->slot is a fixed once-permuted assignment).",
+    "full_chain": [
+      "EVAL_SEED = 42                                      eval:77 (hardcoded module const)",
+      "rng = jax.random.PRNGKey(EVAL_SEED)                 eval:169",
+      "rng, reset_rng = jax.random.split(rng)              eval:170  -> take [1]",
+      "obsv, log_state = env.reset(reset_rng, ctor)        eval:171  (wrapper splits internally)",
+      "  key, _rng = jax.random.split(key)                 wrappers_cl:228  -> take [1]",
+      "  reset_rngs = jax.random.split(_rng, num_envs=256) wrappers_cl:229",
+      "  obs, env_state = vmapped_reset(reset_rngs, params, task_ids, task_embeddings)  wrappers_cl:231",
+      "  world i receives reset_rngs[i]",
+      "  reset_env: rng, world_rng = jax.random.split(rng) multitask.py:129  -> take [1]",
+      "  state = lax.switch(task_id, world_gen_fns, world_rng)  multitask.py:132",
+      "  S4 generate_world: rng,_r = split(rng)            s4_task_code:39; WorldBuilder(_r); s=b.build(rng) s4:47",
+      "  WorldBuilder: generate_full_base_world split(rng,7)+split(rng,4); build split(rng,3)->state_rng,potion_rng; potion_mapping=permutation(potion_rng,arange(6))  world_builder:785,793,1186,1254"
+    ],
+    "closed_form_outer": "world_key[i] = split( split( split( PRNGKey(42) )[1] )[1], 256 )[i]",
+    "then_inner": "reset_env splits once more (multitask:129); generate_world splits again (s4:39); WorldBuilder splits multiple times",
+    "consequence": "a single world's key is NOT independently derivable from (seed, world_index); it depends on the WHOLE 256-way batch and ordering. The materializer MUST reproduce the entire batch (call env.reset(reset_rng) once and index [i]); feeding a pre-split single key back into env.reset would split it AGAIN and yield WRONG worlds.",
+    "fold_in_count_dicode_src": 0,
+    "fold_in_count_evaluators": 0
+  },
+  "how_evaluation_seed_enters_rng": "PRNGKey(EVAL_SEED=42) at eval:169 is the ROOT of the world-generation split chain. evaluation_seed GENUINELY enters the world-generation RNG (not merely action sampling). Changing the numeric seed changes PRNGKey -> the entire split tree -> every world. (The action stream uses a separate rng split inside the scan, eval:134/146, also seeded from EVAL_SEED.)",
+  "how_world_index_enters_rng": "POSITIONALLY: world_index selects reset_rngs[i] = split(_rng, 256)[i] (wrappers_cl:229). It is NOT fold_in(key, world_index) and NOT (seed_base + world_index).",
+  "extra_splits_inside_worldgen": [
+    "multitask.py:129 (reset_env)",
+    "s4_task_code.py:39 (generate_world)",
+    "world_builder.py:785 split(7)",
+    "world_builder.py:793 split(4)",
+    "world_builder.py:1186 split(3)",
+    "per-level smoothworld split(5)",
+    "dungeon per-room/per-chest/per-fountain/per-ladder splits"
+  ],
+  "reset_return_types": {
+    "obs": "symbolic rendering via MiniCraftaxTrain.get_obs (render_craftax_symbolic), optionally concat task_embeddings[task_id] (multitask:228-252)",
+    "env_state": "wrapper returns LogEnvState; .env_state is the batched (256,) minicraftax.craftax_state.EnvState (NOT the upstream craftax EnvState) -- 53 fields, extends upstream with task_id/running_original_return/task_params",
+    "env_state_def_source": "dicode_src/src/minicraftax/craftax_state.py:42",
+    "env_state_def_sha256": "7ed6eed02495fa6f0992ebe3e7a2c89b56d2c8d0798915fed76c60e3a5be770b"
+  },
+  "world_identity_schema": {
+    "schema_id": "mechanism_UED.craftax_materialized_world/v1",
+    "world_identity_definition": "the COMPLETE EnvState pytree at reset time (timestep=0, before any _craftax_step), per world index, as produced by the canonical reset chain",
+    "serialization_decision": "SERIALIZE ALL 53 EnvState fields of the initial snapshot (the canonical serializer recurses the dataclass via __dataclass_fields__; arrays bind dtype+shape+C-order bytes). This guarantees NO result-affecting initial field is silently dropped, and makes the per-world hash bit-equal to the evaluator's log_state.env_state[i].",
+    "why_not_only_immutable_fields": "only 6 fields are strictly immutable, but the INITIAL VALUES of the runtime-mutated fields (map terrain, item_map incl. removed floor-2 up-ladder, starting inventory, monsters_killed[2]=8, mob placements, pre-populated achievements, player_position/level) ARE the world's identity. Dropping them would discard result-affecting initial state (forbidden).",
+    "strict_immutable_identity_fields": [
+      "task_id",
+      "down_ladders",
+      "up_ladders",
+      "potion_mapping",
+      "fractal_noise_angles",
+      "task_params"
+    ],
+    "initial_value_is_identity_fields_count": 46,
+    "decorative_fields": [
+      "state_rng"
+    ],
+    "excluded_NON_identity": [
+      {
+        "what": "LogEnvState.episode_returns",
+        "reason": "wrapper runtime accumulator; trivially zero at reset; no world information"
+      },
+      {
+        "what": "LogEnvState.episode_lengths",
+        "reason": "wrapper runtime accumulator; zero at reset"
+      },
+      {
+        "what": "LogEnvState.running_original_return",
+        "reason": "wrapper runtime accumulator; zero at reset (set per-env after reset for training, not world identity)"
+      },
+      {
+        "what": "obs",
+        "reason": "deterministic projection/rendering of the state, not identity itself"
+      }
+    ],
+    "must_NOT_serialize_only": [
+      "a PRNG key",
+      "a seed label",
+      "a path",
+      "a description",
+      "a recipe JSON"
+    ],
+    "field_table_53": [
+      {
+        "field": "task_id",
+        "type": "int",
+        "set_at_reset_by": "reset_env state.replace (multitask:165)",
+        "runtime_mutated": "no",
+        "identity_class": "STRICT_IMMUTABLE_IDENTITY"
+      },
+      {
+        "field": "map",
+        "type": "jnp.ndarray(9,48,48)",
+        "set_at_reset_by": "WorldBuilder terrain",
+        "runtime_mutated": "yes(mining/placing)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "item_map",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder(ladders/torches/chests)+s4 floor-2 up-ladder removed",
+        "runtime_mutated": "yes(place/open)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "mob_map",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder/add_mobs_randomly_near",
+        "runtime_mutated": "yes(update/spawn)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "light_map",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder",
+        "runtime_mutated": "yes(torch/light)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "down_ladders",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder",
+        "runtime_mutated": "no(read only)",
+        "identity_class": "STRICT_IMMUTABLE_IDENTITY"
+      },
+      {
+        "field": "up_ladders",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder",
+        "runtime_mutated": "no(read only)",
+        "identity_class": "STRICT_IMMUTABLE_IDENTITY"
+      },
+      {
+        "field": "chests_opened",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "build=zeros(:1249)",
+        "runtime_mutated": "yes(counter)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "monsters_killed",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "build at[0].set(10) + s4 set_monsters_killed(2,8)",
+        "runtime_mutated": "yes(kill counter)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_position",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder(center/ladder)",
+        "runtime_mutated": "yes(move/change_floor)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_level",
+        "type": "int",
+        "set_at_reset_by": "set_starting_floor(2)",
+        "runtime_mutated": "yes(floor change)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_direction",
+        "type": "int",
+        "set_at_reset_by": "WorldBuilder(Action.UP)",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_health",
+        "type": "float",
+        "set_at_reset_by": "build=9.0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_food",
+        "type": "int",
+        "set_at_reset_by": "build=9",
+        "runtime_mutated": "yes(intrinsics)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_drink",
+        "type": "int",
+        "set_at_reset_by": "build=9",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_energy",
+        "type": "int",
+        "set_at_reset_by": "build=9",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_mana",
+        "type": "int",
+        "set_at_reset_by": "build=9",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "is_sleeping",
+        "type": "bool",
+        "set_at_reset_by": "build=False",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "is_resting",
+        "type": "bool",
+        "set_at_reset_by": "build=False",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_recover",
+        "type": "float",
+        "set_at_reset_by": "build=0.0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_hunger",
+        "type": "float",
+        "set_at_reset_by": "build=0.0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_thirst",
+        "type": "float",
+        "set_at_reset_by": "build=0.0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_fatigue",
+        "type": "float",
+        "set_at_reset_by": "build=0.0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_recover_mana",
+        "type": "float",
+        "set_at_reset_by": "build=0.0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_xp",
+        "type": "int",
+        "set_at_reset_by": "build=0",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_dexterity",
+        "type": "int",
+        "set_at_reset_by": "set_player_stats(default 1)",
+        "runtime_mutated": "yes(level_up)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_strength",
+        "type": "int",
+        "set_at_reset_by": "set_player_stats(default 1)",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_intelligence",
+        "type": "int",
+        "set_at_reset_by": "set_player_stats(default 1)",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "inventory",
+        "type": "Inventory(upstream dataclass)",
+        "set_at_reset_by": "WorldBuilder + s4 set_player_inventory{wood7,stone27,coal3,iron3,sapling1,pickaxe3,sword3,bow1,arrows7,torches10}",
+        "runtime_mutated": "yes(core gameplay)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "melee_mobs",
+        "type": "Mobs",
+        "set_at_reset_by": "WorldBuilder(add_mob*)",
+        "runtime_mutated": "yes(spawn/update)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "passive_mobs",
+        "type": "Mobs",
+        "set_at_reset_by": "WorldBuilder",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "ranged_mobs",
+        "type": "Mobs",
+        "set_at_reset_by": "WorldBuilder",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "mob_projectiles",
+        "type": "Mobs",
+        "set_at_reset_by": "build=empty",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "mob_projectile_directions",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "build=empty",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_projectiles",
+        "type": "Mobs",
+        "set_at_reset_by": "build=empty",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "player_projectile_directions",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "build=empty",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "growing_plants_positions",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder=zeros",
+        "runtime_mutated": "yes(update_plants)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "growing_plants_age",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder=zeros",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "growing_plants_mask",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "WorldBuilder=zeros",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "potion_mapping",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "build=permutation(potion_rng, arange(6)) :1254",
+        "runtime_mutated": "no",
+        "identity_class": "STRICT_IMMUTABLE_IDENTITY"
+      },
+      {
+        "field": "learned_spells",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "set_learned_spells",
+        "runtime_mutated": "yes(read_book)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "sword_enchantment",
+        "type": "int",
+        "set_at_reset_by": "builder setter",
+        "runtime_mutated": "yes(enchant)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "bow_enchantment",
+        "type": "int",
+        "set_at_reset_by": "builder setter",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "armour_enchantments",
+        "type": "jnp.ndarray",
+        "set_at_reset_by": "builder setter",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "boss_progress",
+        "type": "int",
+        "set_at_reset_by": "build=0",
+        "runtime_mutated": "yes(boss_logic)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "boss_timesteps_to_spawn_this_round",
+        "type": "int",
+        "set_at_reset_by": "build=50",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "light_level",
+        "type": "float",
+        "set_at_reset_by": "build=calculate_light_level(0,params)",
+        "runtime_mutated": "yes(recomputed each step)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "achievements",
+        "type": "jnp.ndarray(bool,67)",
+        "set_at_reset_by": "build=zeros -> pre-populated in reset_env(multitask:139-161)",
+        "runtime_mutated": "yes",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "state_rng",
+        "type": "PRNGKey",
+        "set_at_reset_by": "build(:1259) from split(rng,3)",
+        "runtime_mutated": "yes(overwritten each step; never read by reset)",
+        "identity_class": "DECORATIVE"
+      },
+      {
+        "field": "timestep",
+        "type": "int",
+        "set_at_reset_by": "build=0",
+        "runtime_mutated": "yes(+1 each step)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "fractal_noise_angles",
+        "type": "tuple[int x4]",
+        "set_at_reset_by": "build copies params.fractal_noise_angles",
+        "runtime_mutated": "no",
+        "identity_class": "STRICT_IMMUTABLE_IDENTITY"
+      },
+      {
+        "field": "running_original_return",
+        "type": "float",
+        "set_at_reset_by": "build=0.0; wrapper sets per-env after reset",
+        "runtime_mutated": "yes(dynamic bonus)",
+        "identity_class": "INITIAL_VALUE_IS_IDENTITY"
+      },
+      {
+        "field": "task_params",
+        "type": "TaskParams(dataclass)",
+        "set_at_reset_by": "reset_env state.replace(multitask:166)",
+        "runtime_mutated": "no",
+        "identity_class": "STRICT_IMMUTABLE_IDENTITY"
+      }
+    ]
+  },
+  "shared_builder_status": {
+    "GATE19_strict_shared_builder": "BLOCKED",
+    "reason": "the real evaluators keep env construction + the three seed lines INLINE (copy-pasted into each eval script) and load the task via exec() of a server-absolute path; there is NO importable shared world-builder. The canonical evaluator file is READ-ONLY and must NOT be modified, so a literal 'evaluator and materializer call the same builder function' cannot be achieved without altering canonical files / breaking the canonical SHA.",
+    "honest_substitute_STATIC_ANCHOR_TEST": "every constant and derivation step embedded in materialize_craftax_world_set_twice.py is asserted EQUAL to the literal value parsed from the canonical source files (static_anchor_check). Against the real sources this round: 12/12 anchors PASS, 0 mismatches. The wrapper the materializer imports (dicode_src) is byte-identical (2ded41d8...) to the copy the evaluator loads; the task exec'd is the canonical 45fdd17c...."
+  },
+  "source_sha_manifest": {
+    "eval_phase2_unified.py": "224514026aefd273a6647e055fc2e1a434760dc5f4b6b9acd0624bbba57035a1",
+    "s4_task_code_canonical_p2_v1_LF": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "s4_task_code_INVALID_p2_v0": "df7cde78bc4ce1067a543063d0a23037046ea9a5975ca953076e59f93e29e6f5",
+    "wrappers_cl.py": "2ded41d81a98c712620dc1633262f2d185ce7dd22e7cc447db22a6ad04b0ddd8",
+    "multitask.py": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+    "craftax.py(env)": "be90ee9c9cb4977f07ba52b58676166dea3446f9f40e87a26ef552fbec54104a",
+    "base.py": "34e9e3392e8fe73069389387f022e4adf32b1ece1ce0d55730560434920db572",
+    "craftax_state.py(EnvState/TaskParams)": "7ed6eed02495fa6f0992ebe3e7a2c89b56d2c8d0798915fed76c60e3a5be770b",
+    "world_builder.py": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d",
+    "base_task.py": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa"
+  },
+  "dicode_src_vs_dicode_v6": "byte-identical for multitask.py/craftax.py/base.py/wrappers_cl.py/setup.py (cmp verified); only craftax_evaluation.py differs (v6 adds fingerprint logic; reset/world-gen path unchanged). craftax_evaluation.py is NOT the canonical evaluator (it uses max_timesteps=8192 + BatchEnvWrapper); canonical = eval_phase2_unified.py (4096 + DistributedMultiTaskOptimisticLogWrapper).",
+  "host_environment": {
+    "jax_importable": false,
+    "craftax_importable": false,
+    "implication": "real materialization NOT_RUN on this host; the materializer FAILS CLOSED before emitting any world_set_hash"
+  },
+  "discipline": [
+    "no training, no formal evaluation, no real Exact Resume, no matched Replay run",
+    "no fabricated world_set_hash; key-only hash never called a world hash",
+    "54 frozen files unmodified; SHA256SUMS not rewritten",
+    "did NOT invent a plausible path -- everything line-anchored + SHA-pinned from real source",
+    "evaluator left read-only; strict shared-builder honestly reported BLOCKED with a static-anchor substitute"
+  ]
+}
