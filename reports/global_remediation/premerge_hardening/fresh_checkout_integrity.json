@@ -1,0 +1,95 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "二 fresh-checkout integrity",
+  "utc": "2026-07-26T13:15:53Z",
+  "method": "independent DETACHED worktree (D:/c4f) checked out from object store at CC4 HEAD; sha256sum -c run from worktree ROOT because SHA256SUMS paths are repo-root-relative (audit_outputs/global_remediation_…/X). User-literal 'cd <dir> && sha256sum -c SHA256SUMS' yields 0 OK/54 FAILED due to root-relative paths — documented, not a defect.",
+  "fresh_checkout": {
+    "worktree": "D:/c4f",
+    "detached": true,
+    "HEAD": "2a89f393113d26a4e022646ba9d26c4d8c2b0dad",
+    "tree": "3c8bc175fc9fdeec96707570f76ce11e3bda8c73",
+    "status_clean": true
+  },
+  "CC4_FRESH_CHECKOUT_INTEGRITY": "PASS",
+  "sha256sum_c": {
+    "OK": 54,
+    "FAILED": 0,
+    "cwd": "worktree root (BASE-equivalent)",
+    "sumfile": "audit_outputs/global_remediation_20260726T095819Z/SHA256SUMS"
+  },
+  "user_literal_cd_invocation": {
+    "OK": 0,
+    "FAILED": 54,
+    "reason": "SHA256SUMS paths are repo-root-relative, not dir-relative"
+  },
+  "no_crlf_lf_conversion": {
+    "gitattributes_blob_sha": "e19ceacf56871f7cd3b6ceebddb747be84fe50d9",
+    "gitattributes_content": [
+      "audit_outputs/global_remediation_20260726T095819Z/** -text",
+      "reports/global_remediation/** -text"
+    ],
+    "samples": [
+      {
+        "path": "reports/global_remediation/world_manifest_report.md",
+        "workfile_sha": "c445eada88a7cf1266857db4146ab3180b981010d486f0443b10a85a619ee3fe",
+        "blob_sha": "c445eada88a7cf1266857db4146ab3180b981010d486f0443b10a85a619ee3fe",
+        "sumfile_sha": "c445eada88a7cf1266857db4146ab3180b981010d486f0443b10a85a619ee3fe",
+        "workfile_eq_blob": true,
+        "workfile_eq_sumfile": true
+      },
+      {
+        "path": "audit_outputs/global_remediation_20260726T095819Z/official_achievement_tiers.json",
+        "workfile_sha": "16f121800b888b0db9c37bef686ed86a6c38ca5325f600fcf28b14d8b06aeea6",
+        "blob_sha": "16f121800b888b0db9c37bef686ed86a6c38ca5325f600fcf28b14d8b06aeea6",
+        "sumfile_sha": "16f121800b888b0db9c37bef686ed86a6c38ca5325f600fcf28b14d8b06aeea6",
+        "workfile_eq_blob": true,
+        "workfile_eq_sumfile": true
+      },
+      {
+        "path": "audit_outputs/global_remediation_20260726T095819Z/world_manifests/canonical_worlds_256_seed42.json",
+        "workfile_sha": "e63c626aac15e18edeb81b134505d8760f49f70573c22722aca71048f9cfa5c0",
+        "blob_sha": "e63c626aac15e18edeb81b134505d8760f49f70573c22722aca71048f9cfa5c0",
+        "sumfile_sha": "e63c626aac15e18edeb81b134505d8760f49f70573c22722aca71048f9cfa5c0",
+        "workfile_eq_blob": true,
+        "workfile_eq_sumfile": true
+      },
+      {
+        "path": "audit_outputs/global_remediation_20260726T095819Z/raw_data_manifest.json",
+        "workfile_sha": "c1266cc4aaef53439c37874b1bf7f8140b4bacd099b23948021becdb53259e68",
+        "blob_sha": "c1266cc4aaef53439c37874b1bf7f8140b4bacd099b23948021becdb53259e68",
+        "sumfile_sha": "c1266cc4aaef53439c37874b1bf7f8140b4bacd099b23948021becdb53259e68",
+        "workfile_eq_blob": true,
+        "workfile_eq_sumfile": true
+      }
+    ],
+    "all_workfile_eq_blob": true
+  },
+  "artifact_inventory": {
+    "count": 54,
+    "size_match": 54,
+    "sha_match": 54,
+    "size_mismatches": [],
+    "sha_mismatches": [],
+    "inventory_sha_field_present": true
+  },
+  "path_existence": {
+    "sumfile_entries": 54,
+    "sumfile_paths_exist": 54
+  },
+  "impostor_check": {
+    "tracked_remediation": 45,
+    "ondisk_remediation": 45,
+    "tracked_reports": 11,
+    "ondisk_reports": 11,
+    "total_tracked": 56,
+    "unregistered_files": [],
+    "sumfile_paths_all_tracked": true,
+    "inventory_paths_all_tracked": true
+  },
+  "discipline": [
+    "54 frozen files NOT modified",
+    "SHA256SUMS NOT rewritten",
+    "fresh checkout is read-only",
+    "no push/merge/rebase/force"
+  ]
+}

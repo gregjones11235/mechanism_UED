@@ -1,0 +1,138 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "十 pure-logic gates",
+  "utc": "2026-07-26T13:36:53Z",
+  "regression_gates_summary": {
+    "PASS": 13,
+    "PARTIAL": 1,
+    "BLOCKED": 1,
+    "FAIL": 0,
+    "total": 15
+  },
+  "PURE_LOGIC_GATE_PASS_COUNT": 13,
+  "PURE_LOGIC_GATE_PARTIAL_COUNT": 1,
+  "PURE_LOGIC_GATE_BLOCKED_COUNT": 1,
+  "PURE_LOGIC_GATE_FAIL_COUNT": 0,
+  "allowed_final_state_satisfied": true,
+  "regression_gates": [
+    {
+      "id": "GATE1",
+      "status": "PASS",
+      "name": "CANONICAL_EVALUATOR_SINGLE_SOURCE"
+    },
+    {
+      "id": "GATE2",
+      "status": "PASS",
+      "name": "WORLD_MANIFEST_FROZEN"
+    },
+    {
+      "id": "GATE3",
+      "status": "PARTIAL",
+      "name": "WORLD_SET_HASH_AVAILABLE"
+    },
+    {
+      "id": "GATE4",
+      "status": "PASS",
+      "name": "PARTIAL_RESTORE_HARD_FAIL"
+    },
+    {
+      "id": "GATE5",
+      "status": "PASS",
+      "name": "MEMORY_ISOLATION_PROBE"
+    },
+    {
+      "id": "GATE6",
+      "status": "PASS",
+      "name": "DONE_RESET_PROBE"
+    },
+    {
+      "id": "GATE7",
+      "status": "PASS",
+      "name": "OFFICIAL_TIER_SOURCE"
+    },
+    {
+      "id": "GATE8",
+      "status": "PASS",
+      "name": "TIER_COUNTS_AND_FROZEN_FACTS"
+    },
+    {
+      "id": "GATE9",
+      "status": "PASS",
+      "name": "BASELINE_SINGLE_IDENTITY"
+    },
+    {
+      "id": "GATE10",
+      "status": "PASS",
+      "name": "PAIRED_COMPARISON_ELIGIBILITY"
+    },
+    {
+      "id": "GATE11",
+      "status": "BLOCKED",
+      "name": "RESUME_STATE_TESTS_PRESENT"
+    },
+    {
+      "id": "GATE12",
+      "status": "PASS",
+      "name": "RAW_DATA_BEFORE_STRONG_CLAIM"
+    },
+    {
+      "id": "GATE13",
+      "status": "PASS",
+      "name": "ACTION_MODE_EXPLICIT"
+    },
+    {
+      "id": "GATE14",
+      "status": "PASS",
+      "name": "EXACT_RESUME_MISSING_COMPONENT_DETECT"
+    },
+    {
+      "id": "GATE15",
+      "status": "PASS",
+      "name": "MATCHED_REPLAY_CONFIG_MATCHES_P2_EXCEPT_NETWORK"
+    }
+  ],
+  "partial_gate": "GATE3 WORLD_SET_HASH_AVAILABLE (JAX absent; GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED)",
+  "blocked_gate": "GATE11 RESUME_STATE_TESTS_PRESENT (no resume-state tests / 0 binaries; REAL_EXACT_RESUME_EXECUTION=NOT_RUN)",
+  "self_tests": {
+    "baseline_identity": {
+      "rc": 0,
+      "marker_present": true,
+      "result": "PASS"
+    },
+    "action_mode_consistency": {
+      "rc": 0,
+      "marker_present": true,
+      "result": "PASS"
+    },
+    "tier_registry": {
+      "rc": 0,
+      "marker_present": true,
+      "result": "PASS"
+    },
+    "exact_resume_harness_self_test": {
+      "rc": 0,
+      "marker_present": true,
+      "result": "PASS"
+    },
+    "canonical_evaluator_schema": {
+      "rc": 0,
+      "result": "PASS"
+    }
+  },
+  "compileall": {
+    "frozen_tools_rc": 0,
+    "new_script_rc": 0,
+    "result": "PASS"
+  },
+  "git_diff_check": {
+    "rc": 0,
+    "output": "(clean)",
+    "result": "PASS"
+  },
+  "statement": "No gate was lowered to convert PARTIAL/BLOCKED into PASS. PARTIAL=1 (world_set_hash) and BLOCKED=1 (resume-state tests) are retained; FAIL=0. tier_registry GATE7/8 vs installed craftax = BLOCKED_ON_CRAFTAX (craftax ABSENT), NOT FAIL.",
+  "discipline": [
+    "read-only gate re-run",
+    "no gate threshold lowered",
+    "FAIL=0 required and met"
+  ]
+}

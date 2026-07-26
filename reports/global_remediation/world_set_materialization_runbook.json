@@ -1,0 +1,176 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "六 world-set materialization runbook (PREPARED, NOT EXECUTED this round)",
+  "utc": "2026-07-26T13:30:17Z",
+  "status": "NOT_EXECUTED_THIS_ROUND",
+  "executed_this_round": false,
+  "reason_not_executed": "JAX/jaxlib/craftax/jaxnav/flax/optax/chex ABSENT on this host; formal materialization requires a JAX+craftax==1.4.5 host. Dry-run validated parameters/paths and confirmed a formal run would FAIL CLOSED here.",
+  "script": {
+    "path": "tools/global_evaluation/materialize_world_set_twice.py",
+    "absolute_path": "D:/cc4tmp\\tools\\global_evaluation\\materialize_world_set_twice.py",
+    "sha256": "6631f5ddc8be42a93136919ebd0f135665b168309685c172675a6ac5689289de",
+    "placement_rationale": "Placed under tools/global_evaluation/ (the directive's allowed alternative) instead of the frozen audit_outputs/global_remediation_20260726T095819Z/tools/ directory, because adding a new file there would change that frozen directory's SHA inventory semantics. Placement is recorded here per the directive.",
+    "compiles": true,
+    "dry_run_demonstrated": true,
+    "dry_run_verdict_here": "VALIDATIONS_INCOMPLETE (jax/jaxlib/craftax ABSENT; env source SHA missing) -> formal run would FAIL CLOSED"
+  },
+  "frozen_recipe_reference": "audit_outputs/global_world_set_v1/world_manifest.json (schema mechanism_UED.world_set/v1)",
+  "frozen_recipe": {
+    "fold_in_rule": "jax.random.fold_in(PRNGKey(wrapper_seed), world_index)",
+    "wrapper_seed": 0,
+    "condition_on_task": true,
+    "optimistic_reset_ratio": 16,
+    "mode": "score",
+    "bonus_type": "none",
+    "max_timesteps": 4096,
+    "num_worlds": 256,
+    "world_index_order": "0..255 ascending",
+    "world_sets": {
+      "seed42": 42,
+      "seed100000": 100000
+    }
+  },
+  "preconditions_for_a_real_run": [
+    "JAX + jaxlib importable (version recorded)",
+    "craftax==1.4.5 importable (version recorded; mismatch => fail closed)",
+    "environment wrapper source (DistributedMultiTaskOptimisticLogWrapper) available; --env-source points to it (SHA recorded)",
+    "generation script SHA recorded automatically",
+    "no checkpoint, no training, no formal evaluation invoked"
+  ],
+  "requirements_17": [
+    {
+      "n": 1,
+      "requirement": "only generate the world set",
+      "implementation": "main() only builds per-world identity + hashes; no other artifact"
+    },
+    {
+      "n": 2,
+      "requirement": "do NOT load any checkpoint",
+      "implementation": "no checkpoint path argument; materialize_world_set never opens a checkpoint"
+    },
+    {
+      "n": 3,
+      "requirement": "do NOT train",
+      "implementation": "no training loop / optimizer step anywhere in the script"
+    },
+    {
+      "n": 4,
+      "requirement": "do NOT formally evaluate",
+      "implementation": "no evaluator invocation; no success metric computed"
+    },
+    {
+      "n": 5,
+      "requirement": "frozen seed + fold_in rule",
+      "implementation": "jax.random.fold_in(PRNGKey(wrapper_seed=0), world_index); ALLOWED_SEEDS={seed42,seed100000}"
+    },
+    {
+      "n": 6,
+      "requirement": "fixed world order",
+      "implementation": "for world_index in range(256) ascending; ordered_hashes preserves order"
+    },
+    {
+      "n": 7,
+      "requirement": "stable serialization per world",
+      "implementation": "canonical sort_keys JSON descriptor + folded-key bytes"
+    },
+    {
+      "n": 8,
+      "requirement": "SHA256 per world",
+      "implementation": "per_world[str(world_index)] = sha256(blob)"
+    },
+    {
+      "n": 9,
+      "requirement": "ordered world_set_hash",
+      "implementation": "world_set_hash = sha256(concat of ascending per-world hashes)"
+    },
+    {
+      "n": 10,
+      "requirement": "two independent processes",
+      "implementation": "--orchestrate spawns this script twice via subprocess (--single-run) into run_A/run_B"
+    },
+    {
+      "n": 11,
+      "requirement": "compare per-world hashes",
+      "implementation": "require(a['per_world_hashes'] == b['per_world_hashes'])"
+    },
+    {
+      "n": 12,
+      "requirement": "compare total hash",
+      "implementation": "require(a['world_set_hash'] == b['world_set_hash'])"
+    },
+    {
+      "n": 13,
+      "requirement": "record JAX version",
+      "implementation": "ident['jax_version'] / jaxlib_version via probe_version"
+    },
+    {
+      "n": 14,
+      "requirement": "record Craftax version",
+      "implementation": "ident['craftax_version']; must equal 1.4.5"
+    },
+    {
+      "n": 15,
+      "requirement": "record environment source SHA",
+      "implementation": "ident['env_source_sha256'] = sha256(--env-source); required"
+    },
+    {
+      "n": 16,
+      "requirement": "record generation script SHA",
+      "implementation": "ident['generation_script_sha256'] = sha256(this file)"
+    },
+    {
+      "n": 17,
+      "requirement": "fail closed on missing version/identity",
+      "implementation": "assert_formal_identity raises FailClosed -> exit 2"
+    }
+  ],
+  "modes": {
+    "--dry-run": "validate dependencies, parameters, output paths ONLY; generate NO formal hash; exit 0 with findings",
+    "--single-run": "one materialization pass writing world_hashes.json (used inside orchestration)",
+    "--orchestrate": "default formal mode: two independent subprocess runs, compare per-world + total, fail closed on mismatch, write world_set_agreement.json"
+  },
+  "exit_codes": {
+    "0": "success / dry-run validations passed",
+    "2": "fail closed (missing dep/version/identity or run mismatch)",
+    "3": "usage error"
+  },
+  "commands_on_a_jax_host": [
+    "# 0. dry-run first (no hash generated)",
+    "python tools/global_evaluation/materialize_world_set_twice.py --seed seed42 --out audit_outputs/world_materialization/seed42 --env-source <path/to/wrapper.py> --dry-run",
+    "python tools/global_evaluation/materialize_world_set_twice.py --seed seed100000 --out audit_outputs/world_materialization/seed100000 --env-source <path/to/wrapper.py> --dry-run",
+    "# 1. formal two-independent-run materialization (seed42 then seed100000; never pooled)",
+    "python tools/global_evaluation/materialize_world_set_twice.py --seed seed42 --out audit_outputs/world_materialization/seed42 --env-source <path/to/wrapper.py> --orchestrate",
+    "python tools/global_evaluation/materialize_world_set_twice.py --seed seed100000 --out audit_outputs/world_materialization/seed100000 --env-source <path/to/wrapper.py> --orchestrate",
+    "# 2. verify world_set_agreement.json shows per_world_hash_agreement=true and world_set_hash_agreement=true for BOTH seeds"
+  ],
+  "expected_outputs": [
+    "audit_outputs/world_materialization/seed42/run_A/world_hashes.json",
+    "audit_outputs/world_materialization/seed42/run_B/world_hashes.json",
+    "audit_outputs/world_materialization/seed42/world_set_agreement.json",
+    "audit_outputs/world_materialization/seed100000/run_A/world_hashes.json",
+    "audit_outputs/world_materialization/seed100000/run_B/world_hashes.json",
+    "audit_outputs/world_materialization/seed100000/world_set_agreement.json"
+  ],
+  "recorded_in_each_world_hashes_json": [
+    "JAX version",
+    "jaxlib version",
+    "craftax version (==1.4.5)",
+    "environment source SHA",
+    "generation script SHA",
+    "frozen recipe",
+    "256 per-world hashes",
+    "ordered world_set_hash"
+  ],
+  "global_labels_after_real_run": {
+    "GLOBAL_WORLD_RECIPE": "PASS (already)",
+    "GLOBAL_WORLD_SET_HASH": "would move from BLOCKED_SOURCE_UNVERIFIED to PASS ONLY after two-run agreement for BOTH seeds"
+  },
+  "discipline": [
+    "NOT executed this round",
+    "no checkpoint loaded, no training, no formal evaluation",
+    "no fabricated/placeholder hashes; fail closed instead",
+    "seed42 and seed100000 generated separately and never pooled/paired",
+    "BLOCKED_SOURCE_UNVERIFIED != FAIL",
+    "does NOT modify the 54 frozen files; does NOT rewrite any SHA256SUMS"
+  ]
+}

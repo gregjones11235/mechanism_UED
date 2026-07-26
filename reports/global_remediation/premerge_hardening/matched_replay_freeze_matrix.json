@@ -1,0 +1,470 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "八 Base GTrXL matched-Replay freeze matrix",
+  "utc": "2026-07-26T13:33:22Z",
+  "BASE_GTRXL_MATCHED_REPLAY_CONTROL": "READY_NOT_AUTHORIZED",
+  "match_verdict": "SPEC_SINGLE_DIFFERENCE_CONFIRMED + FIELD_VERIFICATION_PARTIAL",
+  "authoritative_field_counts": {
+    "identical": 23,
+    "unverified_must_freeze": 5,
+    "different": 0
+  },
+  "no_extra_main_difference_found": true,
+  "is_not_matched": false,
+  "not_matched_reason": "NOT_MATCHED requires a major field mismatch; here different=0, so status stays READY_NOT_AUTHORIZED (not NOT_MATCHED).",
+  "five_must_freeze_fields": [
+    "replay.L_SEQ (129 vs 512 conflict; NOT auto-picked; must freeze on server, MISS-6)",
+    "ppo.total_environment_steps (pin 24576 screen vs 98304 longrun; match controlled P2 arm)",
+    "evaluation.evaluation_seed (pin which P2 line; seed42 vs seed100000 are distinct world sets, never pooled)",
+    "evaluation.evaluator_sha256 (must equal canonical frozen evaluator eval_phase2_unified.py#22451402... at run)",
+    "evaluation.world_set_hash (materialize on a JAX+craftax host; currently BLOCKED_SOURCE_UNVERIFIED)"
+  ],
+  "l_seq_decision": "NOT_AUTO_PICKED -- conflict 129 (run_p2_full_smoke.py:66 'formal run uses 512') vs 512 (RMT16/P2-Full-A v2.1 frozen); MUST be frozen on server and recorded in provenance.",
+  "init_identity": {
+    "checkpoint": "teacher17500 = base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+    "params_sha256": "d4e85af58b7f87d6",
+    "status": "VERIFIED identical (matches LC smoke logs teacher_sha and P2 base_checkpoint)"
+  },
+  "architecture_single_axis": "long_memory_module=NONE removes EXACTLY this delta and nothing else => single-difference holds at architecture level",
+  "authoritative_field_table": [
+    {
+      "field": "network.class",
+      "section": "authoritative_field_table",
+      "matched_control": "ActorCriticTransformer (Base GTrXL)",
+      "real_p2_full_a": "ActorCriticTransformer (Base GTrXL trunk)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "GIT_PROVENANCE",
+      "freeze_required": false
+    },
+    {
+      "field": "network.long_memory_module",
+      "section": "authoritative_field_table",
+      "matched_control": "NONE",
+      "real_p2_full_a": "NONE (P2-Full-A has no long-memory module; W512/RMT ADD one)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL (this is the intended single axis vs W512/RMT)",
+      "evidence_source": "GIT_PROVENANCE",
+      "freeze_required": false
+    },
+    {
+      "field": "init.checkpoint",
+      "section": "authoritative_field_table",
+      "matched_control": "teacher17500",
+      "real_p2_full_a": "base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE (P2 summary base_checkpoint)",
+      "freeze_required": false
+    },
+    {
+      "field": "init.params_sha256",
+      "section": "authoritative_field_table",
+      "matched_control": "d4e85af58b7f87d6",
+      "real_p2_full_a": "teacher_sha=d4e85af58b7f87d6 (LC smoke logs); P2 base = ckpt17500",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE (LC logs teacher_sha)",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.optimizer",
+      "section": "authoritative_field_table",
+      "matched_control": "Adam",
+      "real_p2_full_a": "Adam (ppo)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "GIT_PROVENANCE",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.learning_rate",
+      "section": "authoritative_field_table",
+      "matched_control": "2.0e-5",
+      "real_p2_full_a": "2e-05",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE (P2 manifest lr)",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.adam_eps",
+      "section": "authoritative_field_table",
+      "matched_control": "1.0e-5",
+      "real_p2_full_a": "1e-05",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE (P2 manifest config)",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.gamma",
+      "section": "authoritative_field_table",
+      "matched_control": "0.999",
+      "real_p2_full_a": "0.999",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.grad_clip_global_norm",
+      "section": "authoritative_field_table",
+      "matched_control": "1.0",
+      "real_p2_full_a": "1.0",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.num_envs",
+      "section": "authoritative_field_table",
+      "matched_control": "16",
+      "real_p2_full_a": "16",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.rollout_steps",
+      "section": "authoritative_field_table",
+      "matched_control": "128",
+      "real_p2_full_a": "128",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "ppo.transitions_per_update",
+      "section": "authoritative_field_table",
+      "matched_control": "2048",
+      "real_p2_full_a": "2048",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.enabled",
+      "section": "authoritative_field_table",
+      "matched_control": "true",
+      "real_p2_full_a": "true (replay_samples_drawn>0; format p2_full_a_pure_pickle_v1)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE (P2 manifest counters)",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.capacity",
+      "section": "authoritative_field_table",
+      "matched_control": "64",
+      "real_p2_full_a": "64",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.vtrace",
+      "section": "authoritative_field_table",
+      "matched_control": "true",
+      "real_p2_full_a": "w_vtrace=0.5 vt_clip[-50.0,300.0]",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL (vtrace enabled)",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.awr_hindsight",
+      "section": "authoritative_field_table",
+      "matched_control": "true",
+      "real_p2_full_a": "w_awr=0.5; hindsight_eligible=188",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL (AWR+hindsight enabled)",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.ema.tau",
+      "section": "authoritative_field_table",
+      "matched_control": "0.995",
+      "real_p2_full_a": "0.995",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.policy_lag_gate.max_lag",
+      "section": "authoritative_field_table",
+      "matched_control": "16",
+      "real_p2_full_a": "16",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.transactional_kl_gate",
+      "section": "authoritative_field_table",
+      "matched_control": "true",
+      "real_p2_full_a": "kl_max=0.05 kl_replay_max=0.05 lambda_kl=0.01",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL (KL gate enabled)",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "arch.embed",
+      "section": "authoritative_field_table",
+      "matched_control": "256",
+      "real_p2_full_a": "256",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "arch.num_heads",
+      "section": "authoritative_field_table",
+      "matched_control": "8",
+      "real_p2_full_a": "8",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "arch.num_layers",
+      "section": "authoritative_field_table",
+      "matched_control": "2",
+      "real_p2_full_a": "2",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "arch.window_mem (GTrXL window)",
+      "section": "authoritative_field_table",
+      "matched_control": "128",
+      "real_p2_full_a": "128 (frozen design: 128-step UNCHANGED from ckpt17500)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "IDENTICAL",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false
+    },
+    {
+      "field": "replay.L_SEQ",
+      "section": "authoritative_field_table",
+      "matched_control": "512",
+      "real_p2_full_a": "CONFLICT: W512 repro used 129 (run_p2_full_smoke.py:66 'formal run uses 512'); RMT16/P2-Full-A v2.1 frozen=512; P2-Full-A actual run value NOT in synced manifests",
+      "verdict": "UNVERIFIED_MUST_FREEZE",
+      "verdict_detail": "UNVERIFIED — MUST FREEZE ON SERVER (MISS-6)",
+      "evidence_source": "REPORT_ONLY",
+      "freeze_required": true
+    },
+    {
+      "field": "ppo.total_environment_steps",
+      "section": "authoritative_field_table",
+      "matched_control": "24576 (screen) / 98304 (longrun)",
+      "real_p2_full_a": "P2 resume ran to 98304; matched control must pin ONE and match",
+      "verdict": "UNVERIFIED_MUST_FREEZE",
+      "verdict_detail": "UNVERIFIED — must pin per authorization",
+      "evidence_source": "REPORT_ONLY",
+      "freeze_required": true
+    },
+    {
+      "field": "evaluation.evaluation_seed",
+      "section": "authoritative_field_table",
+      "matched_control": "42",
+      "real_p2_full_a": "P2-Full-A levelB 24576 eval summary seed_base=100000 (a DIFFERENT P2 line); multiple P2 eval lines exist",
+      "verdict": "UNVERIFIED_MUST_FREEZE",
+      "verdict_detail": "UNVERIFIED — must pin which P2 line is controlled for; seed42 vs seed100000 are distinct world sets",
+      "evidence_source": "RAW_FILE (P2 summary seed_base)",
+      "freeze_required": true
+    },
+    {
+      "field": "evaluation.evaluator_sha256",
+      "section": "authoritative_field_table",
+      "matched_control": "REQUIRED (at run time)",
+      "real_p2_full_a": "P2 levelB eval evaluator_sha256=51c37c27...; canonical frozen evaluator = eval_phase2_unified.py#22451402...",
+      "verdict": "UNVERIFIED_MUST_FREEZE",
+      "verdict_detail": "UNVERIFIED — must equal canonical frozen evaluator at run; record SHA",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": true
+    },
+    {
+      "field": "evaluation.world_set_hash",
+      "section": "authoritative_field_table",
+      "matched_control": "REQUIRED (materialized on JAX host)",
+      "real_p2_full_a": "NOT materialized (JAX absent) => GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED",
+      "verdict": "UNVERIFIED_MUST_FREEZE",
+      "verdict_detail": "UNVERIFIED — BLOCKED_SOURCE_UNVERIFIED",
+      "evidence_source": "RECOMPUTED (blocked)",
+      "freeze_required": true
+    }
+  ],
+  "additional_task_requested_checks": [
+    {
+      "field": "initialization_params_sha",
+      "matched_control": "d4e85af58b7f87d6",
+      "real_p2_full_a": "teacher_sha=d4e85af58b7f87d6 (LC logs); P2 base=ckpt17500",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "VERIFIED identical (== init.params_sha256 row)",
+      "evidence_source": "RAW_FILE (LC logs teacher_sha + P2 base_checkpoint)",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "base_checkpoint",
+      "matched_control": "teacher17500",
+      "real_p2_full_a": "base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== init.checkpoint row",
+      "evidence_source": "RAW_FILE (P2 summary base_checkpoint)",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "optimizer",
+      "matched_control": "Adam",
+      "real_p2_full_a": "Adam (ppo)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== ppo.optimizer row",
+      "evidence_source": "GIT_PROVENANCE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "learning_rate",
+      "matched_control": "2.0e-5",
+      "real_p2_full_a": "2.0e-5 (P2 manifest lr)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== ppo.learning_rate row",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "rollout_length",
+      "matched_control": "128",
+      "real_p2_full_a": "128 (rollout_steps)",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== ppo.rollout_steps row",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "replay_bundle",
+      "matched_control": "enabled, capacity 64, vtrace+AWR+hindsight+EMA+KL gates",
+      "real_p2_full_a": "replay_samples_drawn>0; format p2_full_a_pure_pickle_v1",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== replay.* rows (enabled/capacity/vtrace/awr/ema/kl)",
+      "evidence_source": "RAW_FILE (P2 manifest counters)",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "vtrace",
+      "matched_control": "true",
+      "real_p2_full_a": "w_vtrace enabled; vt_clip[min,max]",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== replay.vtrace row",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "awr",
+      "matched_control": "true (hindsight)",
+      "real_p2_full_a": "w_awr; hindsight_eligible",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== replay.awr_hindsight row",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "ema",
+      "matched_control": "tau 0.995",
+      "real_p2_full_a": "ema_tau=0.995",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== replay.ema.tau row",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "kl",
+      "matched_control": "transactional_kl_gate true",
+      "real_p2_full_a": "kl_max/kl_replay_max/lambda_kl",
+      "verdict": "IDENTICAL",
+      "verdict_detail": "== replay.transactional_kl_gate row",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "replay_ratio",
+      "matched_control": "not separately frozen in matched audit",
+      "real_p2_full_a": "capacity 64; sampling per update (transitions_per_update=2048)",
+      "verdict": "CHECKED_DERIVED",
+      "verdict_detail": "derivable from frozen PPO config; explicit replay ratio not separately listed -> minor, record at run",
+      "evidence_source": "RAW_FILE (derived)",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "batch",
+      "matched_control": "transitions_per_update=2048 (num_envs 16 x rollout 128)",
+      "real_p2_full_a": "transitions_per_update=2048",
+      "verdict": "CHECKED_DERIVED",
+      "verdict_detail": "transitions/update IDENTICAL; explicit minibatch count not separately listed -> minor, record at run",
+      "evidence_source": "RAW_FILE",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "action_mode",
+      "matched_control": "deterministic eval action mode (canonical evaluator spec)",
+      "real_p2_full_a": "must equal the controlled P2 arm's eval action mode",
+      "verdict": "FROZEN_BY_CANONICAL_SPEC",
+      "verdict_detail": "CANONICAL_EVALUATOR_V1 pins eval action mode; matched replay must match controlled arm; not among the 5 must-freeze identity fields",
+      "evidence_source": "CANONICAL_SPEC",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "checkpoint_schema",
+      "matched_control": "p2_full_a_pure_pickle_v1 (P2 declared format)",
+      "real_p2_full_a": "p2_full_a_pure_pickle_v1",
+      "verdict": "DECLARED",
+      "verdict_detail": "P2 checkpoint format declared; binary not synced locally (see section seven)",
+      "evidence_source": "GIT_PROVENANCE (manifest)",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    },
+    {
+      "field": "resume_policy",
+      "matched_control": "matched control is a FRESH base+replay run (not a resume continuation)",
+      "real_p2_full_a": "P2 production resume 24576->98304 exists but is NOT a bit-exact A/B continuation gate",
+      "verdict": "CLARIFIED",
+      "verdict_detail": "the matched control itself does not resume; if any resume comparison is needed, Exact Resume harness is READY but execution NOT_RUN",
+      "evidence_source": "REPORT_ONLY",
+      "freeze_required": false,
+      "section": "additional_task_requested_check"
+    }
+  ],
+  "discipline": [
+    "config audit only; NO training launched; NO auto-modify+run",
+    "max status READY_NOT_AUTHORIZED",
+    "did NOT auto-pick L_SEQ",
+    "NOT_MATCHED only on major mismatch (none here)",
+    "MISSING/BLOCKED never relabeled FAIL"
+  ]
+}

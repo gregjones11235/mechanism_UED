@@ -1,0 +1,44 @@
+field,section,matched_control,real_p2_full_a,verdict,verdict_detail,evidence_source,freeze_required
+network.class,authoritative_field_table,ActorCriticTransformer (Base GTrXL),ActorCriticTransformer (Base GTrXL trunk),IDENTICAL,IDENTICAL,GIT_PROVENANCE,False
+network.long_memory_module,authoritative_field_table,NONE,NONE (P2-Full-A has no long-memory module; W512/RMT ADD one),IDENTICAL,IDENTICAL (this is the intended single axis vs W512/RMT),GIT_PROVENANCE,False
+init.checkpoint,authoritative_field_table,teacher17500,base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500,IDENTICAL,IDENTICAL,RAW_FILE (P2 summary base_checkpoint),False
+init.params_sha256,authoritative_field_table,d4e85af58b7f87d6,teacher_sha=d4e85af58b7f87d6 (LC smoke logs); P2 base = ckpt17500,IDENTICAL,IDENTICAL,RAW_FILE (LC logs teacher_sha),False
+ppo.optimizer,authoritative_field_table,Adam,Adam (ppo),IDENTICAL,IDENTICAL,GIT_PROVENANCE,False
+ppo.learning_rate,authoritative_field_table,2.0e-5,2e-05,IDENTICAL,IDENTICAL,RAW_FILE (P2 manifest lr),False
+ppo.adam_eps,authoritative_field_table,1.0e-5,1e-05,IDENTICAL,IDENTICAL,RAW_FILE (P2 manifest config),False
+ppo.gamma,authoritative_field_table,0.999,0.999,IDENTICAL,IDENTICAL,RAW_FILE,False
+ppo.grad_clip_global_norm,authoritative_field_table,1.0,1.0,IDENTICAL,IDENTICAL,RAW_FILE,False
+ppo.num_envs,authoritative_field_table,16,16,IDENTICAL,IDENTICAL,RAW_FILE,False
+ppo.rollout_steps,authoritative_field_table,128,128,IDENTICAL,IDENTICAL,RAW_FILE,False
+ppo.transitions_per_update,authoritative_field_table,2048,2048,IDENTICAL,IDENTICAL,RAW_FILE,False
+replay.enabled,authoritative_field_table,true,true (replay_samples_drawn>0; format p2_full_a_pure_pickle_v1),IDENTICAL,IDENTICAL,RAW_FILE (P2 manifest counters),False
+replay.capacity,authoritative_field_table,64,64,IDENTICAL,IDENTICAL,RAW_FILE,False
+replay.vtrace,authoritative_field_table,true,"w_vtrace=0.5 vt_clip[-50.0,300.0]",IDENTICAL,IDENTICAL (vtrace enabled),RAW_FILE,False
+replay.awr_hindsight,authoritative_field_table,true,w_awr=0.5; hindsight_eligible=188,IDENTICAL,IDENTICAL (AWR+hindsight enabled),RAW_FILE,False
+replay.ema.tau,authoritative_field_table,0.995,0.995,IDENTICAL,IDENTICAL,RAW_FILE,False
+replay.policy_lag_gate.max_lag,authoritative_field_table,16,16,IDENTICAL,IDENTICAL,RAW_FILE,False
+replay.transactional_kl_gate,authoritative_field_table,true,kl_max=0.05 kl_replay_max=0.05 lambda_kl=0.01,IDENTICAL,IDENTICAL (KL gate enabled),RAW_FILE,False
+arch.embed,authoritative_field_table,256,256,IDENTICAL,IDENTICAL,RAW_FILE,False
+arch.num_heads,authoritative_field_table,8,8,IDENTICAL,IDENTICAL,RAW_FILE,False
+arch.num_layers,authoritative_field_table,2,2,IDENTICAL,IDENTICAL,RAW_FILE,False
+arch.window_mem (GTrXL window),authoritative_field_table,128,128 (frozen design: 128-step UNCHANGED from ckpt17500),IDENTICAL,IDENTICAL,RAW_FILE,False
+replay.L_SEQ,authoritative_field_table,512,CONFLICT: W512 repro used 129 (run_p2_full_smoke.py:66 'formal run uses 512'); RMT16/P2-Full-A v2.1 frozen=512; P2-Full-A actual run value NOT in synced manifests,UNVERIFIED_MUST_FREEZE,UNVERIFIED — MUST FREEZE ON SERVER (MISS-6),REPORT_ONLY,True
+ppo.total_environment_steps,authoritative_field_table,24576 (screen) / 98304 (longrun),P2 resume ran to 98304; matched control must pin ONE and match,UNVERIFIED_MUST_FREEZE,UNVERIFIED — must pin per authorization,REPORT_ONLY,True
+evaluation.evaluation_seed,authoritative_field_table,42,P2-Full-A levelB 24576 eval summary seed_base=100000 (a DIFFERENT P2 line); multiple P2 eval lines exist,UNVERIFIED_MUST_FREEZE,UNVERIFIED — must pin which P2 line is controlled for; seed42 vs seed100000 are distinct world sets,RAW_FILE (P2 summary seed_base),True
+evaluation.evaluator_sha256,authoritative_field_table,REQUIRED (at run time),P2 levelB eval evaluator_sha256=51c37c27...; canonical frozen evaluator = eval_phase2_unified.py#22451402...,UNVERIFIED_MUST_FREEZE,UNVERIFIED — must equal canonical frozen evaluator at run; record SHA,RAW_FILE,True
+evaluation.world_set_hash,authoritative_field_table,REQUIRED (materialized on JAX host),NOT materialized (JAX absent) => GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED,UNVERIFIED_MUST_FREEZE,UNVERIFIED — BLOCKED_SOURCE_UNVERIFIED,RECOMPUTED (blocked),True
+initialization_params_sha,additional_task_requested_check,d4e85af58b7f87d6,teacher_sha=d4e85af58b7f87d6 (LC logs); P2 base=ckpt17500,IDENTICAL,VERIFIED identical (== init.params_sha256 row),RAW_FILE (LC logs teacher_sha + P2 base_checkpoint),False
+base_checkpoint,additional_task_requested_check,teacher17500,base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500,IDENTICAL,== init.checkpoint row,RAW_FILE (P2 summary base_checkpoint),False
+optimizer,additional_task_requested_check,Adam,Adam (ppo),IDENTICAL,== ppo.optimizer row,GIT_PROVENANCE,False
+learning_rate,additional_task_requested_check,2.0e-5,2.0e-5 (P2 manifest lr),IDENTICAL,== ppo.learning_rate row,RAW_FILE,False
+rollout_length,additional_task_requested_check,128,128 (rollout_steps),IDENTICAL,== ppo.rollout_steps row,RAW_FILE,False
+replay_bundle,additional_task_requested_check,"enabled, capacity 64, vtrace+AWR+hindsight+EMA+KL gates",replay_samples_drawn>0; format p2_full_a_pure_pickle_v1,IDENTICAL,== replay.* rows (enabled/capacity/vtrace/awr/ema/kl),RAW_FILE (P2 manifest counters),False
+vtrace,additional_task_requested_check,true,"w_vtrace enabled; vt_clip[min,max]",IDENTICAL,== replay.vtrace row,RAW_FILE,False
+awr,additional_task_requested_check,true (hindsight),w_awr; hindsight_eligible,IDENTICAL,== replay.awr_hindsight row,RAW_FILE,False
+ema,additional_task_requested_check,tau 0.995,ema_tau=0.995,IDENTICAL,== replay.ema.tau row,RAW_FILE,False
+kl,additional_task_requested_check,transactional_kl_gate true,kl_max/kl_replay_max/lambda_kl,IDENTICAL,== replay.transactional_kl_gate row,RAW_FILE,False
+replay_ratio,additional_task_requested_check,not separately frozen in matched audit,capacity 64; sampling per update (transitions_per_update=2048),CHECKED_DERIVED,"derivable from frozen PPO config; explicit replay ratio not separately listed -> minor, record at run",RAW_FILE (derived),False
+batch,additional_task_requested_check,transitions_per_update=2048 (num_envs 16 x rollout 128),transitions_per_update=2048,CHECKED_DERIVED,"transitions/update IDENTICAL; explicit minibatch count not separately listed -> minor, record at run",RAW_FILE,False
+action_mode,additional_task_requested_check,deterministic eval action mode (canonical evaluator spec),must equal the controlled P2 arm's eval action mode,FROZEN_BY_CANONICAL_SPEC,CANONICAL_EVALUATOR_V1 pins eval action mode; matched replay must match controlled arm; not among the 5 must-freeze identity fields,CANONICAL_SPEC,False
+checkpoint_schema,additional_task_requested_check,p2_full_a_pure_pickle_v1 (P2 declared format),p2_full_a_pure_pickle_v1,DECLARED,P2 checkpoint format declared; binary not synced locally (see section seven),GIT_PROVENANCE (manifest),False
+resume_policy,additional_task_requested_check,matched control is a FRESH base+replay run (not a resume continuation),P2 production resume 24576->98304 exists but is NOT a bit-exact A/B continuation gate,CLARIFIED,"the matched control itself does not resume; if any resume comparison is needed, Exact Resume harness is READY but execution NOT_RUN",REPORT_ONLY,False

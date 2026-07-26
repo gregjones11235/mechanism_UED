@@ -1,0 +1,135 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "四 raw data status re-adjudication",
+  "utc": "2026-07-26T13:24:56Z",
+  "method": "Did NOT cite historical summaries. Inspected raw_data_manifest.json / server_raw_data_manifest.json / server_raw_data_SHA256SUMS, the recomputation script gen_recompute.py real input paths, and the local tar extract; recomputed SHA256 / array length / evaluator SHA live; checked git tracking of the extract.",
+  "RAW_DATA_SYNC_COMPLETE": false,
+  "raw_data_sync_complete_reason": "Per-world arrays exist ONLY in the local tar extract (NOT in the current git checkout); committed server_raw_data_SHA256SUMS is EMPTY (sync BLOCKED). Therefore the strict COMPLETE conditions ('input files in current Git branch' + 'manifest source/local SHA consistent') are NOT met. Per directive, archive-only => LOCAL_ARCHIVE_ONLY_VERIFIED, never 'current git checkout raw data complete'.",
+  "committed_git_manifest_layer": {
+    "sync_status": "BLOCKED",
+    "server_raw_data_SHA256SUMS": "EMPTY (2 comment lines, no synced files)",
+    "records": "expected SERVER paths only (REMOTE_PATH_ONLY at the git-branch manifest level)",
+    "locally_available_for_recompute_note": "phase2_unified_eval.json (10 arms) recomputed in remediation"
+  },
+  "local_archive_layer": {
+    "extract_root": "D:/Projects/dicode-codex-director/audit_outputs/global_raw_data_extract_20260726T110032Z",
+    "extract_sha256sums_lines": 1536,
+    "extract_tracked_in_git": false,
+    "extract_tracked_filecount": 0,
+    "origin": "local tar snapshot of remote /home/oseasy/experiments (read-only extract)"
+  },
+  "lines": [
+    {
+      "experiment": "W512",
+      "status": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "source_path": "bakeoff_phase1/<arm>/eval/*.json (server /home/oseasy/experiments; expected per raw_data_manifest.json)",
+      "local_path": "home/oseasy/experiments/bakeoff_phase1/eval_results/eval_w512_full_per_world.jsonl",
+      "raw_array_filename": "eval_w512_full_per_world.jsonl",
+      "array_field": "dk_success",
+      "array_length": 256,
+      "sha256": "471803f3953b9a0e97153a1bf90086af05742c7114690f66edbb5e387c2d6cea",
+      "reported_success": 135,
+      "recompute_matches_reported": true,
+      "params_sha256": "8c84287c4bff2032",
+      "evaluator": "eval_a_side_unified.py (docstring claims seed=42; DATA seed100000 -- flagged divergence)",
+      "evaluator_sha": "dcf7fe207bb485c47b2669e6c0eb187556d1a4724dd3417a81a83fc88abe5828",
+      "world_seed": 100000,
+      "world_set_identity": "seed100000",
+      "in_extract_sha256sums": true,
+      "in_git_branch": false,
+      "recomputation_input_status": "READ_BY_gen_recompute.py (RAW_FILE per-world)",
+      "completeness": "per-world complete (256). NOTE: W512_P2Replay sub-claim has NO per-world array (collapsed 90/95 aggregate only) => that sub-claim = SUMMARY_ONLY / UNVERIFIED_FROM_SUMMARY_ONLY"
+    },
+    {
+      "experiment": "P7",
+      "status": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "source_path": "gpu1_p7_egomap/eval/*.jsonl (server; expected per manifest)",
+      "local_path": "home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_paired_out/p7_egomap_eval/results/p7_egomap_98304_episodes.jsonl",
+      "raw_array_filename": "p7_egomap_98304_episodes.jsonl",
+      "array_field": "DEFEAT_KOBOLD",
+      "array_length": 256,
+      "sha256": "7a05fea8822b553ed8d3ead97cc3615465f3ad85a9c87114d1d4ce99d77971a1",
+      "reported_success": 42,
+      "recompute_matches_reported": true,
+      "params_sha256": "params_98304.pkl (param_leaves=87; no SHA recorded)",
+      "evaluator": "eval_p7_egomap_paired_256.py (p7 eval_paired_out)",
+      "evaluator_sha": "c082db8b82e86b971d8943bd9275ba8b709ffdc0da198fb236c52ccd56c08325",
+      "world_seed": 100000,
+      "world_set_identity": "seed100000",
+      "in_extract_sha256sums": true,
+      "in_git_branch": false,
+      "recomputation_input_status": "READ_BY_gen_recompute.py (RAW_FILE per-world)",
+      "completeness": "per-world complete (256); paired control p7_control_98304_episodes.jsonl also present in extract"
+    },
+    {
+      "experiment": "P8",
+      "status": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "source_path": "gpu2_p8_longmemory/eval/{migration,final}/*.json (server; expected per manifest)",
+      "local_path": "home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_p8_longmemory/eval/p8_final_gate.json",
+      "raw_array_filename": "p8_final_gate.json (success_per_world EMBEDDED per step)",
+      "array_field": "results[*].success_per_world",
+      "array_length": "256 per step (CTL_24576, CTL_49152, CTL_73728, CTL_98304, P8_24576, P8_49152, P8_73728, P8_98304)",
+      "sha256": "2467ecf464cc232c978df1592d5e5dcf52b0b3ab2a08fd52f20904b17a59ee8f",
+      "reported_success": "per-step n_success embedded in gate JSON",
+      "recompute_matches_reported": "verified per arm in gen_recompute (0 mismatch)",
+      "params_sha256": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_p8_longmemory/train_98304/ckpt",
+      "evaluator": "P8 gate evaluator (eval_p8_final.py)",
+      "evaluator_sha": "da0baba39200e5102c4f546d20b616a17546bd648c42263e247ce09026dfd6c8",
+      "evaluator_sha_closed_loop": true,
+      "world_seed": 42,
+      "world_set_identity": "seed42",
+      "in_extract_sha256sums": true,
+      "in_git_branch": false,
+      "recomputation_input_status": "READ_BY_gen_recompute.py (RAW_FILE per-world, EMBEDDED in gate JSON)",
+      "completeness": "per-world embedded for steps + paired CTL_*; migration gate (p8_migration_gate.json) also present"
+    },
+    {
+      "experiment": "P9",
+      "status": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "source_path": "gpu3_p9_authentic_reset/eval/*.json (server; expected per manifest)",
+      "local_path": "home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_p9_authentic_reset/eval/p9_final_gate.json",
+      "raw_array_filename": "p9_final_gate.json (success_per_world EMBEDDED per step)",
+      "array_field": "results[*].success_per_world",
+      "array_length": "256 per step (CTL_24576, CTL_49152, CTL_73728, CTL_98304, P9_24576, P9_49152, P9_73728, P9_98304)",
+      "sha256": "7c006c19522656085eb10ceeb58ae8de4f11e4b0755e2a45b30320077ff62776",
+      "reported_success": "per-step n_success embedded in gate JSON",
+      "recompute_matches_reported": "verified per arm in gen_recompute (0 mismatch)",
+      "params_sha256": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_p9_authentic_reset/train_98304/ckpt",
+      "evaluator": "P9 gate evaluator (eval_p9_final.py)",
+      "evaluator_sha": "eff1d77cae6d229a89c2580009076d909f86e7f636244b909cfbc3cb41abd627",
+      "evaluator_sha_closed_loop": true,
+      "world_seed": 42,
+      "world_set_identity": "seed42",
+      "in_extract_sha256sums": true,
+      "in_git_branch": false,
+      "recomputation_input_status": "READ_BY_gen_recompute.py (RAW_FILE per-world, EMBEDDED in gate JSON)",
+      "completeness": "per-world embedded for steps + paired CTL_*. NOTE: P9 exact-resume = snapshot-restore check (P9_VALIDATE), NOT an A/B continuation gate"
+    }
+  ],
+  "world_set_separation": {
+    "seed100000": [
+      "W512(bakeoff)",
+      "P7"
+    ],
+    "seed42": [
+      "P8",
+      "P9"
+    ],
+    "rule": "never pool/pair across seed42 vs seed100000"
+  },
+  "status_taxonomy_used": [
+    "LOCAL_RAW_ARRAY_VERIFIED",
+    "LOCAL_ARCHIVE_ONLY_VERIFIED",
+    "REMOTE_PATH_ONLY",
+    "RECOMPUTATION_OUTPUT_ONLY",
+    "SUMMARY_ONLY",
+    "NOT_FOUND",
+    "INTEGRITY_FAIL"
+  ],
+  "discipline": [
+    "no modification of raw per-world arrays",
+    "no modification of 54 frozen files",
+    "read-only",
+    "W512_P2Replay sub-claim flagged SUMMARY_ONLY (no per-world)"
+  ]
+}

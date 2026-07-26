@@ -1,0 +1,126 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "九 integration & scientific-claims contract",
+  "utc": "2026-07-26T13:35:02Z",
+  "branch": "henry/reviewed-global-evaluation",
+  "head": "2a89f393113d26a4e022646ba9d26c4d8c2b0dad",
+  "points": {
+    "1_CC4_allowed_integration_file_range": {
+      "reviewed_baseline_already_in_branch": "54 frozen remediation files (45 audit_outputs/global_remediation_20260726T095819Z/ + 11 reports/global_remediation/) committed at 2a89f393; fresh-checkout 54 OK / 0 FAILED.",
+      "new_this_round": [
+        "reports/global_remediation/premerge_hardening/  (all premerge-hardening reports, CSV/JSON/MD)",
+        "reports/global_remediation/world_set_materialization_runbook.md",
+        "reports/global_remediation/world_set_materialization_runbook.json",
+        "tools/global_evaluation/materialize_world_set_twice.py"
+      ],
+      "not_entering_integration": [
+        "audit_outputs/global_raw_data_extract_20260726T110032Z/ (local tar extract; NOT git-tracked)",
+        "audit_outputs/global_evidence_closure_20260726T110032Z/ (evidence closure; delivered via evidence tar, not this branch)",
+        "audit_outputs/global_world_set_v1/ (world-set recipe deliverable; evidence tar, not this branch)",
+        "CC3 independent clone (C:/Users/Lenovo/Desktop/.../mechanism_UED_Henry_worktree) -- DO NOT TOUCH",
+        "D:/cc4_gen/* (ephemeral report generators; never committed)"
+      ]
+    },
+    "2_gitattributes_scope": {
+      "CC4_GITATTRIBUTES_SCOPE": "PASS",
+      "gitattributes_files_in_worktree": [
+        ".gitattributes"
+      ],
+      "rules": [
+        "audit_outputs/global_remediation_20260726T095819Z/** -text",
+        "reports/global_remediation/** -text"
+      ],
+      "rules_exact_match_expected": true,
+      "single_root_gitattributes": true,
+      "all_54_frozen_under_text_rule": true,
+      "frozen_file_count_checked": 54,
+      "effect": "-text on the two evidence dirs ONLY; no global wildcard; no other .gitattributes broadens scope."
+    },
+    "3_54_frozen_no_text_conversion": {
+      "fresh_checkout_sha256sum_c": {
+        "OK": 54,
+        "FAILED": 0,
+        "cwd": "worktree root (BASE-equivalent)",
+        "sumfile": "audit_outputs/global_remediation_20260726T095819Z/SHA256SUMS"
+      },
+      "CC4_FRESH_CHECKOUT_INTEGRITY": "PASS",
+      "statement": "The 54 frozen files must NOT be text-converted (CRLF/LF) in any merge; -text enforces byte preservation; verified 54 OK / 0 FAILED on a fresh detached checkout."
+    },
+    "4_CC4_does_not_modify_CC2": {
+      "CC2_FILES_TOUCHED": false,
+      "statement": "CC4 wrote nothing into CC2 branches/paths this round."
+    },
+    "5_CC4_does_not_modify_CC3": {
+      "CC3_FILES_TOUCHED": false,
+      "statement": "CC4 treated CC3 (D052 canonical refactor; independent clone) as READ-ONLY; nothing modified."
+    },
+    "6_world_set_status": {
+      "GLOBAL_WORLD_RECIPE": "PASS",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "deliverable_tier": "WORLD_RECIPE_MANIFEST + WORLD_INDEX_MANIFEST (SPEC ONLY)",
+      "is_materialized_world": false,
+      "statement": "Only a frozen recipe/index manifest exists; NO materialized world serialization or world_set_hash. Runbook + script prepared but NOT executed."
+    },
+    "7_raw_data_status": {
+      "W512": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "P7": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "P8": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "P9": "LOCAL_ARCHIVE_ONLY_VERIFIED",
+      "RAW_DATA_SYNC_COMPLETE": false,
+      "W512_P2Replay_subclaim": "SUMMARY_ONLY / UNVERIFIED_FROM_SUMMARY_ONLY (no per-world array)",
+      "statement": "Per-world arrays exist only in the local tar extract (not in git); committed server SHA256SUMS empty (sync BLOCKED). Archive-only => LOCAL_ARCHIVE_ONLY_VERIFIED."
+    },
+    "8_exact_resume_status": {
+      "GLOBAL_EXACT_RESUME_HARNESS": "READY",
+      "REAL_EXACT_RESUME_EXECUTION": "NOT_RUN",
+      "EXACT_RESUME_BITEXACT": "NOT_CLAIMED (self-test PASS != real bit-exact pass)",
+      "per_experiment": {
+        "P2": "PARTIAL",
+        "W512": "BLOCKED_MISSING_STATE",
+        "RMT16": "BLOCKED_MISSING_STATE",
+        "D052": "NOT_APPLICABLE",
+        "REFERENCE_LC_family": "PARTIAL"
+      },
+      "statement": "Harness READY; no real resume run; bit-exact NOT_CLAIMED. No experiment READY (0 binaries locally)."
+    },
+    "9_matched_replay_status": {
+      "BASE_GTRXL_MATCHED_REPLAY_CONTROL": "READY_NOT_AUTHORIZED",
+      "match_verdict": "SPEC_SINGLE_DIFFERENCE_CONFIRMED + FIELD_VERIFICATION_PARTIAL",
+      "field_counts": {
+        "identical": 23,
+        "unverified_must_freeze": 5,
+        "different": 0
+      },
+      "is_not_matched": false,
+      "five_must_freeze_fields": [
+        "replay.L_SEQ (129 vs 512 conflict; NOT auto-picked; must freeze on server, MISS-6)",
+        "ppo.total_environment_steps (pin 24576 screen vs 98304 longrun; match controlled P2 arm)",
+        "evaluation.evaluation_seed (pin which P2 line; seed42 vs seed100000 are distinct world sets, never pooled)",
+        "evaluation.evaluator_sha256 (must equal canonical frozen evaluator eval_phase2_unified.py#22451402... at run)",
+        "evaluation.world_set_hash (materialize on a JAX+craftax host; currently BLOCKED_SOURCE_UNVERIFIED)"
+      ],
+      "l_seq": "NOT auto-picked (129 vs 512 conflict).",
+      "statement": "Config design ready but NOT authorized; 5 identity fields must be frozen; no run performed."
+    }
+  },
+  "allowed_scientific_claims": [
+    "remediation engineering framework is complete",
+    "archived metrics are recomputable according to the ACTUAL raw-data status (per-world arrays from the local archive; 0 mismatch on recomputed arms)",
+    "Exact Resume harness is READY",
+    "matched Replay config design is READY (single-difference architecture confirmed)"
+  ],
+  "forbidden_scientific_claims": [
+    "the world set has been really materialized",
+    "checkpoints have been re-evaluated",
+    "training has been reproduced",
+    "Exact Resume is fully bit-exact",
+    "matched Replay has been run",
+    "the long-memory mechanism has been validated"
+  ],
+  "discipline": [
+    "no push, no merge, no rebase, no force push, no git add .",
+    "no training, no formal evaluation, no real Exact Resume continuation, no matched Replay run",
+    "54 frozen files unmodified; SHA256SUMS not rewritten; no fabricated world_set_hash",
+    "recipe/index manifest never called a materialized world"
+  ]
+}

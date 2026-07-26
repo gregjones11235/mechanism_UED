@@ -1,0 +1,91 @@
+{
+  "task": "GLOBAL_EVALUATION_PREMERGE_EVIDENCE_HARDENING",
+  "section": "五 world manifest evidence tier",
+  "utc": "2026-07-26T13:26:29Z",
+  "GLOBAL_WORLD_RECIPE": "PASS",
+  "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+  "manifest_status_field": "BLOCKED_SOURCE_UNVERIFIED",
+  "deliverable_tier": "WORLD_RECIPE_MANIFEST + WORLD_INDEX_MANIFEST (SPEC ONLY)",
+  "is_materialized_world": false,
+  "tiers": {
+    "WORLD_RECIPE_MANIFEST": {
+      "present": true,
+      "evidence": "world_manifest.json schema=mechanism_UED.world_set/v1 + frozen_recipe in provenance (fold_in rule, wrapper_seed=0, condition_on_task, optimistic_reset_ratio=16, mode=score, bonus_type=none, max_timesteps=4096, num_worlds=256)",
+      "world_recipe_hash_seed42": "3377049f3e983bfeeacbb219e8c3be0e1d72966d4b1fe2ca72444caadbd1575e",
+      "world_recipe_hash_seed100000": "0470f9cc7acc1152edaeeda0b688540682b9efcbcc6a48292551f3600521eff9",
+      "note": "Recipe hash = hash of the FROZEN RECIPE SPEC, NOT a hash of materialized per-world params."
+    },
+    "WORLD_INDEX_MANIFEST": {
+      "present": true,
+      "evidence": "world_index_order=0..255 ascending; world_count_expected=256",
+      "world_count_expected": 256,
+      "world_count_actual": null,
+      "note": "Index/order is specified but world_count_actual=null (nothing materialized to count)."
+    },
+    "MATERIALIZED_WORLD_SERIALIZATION": {
+      "present": false,
+      "evidence": "world_manifest.json: world_params_materialized=false; per_world_params='NOT_GENERATED (JAX absent)' for BOTH sets",
+      "world_params_materialized": false
+    },
+    "MATERIALIZED_WORLD_HASH": {
+      "present": false,
+      "evidence": "world_hashes.json: status=NOT_GENERATED, per_world_hashes={} (empty), world_set_hash=null; world_manifest.json world_set_hash=null",
+      "per_world_hashes_count": 0,
+      "world_set_hash": null
+    }
+  },
+  "manifest_files_integrity_vs_SHA256SUMS": {
+    "world_manifest.json": true,
+    "world_hashes.json": true,
+    "world_generation_provenance.json": true,
+    "world_generation.log": true
+  },
+  "manifest_files_live_sha256": {
+    "world_manifest.json": "d77f879a8dbafd9e9765298ae8b1a97b68e5d9674bfe0c8d608542aad685ea1c",
+    "world_hashes.json": "467d079a7f731ce6d4f3607f7ab8d8136e61eba40bbc1a9600dade0e27467f1e",
+    "world_generation_provenance.json": "303b38c4a8232d8b294ed48d89767d9617768a53d17de613cc63d244daca69da",
+    "world_generation.log": "374fe5669beef5a7558ef8b7f549378c82e699c0ce0aad95f1681697227e4f17"
+  },
+  "git_tracking": {
+    "world_set_v1_tracked_files": [],
+    "world_set_v1_in_current_git_branch": false,
+    "note": "world_set_v1 deliverables travel via the evidence tar, not the git branch"
+  },
+  "used_by_vs_data_divergence": {
+    "recipe_manifest_used_by_seed42": [
+      "Phase2",
+      "P8",
+      "P9",
+      "W512"
+    ],
+    "recipe_manifest_used_by_seed100000": [
+      "P7",
+      "LC"
+    ],
+    "section_four_data_world_finding": {
+      "W512_bakeoff_data": "seed100000 (per-world eval array world_seed=100000)",
+      "P7_data": "seed100000",
+      "P8_data": "seed42",
+      "P9_data": "seed42"
+    },
+    "conflict": "world_manifest.json assigns W512 to seed42 used_by (per evaluator eval_a_side_unified.py docstring seed=42), but the synced W512 per-world eval array carries world_seed=100000 (bakeoff data). This is the DOCUMENTED recipe-vs-data divergence carried from the evidence closure; it is NOT resolved here and must NOT be silently pooled."
+  },
+  "forbidden_claims": [
+    "do NOT call the recipe/index manifest a real materialized world",
+    "do NOT present world_recipe_hash as world_set_hash",
+    "do NOT fabricate or placeholder per-world hashes",
+    "do NOT pool seed42 and seed100000 world sets"
+  ],
+  "what_is_still_required": [
+    "run materialization on a JAX+craftax==1.4.5 host (env source + SHA verified)",
+    "generate per-world stable serialization for both seed42 and seed100000",
+    "compute per-world SHA256 and total world_set_hash",
+    "run generation TWICE independently and verify agreement (count, order, per-world hash, total hash)"
+  ],
+  "discipline": [
+    "read-only",
+    "no fake hashes",
+    "BLOCKED_SOURCE_UNVERIFIED != FAIL",
+    "recipe carried forward verbatim"
+  ]
+}
