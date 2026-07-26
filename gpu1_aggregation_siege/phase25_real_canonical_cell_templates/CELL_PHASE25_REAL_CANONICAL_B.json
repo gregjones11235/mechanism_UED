@@ -1,0 +1,33 @@
+{
+  "template_status": "BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS",
+  "note": "TEMPLATE ONLY. This is NOT a valid canonical CellSpec and is NOT registered in any CellRegistry. It cannot become DRAFT until every blocker below is resolved with NEW real data. intended_total_timesteps=0: this phase executes nothing.",
+  "cell_id": "CELL_PHASE25_REAL_CANONICAL_B",
+  "arm": "B_NO_MODELER",
+  "protocol_version": "canonical_v2",
+  "evidence_tier": "C_REAL_CANONICAL_POOL (NOT_RUN)",
+  "hypothesis": "Matched arm B (modeler OFF): canonical three-role judgments + rank_percentile_v1 Copeland selection over a real canonical pool; baseline for the arm-C modeler contrast.",
+  "fields_PENDING_real_values": {
+    "pool_id": "PENDING: real canonical pool id",
+    "pool_hash": "PENDING: 64-char sha256 over ordered candidate chashes",
+    "selector": {
+      "selector": "S1_THREE_ROLE",
+      "critic_policy": "PENDING director decision (hard_veto default vs soft_penalty)",
+      "k": 8,
+      "seed": "PENDING: int (canonical seed REQUIRED; legacy was seedless)",
+      "roles": ["tutor", "critic", "explorer"]
+    },
+    "candidate_ids": "PENDING: real canonical selected-8 (arm B)",
+    "selection_hash": "PENDING: 64-char canonical compute_selection_hash(...)",
+    "judgments": "PENDING: real RoleJudgments (96) from pinned models; critic_reject per director-chosen rule",
+    "intended_total_timesteps": 0,
+    "output_dir": "gpu1_aggregation_siege/phase25_real_canonical_cells/cell_B",
+    "created_by": "PENDING: authorized canonical harness"
+  },
+  "blockers": [
+    "no real canonical pool exists (legacy pool targets are salted-hash placeholders -> INVALID)",
+    "no real canonical judgments exist (LLM calls forbidden this round)",
+    "critic_reject derivation rule undecided (decision_reject=40 vs flags_too_hard=38 over B+C)",
+    "ROLE_REGISTRY model pins (qwen-turbo/deepseek-chat/glm-4.5-air) diverge from real-bundle ids (qwen-flash-2025-07-28/deepseek-v4-pro/glm-4-flash)"
+  ],
+  "what_would_unblock": "Director authorizes a Tier-C run: (1) generate/curate a canonical pool with canonical targets and recomputed chash/pool_hash; (2) run the pinned role protocol for real judgments; (3) fix the critic_reject rule and model pins; (4) register via the canonical harness as DRAFT with zero timesteps, then separately authorize any training."
+}

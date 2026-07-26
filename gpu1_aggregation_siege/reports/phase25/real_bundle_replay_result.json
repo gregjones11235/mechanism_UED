@@ -1,0 +1,125 @@
+{
+  "replay_mode": "OFFLINE_DETERMINISTIC_NO_LLM",
+  "aggregation_source_sha256": "27492e8a513a94df81a43a341926a6dc5b3e5869b2be13a96c8528e7d19e2888",
+  "aggregation_source_note": "27492e8a... = bundle selector_source_sha256 (server workers/gpu0_original); robust_normalize & _aggregate_soft_copeland are byte-identical to the worktree-frozen gpu1_aggregation_siege aggregation.py (590fcef4).",
+  "weights": {
+    "w_progression": 0.34,
+    "w_retention": 0.33,
+    "w_novelty": 0.33,
+    "w_critic": 0.01,
+    "w_monopoly": 0.01
+  },
+  "temperature": 1.0,
+  "k": 8,
+  "expected_anchors": {
+    "B_selection_hash": "82571538e5299ea9",
+    "C_selection_hash": "868a57268d66b90b",
+    "legacy_pool_hash": "1902b71a5d86fa00",
+    "B_selected8": [
+      "d052_r3_0000",
+      "d052_r3_0006",
+      "d052_r3_0007",
+      "d052_r3_0011",
+      "d052_r3_0014",
+      "d052_r3_0022",
+      "d052_r3_0025",
+      "d052_r3_0028"
+    ],
+    "C_selected8": [
+      "d052_r3_0000",
+      "d052_r3_0003",
+      "d052_r3_0010",
+      "d052_r3_0014",
+      "d052_r3_0017",
+      "d052_r3_0024",
+      "d052_r3_0025",
+      "d052_r3_0028"
+    ]
+  },
+  "recomputed": {
+    "B_selection_hash": "82571538e5299ea9",
+    "C_selection_hash": "868a57268d66b90b",
+    "B_selected8_score_order": [
+      "d052_r3_0000",
+      "d052_r3_0014",
+      "d052_r3_0006",
+      "d052_r3_0028",
+      "d052_r3_0007",
+      "d052_r3_0025",
+      "d052_r3_0011",
+      "d052_r3_0022"
+    ],
+    "C_selected8_score_order": [
+      "d052_r3_0000",
+      "d052_r3_0003",
+      "d052_r3_0014",
+      "d052_r3_0025",
+      "d052_r3_0010",
+      "d052_r3_0024",
+      "d052_r3_0017",
+      "d052_r3_0028"
+    ],
+    "pool_hash": "1902b71a5d86fa00",
+    "overlap": [
+      "d052_r3_0000",
+      "d052_r3_0014",
+      "d052_r3_0025",
+      "d052_r3_0028"
+    ],
+    "entered_C_only": [
+      "d052_r3_0003",
+      "d052_r3_0010",
+      "d052_r3_0017",
+      "d052_r3_0024"
+    ],
+    "exited_B_only": [
+      "d052_r3_0006",
+      "d052_r3_0007",
+      "d052_r3_0011",
+      "d052_r3_0022"
+    ],
+    "change": "4/8",
+    "jaccard": 0.3333
+  },
+  "checks": {
+    "agg_source_sha_matches_bundle": true,
+    "B_selection_hash_match": true,
+    "C_selection_hash_match": true,
+    "B_selected8_exact_set": true,
+    "C_selected8_exact_set": true,
+    "candidate_count_32": true,
+    "change_is_4_of_8": true,
+    "jaccard_match": true,
+    "overlap_4": true,
+    "B_determinism_bitidentical": true,
+    "C_determinism_bitidentical": true,
+    "selector_rng_seed_null": true,
+    "pool_hash_match": true
+  },
+  "ALL_ANCHORS_PASS": true,
+  "supplementary_anchors": {
+    "all_6_prompt_hashes_match_sha256_of_full_text": true,
+    "B_C_only_preregistered_difference_is_appended_frozen_profile": true,
+    "per_role_exact_insertion_checks": {
+      "C_tutor_is_B_plus_profile_only": true,
+      "C_critic_is_B_plus_profile_only": true,
+      "C_explorer_is_B_plus_profile_only": true
+    },
+    "profile_block_byte_identical_across_roles": true,
+    "profile_json_semantically_equal_student_profile_llm_interpretation": true,
+    "profile_json_sha256_reproduced_from_student_profile_llm_interpretation": true,
+    "embedded_profile_json_key_order_note": "prompt embeds builder-dict key order; registry profile_json_sha256 (10ea13a1...) is over student_profile.json serialization of the SAME object; deep-equal not byte-equal; recorded honestly, no anchor broken",
+    "profile_hash_sha256_reproduced_formula": "sha256(json.dumps(llm_interpretation, sort_keys=True, ensure_ascii=False, separators(\",\",\":\")))",
+    "profile_hash_sha256_reproduced": true,
+    "student_profile_profile_hash_sha256": "223defdfbe6fc9b4f14680f8def5f5639cc85a02d6557d16fa8f29f0e0080455",
+    "raw_summary_sha256_reproduced": true,
+    "candidate_block_sha256_reproduced": true,
+    "per_role_B_C_candidate_plus_schema_suffix_identical": {
+      "tutor": true,
+      "critic": true,
+      "explorer": true
+    },
+    "candidate_block_only_byte_identical_all_6_prompts": true,
+    "schema_differs_by_role_by_design": true
+  }
+}

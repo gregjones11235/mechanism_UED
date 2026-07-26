@@ -1,0 +1,58 @@
+{
+  "task": "D052_PHASE25_REAL_BUNDLE_RECONCILIATION — acquisition + integrity verification of the REAL Phase 2.5 Canonical Migration Bundle",
+  "verdict_labels": {
+    "LOCAL_REAL_MIGRATION_BUNDLE_FOUND": true,
+    "REAL_MIGRATION_BUNDLE_INTEGRITY": "PASS",
+    "SOURCE_PROVENANCE": "REMOTE_UNCOMMITTED_UNTRACKED_WORKTREE",
+    "CONTENT_INTEGRITY": "SHA256_VERIFIED",
+    "GIT_COMMIT_PROVENANCE_CLAIMED": false
+  },
+  "source": {
+    "server": "oseasy@172.25.14.221:22 (host i-00000226)",
+    "ssh_key_used": "project-specific key at orchestration/control/ssh_oseasy_172_25_14_221_ed25519 (IdentitiesOnly=yes, BatchMode=yes); default keys NOT used; no secrets displayed",
+    "repo_root": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/mechanism_UED",
+    "branch": "henry/d052-modeler-shadow-v1",
+    "head": "e6765fb26d2cca8b7a49bd3b1ce6a2626d72f69b",
+    "bundle_dir": "orchestration/experiments/d052_modeler_shadow_v1/artifacts/d052_phase25_canonical_migration/",
+    "git_status_of_bundle_dir": "?? (UNTRACKED, UNCOMMITTED) — therefore NO Git-commit provenance is claimed; provenance is the untracked server working tree",
+    "file_mtimes": "2026-07-26 16:30 (all 14 bundle files)"
+  },
+  "local_destination": {
+    "worktree": "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\mechanism_UED_Henry_worktree",
+    "branch": "henry/d052-canonical-refactor @ 968768e",
+    "path": "orchestration/experiments/d052_modeler_shadow_v1/  (same repo-relative path as source)",
+    "files_copied": 75,
+    "note": "scp -r (rsync unavailable); only the LOCAL derived tests/__pycache__ copy was removed; server originals untouched; no pre-existing target (no-overwrite honored)"
+  },
+  "integrity_verification": {
+    "stage_1_source_self_check": "on server: sha256sum -c SHA256SUMS -> 13/13 成功(OK)",
+    "stage_2_manifest_cross_check": "server SHA256SUMS content == delivery-report 13 SHA == local control/d052v2/...md 13 SHA (diff empty, all three identical)",
+    "stage_3_local_self_check": "on local bundle dir: sha256sum -c SHA256SUMS -> 13/13 OK",
+    "stage_4_recursive_server_vs_local": "normalized sha256 of all files, server vs local: bundle 14/14 identical; WHOLE experiment tree 75/75 identical",
+    "sha256sums_manifest_self_hash": "857a328226dcaa821c15add9a01284f9992f7fe260e925ad43082797620f1488 (SHA256SUMS file, identical server==local)"
+  },
+  "bundle_payloads_present_14": [
+    "expected_behavior.json", "field_mapping.json", "judgments_B.jsonl", "judgments_C.jsonl",
+    "prompt_registry.json", "protocol.json", "ranking_B.json", "ranking_C.json",
+    "regression_test_spec.md", "role_ablation.json", "salted_hash_audit.json",
+    "selector_config.json", "student_profile.json", "SHA256SUMS"
+  ],
+  "supplementary_also_copied": [
+    "reports/ (d052_phase25_canonical_migration.md + final_report.md + phase0/1/2/2.5 reports)",
+    "outputs/ (raw per-role judgments, bc_{B,C}_explorer_normalization_log.json for R3, student_profile/evidence, llm_cost_phase25.json)",
+    "analysis/ (bc/full32/pilot rankings + deltas, salted_hash_audit.json)",
+    "manifests/ (canonical_achievement_order.json, pilot8_manifest.json)",
+    "tests/ (build_migration_bundle.py, soft_copeland_recompute.py, phase25 steps, diag_glm.py, etc.)"
+  ],
+  "constraint_compliance": {
+    "no_bundle_original_modified": true,
+    "no_whole_branch_merge": true,
+    "no_training_started": true,
+    "no_new_llm_calls": true,
+    "no_push": true,
+    "no_secrets_displayed": true,
+    "synthetic_fixture_NOT_substituted": true,
+    "no_regeneration_from_summary": true
+  },
+  "next": "Proceed to D052_PHASE25_REAL_BUNDLE_RECONCILIATION: read payloads, offline historical B/C replay (no LLM), field-mapping reconciliation, judgment adapter, R1-R6, evidence tiers, reports, local commit (no push)."
+}

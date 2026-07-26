@@ -1,0 +1,39 @@
+{
+  "audit": "salted_hash_static_dataflow",
+  "verdict": "SALTED_HASH_AFFECTS_TRAINING_SEMANTICS",
+  "summary": "The per-process-salted Python hash() that maps each candidate spec's target_achievements to Achievement enums (stored as BaseTask.relevant_achievements) defines the task REWARD mask, early TERMINATION (task_solved), and SUCCESS criterion used during PPO training. It therefore enters reward, termination, success, and the PPO loss -- it is NOT a report-only label. Observation conditioning in this launcher uses a task-index one-hot (jnp.eye), so the salted achievements do not directly enter the policy embedding, but the task-index routes to tasks whose reward/termination are salted.",
+  "salt_site": {
+    "file": "workers/gpu0_original/gpu0_training_mechanisms/scripts/launch_d052_pure_dynamic_enhanced.py",
+    "line": 818,
+    "code": "ta = [_all_a[hash(f\"{cid}_{a}\") % len(_all_a)] for a in ta_names]",
+    "note": "Python str hash() is salted per process (PYTHONHASHSEED); mapping is unrecoverable and differs across runs."
+  },
+  "stored_as": {"file": "launch_d052_pure_dynamic_enhanced.py", "line": 832, "code": "self.relevant_achievements = list(__ta)", "override": "none (_CT does not override get_reward/is_terminal/is_success)"},
+  "call_chain_to_training": [
+    "launch_d052_pure_dynamic_enhanced.py:1168 task_classes = make_task_classes(sel_cands)",
+    "launch_d052_pure_dynamic_enhanced.py:1169 task_embeddings = jnp.eye(len(task_classes))  [task-INDEX one-hot, not salted achievements]",
+    "launch_d052_pure_dynamic_enhanced.py:1180 make_train_with_treatments(cfg, task_classes, UPD, task_embeddings=_te, ...)",
+    "dicode/training/integration.py:37 make_train_with_treatments -> dicode/ppo_tr.py:39 make_train",
+    "dicode/ppo_tr.py:71-121 base_env = MultiTaskMiniCraftaxEnv[R](task_classes, ...); env = DistributedMultiTaskOptimisticLogWrapper(...)",
+    "minicraftax/envs/multitask.py:324 self.reward_fns = tuple(t.get_reward for t in self.tasks)",
+    "minicraftax/envs/multitask.py:325 self.terminal_fns = tuple(t.is_terminal for t in self.tasks)"
+  ],
+  "training_semantics_affected": [
+    {"aspect": "REWARD", "file": "minicraftax/tasks/base_task.py", "lines": "52-62", "fn": "BaseTask.get_reward", "code": "mask = zeros.at[relevant_achievements].set(1); achievement_reward = (achievement_delta * mask * ACHIEVEMENT_REWARD_MAP).sum()", "callers": ["minicraftax/envs/base.py:519", "minicraftax/envs/base.py:682"], "enters_loss": true},
+    {"aspect": "TERMINATION", "file": "minicraftax/tasks/base_task.py", "lines": "28-50", "fn": "BaseTask.is_terminal", "code": "task_solved = all(current_achievements_bool[relevant_indices]); return done_steps|is_dead|defeated_boss|task_solved", "callers": ["minicraftax/envs/base.py:60", "minicraftax/envs/base.py:225", "minicraftax/envs/base.py:387", "minicraftax/envs/base.py:550"]},
+    {"aspect": "SUCCESS", "file": "minicraftax/tasks/base_task.py", "lines": "69-81", "fn": "BaseTask.is_success", "code": "task_solved = all(current_achievements_bool[relevant_indices])"},
+    {"aspect": "SUCCESS_METRICS_MASK", "file": "dicode/setup.py", "lines": "300-319", "fn": "_create_achievement_masks", "code": "task_achievement_mask.at[i, relevant_achievements].set(True)", "consumers": ["dicode/scoring.py:22", "dicode/evolution.py:321-339"]}
+  ],
+  "observation_conditioning": {
+    "affected": false,
+    "detail": "launcher passes task_embeddings=jnp.eye(n) (task-index one-hot); ppo_tr.py:68 uses the passed embeddings. The salted relevant_achievements multi-hot path (_generate_embeddings_for_session one-hot branch, training/__init__.py:335-337) is NOT used by this launcher. NOTE: task-index still routes to a task whose reward/termination are salted."
+  },
+  "eval_pilot": {
+    "file": "single_director_20260722/d052_eval/d052_eval_pilot.py",
+    "lines": "132,139",
+    "self_label": "SUCCESS_MODE = \"UNDEFINED\"  # enhanced: relevant_ach via salted hash(), unrecoverable",
+    "note": "The per-episode eval itself flags success as UNDEFINED. Empirical per-achievement completion (used by the Modeler) is real/canonical and NOT salted."
+  },
+  "consequence": "Because hash() is per-process-salted, relevant_achievements (hence each task's reward function, termination, and success) is an effectively RANDOM achievement assignment, decoupled from the spec target_achievements labels the LLM judged. Curriculum selection (label-based) and training reward/termination/success (salt-based) are decoupled. Any training run (incl. a 4096 smoke) on these enhanced candidates trains on salted-random reward functions, making curriculum-quality conclusions uninterpretable until targets are made canonical.",
+  "base_paths_verified": "src on sys.path = workers/gpu0_original/gpu0_training_mechanisms/src (launcher L99); base_task.py read from that tree."
+}

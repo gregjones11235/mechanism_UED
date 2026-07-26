@@ -1,0 +1,476 @@
+[
+  {
+    "rank": 1,
+    "task_id": "d052_r3_0027",
+    "progression": 8.65,
+    "critic_penalty": 0.85,
+    "novelty": 7.5,
+    "soft_copeland_score": 1.0,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Enchant your weapon and defeat magical enemies in a fantasy realm.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 2,
+    "task_id": "d052_r3_0005",
+    "progression": 8.75,
+    "critic_penalty": 0.85,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.994,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Survive and manage your hunger. Passive animals are plentiful, while hostile mobs are weak and deal little damage.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 3,
+    "task_id": "d052_r3_0008",
+    "progression": 4.75,
+    "critic_penalty": 0.0,
+    "novelty": 7.5,
+    "soft_copeland_score": 0.95917,
+    "difficulty_tier": "medium",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Craft a wooden pickaxe and then a stone pickaxe to demonstrate tool progression.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 4,
+    "task_id": "d052_r3_0022",
+    "progression": 4.85,
+    "critic_penalty": 0.85,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.8062,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "craft_wooden_pickaxe"
+    ],
+    "description": "Craft a wooden pickaxe to begin your tool-making journey. Gather wood, craft planks and sticks, then assemble a pickaxe at a crafting table.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 5,
+    "task_id": "d052_r3_0026",
+    "progression": 4.85,
+    "critic_penalty": 0.85,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.8062,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Learn to manage your hunger by gathering food from plentiful passive animals. Mobs are weaker, giving you a safe environment to practice survival basics.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 6,
+    "task_id": "d052_r3_0012",
+    "progression": 8.75,
+    "critic_penalty": 0.95,
+    "novelty": 5.5,
+    "soft_copeland_score": 0.75048,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "eat_food",
+      "survive_3_days"
+    ],
+    "description": "Survive by managing your hunger. Passive animals spawn frequently to provide food. Hostile mobs are weaker, making survival easier. Reach achievement eat_food and survive for 3 days.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 7,
+    "task_id": "d052_r3_0016",
+    "progression": 8.45,
+    "critic_penalty": 0.85,
+    "novelty": 0.75,
+    "soft_copeland_score": 0.73703,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie",
+      "survive"
+    ],
+    "description": "Defeat zombies with reduced enemy stats and spawn rates for beginners.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 8,
+    "task_id": "d052_r3_0024",
+    "progression": 8.65,
+    "critic_penalty": 0.65,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.71854,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "cave_navigator",
+      "passive_collector"
+    ],
+    "description": "Navigate the twisting caves, avoid weakened monsters, and gather resources from passive creatures.",
+    "in_original_selected8": true
+  },
+  {
+    "rank": 9,
+    "task_id": "d052_r3_0029",
+    "progression": 8.75,
+    "critic_penalty": 0.85,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.65322,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Achievement A: Craft a pickaxe. Achievement B: Collect stone. Use the reduced mob environment to gather resources safely.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 10,
+    "task_id": "d052_r3_0001",
+    "progression": 8.45,
+    "critic_penalty": 0.92,
+    "novelty": 0.75,
+    "soft_copeland_score": 0.59006,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Craft a pickaxe by gathering basic resources with minimal threats.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 11,
+    "task_id": "d052_r3_0003",
+    "progression": 4.25,
+    "critic_penalty": 0.9,
+    "novelty": 7.5,
+    "soft_copeland_score": 0.58357,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Navigate the dark cave, avoiding threats and gathering resources.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 12,
+    "task_id": "d052_r3_0025",
+    "progression": 4.85,
+    "critic_penalty": 0.85,
+    "novelty": 0.65,
+    "soft_copeland_score": 0.57637,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "place_table"
+    ],
+    "description": "Place a crafting table to establish a building foundation. Collect wood, craft planks, and place the table.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 13,
+    "task_id": "d052_r3_0017",
+    "progression": 4.25,
+    "critic_penalty": 0.85,
+    "novelty": 0.85,
+    "soft_copeland_score": 0.55572,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "cave_explore",
+      "find_exit"
+    ],
+    "description": "Navigate through a cave, find the exit while avoiding or defeating weak enemies. Focus on exploration and movement.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 14,
+    "task_id": "d052_r3_0002",
+    "progression": 0.85,
+    "critic_penalty": 0.85,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.53674,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Defeat zombies with easier combat parameters. Reduced zombie spawn rate, health, and damage to assist learning.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 15,
+    "task_id": "d052_r3_0020",
+    "progression": 4.25,
+    "critic_penalty": 0.85,
+    "novelty": 0.75,
+    "soft_copeland_score": 0.50024,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "craft_sword",
+      "enchant_weapon"
+    ],
+    "description": "Enchant a weapon using an enchanting table. Gather resources, craft a sword, and enchant it with magic.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 16,
+    "task_id": "d052_r3_0018",
+    "progression": 4.67,
+    "critic_penalty": 0.85,
+    "novelty": 0.65,
+    "soft_copeland_score": 0.47839,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood",
+      "place_table"
+    ],
+    "description": "Collect wood and place a table to complete the basic building task.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 17,
+    "task_id": "d052_r3_0004",
+    "progression": 4.85,
+    "critic_penalty": 0.95,
+    "novelty": 0.75,
+    "soft_copeland_score": 0.46758,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "place_table",
+      "survive"
+    ],
+    "description": "Place a table to furnish your shelter. Survive the night and complete the building task.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 18,
+    "task_id": "d052_r3_0015",
+    "progression": 4.85,
+    "critic_penalty": 0.95,
+    "novelty": 0.75,
+    "soft_copeland_score": 0.46758,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Craft a wooden pickaxe to unlock basic tool progression.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 19,
+    "task_id": "d052_r3_0021",
+    "progression": 0.85,
+    "critic_penalty": 0.85,
+    "novelty": 3.5,
+    "soft_copeland_score": 0.46542,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood",
+      "place_table"
+    ],
+    "description": "Collect wood and craft a table.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 20,
+    "task_id": "d052_r3_0011",
+    "progression": 4.85,
+    "critic_penalty": 0.85,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.46542,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "craft_table",
+      "place_table"
+    ],
+    "description": "Build a crafting table and place it in the world.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 21,
+    "task_id": "d052_r3_0028",
+    "progression": 4.85,
+    "critic_penalty": 0.99,
+    "novelty": 5.5,
+    "soft_copeland_score": 0.45653,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood"
+    ],
+    "description": "Collect wood. Enemy spawns and stats significantly reduced to provide a low-pressure learning environment.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 22,
+    "task_id": "d052_r3_0023",
+    "progression": 4.25,
+    "critic_penalty": 0.85,
+    "novelty": 0.65,
+    "soft_copeland_score": 0.41306,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie",
+      "zombie_slayer"
+    ],
+    "description": "Combat training: defeat zombies. Use your sword and movement to eliminate zombie threats in a low-pressure setting.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 23,
+    "task_id": "d052_r3_0019",
+    "progression": 4.25,
+    "critic_penalty": 0.99,
+    "novelty": 7.5,
+    "soft_copeland_score": 0.4121,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Survive in the wilderness by managing your hunger. Hunt passive animals for food while avoiding hostile mobs. Keep your hunger bar filled to stay alive.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 24,
+    "task_id": "d052_r3_0013",
+    "progression": 4.67,
+    "critic_penalty": 0.95,
+    "novelty": 0.75,
+    "soft_copeland_score": 0.3696,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Learn to enchant weapons to fight enemies. Use magic to upgrade your weapon and defeat monsters.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 25,
+    "task_id": "d052_r3_0006",
+    "progression": 4.12,
+    "critic_penalty": 0.99,
+    "novelty": 7.5,
+    "soft_copeland_score": 0.35495,
+    "difficulty_tier": "medium",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Enchant a weapon to gain magical abilities and use it to defeat mobs.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 26,
+    "task_id": "d052_r3_0014",
+    "progression": 8.75,
+    "critic_penalty": 0.99,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.3511,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood"
+    ],
+    "description": "Collect wood in a safe environment with weak mobs.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 27,
+    "task_id": "d052_r3_0007",
+    "progression": 8.65,
+    "critic_penalty": 0.99,
+    "novelty": 0.5,
+    "soft_copeland_score": 0.34918,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood"
+    ],
+    "description": "Collect wood in a safe, low-threat environment with few distractions.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 28,
+    "task_id": "d052_r3_0009",
+    "progression": 4.67,
+    "critic_penalty": 0.98,
+    "novelty": 0.65,
+    "soft_copeland_score": 0.23343,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie",
+      "survive_10_steps"
+    ],
+    "description": "Defeat the zombies that appear and survive as long as possible.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 29,
+    "task_id": "d052_r3_0031",
+    "progression": 8.65,
+    "critic_penalty": 0.995,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.22863,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "description": "Explore the cave to achieve targets A and B. Use navigation skills to uncover hidden chambers while managing limited resources and hostile mobs.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 30,
+    "task_id": "d052_r3_0030",
+    "progression": 0.85,
+    "critic_penalty": 0.85,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.19597,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie"
+    ],
+    "description": "Defeat zombies",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 31,
+    "task_id": "d052_r3_0000",
+    "progression": 4.12,
+    "critic_penalty": 0.99,
+    "novelty": 0.65,
+    "soft_copeland_score": 0.05379,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood",
+      "craft_planks"
+    ],
+    "description": "Collect wood and craft planks in a safe environment.",
+    "in_original_selected8": false
+  },
+  {
+    "rank": 32,
+    "task_id": "d052_r3_0010",
+    "progression": 0.85,
+    "critic_penalty": 0.95,
+    "novelty": 0.0,
+    "soft_copeland_score": 0.0,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "enter_cave",
+      "explore_cave_depth1"
+    ],
+    "description": "Explore the cave safely, navigating through tunnels and avoiding hazards. Achieve the required exploration goals.",
+    "in_original_selected8": false
+  }
+]

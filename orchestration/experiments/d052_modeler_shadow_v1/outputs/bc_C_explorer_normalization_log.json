@@ -1,0 +1,72 @@
+{
+  "arm": "C",
+  "role": "explorer",
+  "n_entries": 32,
+  "n_role_echo_normalized": 9,
+  "normalizations": [
+    {
+      "anon_id": "C005",
+      "task_id": "d052_r3_0004",
+      "original_role_echo": "builder",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C006",
+      "task_id": "d052_r3_0005",
+      "original_role_echo": "survivor",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C012",
+      "task_id": "d052_r3_0011",
+      "original_role_echo": "builder",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C013",
+      "task_id": "d052_r3_0012",
+      "original_role_echo": "survivor",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C019",
+      "task_id": "d052_r3_0018",
+      "original_role_echo": "builder",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C020",
+      "task_id": "d052_r3_0019",
+      "original_role_echo": "survivor",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C022",
+      "task_id": "d052_r3_0021",
+      "original_role_echo": "builder",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C026",
+      "task_id": "d052_r3_0025",
+      "original_role_echo": "builder",
+      "normalized_to": "explorer"
+    },
+    {
+      "anon_id": "C027",
+      "task_id": "d052_r3_0026",
+      "original_role_echo": "survivor",
+      "normalized_to": "explorer"
+    }
+  ],
+  "note": "Only the echoed `role` string was normalized to explorer; all scores/decisions/short_reason are the model's verbatim output. `role` is not consumed by Soft Copeland. 0 new LLM calls.",
+  "source_meta": {
+    "provider": "gl",
+    "model_rq": "glm-4-flash",
+    "attempts": 1,
+    "itok": 3319,
+    "otok": 1747,
+    "err": null,
+    "model_rt": "glm-4-flash"
+  }
+}

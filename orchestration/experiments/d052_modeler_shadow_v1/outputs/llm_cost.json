@@ -1,0 +1,38 @@
+{
+  "modeler": {
+    "provider": "ds",
+    "model_rq": "deepseek-v4-pro",
+    "model_rt": "deepseek-v4-pro",
+    "attempts": 2,
+    "itok": 4681,
+    "otok": 861,
+    "err": null
+  },
+  "tutor": {
+    "provider": "qw",
+    "model_rq": "qwen-flash-2025-07-28",
+    "model_rt": "qwen-flash-2025-07-28",
+    "attempts": 1,
+    "itok": 1043,
+    "otok": 1116,
+    "err": null
+  },
+  "critic": {
+    "provider": "ds",
+    "model_rq": "deepseek-v4-pro",
+    "model_rt": "deepseek-v4-pro",
+    "attempts": 2,
+    "itok": 2185,
+    "otok": 805,
+    "err": null
+  },
+  "explorer": {
+    "provider": "gl",
+    "model_rq": "glm-4-flash",
+    "model_rt": "glm-4-flash",
+    "attempts": 1,
+    "itok": 1047,
+    "otok": 664,
+    "err": null
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "template_status": "BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS",
+  "note": "TEMPLATE ONLY. This is NOT a valid canonical CellSpec and is NOT registered in any CellRegistry. It cannot become DRAFT until every blocker below is resolved with NEW real data. intended_total_timesteps=0: this phase executes nothing.",
+  "cell_id": "CELL_PHASE25_REAL_CANONICAL_C",
+  "arm": "C_WITH_MODELER",
+  "protocol_version": "canonical_v2",
+  "evidence_tier": "C_REAL_CANONICAL_POOL (NOT_RUN)",
+  "hypothesis": "Matched arm C (modeler ON): identical to arm B except the frozen deterministic StudentProfile channel + ModelerJudgment bonus enter selection; the B<->C selected-8 delta is the canonical modeler selection effect (engineering + scientific question, UNTESTED until real).",
+  "fields_PENDING_real_values": {
+    "pool_id": "PENDING: SAME real canonical pool as arm B (matched invariant)",
+    "pool_hash": "PENDING: 64-char sha256 (identical to arm B)",
+    "selector": {
+      "selector": "S2_FOUR_ROLE_MODELER",
+      "critic_policy": "PENDING director decision (must match arm B)",
+      "k": 8,
+      "seed": "PENDING: int (must match arm B)",
+      "roles": ["tutor", "critic", "explorer"]
+    },
+    "candidate_ids": "PENDING: real canonical selected-8 (arm C)",
+    "selection_hash": "PENDING: 64-char canonical compute_selection_hash(...)",
+    "judgments": "PENDING: SAME real judgment cache as arm B (matched invariant); modeler context from real StudentProfile + real ModelerJudgment",
+    "student_profile_channel": "PENDING: canonical StudentProfile hash + ModelerContext hash (machine-facts firewall enforced)",
+    "intended_total_timesteps": 0,
+    "output_dir": "gpu1_aggregation_siege/phase25_real_canonical_cells/cell_C",
+    "created_by": "PENDING: authorized canonical harness"
+  },
+  "matched_invariants_vs_arm_B": [
+    "identical pool (pool_id, pool_hash)",
+    "identical judgment cache (same 96 judgments; only the conditioning block differs)",
+    "identical k, seed, critic_policy",
+    "only allowed variation: modeler ON (profile channel + bonus) vs OFF"
+  ],
+  "blockers": [
+    "no real canonical pool exists (legacy pool targets are salted-hash placeholders -> INVALID)",
+    "no real canonical judgments exist (LLM calls forbidden this round)",
+    "no real ModelerJudgment in canonical schema for the student state (legacy frozen interpretation lacks required student_state/recommendation -> preserved verbatim as Tier-A audit only)",
+    "critic_reject derivation rule undecided; ROLE_REGISTRY model pins undecided"
+  ],
+  "what_would_unblock": "Same as arm B, plus a real canonical ModelerJudgment (schema-valid: student_state, recommendation, evidence_check) produced under the machine-facts firewall."
+}

@@ -1,0 +1,117 @@
+{
+  "n_candidates": 32,
+  "pool_hash": "1902b71a5d86fa00",
+  "determinism_self_check": "PASS (OLD & NEW each identical across 2 recomputes)",
+  "old_recompute_matches_original_round4_selected8": true,
+  "old_selected8": [
+    "d052_r3_0005",
+    "d052_r3_0008",
+    "d052_r3_0012",
+    "d052_r3_0016",
+    "d052_r3_0022",
+    "d052_r3_0024",
+    "d052_r3_0026",
+    "d052_r3_0027"
+  ],
+  "new_selected8": [
+    "d052_r3_0000",
+    "d052_r3_0001",
+    "d052_r3_0007",
+    "d052_r3_0011",
+    "d052_r3_0014",
+    "d052_r3_0022",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "old_selection_hash": "6a285e8fe13731d5",
+  "new_selection_hash": "24cd8eda3f08fab1",
+  "selection_hash_changed": true,
+  "selected8_overlap": 1,
+  "selected8_jaccard": 0.0667,
+  "entered_new_sel8": [
+    "d052_r3_0000",
+    "d052_r3_0001",
+    "d052_r3_0007",
+    "d052_r3_0011",
+    "d052_r3_0014",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "exited_old_sel8": [
+    "d052_r3_0005",
+    "d052_r3_0008",
+    "d052_r3_0012",
+    "d052_r3_0016",
+    "d052_r3_0024",
+    "d052_r3_0026",
+    "d052_r3_0027"
+  ],
+  "spearman_full32_old_vs_new": -0.21,
+  "mean_abs_delta": {
+    "progression": 2.5825,
+    "critic_penalty": 0.2448,
+    "novelty": 4.4656
+  },
+  "decision_flips_of_96": 36,
+  "role_ablation": {
+    "revert_tutor": {
+      "selected8": [
+        "d052_r3_0001",
+        "d052_r3_0007",
+        "d052_r3_0011",
+        "d052_r3_0014",
+        "d052_r3_0018",
+        "d052_r3_0022",
+        "d052_r3_0025",
+        "d052_r3_0028"
+      ],
+      "overlap_with_OLD": 1,
+      "overlap_with_NEW_all": 7,
+      "selection_hash": "798a0baeefb3098a"
+    },
+    "revert_critic": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0008",
+        "d052_r3_0011",
+        "d052_r3_0021",
+        "d052_r3_0022",
+        "d052_r3_0024",
+        "d052_r3_0025",
+        "d052_r3_0029"
+      ],
+      "overlap_with_OLD": 3,
+      "overlap_with_NEW_all": 4,
+      "selection_hash": "dce94a3d2943c1c6"
+    },
+    "revert_explorer": {
+      "selected8": [
+        "d052_r3_0001",
+        "d052_r3_0003",
+        "d052_r3_0007",
+        "d052_r3_0014",
+        "d052_r3_0021",
+        "d052_r3_0022",
+        "d052_r3_0025",
+        "d052_r3_0028"
+      ],
+      "overlap_with_OLD": 1,
+      "overlap_with_NEW_all": 6,
+      "selection_hash": "abc570fa1a207b6c"
+    }
+  },
+  "student_weak_skills_sr_lt_0.2": [
+    "MAKE_WOOD_PICKAXE",
+    "PLACE_TABLE",
+    "COLLECT_DRINK"
+  ],
+  "entered_gap_mapping": {
+    "d052_r3_0000": "UNDEFINED (salted-hash placeholders: collect_wood,craft_planks)",
+    "d052_r3_0001": "UNDEFINED (salted-hash placeholders: A,B)",
+    "d052_r3_0007": "UNDEFINED (salted-hash placeholders: collect_wood)",
+    "d052_r3_0011": "UNDEFINED (salted-hash placeholders: craft_table,place_table)",
+    "d052_r3_0014": "UNDEFINED (salted-hash placeholders: collect_wood)",
+    "d052_r3_0025": "UNDEFINED (salted-hash placeholders: place_table)",
+    "d052_r3_0028": "UNDEFINED (salted-hash placeholders: collect_wood)"
+  }
+}

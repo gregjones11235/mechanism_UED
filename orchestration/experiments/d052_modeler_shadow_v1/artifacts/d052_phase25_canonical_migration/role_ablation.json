@@ -1,0 +1,107 @@
+{
+  "selected_set_change": "4/8",
+  "jaccard": 0.3333,
+  "overlap": 4,
+  "entered_C_only": [
+    "d052_r3_0003",
+    "d052_r3_0010",
+    "d052_r3_0017",
+    "d052_r3_0024"
+  ],
+  "exited_B_only": [
+    "d052_r3_0006",
+    "d052_r3_0007",
+    "d052_r3_0011",
+    "d052_r3_0022"
+  ],
+  "shared": [
+    "d052_r3_0000",
+    "d052_r3_0014",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "full_rank_spearman_B_vs_C": 0.4373,
+  "per_role_B_vs_C": {
+    "tutor": {
+      "signal": "progression",
+      "spearman_rank": 0.1452,
+      "pearson_score": 0.0988,
+      "mean_abs_delta": 5.3281,
+      "mean_B": 6.8438,
+      "mean_C": 1.5156
+    },
+    "critic": {
+      "signal": "critic_penalty",
+      "spearman_rank": 0.8182,
+      "pearson_score": 0.6967,
+      "mean_abs_delta": 0.1828,
+      "mean_B": 0.6031,
+      "mean_C": 0.6953
+    },
+    "explorer": {
+      "signal": "novelty",
+      "spearman_rank": 0.5803,
+      "pearson_score": 0.1972,
+      "mean_abs_delta": 0.3125,
+      "mean_B": 7.0938,
+      "mean_C": 6.7812
+    }
+  },
+  "decision_flips_of_96": 34,
+  "decision_flips_by_role": {
+    "tutor": 24,
+    "critic": 10,
+    "explorer": 0
+  },
+  "leave_one_role_out": {
+    "C_revert_tutor_to_B": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0010",
+        "d052_r3_0011",
+        "d052_r3_0015",
+        "d052_r3_0017",
+        "d052_r3_0022",
+        "d052_r3_0024",
+        "d052_r3_0025"
+      ],
+      "overlap_with_B": 4,
+      "overlap_with_C": 5,
+      "selection_hash": "b33b05cb31eef479",
+      "interpretation": "reverting tutor to B moves selection toward B by 4 (overlap_with_B)"
+    },
+    "C_revert_critic_to_B": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0003",
+        "d052_r3_0005",
+        "d052_r3_0014",
+        "d052_r3_0025",
+        "d052_r3_0026",
+        "d052_r3_0028",
+        "d052_r3_0031"
+      ],
+      "overlap_with_B": 4,
+      "overlap_with_C": 5,
+      "selection_hash": "e0ae507e20b07f2f",
+      "interpretation": "reverting critic to B moves selection toward B by 4 (overlap_with_B)"
+    },
+    "C_revert_explorer_to_B": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0005",
+        "d052_r3_0007",
+        "d052_r3_0009",
+        "d052_r3_0014",
+        "d052_r3_0019",
+        "d052_r3_0028",
+        "d052_r3_0030"
+      ],
+      "overlap_with_B": 4,
+      "overlap_with_C": 3,
+      "selection_hash": "ffe9a39b2cf46280",
+      "interpretation": "reverting explorer to B moves selection toward B by 4 (overlap_with_B)"
+    }
+  },
+  "interpretation": "Tutor is the largest JUDGMENT mover (progression mean 6.84->1.52, mean|d|=5.33, 24/34 flips). Final selection change is diffuse: reverting ANY single role to B raises overlap_with_B to 4; no single dominant driver (unlike Phase 2 OLD/NEW where critic dominated, due to drift in the OLD arm)."
+}

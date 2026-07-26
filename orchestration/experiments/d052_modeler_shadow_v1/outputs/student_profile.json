@@ -1,0 +1,137 @@
+{
+  "schema_version": "d052_modeler_v1",
+  "round_id": "round_4",
+  "checkpoint_id": "soft_copeland_x_original/seed0_1784462982/checkpoints/98304",
+  "data_window": {
+    "rounds_with_per_episode_eval": [
+      4
+    ],
+    "n_episodes": 64,
+    "tasks_evaluated": "round_4_selected8 (8 tasks)"
+  },
+  "skills": [
+    {
+      "achievement_id": "COLLECT_WOOD",
+      "current_sr": 0.3594,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "NORMAL_EARLY",
+      "confidence": 0.9,
+      "evidence_ids": [
+        "per_achievement_completion[0].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    },
+    {
+      "achievement_id": "PLACE_TABLE",
+      "current_sr": 0.0625,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "NORMAL_EARLY",
+      "confidence": 0.9,
+      "evidence_ids": [
+        "per_achievement_completion[1].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    },
+    {
+      "achievement_id": "COLLECT_SAPLING",
+      "current_sr": 0.3125,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "NORMAL_EARLY",
+      "confidence": 0.9,
+      "evidence_ids": [
+        "per_achievement_completion[2].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    },
+    {
+      "achievement_id": "COLLECT_DRINK",
+      "current_sr": 0.1094,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "NORMAL_EARLY",
+      "confidence": 0.9,
+      "evidence_ids": [
+        "per_achievement_completion[3].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    },
+    {
+      "achievement_id": "MAKE_WOOD_PICKAXE",
+      "current_sr": 0.0156,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "NORMAL_EARLY",
+      "confidence": 0.9,
+      "evidence_ids": [
+        "per_achievement_completion[4].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    },
+    {
+      "achievement_id": "PLACE_PLANT",
+      "current_sr": 0.2031,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "NORMAL_EARLY",
+      "confidence": 0.9,
+      "evidence_ids": [
+        "per_achievement_completion[5].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    },
+    {
+      "achievement_id": "WAKE_UP",
+      "current_sr": 0.9844,
+      "best_sr": null,
+      "recent_delta": null,
+      "status": "MASTERED",
+      "confidence": 0.95,
+      "evidence_ids": [
+        "per_achievement_completion[6].completion_rate"
+      ],
+      "missing_evidence": [
+        "best_sr",
+        "recent_delta"
+      ]
+    }
+  ],
+  "chain_frontier": "WAKE_UP",
+  "dominant_breakpoints": [
+    "PLACE_TABLE",
+    "COLLECT_DRINK",
+    "MAKE_WOOD_PICKAXE",
+    "PLACE_PLANT"
+  ],
+  "curriculum_priorities": [
+    "Reduce death rate",
+    "Improve wood collection and tool crafting",
+    "Unlock deeper achievements past WAKE_UP"
+  ],
+  "uncertainties": [
+    "Missing longitudinal data (best_sr, recent_delta)",
+    "Target success rates undefined",
+    "Only 8 tasks evaluated out of 32 candidates",
+    "High death rate may limit learning"
+  ]
+}

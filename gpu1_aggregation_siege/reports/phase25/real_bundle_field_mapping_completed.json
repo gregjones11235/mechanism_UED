@@ -1,0 +1,248 @@
+{
+  "A_candidate_pool": {
+    "n_candidates": 32,
+    "legacy_pool_hash_field": {
+      "value": "1902b71a5d86fa00",
+      "chars": 16,
+      "canonical_pool_hash_chars_required": 64,
+      "note": "legacy hash == replay anchor 1902b71a5d86fa00 (16 chars); canonical CandidatePool.pool_hash = sha256(ordered candidate chashes), 64 chars"
+    },
+    "legacy_chash_bridge": {
+      "chash_formula": "sha256(f'{task_id}:{sorted(names)}')[:16]",
+      "candidates_where_legacy_chash_reproduced": 0,
+      "canonical_field": "Candidate.legacy_short_id (bridge only, not identity)",
+      "note": "0/32: legacy chash does NOT match compute_legacy_short_id either -> legacy chash/snapshot_hash are opaque salted values (consistent with salted_hash_audit); retained as audit-only values, NO bridge identity claim made"
+    },
+    "distinct_target_names": 21,
+    "target_names_resolving_via_canonical_registry": [
+      "collect_wood",
+      "defeat_zombie",
+      "place_table"
+    ],
+    "target_names_UNKNOWN_to_canonical_registry": [
+      "A",
+      "B",
+      "cave_explore",
+      "cave_navigator",
+      "craft_planks",
+      "craft_sword",
+      "craft_table",
+      "craft_wooden_pickaxe",
+      "eat_food",
+      "enchant_weapon",
+      "enter_cave",
+      "explore_cave_depth1",
+      "find_exit",
+      "passive_collector",
+      "survive",
+      "survive_10_steps",
+      "survive_3_days",
+      "zombie_slayer"
+    ],
+    "canonical_instantiation_attempts": {
+      "BLOCKED:INVALID_HASH": 32,
+      "ALSO:UNKNOWN_TARGET_NAMES": 25
+    },
+    "blocking_codes": {
+      "INVALID_HASH": 32
+    },
+    "verdict": "NO candidate instantiates as a canonical Candidate: (1) INVALID_HASH for all 32 (16-char legacy chash vs required 64-char content hash); (2) 25/32 candidates additionally carry UNKNOWN_ACHIEVEMENT target names (18/21 distinct names unresolvable; only collect_wood/defeat_zombie/place_table resolve); (3) task_params lacks REQUIRED melee_spawn_multiplier for all 32. Consistent with the bundle salted_hash_audit: legacy targets semantically INVALID for the training path."
+  },
+  "B_role_judgment": {
+    "records_total": 192,
+    "headline_score_keys_present_per_role": {
+      "tutor": "progression_score (aux: learnability_score)",
+      "critic": "critic_penalty (aux: none; flags too_hard/already_mastered)",
+      "explorer": "novelty_score (aux: diversity_score)"
+    },
+    "conversion_rule": {
+      "role": "identity (ScoringRole)",
+      "task_id(real, e.g. d052_r3_0007)": "candidate_id (identity; anon_id C001..C032 kept in audit envelope)",
+      "raw_scores": "scores (identity; all numeric, finite)",
+      "short_reason": "rationale (identity; never parsed for scoring)",
+      "provider": "provider (identity)",
+      "model_returned": "exact_model_id (identity; model_requested kept in envelope)",
+      "prompt_version": "from prompt_registry.prompt_version=d052_phase25_v1",
+      "critic_reject": "DERIVED: decision=='reject' (legacy schema has no critic_reject bit). Empirically 40/64 critic judgments are reject (38 with too_hard=True, 2 with too_hard=False); the alternative rule critic_reject=flags.too_hard would give 38/64. Rule is lossless=False, applied ONLY in the read-only adapter envelope, and flagged for director review; it is NOT used by the historical replay (which consumes raw critic_penalty exactly as the legacy selector did).",
+      "no_canonical_field_kept_in_audit_envelope": [
+        "decision(tutor/explorer)",
+        "flags",
+        "anon_id",
+        "arm",
+        "attempts",
+        "parse_status",
+        "source_file",
+        "model_requested",
+        "judgment_hash_sha256 (tamper-evidence over ORIGINAL raw judgment; canonical RoleJudgment forbids extra fields so it cannot live inside)"
+      ]
+    },
+    "canonical_instantiation_with_derivation": {
+      "ok_per_role": {
+        "critic": 64,
+        "explorer": 64,
+        "tutor": 64
+      },
+      "blocked": {}
+    },
+    "critic_decision_flags_distribution_B+C": {
+      "('accept', False, False)": 19,
+      "('hold', False, False)": 5,
+      "('reject', False, False)": 2,
+      "('reject', True, False)": 38
+    },
+    "role_echo_records_where_raw_label_neq_normalized": 18,
+    "role_echo_disposition": "raw_role_label/canonical_role_label/normalization_reason/normalization_log_hash recorded by the read-only adapter (spec section 6); decorative, never consumed by selector",
+    "verdict": "192/192 judgments map to canonical RoleJudgment IFF the critic_reject derivation rule is accepted; headline scores are lossless identity maps."
+  },
+  "C_normalized_scores": {
+    "legacy_mechanism": "robust median/IQR normalize (clip 3.0, epsilon 1e-8) + weighted soft Copeland (0.34/0.33/0.33/0.01/0.01) + temperature 1.0",
+    "canonical_mechanism": "NormalizedRoleScores pins normalization='rank_percentile_v1' (per-role rank percentile in [0,1], deterministic tie groups)",
+    "validation_result": "MECHANISM_MISMATCH: legacy Phase-2.5 normalized signals CANNOT be expressed as canonical NormalizedRoleScores; this is by design the boundary between evidence Tier A (legacy mechanism) and Tier C (future canonical-pool experiment). No coercion."
+  },
+  "D_selector_config": {
+    "legacy_fields": {
+      "rng_seed": null,
+      "selection_hash_fn": "sha256(json.dumps(sorted(selected_ids)))[:16]",
+      "pool_hash_fn": "sha256(json.dumps(sorted([{id,tp,achs(sorted),prov}], key=id), sort_keys=True))[:16]",
+      "selector_source_sha256": "27492e8a513a94df81a43a341926a6dc5b3e5869b2be13a96c8528e7d19e2888"
+    },
+    "canonical_mapping": {
+      "selector": "SelectorType.SOFT_COPELAND (enum exists)",
+      "critic consumption (weights w_critic/w_monopoly 0.01/0.01 in score)": "CriticPolicy.SOFT_PENALTY (closest canonical policy)",
+      "k=8": "k=8 (identity)",
+      "rng_seed=null": "BLOCKED_REQUIRED_FIELD: canonical seed: int is REQUIRED; legacy selector is seedless-deterministic; no honest default exists",
+      "roles": "[tutor, critic, explorer] (identity)",
+      "weights/temperature/clip/epsilon": "NO canonical field (canonical selectors use rank_percentile_v1 + copeland; the legacy weight vector is mechanism-specific) -> audit envelope",
+      "selection_hash_fn / pool_hash_fn": "incompatible hash regimes (16-char legacy vs 64-char canonical over different payloads)",
+      "selector_source_sha256": "provenance envelope (27492e8a... verified; AST-identical relevant functions to worktree 590fcef4...)"
+    },
+    "canonical_instantiation_with_seed0_convention": true,
+    "verdict": "canonical SelectorConfig structurally represents the LEGACY selector only with two documented conventions (seed int; weights dropped to envelope). The legacy selection evidence itself is MECHANISM_ONLY."
+  },
+  "E_selection_result": {
+    "legacy_anchors": {
+      "B_selection_hash": "82571538e5299ea9",
+      "C_selection_hash": "868a57268d66b90b",
+      "chars": 16
+    },
+    "canonical_SelectionResult_hash_chars_required": 64,
+    "canonical_hash_payload": "(selector, critic_policy, k, seed, sorted selected_ids)",
+    "validation_result": "HASH_REGIME_INCOMPATIBLE: legacy 16-char selection hashes are HISTORICAL ANCHORS (Tier A) and MUST NOT be rewritten into canonical 64-char hashes; a canonical SelectionResult can only be produced by a canonical selector run (Tier C, NOT_RUN)."
+  },
+  "F_execution_mapping": {
+    "certificate_requirements": "ExecutionMappingCertificate: target_is_canonical, goal_vector_dim_67, goal_vector_index_aligned, student_obs_dim_8335, no_silent_fallback, task_compiled; executed_as_intended=True requires ALL gates",
+    "candidates_with_all_target_names_canonical": 7,
+    "candidates_with_unknown_targets": 25,
+    "salted_hash_finding": "even where names resolve, the legacy launcher mapped names to achievement slots via salted hash() modulo (bundle salted_hash_audit.json) -> no_silent_fallback gate FAILS -> executed_as_intended=False for the whole pool",
+    "validation_result": "BLOCKED: no legacy candidate can hold an executed_as_intended=True certificate; training path INVALID (matches bundle)."
+  },
+  "G_cellspec": {
+    "legacy_cell": "soft_copeland_x_original / seed0_1784462982 / round_4",
+    "canonical_requirements_unmet": [
+      "pool_hash must be 64-char sha256 (legacy 16)",
+      "selection_hash must be 64-char (legacy 16)",
+      "selector.seed: int required (legacy null)",
+      "protocol_version pinned canonical_v2 (legacy)"
+    ],
+    "validation_result": "BLOCKED: legacy cell is Tier-A evidence, NOT expressible as a canonical CellSpec. New CELL_PHASE25_REAL_CANONICAL_B/C templates -> BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS (spec section 9)."
+  },
+  "H_prompt_registry": {
+    "legacy_contract": {
+      "prompt_version": "d052_phase25_v1",
+      "per_prompt_hash": "sha256(full_text), 6 verified 2026-07-26",
+      "block_hashes": "raw_summary/profile_json/candidate_block (verified)",
+      "models_used": {
+        "tutor": "qw/qwen-flash-2025-07-28",
+        "critic": "ds/deepseek-v4-pro",
+        "explorer": "glm-4-flash"
+      }
+    },
+    "canonical_contract": {
+      "PromptSpec/PromptSet (d052.counterfactual.prompts)": "per-role pins provider/exact_model_id/role_prompt_version/output_schema + conditioning_block(arm, modeler_enabled)",
+      "ROLE_PROMPT_VERSION": "canonical_v2.roles.v1",
+      "ROLE_OUTPUT_SCHEMA": "role_judgment_v2"
+    },
+    "ROLE_REGISTRY_pins": {
+      "tutor": {
+        "provider": "dashscope",
+        "exact_model_id": "qwen-turbo"
+      },
+      "critic": {
+        "provider": "deepseek",
+        "exact_model_id": "deepseek-chat"
+      },
+      "explorer": {
+        "provider": "zhipu",
+        "exact_model_id": "glm-4.5-air"
+      },
+      "modeler": {
+        "provider": "zhipu",
+        "exact_model_id": "glm-4.5"
+      }
+    },
+    "model_pin_reconciliation": "provider families agree (dashscope/deepseek/zhipu ~ qw/ds/glm) but exact_model_ids DIFFER (qwen-flash-2025-07-28 vs qwen-turbo; deepseek-v4-pro vs deepseek-chat; glm-4-flash vs glm-4.5-air). RoleJudgment OPTIONAL provenance fields preserve the REAL ids losslessly; ROLE_REGISTRY pin divergence affects ONLY future LLM calls (none this round) -> flagged for director decision before any Tier-C canonical run.",
+    "hash_regime_note": "legacy hashes are over rendered full_text; canonical prompt_set_hash is over role pins + conditioning block. Both kept; neither rewritten."
+  },
+  "I_student_profile_modeler": {
+    "machine_facts_to_canonical_StudentProfile": {
+      "per_achievement_completion[].completion_rate": "per_achievement_sr (semantic note: completion_rate over 64 episodes used as SR proxy; evidence_source stays honest in provenance envelope)",
+      "episode_level/skill_chain/dominant_breakpoints/evidence_boundaries": "NO canonical field -> audit envelope (these feed prompt rendering, not the model)",
+      "validation_result": "PASS",
+      "constructed_profile_summary": {
+        "overall_mastery": 0.030551,
+        "mastered_count": 1,
+        "proficient_count": 1,
+        "measured_count": 7
+      }
+    },
+    "llm_interpretation_to_canonical_ModelerJudgment": {
+      "curriculum_priorities": "guidance (free text, lossy)",
+      "dominant_breakpoints (PLACE_TABLE/COLLECT_DRINK/MAKE_WOOD_PICKAXE/PLACE_PLANT)": "siege_foci (all 4 resolve via registry; sorted/deduped by schema)",
+      "skills[].status (per-achievement NORMAL_EARLY/MASTERED)": "NO session-level StudentState field equivalent -> student_state MISSING_REQUIRED (derivation forbidden)",
+      "recommendation": "MISSING_REQUIRED (no DEPTH/BREADTH/CONSOLIDATE in legacy)",
+      "evidence_check": "REQUIRES_ADAPTER_DERIVATION (machine_facts vs interpretation)",
+      "skills[].best_sr/recent_delta=null": "kept null (INSUFFICIENT_EVIDENCE; never fabricated)",
+      "validation_result": "BLOCKED_REQUIRED_FIELDS (student_state, recommendation): the frozen interpretation is preserved VERBATIM in the audit envelope and as the exact bytes appended to arm-C prompts; a strict canonical ModelerJudgment is NOT claimed for the legacy bundle."
+    },
+    "profile_hash_reproduced": "sha256(canon_json(llm_interpretation)) == 223defdf... (verified)"
+  },
+  "J_provenance_hashes": {
+    "canonical_hash_convention": "lowercase 64-char sha256 over canonical JSON (sort_keys, separators (',',':'), ensure_ascii=False); protocol_version pinned 'canonical_v2'; extra fields forbidden (NO_SILENT_SCHEMA_COERCION)",
+    "legacy_hashes_retained_as_audit": [
+      "chash(16)",
+      "snapshot_hash(16)",
+      "pool.hash(16)",
+      "selection_hash(16)",
+      "judgment_hash_sha256(64, over ORIGINAL raw judgment)",
+      "profile_hash_sha256(64)",
+      "calculator_source_sha256(64)",
+      "machine_facts.source_sha256(64)",
+      "selector_source_sha256(64)",
+      "wrapper_source_sha256(64)",
+      "prompt_hash_sha256 x6 (64)"
+    ],
+    "canonical_v2_fixed_config": {
+      "protocol_version": "canonical_v2",
+      "achievement_schema": "craftax_67_v1",
+      "num_achievements": 67,
+      "max_achievement_value": 66,
+      "conditioning_type": "achievement_multi_hot",
+      "conditioning_dimension": 67,
+      "student_obs_dim": 8335,
+      "base_obs_dim": 8268,
+      "candidate_pool_mode": "shared_frozen",
+      "unknown_target_policy": "error",
+      "empty_goal_policy": "error",
+      "fallback_policy": "error",
+      "score_normalization": "rank_percentile_v1"
+    }
+  },
+  "status": "COMPLETED: canonical side of the bundle's field_mapping.json is now filled from the real local canonical_v2 schemas, validated empirically against the real bundle payloads. No bundle original modified; no data fabricated.",
+  "constraint_compliance": {
+    "no_bundle_original_modified": true,
+    "no_llm": true,
+    "no_training": true,
+    "no_silent_coercion": true,
+    "no_synthetic_substitution": true
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "task": "D052_PHASE25_REAL_BUNDLE_RECONCILIATION — local search for the real Phase 2.5 migration bundle",
+  "STATUS_UPDATE_2026_07_26": "SUPERSEDED — the local search below was genuinely exhaustive and correctly returned NOT_FOUND_LOCALLY (the bundle was on the server, never synced). Subsequently, once the project-specific SSH key was restored, the REAL bundle was pulled from oseasy@172.25.14.221 and fully verified. See reports/phase25_real_bundle_acquisition.json (LOCAL_REAL_MIGRATION_BUNDLE_FOUND=true, REAL_MIGRATION_BUNDLE_INTEGRITY=PASS).",
+  "verdict_labels": {
+    "LOCAL_SEARCH_EXHAUSTED": true,
+    "REAL_MIGRATION_BUNDLE_NOT_FOUND_LOCALLY": true,
+    "REAL_MIGRATION_BUNDLE_FOUND": false,
+    "SUMMARY_ONLY": true,
+    "LOCAL_REAL_MIGRATION_BUNDLE_FOUND": false,
+    "REAL_MIGRATION_BUNDLE_INTEGRITY": "NOT_VERIFIABLE_NO_BUNDLE"
+  },
+  "target_bundle_dir": "orchestration/experiments/d052_modeler_shadow_v1/artifacts/d052_phase25_canonical_migration/",
+  "target_report": "orchestration/experiments/d052_modeler_shadow_v1/reports/d052_phase25_canonical_migration.md",
+  "search_scope": {
+    "git_worktrees": "ALL repos on machine (17 .git entries) — git worktree list --porcelain, branch --all, status",
+    "git_history": "git log --all (path + -S distinctive strings), rev-list --all --objects, reflog --all grep",
+    "git_object_db": "git fsck --full --no-reflogs --unreachable on every usable repo -> reports/phase25_unreachable_git_objects.txt",
+    "filesystem": "find over ALL of /d and /c/Users/Lenovo (only code-bearing roots; /c top-level has no code dirs) for 8 distinctive bundle names -> reports/phase25_local_fs_search.txt"
+  },
+  "files_actually_present": [
+    {
+      "path": "/d/Projects/dicode-codex-director/orchestration/control/d052v2/d052_phase25_canonical_migration.md",
+      "kind": "DELIVERY_REPORT_SUMMARY (lists the 13 expected SHA256s + anchors)",
+      "is_real_bundle_payload": false
+    },
+    {
+      "path": "/d/Projects/dicode-codex-director/orchestration/control/d052v2/salted_hash_audit.json",
+      "kind": "BUILDER_INPUT (one input to build_migration_bundle.py)",
+      "is_real_bundle_payload": false
+    },
+    {
+      "path": "/d/Projects/dicode-codex-director/orchestration/control/d052v2/build_migration_bundle.py",
+      "kind": "BUILDER_SCRIPT (deterministic packager, needs server inputs not on this machine)",
+      "is_real_bundle_payload": false
+    }
+  ],
+  "bundle_payloads_searched_but_ABSENT": [
+    "d052_phase25_canonical_migration/ (directory)",
+    "expected_behavior.json",
+    "judgments_B.jsonl",
+    "judgments_C.jsonl",
+    "role_ablation.json",
+    "regression_test_spec.md",
+    "prompt_registry.json",
+    "protocol.json",
+    "ranking_B.json / ranking_C.json",
+    "selector_config.json",
+    "student_profile.json",
+    "field_mapping.json",
+    "SHA256SUMS (bundle's)"
+  ],
+  "git_object_db_only_finding": {
+    "unreachable_commit": "fa14168ccf0f8f5a44c131a5f78bf8e98eb3030a",
+    "content": "scripts/run_data_plane_preflight_v3.py (Preflight v3, fail-closed) — UNRELATED to the bundle",
+    "present_in": ["source-mirror", "dicode-aggregation-review", "dicode-dspro-review (shared object store)"]
+  },
+  "integrity_check_status": "Cannot run sha256sum -c: no bundle directory, no bundle SHA256SUMS, no payload files exist locally. The 13 expected SHA256s exist ONLY as text inside the delivery report — they are not verifiable against any local bytes.",
+  "summary_faithfulness_cross_check": {
+    "method": "extracted the 13 '<sha256>  <file>' lines from local control/d052v2/d052_phase25_canonical_migration.md and diffed against the 13 SHA256s CC Modeler pasted in its delivery message",
+    "result": "IDENTICAL — all 13 SHA256s match exactly (empty diff). Anchors and 'known-gaps' section also match.",
+    "conclusion": "The local delivery report is a faithful, untampered record of what Modeler CC delivered. SUMMARY_ONLY=true is therefore trustworthy: the bytes were genuinely produced, but only on the server."
+  },
+  "where_the_bytes_actually_are": {
+    "evidence_from_modeler_cc": "Modeler CC's own message states canonical_v2 new Schema was 'invisible on THIS SERVER (find+grep over mechanism_UED_continuation_20260715 = no hits)' and the branch henry/d052-modeler-shadow-v1 was 'not pushed'.",
+    "conclusion": "The 14-file bundle exists on the server oseasy@172.25.14.221 (Modeler CC ran there) and was NEVER synced to this local machine. This fully corroborates and explains the exhausted local search.",
+    "modeler_cc_branch": "henry/d052-modeler-shadow-v1 (NOT present in any local repo or remote ref — consistent with never pushed)"
+  },
+  "canonical_owner_actionable_item": "Modeler CC known-gap #1 is explicitly handed to the canonical_v2 owner (CC3): the bundle's field_mapping.json marks all canonical-side new-schema fields UNAVAILABLE because canonical_v2 was invisible on the server. The canonical_v2 schemas (Candidate/TaskParams, RoleJudgment/NormalizedRoleScores, SelectorConfig/SelectionResult, StudentProfile, ExecutionMappingCertificate, canonical achievement enum + name->id table) ARE available in this local worktree. These can be catalogued now to fill the UNAVAILABLE columns once the bundle's field_mapping.json is in hand.",
+  "constraint_compliance": {
+    "did_not_regenerate_from_summary": true,
+    "did_not_substitute_synthetic_fixture": true,
+    "did_not_modify_bundle_originals": "N/A (none present)",
+    "no_whole_branch_merge": true,
+    "no_training_started": true,
+    "no_new_llm_calls": true,
+    "no_push": true
+  },
+  "next_action_required": "Real bundle must be obtained from the Modeler CC session's actual output location (server oseasy@172.25.14.221 or a still-open Modeler CC session) before any replay / field-mapping / integration can proceed. Cannot be fabricated locally."
+}

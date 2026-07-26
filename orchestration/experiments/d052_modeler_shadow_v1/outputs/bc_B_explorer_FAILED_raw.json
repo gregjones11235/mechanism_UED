@@ -1,0 +1,335 @@
+{
+  "arm": "B",
+  "role": "explorer",
+  "raw": [
+    {
+      "task_id": "C001",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.5,
+        "diversity_score": 7.5
+      },
+      "decision": "accept",
+      "short_reason": "wood collection, basic crafting"
+    },
+    {
+      "task_id": "C002",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "basic resource gathering, tool crafting"
+    },
+    {
+      "task_id": "C003",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "zombie combat, easier parameters"
+    },
+    {
+      "task_id": "C004",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "cave navigation, resource gathering"
+    },
+    {
+      "task_id": "C005",
+      "role": "builder",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "shelter building, table placement"
+    },
+    {
+      "task_id": "C006",
+      "role": "survivor",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "hunger management, passive mobs"
+    },
+    {
+      "task_id": "C007",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 8.0,
+        "diversity_score": 8.0
+      },
+      "decision": "accept",
+      "short_reason": "weapon enchantment, combat"
+    },
+    {
+      "task_id": "C008",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.5,
+        "diversity_score": 7.5
+      },
+      "decision": "accept",
+      "short_reason": "wood collection, low threat"
+    },
+    {
+      "task_id": "C009",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "tool progression, pickaxe crafting"
+    },
+    {
+      "task_id": "C010",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "zombie combat, survival"
+    },
+    {
+      "task_id": "C011",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "cave exploration, goal achievement"
+    },
+    {
+      "task_id": "C012",
+      "role": "builder",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "crafting table building, placement"
+    },
+    {
+      "task_id": "C013",
+      "role": "survivor",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "hunger management, food gathering"
+    },
+    {
+      "task_id": "C014",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "weapon enchantment, magical combat"
+    },
+    {
+      "task_id": "C015",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.5,
+        "diversity_score": 7.5
+      },
+      "decision": "accept",
+      "short_reason": "wood collection, weak mobs"
+    },
+    {
+      "task_id": "C016",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "wooden pickaxe crafting, tool progression"
+    },
+    {
+      "task_id": "C017",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "zombie combat, reduced stats"
+    },
+    {
+      "task_id": "C018",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "cave exploration, enemy avoidance"
+    },
+    {
+      "task_id": "C019",
+      "role": "builder",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "wood collection, table placement"
+    },
+    {
+      "task_id": "C020",
+      "role": "survivor",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "hunting, mob avoidance"
+    },
+    {
+      "task_id": "C021",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "sword crafting, enchantment"
+    },
+    {
+      "task_id": "C022",
+      "role": "builder",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "wood collection, table crafting"
+    },
+    {
+      "task_id": "C023",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "wooden pickaxe crafting, tool assembly"
+    },
+    {
+      "task_id": "C024",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "zombie combat, sword use"
+    },
+    {
+      "task_id": "C025",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "cave navigation, resource collection"
+    },
+    {
+      "task_id": "C026",
+      "role": "builder",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "crafting table placement, building foundation"
+    },
+    {
+      "task_id": "C027",
+      "role": "survivor",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "hunger management, passive animal gathering"
+    },
+    {
+      "task_id": "C028",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "weapon enchantment, magical enemy combat"
+    },
+    {
+      "task_id": "C029",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.5,
+        "diversity_score": 7.5
+      },
+      "decision": "accept",
+      "short_reason": "wood collection, reduced enemy pressure"
+    },
+    {
+      "task_id": "C030",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "pickaxe crafting, stone collection"
+    },
+    {
+      "task_id": "C031",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "zombie combat, no additional requirements"
+    },
+    {
+      "task_id": "C032",
+      "role": "explorer",
+      "scores": {
+        "novelty_score": 7.0,
+        "diversity_score": 7.0
+      },
+      "decision": "accept",
+      "short_reason": "cave exploration, resource management"
+    }
+  ],
+  "meta": {
+    "provider": "gl",
+    "model_rq": "glm-4-flash",
+    "attempts": 1,
+    "itok": 2452,
+    "otok": 1776,
+    "err": null,
+    "model_rt": "glm-4-flash"
+  }
+}

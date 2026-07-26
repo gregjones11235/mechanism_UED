@@ -1,0 +1,5 @@
+=== targeted filesystem search for real Phase 2.5 bundle ===
+Sun Jul 26 18:37:49     2026
+/d/Projects/dicode-codex-director/orchestration/control/d052v2/d052_phase25_canonical_migration.md
+/d/Projects/dicode-codex-director/orchestration/control/d052v2/salted_hash_audit.json
+=== search complete (exit 0) ===

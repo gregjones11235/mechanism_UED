@@ -10,6 +10,11 @@ __pycache__/
 venv/
 wandb/
 outputs/
+# EXCEPT the real Phase 2.5 bundle's original per-role judgment outputs: they are
+# the tamper-evidence source of truth (judgment_hash_sha256 verifies against them;
+# regression test R3 depends on them). No secrets: env-var NAMES only, no values.
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/**
 runs/
 checkpoints/
 *.ckpt

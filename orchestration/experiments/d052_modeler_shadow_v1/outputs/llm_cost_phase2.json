@@ -1,0 +1,11 @@
+{
+  "explorer": {
+    "provider": "gl",
+    "model_rq": "glm-4-flash",
+    "model_rt": "glm-4-flash",
+    "attempts": 1,
+    "itok": 2446,
+    "otok": 1775,
+    "err": null
+  }
+}

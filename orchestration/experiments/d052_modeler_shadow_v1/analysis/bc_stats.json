@@ -1,0 +1,182 @@
+{
+  "design": "B_NO_MODELER vs C_WITH_MODELER; identical deterministic raw summary; C adds frozen StudentProfile; same 32 pool/order/anon IDs, same templates/models(qw/ds/gl)/temperature(0)/timeout/schema, same Soft Copeland code; ONLY profile-append differs.",
+  "n_candidates": 32,
+  "pool_hash": "1902b71a5d86fa00",
+  "determinism_self_check": "PASS (B & C each identical across 2 recomputes)",
+  "per_role_B_vs_C": {
+    "tutor": {
+      "signal": "progression",
+      "spearman_rank": 0.1452,
+      "pearson_score": 0.0988,
+      "mean_abs_delta": 5.3281,
+      "mean_B": 6.8438,
+      "mean_C": 1.5156
+    },
+    "critic": {
+      "signal": "critic_penalty",
+      "spearman_rank": 0.8182,
+      "pearson_score": 0.6967,
+      "mean_abs_delta": 0.1828,
+      "mean_B": 0.6031,
+      "mean_C": 0.6953
+    },
+    "explorer": {
+      "signal": "novelty",
+      "spearman_rank": 0.5803,
+      "pearson_score": 0.1972,
+      "mean_abs_delta": 0.3125,
+      "mean_B": 7.0938,
+      "mean_C": 6.7812
+    }
+  },
+  "decision_flips_of_96": 34,
+  "decision_flips_by_role": {
+    "tutor": 24,
+    "critic": 10,
+    "explorer": 0
+  },
+  "B_selected8": [
+    "d052_r3_0000",
+    "d052_r3_0006",
+    "d052_r3_0007",
+    "d052_r3_0011",
+    "d052_r3_0014",
+    "d052_r3_0022",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "C_selected8": [
+    "d052_r3_0000",
+    "d052_r3_0003",
+    "d052_r3_0010",
+    "d052_r3_0014",
+    "d052_r3_0017",
+    "d052_r3_0024",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "B_selection_hash": "82571538e5299ea9",
+  "C_selection_hash": "868a57268d66b90b",
+  "selection_hash_changed": true,
+  "selected8_n_changed": 4,
+  "selected8_overlap": 4,
+  "selected8_jaccard": 0.3333,
+  "entered_C_only": [
+    "d052_r3_0003",
+    "d052_r3_0010",
+    "d052_r3_0017",
+    "d052_r3_0024"
+  ],
+  "exited_B_only": [
+    "d052_r3_0006",
+    "d052_r3_0007",
+    "d052_r3_0011",
+    "d052_r3_0022"
+  ],
+  "shared": [
+    "d052_r3_0000",
+    "d052_r3_0014",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "full_rank_spearman_B_vs_C": 0.4373,
+  "role_ablation_contribution": {
+    "C_revert_tutor_to_B": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0010",
+        "d052_r3_0011",
+        "d052_r3_0015",
+        "d052_r3_0017",
+        "d052_r3_0022",
+        "d052_r3_0024",
+        "d052_r3_0025"
+      ],
+      "overlap_with_B": 4,
+      "overlap_with_C": 5,
+      "selection_hash": "b33b05cb31eef479",
+      "interpretation": "reverting tutor to B moves selection toward B by 4 (overlap_with_B)"
+    },
+    "C_revert_critic_to_B": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0003",
+        "d052_r3_0005",
+        "d052_r3_0014",
+        "d052_r3_0025",
+        "d052_r3_0026",
+        "d052_r3_0028",
+        "d052_r3_0031"
+      ],
+      "overlap_with_B": 4,
+      "overlap_with_C": 5,
+      "selection_hash": "e0ae507e20b07f2f",
+      "interpretation": "reverting critic to B moves selection toward B by 4 (overlap_with_B)"
+    },
+    "C_revert_explorer_to_B": {
+      "selected8": [
+        "d052_r3_0000",
+        "d052_r3_0005",
+        "d052_r3_0007",
+        "d052_r3_0009",
+        "d052_r3_0014",
+        "d052_r3_0019",
+        "d052_r3_0028",
+        "d052_r3_0030"
+      ],
+      "overlap_with_B": 4,
+      "overlap_with_C": 3,
+      "selection_hash": "ffe9a39b2cf46280",
+      "interpretation": "reverting explorer to B moves selection toward B by 4 (overlap_with_B)"
+    }
+  },
+  "tokens_retries": {
+    "per_call": {
+      "B_tutor": {
+        "attempts": 1,
+        "itok": 2470,
+        "otok": 2328,
+        "err": null
+      },
+      "B_critic": {
+        "attempts": 3,
+        "itok": 7517,
+        "otok": 5623,
+        "err": null
+      },
+      "B_explorer": {
+        "attempts": 1,
+        "itok": 2452,
+        "otok": 1776,
+        "err": null
+      },
+      "C_tutor": {
+        "attempts": 1,
+        "itok": 3337,
+        "otok": 2298,
+        "err": null
+      },
+      "C_critic": {
+        "attempts": 2,
+        "itok": 6734,
+        "otok": 4043,
+        "err": null
+      },
+      "C_explorer": {
+        "attempts": 1,
+        "itok": 3319,
+        "otok": 1747,
+        "err": null
+      }
+    },
+    "total_itok": 25829,
+    "total_otok": 17815,
+    "total_attempts": 9,
+    "n_calls": 6
+  },
+  "verdict_rule_inputs": {
+    "selected8_changed_ge_2_of_8": true,
+    "salted_hash_affects_training_semantics": true,
+    "note": "Per rule: salted hash affecting training semantics => STOP_AND_FIX_CANONICAL_TARGETS takes precedence regardless of B/C magnitude."
+  }
+}
