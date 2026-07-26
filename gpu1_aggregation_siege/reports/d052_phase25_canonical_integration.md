@@ -138,6 +138,29 @@ MODELER_CANONICAL_SELECTION_CHANGE = 1/8
 D052_4096_AUTHORIZED               = false
 ```
 
+### 5b. Critic label layering (added by D052_PREMERGE_SEMANTIC_CLEANUP_V3)
+
+The `MODELER_CANONICAL_SELECTION_CHANGE=1/8` result above comes from the
+**synthetic deterministic fixture** (`SYNTHETIC_FIXTURE_deterministic_offline_v1`).
+Any critic/selector machinery success here is an ENGINEERING pass over that
+fixture — it does NOT freeze a real canonical scientific policy. Scoped labels
+(mirror of `d052_phase25_canonical_frozen_labels.json → critic_label_layering`):
+
+```
+D052_SYNTHETIC_CRITIC_SELECTOR_ENGINEERING       = PASS   (engineering layer only)
+REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE     = UNDECIDED   (dimension A)
+REAL_CANONICAL_CRITIC_SELECTION_POLICY           = UNDECIDED   (dimension B)
+DEFAULT_CRITIC_REJECT_DERIVATION_RULE            = NONE
+DEFAULT_CRITIC_SELECTION_POLICY                  = NONE
+REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_RULE    = BLOCKED
+REAL_CANONICAL_SELECTION_WITHOUT_CRITIC_POLICY   = BLOCKED
+```
+
+Dimension A (how `critic_reject` is derived) and dimension B (how the selector
+consumes it) are independent, must not substitute for each other, and are gated
+fail-closed by `d052/reconciliation/tier_c_gate.py`. The synthetic engineering
+PASS must never be upgraded to a frozen real policy.
+
 ## 6. STOP — awaiting adjudication
 
 Integration is complete and all eight gates pass. **No training has been started and

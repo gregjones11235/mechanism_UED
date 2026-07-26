@@ -6,15 +6,23 @@ normalization_log_hash). Nothing is silently coerced:
 
   * parse_status != "ok"              -> AdapterError (fail closed)
   * critic_reject has NO legacy bit   -> DERIVED ONLY under a caller-supplied,
-                                         explicitly named rule (decision_reject |
-                                         flags_too_hard); flagged derived=True.
-                                         There is NO implicit default:
-                                         CRITIC_REJECT_POLICY=UNDECIDED, so a
-                                         missing policy for critic records ->
-                                         AdapterError CRITIC_POLICY_REQUIRED
-                                         (fail closed; spec D052_PREMERGE_CORRECTION_V2)
+                                         explicitly named DERIVATION RULE
+                                         (decision_reject | flags_too_hard);
+                                         flagged derived=True. There is NO
+                                         implicit default:
+                                         REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE
+                                         =UNDECIDED, so a missing rule for
+                                         critic records -> AdapterError
+                                         CRITIC_POLICY_REQUIRED (fail closed)
   * unknown rule string               -> AdapterError UNKNOWN_RULE
   * fields with no canonical home     -> audit envelope (never dropped)
+
+SCOPE: this adapter handles ONLY dimension A — critic_reject DERIVATION (how the
+canonical boolean is computed from legacy/LLM judgments). It never handles
+dimension B — critic SELECTION policy (how the selector consumes critic_reject
+or the critic score, e.g. hard_veto / soft_penalty); that lives in
+schemas/selector.py + selectors/ and is frozen separately
+(REAL_CANONICAL_CRITIC_SELECTION_POLICY=UNDECIDED).
 
 The historical legacy replay (replay.py) NEVER uses this adapter: it consumes the
 raw critic_penalty exactly as the legacy selector did, so no derivation rule can
@@ -44,20 +52,23 @@ class AdapterError(Exception):
         super().__init__(f"[{code}] {message}")
 
 
-#: critic_reject CANDIDATE derivation rules. The legacy schema has no hard-veto
-#: bit, so any canonical critic_reject is a DERIVATION, never a raw field. Both
-#: rules are CANDIDATES only: CRITIC_REJECT_POLICY=UNDECIDED — the future
-#: canonical science protocol must freeze ONE of them explicitly before any real
-#: canonical judgment conversion is authorized. Neither rule is used by the
-#: historical legacy replay.
-CRITIC_REJECT_RULES: Dict[str, Callable[[dict], bool]] = {
+#: Dimension A — critic_reject CANDIDATE DERIVATION rules (how the canonical
+#: boolean is computed from a legacy/LLM judgment). The legacy schema has no
+#: hard-veto bit, so any canonical critic_reject is a DERIVATION, never a raw
+#: field. Both rules are CANDIDATES only:
+#: REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE=UNDECIDED — the future canonical
+#: science protocol must freeze ONE of them explicitly before any real canonical
+#: judgment conversion is authorized. Neither rule is used by the historical
+#: legacy replay. (NOT to be confused with dimension B, the selector's critic
+#: consumption policy in schemas/selector.py.)
+CRITIC_REJECT_DERIVATION_RULES: Dict[str, Callable[[dict], bool]] = {
     "decision_reject": lambda r: r.get("decision") == "reject",
     "flags_too_hard": lambda r: bool((r.get("flags") or {}).get("too_hard")),
 }
 
-#: FAIL CLOSED: there is NO implicit default critic_reject policy. Callers must
-#: name a rule explicitly; critic records without one raise CRITIC_POLICY_REQUIRED.
-DEFAULT_CRITIC_REJECT_RULE: Optional[str] = None
+#: FAIL CLOSED: there is NO implicit default derivation rule. Callers must name
+#: a rule explicitly; critic records without one raise CRITIC_POLICY_REQUIRED.
+DEFAULT_CRITIC_REJECT_DERIVATION_RULE: Optional[str] = None
 
 #: fields that have no canonical RoleJudgment home; kept verbatim for audit
 ENVELOPE_FIELDS = ("anon_id", "arm", "attempts", "decision", "flags",
@@ -125,24 +136,29 @@ def _normalization(record: dict) -> RoleNormalizationRecord:
 
 
 def adapt_judgment(record: dict, *,
-                   critic_reject_rule: Optional[str] = DEFAULT_CRITIC_REJECT_RULE,
+                   critic_reject_derivation_rule: Optional[str] =
+                   DEFAULT_CRITIC_REJECT_DERIVATION_RULE,
                    prompt_version: Optional[str] = None) -> AdaptedJudgment:
     """Adapt ONE flattened bundle judgment record (read-only; fail-closed).
 
-    critic_reject_rule MUST be named explicitly whenever a critic record is
-    adapted: None (the only default) raises CRITIC_POLICY_REQUIRED; any string
-    outside CRITIC_REJECT_RULES raises UNKNOWN_RULE. Non-critic records never
-    carry a critic_reject derivation, regardless of the rule argument.
+    critic_reject_derivation_rule (dimension A) MUST be named explicitly
+    whenever a critic record is adapted: None (the only default) raises
+    CRITIC_POLICY_REQUIRED; any string outside
+    CRITIC_REJECT_DERIVATION_RULES raises UNKNOWN_RULE. Non-critic records
+    never carry a critic_reject derivation, regardless of the rule argument.
+    Dimension B (selector critic consumption policy) is out of scope here.
     """
     if record.get("parse_status") != "ok":
         raise AdapterError(AdapterError.PARSE_NOT_OK,
                            f"{record.get('arm')}/{record.get('task_id')}/"
                            f"{record.get('role')}: parse_status="
                            f"{record.get('parse_status')!r} != 'ok'")
-    if critic_reject_rule is not None and critic_reject_rule not in CRITIC_REJECT_RULES:
+    if (critic_reject_derivation_rule is not None
+            and critic_reject_derivation_rule not in CRITIC_REJECT_DERIVATION_RULES):
         raise AdapterError(AdapterError.UNKNOWN_RULE,
-                           f"unknown critic_reject_rule {critic_reject_rule!r}; "
-                           f"legal: {sorted(CRITIC_REJECT_RULES)}")
+                           f"unknown critic_reject_derivation_rule "
+                           f"{critic_reject_derivation_rule!r}; legal: "
+                           f"{sorted(CRITIC_REJECT_DERIVATION_RULES)}")
 
     role = record["role"]
     kw = dict(role=ScoringRole(role), candidate_id=record["task_id"],
@@ -153,16 +169,17 @@ def adapt_judgment(record: dict, *,
               prompt_version=prompt_version)
     derived: dict = {}
     if role == "critic":
-        if critic_reject_rule is None:
+        if critic_reject_derivation_rule is None:
             raise AdapterError(
                 AdapterError.CRITIC_POLICY_REQUIRED,
                 f"{record.get('arm')}/{record.get('task_id')}/critic: "
-                f"critic_reject_rule must be specified explicitly; "
-                f"CRITIC_REJECT_POLICY=UNDECIDED, there is no implicit default "
-                f"(candidate rules: {sorted(CRITIC_REJECT_RULES)})")
-        rule = CRITIC_REJECT_RULES[critic_reject_rule]
+                f"critic_reject_derivation_rule must be specified explicitly; "
+                f"REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE=UNDECIDED, there "
+                f"is no implicit default (candidate rules: "
+                f"{sorted(CRITIC_REJECT_DERIVATION_RULES)})")
+        rule = CRITIC_REJECT_DERIVATION_RULES[critic_reject_derivation_rule]
         kw["critic_reject"] = bool(rule(record))
-        derived = {"critic_reject_rule": critic_reject_rule,
+        derived = {"critic_reject_derivation_rule": critic_reject_derivation_rule,
                    "critic_reject_value": kw["critic_reject"],
                    "derived": True,
                    "note": "legacy schema has no raw critic_reject bit; "
@@ -177,20 +194,26 @@ def adapt_judgment(record: dict, *,
 
 
 def adapt_arm(records: List[dict], *,
-              critic_reject_rule: Optional[str] = DEFAULT_CRITIC_REJECT_RULE,
+              critic_reject_derivation_rule: Optional[str] =
+              DEFAULT_CRITIC_REJECT_DERIVATION_RULE,
               prompt_version: Optional[str] = None) -> List[AdaptedJudgment]:
     """Adapt one arm (96 records expected; 32 candidates x 3 roles).
 
     Fail closed for the WHOLE arm: if any record is a critic judgment and no
-    explicit critic_reject_rule was given, nothing is adapted.
+    explicit critic_reject_derivation_rule (dimension A) was given, nothing is
+    adapted.
     """
-    if critic_reject_rule is None and any(r.get("role") == "critic" for r in records):
+    if (critic_reject_derivation_rule is None
+            and any(r.get("role") == "critic" for r in records)):
         raise AdapterError(
             AdapterError.CRITIC_POLICY_REQUIRED,
-            f"arm contains critic judgments but critic_reject_rule was not "
-            f"specified; CRITIC_REJECT_POLICY=UNDECIDED -> fail closed "
-            f"(candidate rules: {sorted(CRITIC_REJECT_RULES)})")
-    out = [adapt_judgment(r, critic_reject_rule=critic_reject_rule,
+            f"arm contains critic judgments but "
+            f"critic_reject_derivation_rule was not specified; "
+            f"REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE=UNDECIDED -> "
+            f"fail closed (candidate rules: "
+            f"{sorted(CRITIC_REJECT_DERIVATION_RULES)})")
+    out = [adapt_judgment(r,
+                          critic_reject_derivation_rule=critic_reject_derivation_rule,
                           prompt_version=prompt_version) for r in records]
     by_role: Dict[str, int] = {}
     for a in out:

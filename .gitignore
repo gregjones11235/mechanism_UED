@@ -12,9 +12,37 @@ wandb/
 outputs/
 # EXCEPT the real Phase 2.5 bundle's original per-role judgment outputs: they are
 # the tamper-evidence source of truth (judgment_hash_sha256 verifies against them;
-# regression test R3 depends on them). No secrets: env-var NAMES only, no values.
+# regression test R3 depends on them). V3 (D052_PREMERGE_SEMANTIC_CLEANUP_V3): the
+# former whole-directory negation was OVER-BROAD; it is narrowed to a strict
+# per-file allowlist — parent dir re-included, directory contents ignored by
+# default, only the 21 tracked evidence files re-included by exact name. Any
+# FUTURE file placed here stays ignored until explicitly allowlisted. Machine
+# list + SHA256 + secret/checkpoint scan verdict:
+# gpu1_aggregation_siege/reports/phase25/frozen_output_allowlist.json
+# No secrets allowed: env-var NAMES only, never credential VALUES; no checkpoints.
 !orchestration/experiments/d052_modeler_shadow_v1/outputs/
-!orchestration/experiments/d052_modeler_shadow_v1/outputs/**
+orchestration/experiments/d052_modeler_shadow_v1/outputs/*
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_critic_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_explorer_FAILED_raw.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_explorer_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_explorer_normalization_log.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_tutor_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_critic_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_explorer_FAILED_raw.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_explorer_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_explorer_normalization_log.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_tutor_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/critic_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/explorer_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/full32_critic_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/full32_explorer_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/full32_tutor_judgments.jsonl
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/llm_cost.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/llm_cost_phase2.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/llm_cost_phase25.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/student_evidence_base.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/student_profile.json
+!orchestration/experiments/d052_modeler_shadow_v1/outputs/tutor_judgments.jsonl
 runs/
 checkpoints/
 *.ckpt

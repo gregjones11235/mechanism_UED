@@ -1,16 +1,32 @@
 {
-  "task": "D052_PHASE25_REAL_BUNDLE_RECONCILIATION §8 — three evidence tiers (amended by D052_PREMERGE_CORRECTION_V2)",
+  "task": "D052_PHASE25_REAL_BUNDLE_RECONCILIATION §8 — three evidence tiers (amended by D052_PREMERGE_CORRECTION_V2 + D052_PREMERGE_SEMANTIC_CLEANUP_V3)",
   "date": "2026-07-26",
-  "branch_head": "henry/d052-canonical-refactor @ 5f9ab74 + premerge correction",
+  "branch_head": "henry/d052-canonical-refactor @ 49f9121 + V3 semantic cleanup (local, not pushed)",
   "separation_rule": "Tiers A/B/C are NEVER mixed in a claim. No tier may be promoted without NEW real data of the stated kind. Synthetic engineering success (B) is not scientific evidence; legacy mechanism confirmation (A) is not a training-ready or performance claim; the real canonical experiment (C) has NOT run.",
-  "critic_reject_policy_status": {
-    "CRITIC_REJECT_POLICY": "UNDECIDED",
-    "DEFAULT_CRITIC_REJECT_POLICY": "NONE",
-    "REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_POLICY": "BLOCKED",
-    "adapter_behavior": "judgment_adapter is fail-closed: critic records require an explicitly named rule (decision_reject | flags_too_hard) or AdapterError CRITIC_POLICY_REQUIRED is raised; unknown strings raise UNKNOWN_RULE; non-critic records never carry a critic_reject derivation",
-    "candidates_are_NOT_approved_definitions": ["decision_reject (B+C True=40)", "flags_too_hard (B+C True=38)"],
-    "historical_replay_independence": "the legacy B/C replay consumes raw critic_penalty only; no derivation rule can alter any historical anchor",
-    "unfreeze_requirements": "director freezes ONE policy; until then no real canonical judgment conversion and no D052 training authorization"
+  "critic_policy_two_dimensions": {
+    "note": "V3 split: 'critic policy' was ambiguous. It is now TWO INDEPENDENT dimensions that must NEVER substitute for each other, and TWO evidence layers (synthetic engineering PASS vs real canonical UNDECIDED). A synthetic engineering PASS must not be read as a frozen real policy.",
+    "D052_SYNTHETIC_CRITIC_SELECTOR_ENGINEERING": "PASS",
+    "synthetic_pass_scope": "engineering PASS over the synthetic deterministic fixture only; does NOT freeze either real dimension",
+    "synthetic_pass_does_not_freeze_real_policy": true,
+    "dimension_A_derivation": {
+      "REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE": "UNDECIDED",
+      "DEFAULT_CRITIC_REJECT_DERIVATION_RULE": "NONE",
+      "REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_RULE": "BLOCKED",
+      "question": "how the canonical critic_reject boolean is DERIVED from a legacy/LLM judgment",
+      "candidates_NOT_approved": ["decision_reject (B+C True=40)", "flags_too_hard (B+C True=38)"],
+      "owner": "d052/reconciliation/judgment_adapter.py (CRITIC_REJECT_DERIVATION_RULES; fail-closed: missing rule -> AdapterError CRITIC_POLICY_REQUIRED; unknown string -> UNKNOWN_RULE; non-critic records never carry a derivation)"
+    },
+    "dimension_B_selection_consumption": {
+      "REAL_CANONICAL_CRITIC_SELECTION_POLICY": "UNDECIDED",
+      "DEFAULT_CRITIC_SELECTION_POLICY": "NONE",
+      "REAL_CANONICAL_SELECTION_WITHOUT_CRITIC_POLICY": "BLOCKED",
+      "question": "how the SELECTOR consumes critic_reject / the critic score",
+      "candidates_NOT_approved": ["hard_veto", "soft_penalty", "score_only"],
+      "owner": "d052/schemas/selector.py (CriticPolicy) + d052/selectors/; Tier-C fail-closed gate: d052/reconciliation/tier_c_gate.py (either dimension missing -> BLOCKED)"
+    },
+    "execution_evidence_must_record_both_fields": true,
+    "historical_replay_independence": "the legacy B/C replay consumes raw critic_penalty only; neither dimension can alter any historical anchor",
+    "unfreeze_requirements": "director freezes dimension A (ONE derivation rule) AND dimension B (ONE selection policy) INDEPENDENTLY; until both are frozen: no real canonical judgment conversion, no real canonical selection, no D052 training authorization"
   },
 
   "tier_A_REAL_LEGACY_PHASE25": {
@@ -80,7 +96,8 @@
     "blockers": [
       "real judgments (LLM calls) over a canonical pool — forbidden this round (NO_UNAUTHORIZED_TRAINING / no new LLM)",
       "canonical pool with canonical targets + recomputed 64-char chash/pool_hash (legacy pool is invalid)",
-      "CRITIC_REJECT_POLICY=UNDECIDED; adapter is fail-closed (CRITIC_POLICY_REQUIRED); director must freeze ONE of decision_reject (40) / flags_too_hard (38) before any conversion",
+      "dimension A: REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE=UNDECIDED; adapter is fail-closed (CRITIC_POLICY_REQUIRED); director must freeze ONE of decision_reject (40) / flags_too_hard (38) before any conversion",
+      "dimension B: REAL_CANONICAL_CRITIC_SELECTION_POLICY=UNDECIDED; director must freeze ONE of hard_veto / soft_penalty / score_only; tier_c_gate fails closed until both dimensions are frozen",
       "director decision: ROLE_REGISTRY model pins vs real-bundle model ids",
       "task_params policy incl. required melee_spawn_multiplier"
     ]
@@ -94,7 +111,8 @@
     "NO_SILENT_FALLBACK": true,
     "NO_RAW_DATA_NO_STRONG_CLAIM": true,
     "synthetic_not_substituted_for_real": true,
-    "no_implicit_critic_policy_default": true,
+    "no_implicit_critic_derivation_rule_default": true,
+    "no_implicit_critic_selection_policy_default": true,
     "henry_invalid_archive_preserved": true
   }
 }

@@ -2,6 +2,16 @@
   "D052_PHASE25_CANONICAL_INTEGRATION": "PASS",
   "MATCHED_BC_PROTOCOL": "PASS",
   "CANONICAL_TARGET_FIREWALL": "PASS",
+  "critic_label_layering": {
+    "note": "D052_PREMERGE_SEMANTIC_CLEANUP_V3: 'critic policy' is split into two INDEPENDENT dimensions (A derivation / B selection consumption) and two evidence layers (synthetic engineering vs real canonical); a synthetic engineering PASS never freezes a real canonical policy; neither dimension may substitute for the other",
+    "D052_SYNTHETIC_CRITIC_SELECTOR_ENGINEERING": "PASS",
+    "REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE": "UNDECIDED",
+    "REAL_CANONICAL_CRITIC_SELECTION_POLICY": "UNDECIDED",
+    "DEFAULT_CRITIC_REJECT_DERIVATION_RULE": "NONE",
+    "DEFAULT_CRITIC_SELECTION_POLICY": "NONE",
+    "REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_RULE": "BLOCKED",
+    "REAL_CANONICAL_SELECTION_WITHOUT_CRITIC_POLICY": "BLOCKED"
+  },
   "CANONICAL_B_SELECTED8": [
     "cand_00",
     "cand_01",

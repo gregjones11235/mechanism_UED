@@ -1,0 +1,246 @@
+{
+  "schema": "frozen_output_allowlist/v1",
+  "task": "D052_PREMERGE_SEMANTIC_CLEANUP_V3 §5/§6",
+  "date": "2026-07-26",
+  "branch": "henry/d052-canonical-refactor",
+  "directory": "orchestration/experiments/d052_modeler_shadow_v1/outputs/",
+  "policy": "directory contents ignored by default (.gitignore); ONLY these files are re-included by exact name. Future files stay ignored until added here with a fresh scan. Env-var NAMES may appear; credential VALUES, checkpoints and binaries must NEVER appear.",
+  "scan": {
+    "keywords_scanned": [
+      "api_key",
+      "apikey",
+      "token",
+      "secret",
+      "password",
+      "authorization",
+      "bearer",
+      "private key",
+      "begin rsa",
+      "begin openssh",
+      "sk-",
+      "ghp_",
+      "github_pat_"
+    ],
+    "banned_extensions": [
+      ".bin",
+      ".ckpt",
+      ".env",
+      ".h5",
+      ".hdf5",
+      ".key",
+      ".log",
+      ".npy",
+      ".npz",
+      ".onnx",
+      ".orbax-checkpoint",
+      ".pb",
+      ".pem",
+      ".pickle",
+      ".pkl",
+      ".pt",
+      ".pth",
+      ".safetensors",
+      ".tflite"
+    ],
+    "all_extensions": [
+      ".json",
+      ".jsonl"
+    ],
+    "json_jsonl_parse_ok": true,
+    "max_size_bytes_observed": 15116,
+    "judgment_hash_reverified": "192/192",
+    "keyword_hits_are_env_var_names_only": true
+  },
+  "file_count": 21,
+  "files": [
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_critic_judgments.jsonl",
+      "sha256": "a6c191396ba54017def7ce0813fc370a63efd6b3f350b12edb62667c4728f6fd",
+      "size_bytes": 12497,
+      "evidence_purpose": "arm B critic role judgments (32); judgment_hash_sha256 tamper-evidence source verified by R3",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_explorer_FAILED_raw.json",
+      "sha256": "e166aba7a396a97d6ea4593fe7104c64df943a8c7275cb9495029340cca29168",
+      "size_bytes": 7843,
+      "evidence_purpose": "arm B explorer parse-FAILED raw records; audit preservation only, never consumed by the selector",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_explorer_judgments.jsonl",
+      "sha256": "5a997c855d50c46ad8369dfa1df3627056aa35d7ac7f7b1834cdeca75e423c91",
+      "size_bytes": 11874,
+      "evidence_purpose": "arm B explorer role judgments (32); tamper-evidence source verified by R3",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_explorer_normalization_log.json",
+      "sha256": "614037d8a8b092ab06e930bffc0f560dd63d765666d9c93365d6880d98bd582e",
+      "size_bytes": 1804,
+      "evidence_purpose": "arm B explorer glm role-echo normalization log (raw/canonical/reason)",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_B_tutor_judgments.jsonl",
+      "sha256": "894f5070def17aa40eb56cd069322856b86cfba4ffddaf5476df32321ef6cacb",
+      "size_bytes": 11336,
+      "evidence_purpose": "arm B tutor role judgments (32); tamper-evidence source verified by R3",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_critic_judgments.jsonl",
+      "sha256": "8196288a8629e22dbeb1b8ec0b20d3cb95dede653ba48e479f75857f478729ae",
+      "size_bytes": 12709,
+      "evidence_purpose": "arm C critic role judgments (32); tamper-evidence source verified by R3",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_explorer_FAILED_raw.json",
+      "sha256": "733dcd1277592d64546c5d3321b645dfe8f4537651414b7499a9e78e6004dc21",
+      "size_bytes": 7822,
+      "evidence_purpose": "arm C explorer parse-FAILED raw records; audit preservation only, never consumed by the selector",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_explorer_judgments.jsonl",
+      "sha256": "f694ab655a561298bcd732d3db5cd54afc12b398201f0040229c33e591d252c0",
+      "size_bytes": 11853,
+      "evidence_purpose": "arm C explorer role judgments (32); tamper-evidence source verified by R3",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_explorer_normalization_log.json",
+      "sha256": "5847a8ab3254c378b32d60278473a6a8b13fbe1883e44cf6a4ef1d9cee47bb7e",
+      "size_bytes": 1789,
+      "evidence_purpose": "arm C explorer glm role-echo normalization log (raw/canonical/reason)",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/bc_C_tutor_judgments.jsonl",
+      "sha256": "0a24c7a1a666c621095b7f1492964d8dbe2631ac1a2ab35f434d99e0120a17c0",
+      "size_bytes": 11181,
+      "evidence_purpose": "arm C tutor role judgments (32); tamper-evidence source verified by R3",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/critic_judgments.jsonl",
+      "sha256": "b3b0ce9b49a9acfc34dc0532d15e617f0120a6597be310566d03ad786ac20586",
+      "size_bytes": 4290,
+      "evidence_purpose": "legacy-round critic judgments aggregate; historical replay input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/explorer_judgments.jsonl",
+      "sha256": "bd5b1de802c7b29b746e3dd0991f0979b5221e230aba988dd2286cf896caea32",
+      "size_bytes": 3468,
+      "evidence_purpose": "legacy-round explorer judgments aggregate; historical replay input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/full32_critic_judgments.jsonl",
+      "sha256": "5efe0dc0005c8b147564cbc418294af7a4e801c22a05cf4d860cd7e980f832ed",
+      "size_bytes": 15116,
+      "evidence_purpose": "full-32 candidate critic judgments; historical replay input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/full32_explorer_judgments.jsonl",
+      "sha256": "3729a6bf166e6628a707582f9af0224d72b4df0f7f74438b00ee3c6b2f645f17",
+      "size_bytes": 13441,
+      "evidence_purpose": "full-32 candidate explorer judgments; historical replay input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/full32_tutor_judgments.jsonl",
+      "sha256": "3951d140251994e95e4707431193cf502d7aa0280a9af8d786817a6c8dc92e6a",
+      "size_bytes": 14020,
+      "evidence_purpose": "full-32 candidate tutor judgments; historical replay input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/llm_cost.json",
+      "sha256": "b236a78ffdbe488448b9fd01400a1b0200153bcd68121f795f76380d4649aa55",
+      "size_bytes": 733,
+      "evidence_purpose": "LLM cost ledger (accounting only; env-var NAMES at most, no credential values)",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/llm_cost_phase2.json",
+      "sha256": "c9f41456895d6191f886042ee069bd4f47bacddb58fab0958672de8edb11ef13",
+      "size_bytes": 178,
+      "evidence_purpose": "phase-2 LLM cost ledger (accounting only)",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/llm_cost_phase25.json",
+      "sha256": "f4f4c4295e671d1ae824f85fb1dcc69698bfaa2d36ffbdbe5f4a5088fc71c406",
+      "size_bytes": 1116,
+      "evidence_purpose": "phase-2.5 LLM cost ledger (accounting only)",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/student_evidence_base.json",
+      "sha256": "4879dbc5d8169162ed7060c5646cb4715b3a7840f2f506936343af0441e3a9f3",
+      "size_bytes": 7519,
+      "evidence_purpose": "student machine-facts evidence base; StudentProfile build input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/student_profile.json",
+      "sha256": "91204c6dee11b45cc1343b4ee0f92def7a3d197aaf8eaae0438d119d60fad6cd",
+      "size_bytes": 3323,
+      "evidence_purpose": "frozen student profile; profile_hash_sha256=223defdf... reproduction source and arm-C conditioning verbatim text",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    },
+    {
+      "path": "orchestration/experiments/d052_modeler_shadow_v1/outputs/tutor_judgments.jsonl",
+      "sha256": "c7cfdada1c835ff487cc7e256c57dfc5353db9d959a34e645fab5126e2370001",
+      "size_bytes": 5021,
+      "evidence_purpose": "legacy-round tutor judgments aggregate; historical replay input",
+      "contains_secret": false,
+      "contains_checkpoint": false,
+      "approved_for_git": true
+    }
+  ]
+}
