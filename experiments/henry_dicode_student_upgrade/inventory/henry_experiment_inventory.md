@@ -79,3 +79,8 @@
 - dir: `13_rmt16_phase4a`
 - status: `FOUND`
 - archived small files: 39
+
+
+### 2026-07-26 cleanup
+
+D052 historical data files (`.json`, `.jsonl`, `.csv`, `.log`) were removed by request. D052 now retains engineering code and lightweight documentation only. Removed paths are listed in `d052_data_removed_by_request.txt`.

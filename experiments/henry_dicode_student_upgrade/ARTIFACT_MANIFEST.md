@@ -18,3 +18,8 @@ Excluded by policy:
 - temporary compiled Python files
 - single files larger than 5MB
 
+Additional cleanup:
+
+- On 2026-07-26, D052 historical data files under `01_d052/` with extensions `.json`, `.jsonl`, `.csv`, and `.log` were removed by request.
+- The retained D052 content is engineering code and lightweight documentation only.
+- Removed D052 paths are listed in `inventory/d052_data_removed_by_request.txt`.
