@@ -1,0 +1,113 @@
+{
+  "principle": "NO_RAW_DATA_NO_STRONG_CLAIM. Missing raw data caps claims; NOT a FAIL, NOT a performance failure.",
+  "sync_attempted": "yes (single bounded probes; no polling)",
+  "sync_result": "BLOCKED",
+  "items": [
+    {
+      "id": "MD-1",
+      "asset": "W512 6-arm per-world arrays + params SHA + manifest + actual L_SEQ",
+      "status": "NOT_SYNCED (server unreachable)",
+      "gates_blocked": [
+        "W512_REPRODUCIBILITY",
+        "L_SEQ freeze"
+      ],
+      "remediation": "FU: read-only sync on connected host; then recompute via recompute_fixed.py"
+    },
+    {
+      "id": "MD-2",
+      "asset": "P7 per-world + action_mode + evaluator SHA + manifest + params SHA",
+      "status": "NOT_SYNCED",
+      "gates_blocked": [
+        "P7_REPRODUCIBILITY"
+      ],
+      "remediation": "sync + force params-SHA recording (hashlib unused)"
+    },
+    {
+      "id": "MD-3",
+      "asset": "P8 migration+final per-world + evaluator SHAs + chunk SHA",
+      "status": "NOT_SYNCED",
+      "gates_blocked": [
+        "P8_REPRODUCIBILITY"
+      ],
+      "remediation": "sync; hard-fail silent fallback (GATE4)"
+    },
+    {
+      "id": "MD-4",
+      "asset": "P9 per-world + compare_resume artifact + manifest + resume config",
+      "status": "NOT_SYNCED",
+      "gates_blocked": [
+        "P9_REPRODUCIBILITY",
+        "continuation exact-resume"
+      ],
+      "remediation": "sync + produce compare_resume via exact_resume_harness (authorized)"
+    },
+    {
+      "id": "MD-5",
+      "asset": "RMT16 Phase4A/smoke/prefreeze/resume tests",
+      "status": "NOT_SYNCED + CC2 domain",
+      "gates_blocked": [
+        "RMT16 performance"
+      ],
+      "remediation": "CC2 owns; CC4 read-only"
+    },
+    {
+      "id": "MD-6",
+      "asset": "P2-Full-A formal per-world eval",
+      "status": "ABSENT",
+      "gates_blocked": [
+        "CL-10"
+      ],
+      "remediation": "requires BASE_GTRXL+Replay control + training (not authorized)"
+    },
+    {
+      "id": "MD-7",
+      "asset": "Phase3 attribution/longrun final per-world JSONs",
+      "status": "server-only",
+      "gates_blocked": [
+        "CL-15 numbers"
+      ],
+      "remediation": "sync"
+    },
+    {
+      "id": "MD-8",
+      "asset": "origin Henry-branch HEAD SHA + code SHA manifest",
+      "status": "BLOCKED (git access via proxy down + direct HTTPS fails)",
+      "gates_blocked": [
+        "HEAD freeze",
+        "lineage code-SHA"
+      ],
+      "remediation": "FU-8 on connected host"
+    },
+    {
+      "id": "MD-9",
+      "asset": "explicit world-set hashes in evaluator outputs",
+      "status": "tooling built (build_world_manifest.py); materialized hash needs JAX",
+      "gates_blocked": [
+        "GLOBAL_WORLD_SET_HASH_AVAILABLE",
+        "GATE2/3"
+      ],
+      "remediation": "run builder --materialize on JAX host"
+    },
+    {
+      "id": "MD-10",
+      "asset": "canonical L_SEQ (129 vs 512) frozen file",
+      "status": "NOT_FOUND locally; partial primary evidence: smoke/repro=129 (run_p2_full_smoke.py, posthoc), formal Level-B=512 (run_p2_full_smoke.py:66 comment 'formal run uses 512'; requirement matrix)",
+      "gates_blocked": [
+        "cross-line replay comparison"
+      ],
+      "remediation": "freeze canonical on server"
+    }
+  ],
+  "L_SEQ_primary_evidence_found": {
+    "smoke_repro_L_SEQ_129": [
+      ".local/p2_full_audit/src/run_p2_full_smoke.py:66 L_SEQ=129 (comment: formal run uses 512)",
+      ".local/p2_full_audit/src_fullp2/run_p2_full_levelB.py:74 L_SEQ=129",
+      ".local/p2_full_audit/posthoc_attribution/posthoc_attribution.py:65 L_SEQ=129"
+    ],
+    "formal_512_reference": [
+      ".local/p2_full_audit/src/run_p2_full_smoke.py:66 comment 'formal run uses 512'",
+      ".local/p2_full_audit/reports/p2_full_a_v1_henry_requirement_matrix.md (L_SEQ=129 loss-window documented; RMT16/P2-Full-A v2.1 doc specifies 512)"
+    ],
+    "interpretation": "Both 129 and 512 exist as distinct run configs; canonical freeze must state which applies to each reported number. W512 repro used 129; RMT16 frozen config uses 512. Cross-line comparison requires this to be pinned."
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "suite": "GLOBAL_REMEDIATION_REGRESSION_GATES_V1",
+  "total": 15,
+  "counts": {
+    "PASS": 13,
+    "PARTIAL": 1,
+    "BLOCKED": 1,
+    "FAIL": 0
+  },
+  "policy": "PARTIAL/BLOCKED = environment limits (no JAX / no craftax / CC2 domain), explicitly NOT FAIL. No FAIL gate may be relabeled.",
+  "gates": [
+    {
+      "gate": "GATE1",
+      "name": "CANONICAL_EVALUATOR_SINGLE_SOURCE",
+      "status": "PASS",
+      "evidence": "spec_exists=True; registry_rows=10; quarantined_as_primary=0",
+      "note": "single CANONICAL_EVALUATOR_V1 anchor; broken/quarantined evaluators never used as primary"
+    },
+    {
+      "gate": "GATE2",
+      "name": "WORLD_MANIFEST_FROZEN",
+      "status": "PASS",
+      "evidence": "seed42=True; seed100000=True; world_recipe_hash=3377049f3e983bfe...",
+      "note": "fold_in(PRNGKey(wrapper_seed), world_index) recipe recorded; two distinct world sets never pooled"
+    },
+    {
+      "gate": "GATE3",
+      "name": "WORLD_SET_HASH_AVAILABLE",
+      "status": "PARTIAL",
+      "evidence": "world_set_hash=None; materialized=False",
+      "note": "BLOCKED_ON_JAX: materialization needs JAX host; recipe hash present, params hash pending. NOT FAIL."
+    },
+    {
+      "gate": "GATE4",
+      "name": "PARTIAL_RESTORE_HARD_FAIL",
+      "status": "PASS",
+      "evidence": "RestoreLeafMismatch+raise=True; dry-run reports 'GATE4 missing-detect: HARD-FAIL as required'",
+      "note": "partial/legacy restore must HARD-FAIL, never silent fallback"
+    },
+    {
+      "gate": "GATE5",
+      "name": "MEMORY_ISOLATION_PROBE",
+      "status": "PASS",
+      "evidence": "memory_isolation_probe_present=True",
+      "note": "argmax memory-off is DIAGNOSTIC only, not policy mode"
+    },
+    {
+      "gate": "GATE6",
+      "name": "DONE_RESET_PROBE",
+      "status": "PASS",
+      "evidence": "memory_done_reset_probe_present=True",
+      "note": "done/true_done reset behaviour probed"
+    },
+    {
+      "gate": "GATE7",
+      "name": "OFFICIAL_TIER_SOURCE",
+      "status": "PASS",
+      "evidence": "references craftax.constants.ACHIEVEMENT_REWARD_MAP=True; craftax==1.4.5; tier_registry_test=PURE_PYTHON_SELF_CHECK_PASS; vs installed craftax=BLOCKED_ON_CRAFTAX (ABSENT, NOT FAIL)",
+      "note": "single source of truth; ACHIEVEMENT_DEPTH renamed CUSTOM_DEPTH_TIER (design layer)"
+    },
+    {
+      "gate": "GATE8",
+      "name": "TIER_COUNTS_AND_FROZEN_FACTS",
+      "status": "PASS",
+      "evidence": "tier_count_check={'BASIC': 25, 'INTERMEDIATE': 18, 'ADVANCED': 15, 'VERY_ADVANCED': 9, 'total': 67}; frozen_facts_all_true=True",
+      "note": "BASIC25/INTERMEDIATE18/ADVANCED15/VERY_ADVANCED9 = 67; defeat_kobold=ADVANCED"
+    },
+    {
+      "gate": "GATE9",
+      "name": "BASELINE_SINGLE_IDENTITY",
+      "status": "PASS",
+      "evidence": "baseline_ids=['TEACHER17500_BASELINE', 'CONTROL24576_BASELINE']; bare_'Baseline'_count=0",
+      "note": "bare 'Baseline' forbidden; 101/256 teacher vs 93/256 control"
+    },
+    {
+      "gate": "GATE10",
+      "name": "PAIRED_COMPARISON_ELIGIBILITY",
+      "status": "PASS",
+      "evidence": "COMPARE_FIELDS_present=True; baseline_id_validation_tests=BASELINE_VALIDATION_SELF_TEST_PASS; checkpoint checked separately (known, may differ)",
+      "note": "mismatched caliber => PAIRED_COMPARISON_NOT_ALLOWED"
+    },
+    {
+      "gate": "GATE11",
+      "name": "RESUME_STATE_TESTS_PRESENT",
+      "status": "BLOCKED",
+      "evidence": "RMT16 test_exact_resume(gate7)/test_resume_state(gate11) NOT_FOUND (test_rmt_units.py only T1-T9); env_state missing from train_state.pkl",
+      "note": "CC2 domain (read-only for CC4); required remediation documented, NOT FAIL"
+    },
+    {
+      "gate": "GATE12",
+      "name": "RAW_DATA_BEFORE_STRONG_CLAIM",
+      "status": "PASS",
+      "evidence": "claims_total=17; server_only_claims=11 (EVIDENCE_UNVERIFIED); strong_claims_on_missing_data=0; Phase2 per-world recomputed (0 mismatch)",
+      "note": "NO_RAW_DATA_NO_STRONG_CLAIM; missing caps claims, not FAIL"
+    },
+    {
+      "gate": "GATE13",
+      "name": "ACTION_MODE_EXPLICIT",
+      "status": "PASS",
+      "evidence": "evaluator_prints/writes_action_mode(A1/A2)=True; action_mode_consistency_test=SELF_TEST_PASS (stochastic varies=9, argmax=1, degenerate flagged)",
+      "note": "action_mode in {stochastic,argmax}; argmax memory-off is DIAGNOSTIC"
+    },
+    {
+      "gate": "GATE14",
+      "name": "EXACT_RESUME_MISSING_COMPONENT_DETECT",
+      "status": "PASS",
+      "evidence": "exact_resume_harness=EXACT_RESUME_HARNESS_SELF_TEST_PASS (6/6: bitexact, rng-diff, P7-missing, RMT16-missing-env_state, replay components, replay-rng-diff)",
+      "note": "a checkpoint LACKING required components is flagged, never silently passed"
+    },
+    {
+      "gate": "GATE15",
+      "name": "MATCHED_REPLAY_CONFIG_MATCHES_P2_EXCEPT_NETWORK",
+      "status": "PASS",
+      "evidence": "bundle_fields_matched=11/11; network=Base GTrXL + long_memory_module=NONE=True; status=READY_NOT_AUTHORIZED; training NOT launched",
+      "note": "isolates architecture effect; L_SEQ MISS-6 must be frozen before any run"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "method": "recomputed all Phase2 per-arm aggregates + causal deltas from per-world arrays; server-only lines NOT recomputed (no summary substitution)",
+  "phase2_per_arm_mismatches": 0,
+  "phase2_causal_delta_all_match": true,
+  "recompute_artifact": "global_metric_recomputation_fixed.csv (arm + paired rows, full provenance schema)",
+  "server_only_lines_status": "EVIDENCE_UNVERIFIED (W512/P7/P8/P9/P2/RMT16) - no per-world locally; sync BLOCKED",
+  "new_provenance_per_row": [
+    "evaluator_sha",
+    "world_set_hash(REQUIRED)",
+    "world_recipe_hash",
+    "checkpoint_sha",
+    "action_mode",
+    "evidence_level"
+  ],
+  "mismatches_found": [],
+  "discipline": "NO_SUMMARY_AS_PRIMARY_EVIDENCE: aggregate percentages for W512/P7/P8/P9 are NOT used as recomputed evidence; they remain UNVERIFIED until per-world sync."
+}

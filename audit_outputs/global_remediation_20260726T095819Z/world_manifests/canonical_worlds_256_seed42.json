@@ -1,0 +1,2323 @@
+{
+  "protocol": "CANONICAL_EVALUATOR_V1",
+  "num_worlds": 256,
+  "base_seed": 42,
+  "wrapper_prng_seed": 0,
+  "fold_in_rule": "jax.random.fold_in(PRNGKey(wrapper_prng_seed), world_index)",
+  "world_generator_sha256": "UNVERIFIED",
+  "evaluator_sha256": "224514026aefd273a6647e055fc2e1a434760dc5f4b6b9acd0624bbba57035a1",
+  "env_version": "craftax==1.4.5(EXPECTED; verify on host)",
+  "paired_by": "world_index (identical index across arms => paired)",
+  "worlds": [
+    {
+      "world_index": 0,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=0)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 0]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 1,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=1)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 1]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 2,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=2)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 2]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 3,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=3)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 3]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 4,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=4)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 4]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 5,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=5)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 5]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 6,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=6)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 6]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 7,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=7)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 7]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 8,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=8)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 8]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 9,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=9)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 9]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 10,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=10)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 10]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 11,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=11)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 11]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 12,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=12)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 12]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 13,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=13)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 13]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 14,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=14)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 14]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 15,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=15)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 15]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 16,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=16)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 16]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 17,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=17)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 17]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 18,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=18)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 18]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 19,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=19)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 19]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 20,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=20)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 20]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 21,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=21)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 21]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 22,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=22)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 22]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 23,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=23)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 23]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 24,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=24)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 24]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 25,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=25)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 25]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 26,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=26)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 26]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 27,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=27)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 27]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 28,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=28)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 28]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 29,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=29)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 29]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 30,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=30)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 30]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 31,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=31)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 31]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 32,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=32)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 32]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 33,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=33)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 33]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 34,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=34)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 34]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 35,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=35)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 35]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 36,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=36)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 36]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 37,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=37)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 37]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 38,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=38)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 38]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 39,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=39)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 39]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 40,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=40)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 40]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 41,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=41)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 41]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 42,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=42)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 42]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 43,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=43)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 43]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 44,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=44)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 44]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 45,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=45)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 45]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 46,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=46)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 46]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 47,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=47)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 47]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 48,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=48)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 48]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 49,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=49)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 49]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 50,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=50)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 50]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 51,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=51)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 51]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 52,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=52)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 52]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 53,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=53)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 53]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 54,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=54)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 54]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 55,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=55)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 55]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 56,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=56)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 56]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 57,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=57)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 57]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 58,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=58)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 58]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 59,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=59)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 59]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 60,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=60)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 60]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 61,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=61)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 61]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 62,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=62)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 62]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 63,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=63)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 63]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 64,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=64)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 64]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 65,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=65)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 65]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 66,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=66)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 66]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 67,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=67)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 67]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 68,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=68)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 68]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 69,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=69)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 69]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 70,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=70)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 70]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 71,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=71)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 71]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 72,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=72)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 72]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 73,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=73)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 73]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 74,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=74)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 74]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 75,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=75)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 75]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 76,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=76)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 76]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 77,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=77)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 77]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 78,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=78)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 78]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 79,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=79)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 79]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 80,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=80)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 80]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 81,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=81)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 81]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 82,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=82)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 82]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 83,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=83)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 83]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 84,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=84)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 84]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 85,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=85)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 85]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 86,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=86)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 86]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 87,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=87)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 87]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 88,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=88)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 88]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 89,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=89)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 89]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 90,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=90)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 90]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 91,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=91)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 91]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 92,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=92)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 92]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 93,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=93)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 93]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 94,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=94)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 94]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 95,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=95)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 95]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 96,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=96)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 96]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 97,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=97)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 97]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 98,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=98)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 98]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 99,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=99)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 99]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 100,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=100)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 100]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 101,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=101)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 101]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 102,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=102)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 102]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 103,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=103)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 103]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 104,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=104)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 104]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 105,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=105)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 105]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 106,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=106)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 106]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 107,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=107)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 107]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 108,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=108)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 108]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 109,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=109)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 109]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 110,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=110)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 110]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 111,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=111)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 111]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 112,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=112)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 112]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 113,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=113)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 113]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 114,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=114)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 114]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 115,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=115)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 115]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 116,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=116)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 116]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 117,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=117)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 117]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 118,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=118)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 118]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 119,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=119)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 119]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 120,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=120)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 120]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 121,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=121)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 121]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 122,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=122)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 122]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 123,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=123)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 123]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 124,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=124)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 124]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 125,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=125)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 125]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 126,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=126)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 126]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 127,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=127)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 127]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 128,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=128)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 128]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 129,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=129)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 129]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 130,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=130)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 130]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 131,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=131)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 131]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 132,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=132)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 132]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 133,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=133)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 133]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 134,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=134)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 134]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 135,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=135)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 135]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 136,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=136)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 136]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 137,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=137)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 137]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 138,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=138)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 138]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 139,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=139)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 139]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 140,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=140)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 140]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 141,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=141)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 141]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 142,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=142)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 142]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 143,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=143)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 143]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 144,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=144)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 144]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 145,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=145)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 145]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 146,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=146)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 146]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 147,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=147)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 147]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 148,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=148)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 148]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 149,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=149)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 149]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 150,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=150)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 150]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 151,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=151)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 151]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 152,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=152)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 152]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 153,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=153)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 153]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 154,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=154)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 154]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 155,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=155)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 155]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 156,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=156)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 156]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 157,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=157)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 157]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 158,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=158)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 158]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 159,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=159)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 159]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 160,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=160)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 160]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 161,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=161)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 161]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 162,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=162)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 162]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 163,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=163)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 163]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 164,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=164)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 164]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 165,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=165)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 165]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 166,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=166)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 166]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 167,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=167)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 167]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 168,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=168)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 168]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 169,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=169)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 169]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 170,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=170)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 170]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 171,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=171)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 171]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 172,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=172)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 172]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 173,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=173)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 173]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 174,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=174)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 174]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 175,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=175)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 175]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 176,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=176)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 176]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 177,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=177)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 177]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 178,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=178)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 178]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 179,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=179)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 179]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 180,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=180)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 180]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 181,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=181)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 181]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 182,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=182)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 182]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 183,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=183)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 183]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 184,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=184)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 184]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 185,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=185)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 185]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 186,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=186)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 186]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 187,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=187)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 187]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 188,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=188)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 188]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 189,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=189)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 189]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 190,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=190)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 190]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 191,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=191)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 191]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 192,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=192)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 192]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 193,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=193)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 193]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 194,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=194)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 194]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 195,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=195)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 195]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 196,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=196)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 196]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 197,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=197)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 197]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 198,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=198)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 198]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 199,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=199)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 199]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 200,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=200)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 200]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 201,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=201)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 201]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 202,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=202)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 202]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 203,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=203)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 203]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 204,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=204)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 204]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 205,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=205)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 205]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 206,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=206)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 206]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 207,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=207)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 207]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 208,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=208)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 208]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 209,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=209)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 209]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 210,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=210)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 210]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 211,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=211)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 211]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 212,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=212)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 212]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 213,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=213)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 213]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 214,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=214)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 214]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 215,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=215)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 215]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 216,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=216)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 216]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 217,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=217)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 217]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 218,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=218)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 218]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 219,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=219)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 219]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 220,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=220)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 220]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 221,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=221)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 221]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 222,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=222)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 222]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 223,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=223)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 223]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 224,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=224)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 224]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 225,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=225)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 225]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 226,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=226)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 226]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 227,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=227)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 227]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 228,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=228)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 228]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 229,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=229)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 229]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 230,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=230)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 230]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 231,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=231)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 231]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 232,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=232)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 232]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 233,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=233)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 233]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 234,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=234)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 234]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 235,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=235)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 235]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 236,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=236)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 236]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 237,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=237)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 237]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 238,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=238)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 238]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 239,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=239)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 239]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 240,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=240)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 240]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 241,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=241)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 241]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 242,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=242)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 242]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 243,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=243)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 243]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 244,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=244)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 244]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 245,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=245)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 245]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 246,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=246)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 246]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 247,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=247)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 247]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 248,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=248)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 248]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 249,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=249)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 249]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 250,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=250)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 250]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 251,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=251)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 251]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 252,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=252)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 252]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 253,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=253)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 253]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 254,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=254)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 254]",
+      "world_params": null,
+      "task_params": null
+    },
+    {
+      "world_index": 255,
+      "base_seed": 42,
+      "wrapper_prng_seed": 0,
+      "fold_in": "fold_in(base_key, world_index=255)",
+      "rng_input": "reset_rng = split(PRNGKey(base_seed)); obsv,log = env.reset(reset_rng, ctor) [world 255]",
+      "world_params": null,
+      "task_params": null
+    }
+  ],
+  "world_recipe_hash": "3377049f3e983bfeeacbb219e8c3be0e1d72966d4b1fe2ca72444caadbd1575e",
+  "world_set_hash": null,
+  "world_params_materialized": false,
+  "status": "RECIPE_ONLY (JAX/Craftax absent in this env; world_set_hash requires materialization on host)",
+  "gate2_reproducible": "NOT_VERIFIED (requires materialization)",
+  "gate3_order_sensitive": "NOT_VERIFIED (requires materialization)"
+}

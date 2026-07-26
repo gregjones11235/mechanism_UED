@@ -1,0 +1,42 @@
+{
+  "schema": "mechanism_UED.exact_resume/v1",
+  "distinction": {
+    "CHECKPOINT_SAVE_VALID": "save -> load roundtrip yields a usable training state (necessary, NOT sufficient).",
+    "EXACT_RESUME_BITEXACT": "CONTINUATION bit-exact: continuous run A vs new-process-restore B2 must satisfy A@4096==B1@4096 AND A@8192==B2@8192 over the FULL state (not just params)."
+  },
+  "comparison_scope": "compare FULL serialized state leaf-by-leaf (byte/hash equality). A diff in ANY required component => EXACT_RESUME_FAIL.",
+  "required_components": [
+    {"id": "params", "desc": "policy+critic parameters", "required": true},
+    {"id": "optimizer_state", "desc": "Adam moments (mu/nu) for ppo optimizer", "required": true},
+    {"id": "target_ema_params", "desc": "EMA/target network params (P2 replay)", "required": "if replay/EMA enabled"},
+    {"id": "global_step", "desc": "environment step counter", "required": true},
+    {"id": "update_count", "desc": "PPO update counter", "required": true},
+    {"id": "jax_rng", "desc": "carried JAX PRNG state", "required": true},
+    {"id": "action_rng", "desc": "separate action-sampling RNG (if present)", "required": "if separately carried"},
+    {"id": "env_state", "desc": "full environment state (per-world)", "required": true},
+    {"id": "observation", "desc": "last observation buffer", "required": true},
+    {"id": "gtrxl_memory", "desc": "GTrXL short-term memory rows", "required": true},
+    {"id": "gtrxl_mask", "desc": "GTrXL attention mask", "required": true},
+    {"id": "gtrxl_index", "desc": "GTrXL memory write index", "required": true},
+    {"id": "replay_buffer", "desc": "replay buffer contents", "required": "if replay enabled"},
+    {"id": "replay_sampling_rng", "desc": "RNG driving replay sampling", "required": "if replay enabled"},
+    {"id": "pending_episodes", "desc": "in-flight partial episodes", "required": "if replay/hindsight enabled"},
+    {"id": "policy_version", "desc": "policy-lag version counter", "required": "if policy-lag gate enabled"},
+    {"id": "rmt_extra_state", "desc": "RMT mem_tokens/seg_buf/seg_count", "required": "for RMT16"},
+    {"id": "w512_extra_state", "desc": "W512 long_buf/long_mask/delay line", "required": "for W512"},
+    {"id": "next_trajectory_ids", "desc": "next-batch sampled trajectory IDs (replay)", "required": "if replay enabled"},
+    {"id": "per_update_metrics", "desc": "last update telemetry (loss/kl/entropy)", "required": "recommended"}
+  ],
+  "done_true_done": "episode done / true_done flags must also match (affects memory reset).",
+  "gate14": "harness MUST detect a checkpoint that is MISSING any required component (e.g. P7 lacks optimizer/global_step; RMT16 lacks env_state) and report it as an explicit gap, not silently pass.",
+  "per_experiment_known_coverage": {
+    "SlowGRU": {"bitexact_continuation": true, "evidence": "smoke_resume.sh + compare_resume.py byte-identical; A@8192==B2@8192; sha 1a4232e6"},
+    "EventMem": {"bitexact_continuation": true, "evidence": "compare_resume.py byte-identical; sha 67ee581c"},
+    "P9": {"bitexact_continuation": "CLAIMED (report text only)", "gap": "no local compare_resume artifact; sha 9ba3f2b9 in text"},
+    "P8": {"bitexact_continuation": false, "gap": "roundtrip assert only; no independent continuation script"},
+    "P7": {"bitexact_continuation": false, "gap": "disk ckpt = params+carry only; MISSING optimizer/Adam moments/global_step/env_state/rng/manifest; in-memory mini (test_ppo_graft_cpu M4) only"},
+    "RMT16": {"bitexact_continuation": false, "gap": "train_state.pkl MISSING env_state; NO restore path; test_exact_resume(gate7)/test_resume_state(gate11) NOT_FOUND (test_rmt_units.py has only T1-T9)"},
+    "W512": {"bitexact_continuation": "UNVERIFIED", "gap": "no local resume smoke script"}
+  },
+  "authorization": "Training-type A/B continuation runs are NOT executed in this round; require explicit re-authorization. Harness --self-test runs pure-logic state-diff only (no JAX, no training)."
+}

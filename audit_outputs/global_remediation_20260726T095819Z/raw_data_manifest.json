@@ -1,0 +1,157 @@
+{
+  "task": "GLOBAL_EVALUATION_REMEDIATION sync step (read-only)",
+  "sync_status": "BLOCKED",
+  "connectivity_probes": [
+    {
+      "target": "github.com:443 (raw TCP)",
+      "result": "REACHABLE",
+      "note": "raw TCP connect succeeds"
+    },
+    {
+      "target": "github.com via git (proxy 127.0.0.1)",
+      "result": "UNREACHABLE",
+      "note": "proxy down: 'Failed to connect via 127.0.0.1'"
+    },
+    {
+      "target": "github.com via git (direct, proxy bypassed)",
+      "result": "UNREACHABLE",
+      "note": "HTTPS handshake fails after 21s => git fetch BLOCKED"
+    },
+    {
+      "target": "117.50.183.232:23 (known sync host = dreaming-in-code orchestration, NOT mechanism_UED)",
+      "result": "UNREACHABLE",
+      "note": "timeout"
+    },
+    {
+      "target": "mechanism_UED experiment server (where W512/P7/P8/P9 raw data live)",
+      "result": "ADDRESS_UNKNOWN/UNREACHABLE",
+      "note": "no reachable address from this env; prior audit: ssh origin unreachable"
+    }
+  ],
+  "consequence": "Cannot freeze origin Henry-branch HEAD (FU-8 BLOCKED) and cannot sync W512/P7/P8/P9 per-world data. Sync deferred to an environment with server access. No guessing of missing fields (NO_SILENT_ASSUMPTION).",
+  "discipline": [
+    "read-only",
+    "server originals not moved/renamed/mtime-changed",
+    "no missing-field inference",
+    "record expected path + minimum data need when not found"
+  ],
+  "expected_server_data": [
+    {
+      "experiment": "W512",
+      "expected_paths": [
+        "bakeoff_phase1/<arm>/eval/*.json (per-world)",
+        "bakeoff_phase1/<arm>/ckpt/manifest",
+        "bakeoff_phase1/shared/eval_a_side_unified.py + eval_w512_p2replay.py"
+      ],
+      "minimum_data_needed": [
+        "success_per_world[256]",
+        "floor_per_world",
+        "death_per_world",
+        "episode_length_per_world",
+        "evaluator_sha256 (per file)",
+        "world seed/list/hash",
+        "checkpoint params_sha256",
+        "checkpoint manifest",
+        "training config",
+        "ACTUAL L_SEQ (resolve 129 vs 512)"
+      ],
+      "arms": [
+        "W512_Persistent_PPO",
+        "W512_Reset128_PPO",
+        "W512_Persistent_P2Replay",
+        "W512_Reset128_P2Replay",
+        "BASELINE(101)",
+        "Control(93)"
+      ],
+      "status": "NOT_SYNCED",
+      "blocks": [
+        "W512_REPRODUCIBILITY",
+        "CL-07",
+        "CL-08",
+        "CL-09",
+        "L_SEQ freeze"
+      ]
+    },
+    {
+      "experiment": "P7",
+      "expected_paths": [
+        "gpu1_p7_egomap/eval/*.jsonl (per-world)",
+        "gpu1_p7_egomap/ckpt/params_*.pkl + carry_*.pkl"
+      ],
+      "minimum_data_needed": [
+        "success_per_world[256]",
+        "action_mode actually used",
+        "evaluator_sha256",
+        "world seed/list (seed100000 line)",
+        "checkpoint manifest + params SHA (hashlib currently unused)"
+      ],
+      "status": "NOT_SYNCED",
+      "blocks": [
+        "P7_REPRODUCIBILITY",
+        "CL-11"
+      ]
+    },
+    {
+      "experiment": "P8",
+      "expected_paths": [
+        "gpu2_p8_longmemory/eval/{migration,final}/*.json (per-world)",
+        "gpu2_p8_longmemory/ckpt/full_state.pkl"
+      ],
+      "minimum_data_needed": [
+        "migration(64w)+final(256w) per-world arrays",
+        "evaluator_sha256 (both files)",
+        "checkpoint SHA per chunk",
+        "distill-stage record"
+      ],
+      "status": "NOT_SYNCED",
+      "blocks": [
+        "P8_REPRODUCIBILITY",
+        "CL-12"
+      ]
+    },
+    {
+      "experiment": "P9",
+      "expected_paths": [
+        "gpu3_p9_authentic_reset/eval/*.json (per-world)",
+        "gpu3_p9_authentic_reset/ckpt/full_state.pkl",
+        "compare_resume artifact"
+      ],
+      "minimum_data_needed": [
+        "success_per_world[256]",
+        "compare_resume A/B2 SHAs",
+        "checkpoint manifest",
+        "resume config",
+        "evaluator_sha256"
+      ],
+      "status": "NOT_SYNCED",
+      "blocks": [
+        "P9_REPRODUCIBILITY",
+        "CL-13",
+        "continuation exact-resume verification"
+      ]
+    },
+    {
+      "experiment": "GLOBAL",
+      "expected_paths": [
+        "origin Henry-branch HEAD",
+        "per-experiment running code SHA manifest",
+        "canonical L_SEQ frozen design file",
+        "all report-referenced checkpoint paths + SHA"
+      ],
+      "minimum_data_needed": [
+        "origin HEAD commit SHA",
+        "code SHA manifest",
+        "canonical L_SEQ frozen file"
+      ],
+      "status": "NOT_SYNCED",
+      "blocks": [
+        "HEAD freeze (FU-8)",
+        "lineage code-SHA",
+        "L_SEQ canonical (MISS-6)"
+      ]
+    }
+  ],
+  "locally_available_for_recompute": [
+    "Phase2 unified per-world arrays (10 arms) in student_upgrade_wave1_4gpu/reports/phase2_unified_eval.json => recomputed in this step"
+  ]
+}
