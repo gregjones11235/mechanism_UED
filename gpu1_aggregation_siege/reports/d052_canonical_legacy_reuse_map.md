@@ -162,3 +162,33 @@ This map classifies every D052-relevant legacy module so teammates know exactly 
 5. **Dedups**: `model_manifest.py` / `immutable_cache.py` each duplicated at two import paths (byte-identical); two `StudentProfileLog` classes (`siege/student_profile.py` tier engine vs `auction/student_profile_log.py` snapshot history) need reconciliation.
 6. **No cell scheme exists** in live code (only voided d052 dir-name cells) — the cell registry is built fresh in `d052/cells/`.
 
+
+## Addendum — selector adapter decision (Commit 5, [6/9])
+
+The two legacy selector modules are classified **REUSE_WITH_ADAPTER**, realized as a
+clean, self-contained **re-implementation of their documented semantics** in
+`gpu1_aggregation_siege/d052/selectors/` rather than a runtime import:
+
+| Legacy source | Blob SHA1 | Canonical re-implementation |
+|---|---|---|
+| `gpu1_aggregation_siege/src/dicode/mechanisms/aggregation.py` | `92a7e8b6c74d` | `d052/selectors/copeland.py` (Soft / Budgeted Soft Copeland) |
+| `gpu1_aggregation_siege/src/dicode/mechanisms/auction.py` | `ec3517288f35` | `d052/selectors/auction.py` (Auction raw / budgeted) |
+
+Why re-implement instead of import:
+1. **`import dicode` collision** — four packages (`dicode_src`, `dicode_v6`,
+   `gpu0_training_mechanisms`, `gpu1_aggregation_siege`) all install a top-level
+   `dicode` module; importing the legacy selector path is non-deterministic and
+   environment-dependent.
+2. **Heavy/absent deps** — the legacy path pulls jax/craftax/hydra, none of which
+   are installed in the canonical environment (zero-new-dependency discipline).
+3. **Hardcoded `/root` paths** and ad-hoc config objects violate canonical_v2
+   path-configurability and no-silent-fallback rules.
+
+**Exact numeric parity with legacy is NOT claimed.** Phase-1 established that the
+archived selector input contract is disjoint from the frozen candidate bundle, so a
+parity oracle does not exist. What IS guaranteed: identical documented semantics
+(pairwise Copeland over normalized role strength; utility-bid auction; greedy
+highest-first budget cap), full determinism (bit-identical replay, candidate_id
+ascending tie-break), explicit critic-policy consumption, and a content-bound
+`selection_hash`. The legacy blobs above remain the authoritative provenance
+reference and are frozen read-only.
