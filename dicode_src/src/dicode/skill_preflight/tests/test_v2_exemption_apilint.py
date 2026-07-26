@@ -355,3 +355,37 @@ def test_lr_schedule_clamped():
                "dicode/ppo_tr.py")).read()
     seg = ppo.split("def linear_schedule")[1].split("return")[0]
     assert "jnp.maximum(" in seg and "0.0" in seg, "anneal must be clamped at zero"
+
+
+# --- v2.1: rule 3 was ungated and defeated the rule-1 exemption ----------------------------
+
+class _IronT:  # focus = collect_iron, its prereq make_stone_pickaxe MASTERED
+    target_achievements = ["collect_iron"]
+    sr_snapshot = dict(SNAPSHOT, make_stone_pickaxe=0.81, collect_iron=0.10)
+
+
+def test_v1_rule3_contradicts_the_exemption():
+    """Regression witness: with the exemption ON, rule 3 still forbids *provisioning*
+    mastered skills unconditionally. Two prohibitions vs one parenthetical permission."""
+    on = format_target_for_prompt_one_step(_IronT(), mastered_exemption=True)
+    assert "MAY be provided or skipped" in on
+    assert "Do NOT pre-mark or provision" in on
+
+
+def test_r3_v2_splits_premark_from_provision():
+    v2 = format_target_for_prompt_one_step(_IronT(), mastered_exemption=True, r3_v2=True)
+    assert "Do NOT pre-mark or provision" not in v2
+    assert "PROVIDING a mastered prerequisite" in v2
+    cv2 = format_scaffold_rules_for_coder(_IronT.sr_snapshot,
+                                          mastered_exemption=True, r3_v2=True)
+    con = format_scaffold_rules_for_coder(_IronT.sr_snapshot, mastered_exemption=True)
+    assert "TOOL TIER" in cv2 and "TOOL TIER" not in con
+
+
+def test_r3_v2_default_off_is_byte_identical():
+    """Branch discipline: passing nothing, or r3_v2=False, must be unchanged."""
+    assert (format_target_for_prompt_one_step(_IronT(), mastered_exemption=True)
+            == format_target_for_prompt_one_step(_IronT(), mastered_exemption=True,
+                                                 r3_v2=False))
+    assert (format_scaffold_rules_for_coder(SNAPSHOT)
+            == format_scaffold_rules_for_coder(SNAPSHOT, r3_v2=False))

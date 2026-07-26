@@ -188,7 +188,7 @@ def _snapshot_lines(sr: Mapping[str, float]) -> tuple[str, str, str]:
 
 
 def format_target_for_prompt_one_step(
-    target: SchedulerTarget, *, mastered_exemption: bool = False
+    target: SchedulerTarget, *, mastered_exemption: bool = False, r3_v2: bool = False
 ) -> str:
     """One-step variant of the [Curriculum focus] block (design/docstring stage).
 
@@ -220,15 +220,21 @@ def format_target_for_prompt_one_step(
         + f"\n"
         f"2. You MAY scaffold prerequisites that are deeper in the chain ONLY if the agent has "
         f"NOT acquired them (< 30%) and they are not the training focus.\n"
-        f"3. Do NOT pre-mark or provision skills the agent already MASTERS (>= 70%): the agent "
-        f"performs those itself. Granting them adds nothing and corrupts the task's meaning.\n"
-        f"4. In the docstring, the Prerequisites section may list ONLY items permitted by rule "
+        + ("3. Do NOT PRE-MARK skills the agent already MASTERS (>= 70%) as completed "
+           "achievements: the agent performs those itself. PROVIDING a mastered prerequisite "
+           "in the starting inventory is permitted by rule 1 above - e.g. if make_stone_pickaxe "
+           "is mastered and the focus skill is collect_iron, start the agent with a stone "
+           "pickaxe rather than making it re-craft one.\n"
+           if r3_v2 else
+           "3. Do NOT pre-mark or provision skills the agent already MASTERS (>= 70%): the agent "
+           "performs those itself. Granting them adds nothing and corrupts the task's meaning.\n")
+        + f"4. In the docstring, the Prerequisites section may list ONLY items permitted by rule "
         f"2. If that leaves it empty, write 'Prerequisites: none'."
     )
 
 
 def format_scaffold_rules_for_coder(
-    sr: Mapping[str, float], *, mastered_exemption: bool = False
+    sr: Mapping[str, float], *, mastered_exemption: bool = False, r3_v2: bool = False
 ) -> str:
     """Scaffolding constraint block appended to the CODE-generation user prompt.
 
@@ -250,6 +256,9 @@ def format_scaffold_rules_for_coder(
         "task trains make_iron_pickaxe or collect_diamond)."
         + (" EXCEPTION: prerequisites in the MASTERS list above may be provided or skipped "
            "— e.g. a starting floor that skips a mastered descent is encouraged."
+           + (" A mastered TOOL TIER may likewise be granted directly: if make_stone_pickaxe "
+              "is mastered and the task trains collect_iron, giving pickaxe level 2 in "
+              "`set_player_inventory` is CORRECT, not a violation." if r3_v2 else "")
            if mastered_exemption else "") + "\n"
         "3. If the code examples above pre-mark achievements or hand out inventory more "
         "liberally, IGNORE that pattern — these constraints take precedence."
