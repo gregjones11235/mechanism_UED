@@ -1,0 +1,182 @@
+--- src/train_rmt16_p2replay.py.before_probe	2026-07-26 13:11:22.318446549 +0800
++++ src/train_rmt16_p2replay.py	2026-07-26 13:11:22.334446667 +0800
+@@ -31,6 +31,13 @@
+ ap.add_argument("--total_updates", type=int, default=12)     # 12 * 2048 = 24576
+ ap.add_argument("--seed", type=int, default=42)
+ ap.add_argument("--save_every", type=int, default=2)         # updates between saves (2 => every 4096)
++# Phase4A probe (CC2 directive 2/3 + addendum): reachability probe + A/B no-perturbation gate.
++ap.add_argument("--probe", action="store_true",
++                help="L512 reachability probe: record-only, fixed full horizon, replay learner+hindsight OFF")
++ap.add_argument("--early_stop_len", type=int, default=0,
++                help="DEBUG-ONLY non-comparative early stop (0=OFF; formal probe MUST keep 0)")
++ap.add_argument("--equiv_dump", action="store_true",
++                help="emit per-update deterministic equivalence hashes for the A/B no-perturbation gate")
+ args = ap.parse_args()
+ 
+ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_uuid
+@@ -62,6 +69,9 @@
+ from rmt_memory_anchor import make_apply_eval_rmt
+ 
+ REPLAY_ON = (args.replay == "on")
++PROBE = bool(args.probe)
++if PROBE:
++    assert args.replay == "off", "probe requires --replay off (replay learner + hindsight must be OFF)"
+ ARM = f"RMT16-{args.carry_mode.capitalize()}{'-P2Replay' if REPLAY_ON else '-PPO'}"
+ 
+ # ----------------------- config (bakeoff frozen + P2 frozen) -----------------------
+@@ -122,6 +132,12 @@
+         h.update(np.ascontiguousarray(np.asarray(v)).tobytes())
+     return h.hexdigest()
+ 
++def _arr_hash(*arrays):
++    h = hashlib.sha256()
++    for a in arrays:
++        h.update(np.ascontiguousarray(np.asarray(a)).tobytes())
++    return h.hexdigest()
++
+ def _to_np(pt):
+     return jax.tree_util.tree_map(lambda x: np.asarray(x), pt)
+ 
+@@ -288,9 +304,17 @@
+ os.makedirs(CKPT_DIR, exist_ok=True); os.makedirs(LOG_DIR, exist_ok=True)
+ log_path = os.path.join(LOG_DIR, f"{ARM}_train.jsonl")
+ audit_path = os.path.join(LOG_DIR, f"{ARM}_replay_audit.jsonl")
++# Phase4A directive 2/3: probe output files (only written when PROBE) + equiv gate file.
++probe_episodes_path = os.path.join(LOG_DIR, f"{ARM}_probe_episodes.jsonl")
++probe_updates_path = os.path.join(LOG_DIR, f"{ARM}_probe_updates.jsonl")
++equiv_path = os.path.join(LOG_DIR, f"{ARM}_equiv.jsonl")
++PROBE_GE_LEN = 512   # directive length>=512 eligibility threshold (RECORD only; never a stop)
+ 
+ update_count = 0
+ accepted_policy_updates = 0; kl_rejected_updates = 0; hindsight_eligible = 0; hindsight_attempts = 0
++# Phase4A directive 2/3: probe cumulative state (used only when PROBE).
++probe_completed_episodes = []     # cumulative per-episode termination records
++probe_first_ge512 = None          # first length>=512 episode (RECORD only; never a stop)
+ 
+ # ----------------------- checkpoint -----------------------
+ def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag):
+@@ -347,6 +371,44 @@
+         replay.counters.trajectories_collected += 1
+     assert replay.counters.trajectories_collected == replay.counters.trajectories_inserted, \
+         "HARD STOP conservation: collected != inserted"
++    # ---- Phase4A probe: per-episode records + per-update aggregation (directive 2/3; RECORD only) ----
++    if PROBE:
++        _new_eps = stats.get("episode_records", [])
++        probe_completed_episodes.extend(_new_eps)
++        with open(probe_episodes_path, "a") as f:
++            for _ep in _new_eps:
++                f.write(json.dumps(_ep, default=str) + "\n")
++        for _ep in _new_eps:
++            if probe_first_ge512 is None and int(_ep["length"]) >= PROBE_GE_LEN:
++                probe_first_ge512 = dict(
++                    first_ge512_update=int(_ep["update_index"]),
++                    first_ge512_global_step=int(_ep["completion_global_step"]),
++                    first_ge512_episode_id=int(_ep["episode_id"]),
++                    first_ge512_length=int(_ep["length"]))
++        _lens = [int(_e["length"]) for _e in probe_completed_episodes]
++        _reasons = {}
++        for _e in probe_completed_episodes:
++            _reasons[_e["done_reason"]] = _reasons.get(_e["done_reason"], 0) + 1
++        _la = np.array(_lens, float) if _lens else np.array([0.0])
++        probe_upd = dict(update=u, global_step=(u + 1) * STEPS_PER_UPDATE, arm=ARM,
++            completed_episode_count_cumulative=len(probe_completed_episodes),
++            completed_episode_count_this_update=len(_new_eps),
++            pending_episode_count=sum(1 for _ps in pending.slots if len(_ps["obs"]) > 0),
++            replay_buffer_trajectory_count=len(replay),
++            P50=float(np.percentile(_la, 50)), P75=float(np.percentile(_la, 75)),
++            P90=float(np.percentile(_la, 90)), P95=float(np.percentile(_la, 95)),
++            P99=float(np.percentile(_la, 99)), max_len=int(max(_lens) if _lens else 0),
++            count_ge_129=sum(1 for _L in _lens if _L >= 129),
++            count_ge_256=sum(1 for _L in _lens if _L >= 256),
++            count_ge_512=sum(1 for _L in _lens if _L >= 512),
++            fraction_ge_512=(sum(1 for _L in _lens if _L >= 512) / len(_lens) if _lens else 0.0),
++            termination_reason_counts=_reasons,
++            first_ge512=probe_first_ge512)
++        with open(probe_updates_path, "a") as f:
++            f.write(json.dumps(probe_upd, default=str) + "\n")
++        print(f"[probe u{u}] eps_cum={len(probe_completed_episodes)} this={len(_new_eps)} "
++              f"max_len={probe_upd['max_len']} ge512={probe_upd['count_ge_512']} "
++              f"first_ge512={probe_first_ge512}", flush=True)
+ 
+     # 2. last_value + GAE + PPO main update
+     _lg, last_value, _mo, _ht = apply_eval_rmt(
+@@ -360,6 +422,28 @@
+     update_count += 1
+     online_ppo_update_count += 1
+     assert ppo_metrics["ppo_finite"], "HARD STOP NaN/Inf in PPO update"
++    # ---- A/B training-no-perturbation gate artifacts (CC2 addendum; only with --equiv_dump) ----
++    # Deterministic hashes of the rollout + post-update params/optimizer/RMT state. A (probe OFF)
++    # and B (probe ON) both emit these; an exact match proves the probe instrumentation does not
++    # perturb training. Host-side reads only; no effect on training numerics / RNG stream.
++    if args.equiv_dump:
++        equiv = dict(update=u, global_step=(u + 1) * STEPS_PER_UPDATE,
++                     actions_hash=_arr_hash(rollout["actions"]),
++                     rewards_hash=_arr_hash(rollout["rewards"]),
++                     dones_hash=_arr_hash(rollout["dones"]),
++                     ard_hash=_arr_hash(rollout["actions"], rollout["rewards"], rollout["dones"]),
++                     params_sha=_params_sha(params),
++                     ppo_opt_sha=_params_sha(ppo_opt_state),
++                     rmt_state_sha=_params_sha(rmt_state),
++                     memories_sha=_params_sha(memories),
++                     mem_mask_sha=_params_sha(mem_mask),
++                     mem_idx_sha=_params_sha(mem_idx),
++                     ppo_actor=float(ppo_metrics["ppo_actor"]),
++                     ppo_entropy=float(ppo_metrics["ppo_entropy"]),
++                     ppo_value=float(ppo_metrics.get("ppo_value", 0.0)),
++                     online_ppo_update_count=online_ppo_update_count)
++        with open(equiv_path, "a") as f:
++            f.write(json.dumps(equiv, default=str) + "\n")
+ 
+     # 3. replay update (P2-Full-A frozen channel)
+     rep = {}
+@@ -498,6 +582,13 @@
+     # 4. checkpoint at save points
+     if (u + 1) % args.save_every == 0 or (u + 1) == args.total_updates:
+         save_ckpt(global_step, params, ppo_opt_state, replay_opt_state, target_params, "save")
++    # Phase4A probe DEBUG-ONLY early stop (default OFF; NON-COMPARATIVE debugging only). The formal
++    # probe MUST keep args.early_stop_len == 0 so both arms run the identical full fixed horizon.
++    if PROBE and args.early_stop_len and probe_first_ge512 is not None \
++            and int(probe_first_ge512["first_ge512_length"]) >= args.early_stop_len:
++        print(f"PROBE_DEBUG_EARLY_STOP fired at u{u} (early_stop_len={args.early_stop_len}); "
++              f"NON-COMPARATIVE debug only -- formal probe must NOT stop here.", flush=True)
++        break
+ 
+     # replay noise audit (directive §七)
+     if REPLAY_ON:
+@@ -514,6 +605,36 @@
+         with open(audit_path, "a") as f:
+             f.write(json.dumps(audit, default=str) + "\n")
+ 
++# ---- Phase4A probe final summary (directive 4; RECORD only; NOT formal science) ----
++if PROBE:
++    _lens = [int(_e["length"]) for _e in probe_completed_episodes]
++    _reasons = {}
++    for _e in probe_completed_episodes:
++        _reasons[_e["done_reason"]] = _reasons.get(_e["done_reason"], 0) + 1
++    probe_summary = dict(
++        arm=ARM, carry_mode=args.carry_mode, probe="REACHABILITY_ONLY",
++        not_for_formal_science=True,
++        replay=args.replay,
++        replay_note="replay learner + hindsight OFF; buffer collection of complete done episodes ON",
++        total_updates=args.total_updates,
++        total_env_steps=args.total_updates * STEPS_PER_UPDATE,
++        online_ppo_update_count=online_ppo_update_count,
++        completed_episode_count=len(probe_completed_episodes),
++        all_episode_lengths_sorted=sorted(_lens),
++        count_ge_512=sum(1 for _L in _lens if _L >= 512),
++        fraction_ge_512=(sum(1 for _L in _lens if _L >= 512) / len(_lens) if _lens else 0.0),
++        first_ge512=probe_first_ge512,
++        termination_reason_counts=_reasons,
++        final_params_sha256=_params_sha(params), base_sha256=base_sha,
++        step0_params_in="ckpt/0/full_state.pkl",
++        early_stop_used=bool(args.early_stop_len and probe_first_ge512 is not None),
++        timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
++    with open(os.path.join(LOG_DIR, f"{ARM}_probe_summary.json"), "w") as f:
++        json.dump(probe_summary, f, indent=2, default=str)
++    print("RMT16_PROBE=REACHABILITY_ONLY NOT_FOR_FORMAL_SCIENCE", flush=True)
++    print("PROBE_SUMMARY=" + json.dumps(probe_summary, default=str), flush=True)
++    sys.exit(0)
++
+ # ---- Phase4A per-arm final gates v2 (CC2 directive: reset128 read branch must be CONNECTED) ----
+ RMT_READ_PATH_ACTIVE = bool(read_ever_nonzero and mem_on_off_ever_nonzero)  # carried-token activity
+ READ_BRANCH_CONNECTED = bool(read_conn_ever_nonzero)                         # synthetic-token connectivity

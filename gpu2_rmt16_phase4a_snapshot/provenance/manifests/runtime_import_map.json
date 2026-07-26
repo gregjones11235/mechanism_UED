@@ -1,0 +1,88 @@
+{
+  "pythonpath_order": [
+    "/home/oseasy/experiments/rmt16_replay_phase4a/src",
+    "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src",
+    "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB"
+  ],
+  "note": "resolved via runtime python (dicode310) inspect.getfile; JAX_PLATFORMS=cpu",
+  "driver_imports_collector_from": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt_collect.py",
+  "wrapper_actual_load_tree": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src/dicode/wrappers_cl.py",
+  "wrapper_source_tree": "incoming/.../dicode_v7fix58_armB/src/dicode (V7/src on sys.path)",
+  "experiment_modules_load_tree": "experiments/rmt16_replay_phase4a/src (SRC first on sys.path)",
+  "frozen_module_resolved_paths": {
+    "network_rmt16": "/home/oseasy/experiments/rmt16_replay_phase4a/src/network_rmt16.py",
+    "rmt_replay_buffer": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt_replay_buffer.py",
+    "rmt_memory_anchor": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt_memory_anchor.py",
+    "rmt16_memory": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt16_memory.py",
+    "rmt_ppo": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt_ppo.py",
+    "rmt_hindsight": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt_hindsight.py",
+    "replay_buffer": "/home/oseasy/experiments/rmt16_replay_phase4a/src/replay_buffer.py",
+    "rmt_replay_learner": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rmt_replay_learner.py"
+  },
+  "dependency_resolved_paths": {
+    "rng_utils": "/home/oseasy/experiments/rmt16_replay_phase4a/src/rng_utils.py",
+    "full_p2_learner": "/home/oseasy/experiments/rmt16_replay_phase4a/src/full_p2_learner.py",
+    "hindsight": "/home/oseasy/experiments/rmt16_replay_phase4a/src/hindsight.py",
+    "pending_episodes": "/home/oseasy/experiments/rmt16_replay_phase4a/src/pending_episodes.py",
+    "awr": "/home/oseasy/experiments/rmt16_replay_phase4a/src/awr.py",
+    "memory_anchor": "/home/oseasy/experiments/rmt16_replay_phase4a/src/memory_anchor.py",
+    "vtrace": "/home/oseasy/experiments/rmt16_replay_phase4a/src/vtrace.py"
+  },
+  "external_resolved_paths": {
+    "dicode.wrappers_cl": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src/dicode/wrappers_cl.py",
+    "dicode.task_utils": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src/dicode/task_utils.py",
+    "minicraftax.envs.multitask": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src/minicraftax/envs/multitask.py"
+  },
+  "probe_term_wiring": "driver line ~166 passes probe_term=PROBE to DistributedMultiTaskOptimisticLogWrapper; wrapper __init__ (probe_term=True) reads ALL self._env.tasks[i].params.max_timesteps, requires >=1 and full agreement, else raises; _term_done_steps uses validated self.probe_max_timesteps.",
+  "same_name_shadowing": {
+    "network_rmt16": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt_replay_buffer": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt_memory_anchor": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt16_memory": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt_ppo": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt_hindsight": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "replay_buffer": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt_replay_learner": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rng_utils": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "full_p2_learner": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "hindsight": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "pending_episodes": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "awr": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "memory_anchor": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "vtrace": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ],
+    "rmt_collect": [
+      "/home/oseasy/experiments/rmt16_replay_phase4a/src"
+    ]
+  },
+  "shadowing_verdict": "no top-level local experiment module is shadowed: each resolves uniquely from SRC; dicode.* resolves from V7/src; no duplicate <name>.py across sys.path entries for the local module set"
+}

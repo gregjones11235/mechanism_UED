@@ -1,0 +1,19 @@
+/home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/jax/_src/ops/scatter.py:93: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=float32 to dtype=int32 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+======================================================================
+GATE 4: wrapper termination-schema test (CPU)
+======================================================================
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+[A] probe_term=OFF: n_keys=73, _term_* present=False  (bit-exact original info)
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+[B] probe_term=ON: 3 normal steps -> key set INVARIANT; exactly 5 _term_* added; shape (16,) fixed; no strings
+[C-normal] done_count=0 (env0 done=False); _term_* schema identical to normal steps
+[D-time_limit] done[0]=True; info _term_timestep=4096 (PRE-reset) vs returned_state timestep=0 (POST-reset); _term_done_steps=True; provenance_differs=True; done_reason=time_limit
+[D-player_death] done[0]=True; info _term_player_health=0.000 (PRE-reset) vs returned_state health=9.000 (POST-reset); _term_is_dead=True; provenance_differs=True; done_reason=player_death
+[D-task_success] done[0]=True; info is_success=True & Achievements/defeat_kobold=100.0 (PRE-reset) vs returned_state achievements[kobold]=0.0 (POST-reset); done_reason=task_success
+======================================================================
+GATE4_RESULTS={"normal": {"done_count": 0, "env0_done": false, "term_is_dead": false, "term_done_steps": false, "is_success": false}, "time_limit": {"term_timestep": 4096, "returned_timestep": 0, "term_done_steps": true, "term_is_dead": false, "is_success": false, "done_reason": "time_limit", "provenance_proven": true}, "player_death": {"term_health": 0.0, "returned_health": 9.0, "term_is_dead": true, "term_done_steps": false, "is_success": false, "done_reason": "player_death", "provenance_proven": true}, "task_success": {"is_success": true, "term_ach_info": 100.0, "returned_ach": 0.0, "term_is_dead": false, "term_done_steps": false, "done_reason": "task_success", "provenance_proven": true}}
+GATE4_PASS=True
