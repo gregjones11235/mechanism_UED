@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""RMT16 × P2-Replay — unified training driver (Phase4A).
+
+ONE driver serves all four RMT16 arms via two flags:
+  --carry_mode {persistent, reset128}   the ONLY Persistent vs Reset128 difference
+                                        (tokens carried across 128-step segment boundaries
+                                         vs cleared at them; both clear on true done).
+  --replay {on, off}                    enable/disable the P2-Full-A replay channel.
+                                        off => clean RMT16 on-policy PPO (gate-4 reference).
+
+Per outer update (directive §三 / frozen design §7):
+  1. collect_rollout_rmt  (16 env x 128 steps; emits complete episodes + sparse GTrXL/RMT
+                           anchors; persists episodes across rollouts via pending buffers)
+  2. PPO MAIN update      (Original PPO, frozen hyperparams; rmt_ppo.ppo_update_rmt)
+  3. REPLAY update        (if buffer.can_sample(): K=4 relabelable sequences ->
+                           V-trace original-goal + hindsight AWR relabeled; transactional
+                           KL gate <=0.05 with actor step-scale retry + rollback; EMA target)
+  4. checkpoints at 0/4096/8192/12288/16384/20480/24576 (smoke: 0/4096). NO auto-98304.
+
+Frozen coefficients (PPO + Replay) are inherited from the bakeoff Cfg + FullP2Config and
+are NOT tuned here. GPU2=persistent, GPU3=reset128 (directive §二).
+"""
+import os, sys, json, time, hashlib, pickle, argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--carry_mode", required=True, choices=["persistent", "reset128"])
+ap.add_argument("--replay", required=True, choices=["on", "off"])
+ap.add_argument("--ckpt17500", required=True)
+ap.add_argument("--out", required=True)
+ap.add_argument("--gpu_uuid", required=True)
+ap.add_argument("--total_updates", type=int, default=12)     # 12 * 2048 = 24576
+ap.add_argument("--seed", type=int, default=42)
+ap.add_argument("--save_every", type=int, default=2)         # updates between saves (2 => every 4096)
+# Phase4A probe (CC2 directive 2/3 + addendum): reachability probe + A/B no-perturbation gate.
+ap.add_argument("--probe", action="store_true",
+                help="L512 reachability probe: record-only, fixed full horizon, replay learner+hindsight OFF")
+ap.add_argument("--early_stop_len", type=int, default=0,
+                help="DEBUG-ONLY non-comparative early stop (0=OFF; formal probe MUST keep 0)")
+ap.add_argument("--equiv_dump", action="store_true",
+                help="emit per-update deterministic equivalence hashes for the A/B no-perturbation gate")
+args = ap.parse_args()
+
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_uuid
+os.environ["XLA_FLAGS"] = "--xla_gpu_deterministic_ops=true"
+
+SRC = os.path.dirname(os.path.abspath(__file__))
+V7 = "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB"
+for p in [SRC, V7 + "/src", V7]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+import jax, jax.numpy as jnp, numpy as np, optax
+import orbax.checkpoint as ocp
+from craftax.craftax.constants import Achievement
+from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+from dicode.task_utils import get_achievement_multi_hot
+from dicode.wrappers_cl import DistributedMultiTaskOptimisticLogWrapper
+from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+
+from network_rmt16 import ActorCriticTransformerRMT16
+import rmt16_memory as rmtm
+import rng_utils as RU
+import rmt_collect as RC
+import rmt_ppo as PPO
+import rmt_replay_learner as RL
+import rmt_hindsight as RH
+from rmt_replay_buffer import RMTReplayBuffer
+from full_p2_learner import FullP2Config, build_optimizer
+from rmt_memory_anchor import make_apply_eval_rmt
+
+REPLAY_ON = (args.replay == "on")
+PROBE = bool(args.probe)
+if PROBE:
+    assert args.replay == "off", "probe requires --replay off (replay learner + hindsight must be OFF)"
+ARM = f"RMT16-{args.carry_mode.capitalize()}{'-P2Replay' if REPLAY_ON else '-PPO'}"
+
+# ----------------------- config (bakeoff frozen + P2 frozen) -----------------------
+class Cfg:
+    activation="relu"; embed_size=256; hidden_layers=256; num_heads=8; qkv_features=256
+    num_layers=2; gating=True; gating_bias=2.0; window_mem=128; window_grad=64
+    lr=2e-5; max_grad_norm=1.0; gamma=0.999; gae_lambda=0.8; clip_eps=0.2; vf_coef=0.5
+    ent_coef=0.002; update_epochs=1; num_minibatches=2; num_envs=16; num_steps=128
+    optimistic_reset_ratio=16; condition_on_task=True
+    value_target_clip_min=-50.0; value_target_clip_max=300.0; rmt_num_tokens=16
+cfg = Cfg()
+ppo_cfg = dict(window_mem=cfg.window_mem, num_heads=cfg.num_heads, num_layers=cfg.num_layers,
+               embed=cfg.embed_size, lr=cfg.lr, max_grad_norm=cfg.max_grad_norm,
+               gamma=cfg.gamma, gae_lambda=cfg.gae_lambda, clip_eps=cfg.clip_eps,
+               vf_coef=cfg.vf_coef, ent_coef=cfg.ent_coef, update_epochs=cfg.update_epochs,
+               num_minibatches=cfg.num_minibatches)
+fp_cfg = FullP2Config(window_mem=cfg.window_mem, num_heads=cfg.num_heads,
+                      num_layers=cfg.num_layers, embed=cfg.embed_size,
+                      gamma=cfg.gamma, vt_clip_min=cfg.value_target_clip_min,
+                      vt_clip_max=cfg.value_target_clip_max)
+rmt_cfg = rmtm.RMT16Config(num_tokens=cfg.rmt_num_tokens, segment_len=cfg.num_steps,
+                           encoder_size=cfg.embed_size)
+K_BATCH = 4
+L_SEQ = 512
+STEPS_PER_UPDATE = cfg.num_envs * cfg.num_steps     # 2048
+
+# ----------------------- Stage4 DEFEAT_KOBOLD task (identical to bakeoff) -----------------------
+S4_TASK_CODE = '''
+import jax
+from craftax.craftax.constants import Achievement, ItemType
+from minicraftax.craftax_state import TaskParams
+from minicraftax.tasks.base_task import BaseTask
+from minicraftax.world_builder import WorldBuilder
+class Env(BaseTask):
+    def __init__(self, sp, p):
+        super().__init__(sp, p)
+        self.relevant_achievements=[Achievement.DEFEAT_KOBOLD]; self.completed_achievements=[]; self.label="DEFEAT_KOBOLD"
+    def get_task_params(self): return TaskParams(needs_depletion_multiplier=0.3)
+    def generate_world(self, rng):
+        rng,_r=jax.random.split(rng); b=WorldBuilder(_r,self.static_params,self.params)
+        b.set_starting_floor(2); b.set_monsters_killed(2,8)
+        b.set_player_inventory({"wood":7,"stone":27,"coal":3,"iron":3,"sapling":1,"pickaxe":3,"sword":3,"bow":1,"arrows":7,"torches":10})
+        s=b.build(rng); up=b.ladders_up[2]
+        return s.replace(item_map=s.item_map.at[2,up[0],up[1]].set(ItemType.NONE.value))
+'''
+ns4 = {}; exec(S4_TASK_CODE, ns4); S4Cls = ns4["Env"]
+ctor = EnvParams(max_timesteps=4096)
+table = jnp.array([get_achievement_multi_hot([Achievement.DEFEAT_KOBOLD])], dtype=jnp.float32)
+EMB = int(table.shape[1])
+target_achievement_1d = np.asarray(table[0]).astype(np.float32)   # [n_ach] (P2 hindsight convention)
+from hindsight import DEFAULT_EMBEDDING_SIZE
+assert EMB == DEFAULT_EMBEDDING_SIZE, f"EMB {EMB} != DEFAULT_EMBEDDING_SIZE {DEFAULT_EMBEDDING_SIZE}"
+
+# ----------------------- helpers -----------------------
+def _params_sha(params):
+    h = hashlib.sha256()
+    for v in jax.tree_util.tree_leaves(params):
+        h.update(np.ascontiguousarray(np.asarray(v)).tobytes())
+    return h.hexdigest()
+
+def _arr_hash(*arrays):
+    h = hashlib.sha256()
+    for a in arrays:
+        h.update(np.ascontiguousarray(np.asarray(a)).tobytes())
+    return h.hexdigest()
+
+def _to_np(pt):
+    return jax.tree_util.tree_map(lambda x: np.asarray(x), pt)
+
+def _merge(base, full):
+    if isinstance(base, dict) and isinstance(full, dict):
+        out = dict(full)
+        for k in base:
+            if k in full:
+                out[k] = _merge(base[k], full[k])
+        return out
+    return base
+
+# ----------------------- env + network + compat init -----------------------
+print("=" * 78, flush=True)
+print(f"{ARM}  driver  (Phase4A)", flush=True)
+print(f"  carry_mode={args.carry_mode} replay={args.replay} gpu={args.gpu_uuid}", flush=True)
+print(f"  devices={[str(d) for d in jax.devices()]}", flush=True)
+print("=" * 78, flush=True)
+
+base_env = MultiTaskMiniCraftaxEnv([S4Cls], StaticEnvParams(), ctor, True,
+                                   conditioning_type="embedding", embedding_size=EMB)
+env = DistributedMultiTaskOptimisticLogWrapper(
+    base_env, jax.random.PRNGKey(0), cfg.num_envs, 1, cfg.optimistic_reset_ratio,
+    # RMT16 Phase4A (CC2): wire the probe so probe_term=True emits the additive _term_* keys.
+    # PROBE=False (frozen runs / A arm) -> probe_term=False -> info dict bit-exact original.
+    jnp.array([1.0]), table, probe_term=PROBE)
+env_params = env.default_params
+assert env_params is not None, 'env_params (Craftax EnvParams) must resolve before collect/env.step'
+ACTION_DIM = int(env.action_space(env_params).n)
+OBS_DIM = int(env.observation_space(env_params).shape[0])
+fp_cfg.action_dim = ACTION_DIM; fp_cfg.obs_dim = OBS_DIM
+
+network = ActorCriticTransformerRMT16(
+    action_dim=ACTION_DIM, activation=cfg.activation, encoder_size=cfg.embed_size,
+    hidden_layers=cfg.hidden_layers, num_heads=cfg.num_heads, qkv_features=cfg.qkv_features,
+    num_layers=cfg.num_layers, gating=cfg.gating, gating_bias=cfg.gating_bias,
+    rmt_num_tokens=cfg.rmt_num_tokens)
+
+# compat init from ckpt17500 (base params loaded; RMT params fresh, rmt_gate=0 -> bit-exact)
+t0 = time.time()
+ckpt_mgr = ocp.CheckpointManager(os.path.dirname(args.ckpt17500))
+raw = ckpt_mgr.restore(int(os.path.basename(args.ckpt17500)))
+base_params = raw["params"]                 # {"params": {...}} wrapped (repo convention)
+base_inner = base_params["params"]          # INNER (apply convention used by make_apply_eval_rmt)
+base_sha = _params_sha(base_inner)
+print(f"[load] ckpt17500 leaves={len(jax.tree_util.tree_leaves(base_inner))} "
+      f"sha={base_sha[:16]} ({time.time()-t0:.1f}s)", flush=True)
+
+rng_init = jax.random.PRNGKey(args.seed); rng_init, _rng = jax.random.split(rng_init)
+full_params = network.init(
+    _rng, jnp.zeros((2, cfg.window_mem, cfg.num_layers, cfg.embed_size)),
+    jnp.zeros((2, OBS_DIM)),
+    jnp.zeros((2, cfg.num_heads, 1, cfg.window_mem + 1), jnp.bool_),
+    mem_tokens=jnp.zeros((2, cfg.rmt_num_tokens, cfg.embed_size)),
+    seg_buf=jnp.zeros((2, cfg.num_steps, cfg.embed_size)),
+    method=network.init_all)
+full_inner = full_params["params"]                  # flax init returns {"params": {...}}
+params = _merge(base_inner, full_inner)             # INNER: ckpt17500 base weights + fresh RMT
+assert _params_sha(_merge(base_inner, base_inner)) == base_sha, "base merge sanity"
+print(f"[merge] inner_leaves={len(jax.tree_util.tree_leaves(params))} base_sha={base_sha[:16]} "
+      f"(rmt_gate zero-init -> bit-exact at step0)", flush=True)
+
+# ----------------------- optimizers / EMA / buffers / state -----------------------
+ppo_opt = PPO.build_ppo_optimizer(ppo_cfg)
+replay_opt = build_optimizer(cfg.lr, fp_cfg)
+params = jax.tree_util.tree_map(jnp.asarray, params)
+ppo_opt_state = ppo_opt.init(params)
+replay_opt_state = replay_opt.init(params)
+target_params = params                                  # EMA target init = online (ckpt17500)
+
+replay = RMTReplayBuffer(capacity=64, seed=args.seed)
+pending = RC.RMTPendingEpisodeBuffers(cfg.num_envs, first_episode_id=0, first_policy_version=0)
+apply_eval_rmt = make_apply_eval_rmt(network)
+
+# ---- RMT read-path runtime monitor (Phase4A env_params-fix gate; READ-ONLY probe) ----
+# Driver-local probe; does NOT modify network / loss / optimizer / env / eval logic.
+def _leaf_norm_rm(subtree):
+    return float(np.sqrt(sum(float(np.sum(np.square(np.asarray(v))))
+        for v in jax.tree_util.tree_leaves(subtree))))
+
+def _read_path_monitor(p, mem, obs, mask, tok):
+    """READ-ONLY read-path activity probe on current (post-update) params + carried state.
+    read-path grad = grad of (logits.mean()+value.mean()); mem on/off = tokens vs zeros."""
+    def _probe_loss(pp):
+        lg, vl, _mo, _ht = apply_eval_rmt(pp, mem, obs, mask, tok)
+        return jnp.asarray(lg).mean() + jnp.asarray(vl).mean()
+    g = jax.grad(_probe_loss)(p)
+    lg_on, _v1, _m1, _h1 = apply_eval_rmt(p, mem, obs, mask, tok)
+    lg_off, _v2, _m2, _h2 = apply_eval_rmt(p, mem, obs, mask, jnp.zeros_like(jnp.asarray(tok)))
+    lon = jnp.asarray(lg_on); loff = jnp.asarray(lg_off)
+    diff = float(jnp.max(jnp.abs(lon - loff)))
+    pon = jax.nn.softmax(lon, axis=-1); poff = jax.nn.softmax(loff, axis=-1)
+    kl = float(jnp.mean(jnp.sum(pon * (jnp.log(pon + 1e-12) - jnp.log(poff + 1e-12)), axis=-1)))
+    return dict(gate_value=float(np.asarray(p["rmt_gate"]).reshape(-1)[0]),
+                gate_probe_grad=float(np.abs(np.asarray(g["rmt_gate"])).max()),
+                read_attn_probe_grad=_leaf_norm_rm(g["rmt_read_attn"]),
+                read_ln_probe_grad=_leaf_norm_rm(g["rmt_read_ln"]),
+                mem_on_off_logit_diff=diff, mem_on_off_KL=kl)
+
+read_ever_nonzero = False
+mem_on_off_ever_nonzero = False
+# ---- Phase4A per-arm gate + replay instrumentation state (driver-only; CC2 directive) ----
+online_ppo_update_count = 0
+replay_not_ready_skip_count = 0
+replay_sample_success_count = 0
+replay_update_success_count = 0
+replay_first_success_update = None
+replay_last_sampled_seq_len = None
+replay_last_sampled_traj_len = None
+ever_eligible_512 = False
+persistent_carry_nonzero_all = True     # persistent: carried RMT tokens nonzero every rollout
+reset128_boundary_clear_all = True      # reset128: carried RMT tokens strictly zero every rollout
+gtrxl_window_finite_all = True
+
+def _replay_stats(buf):
+    """READ-ONLY eligibility query over the (frozen) replay buffer; modifies nothing."""
+    lengths = [int(t.length) for t in buf]
+    return dict(
+        replay_buffer_trajectory_count=len(lengths),
+        replay_max_trajectory_length=(max(lengths) if lengths else 0),
+        replay_eligible_count_128=sum(1 for L in lengths if L >= 128),
+        replay_eligible_count_256=sum(1 for L in lengths if L >= 256),
+        replay_eligible_count_512=sum(1 for L in lengths if L >= 512),
+        replay_lengths=lengths)
+
+# ---- RMT read-path CONNECTIVITY probe (Phase4A; READ-ONLY, synthetic non-zero tokens) ----
+# Discriminates (a) "cleared -> read output zero but write/read branch still CONNECTED" (expected
+# reset128 control) from (b) "write->carry->read broken / read branch never wired to the output"
+# (engineering defect). It forces the gate OPEN on an in-memory param COPY (tanh(gate)!=0) and
+# injects NON-ZERO tokens, so branch WIRING is tested independently of the trained gate value
+# (zero at init; may stay zero for reset128 whose rollout tokens are cleared) and independently of
+# cross-boundary carry. Does NOT modify training params / optimizer / network / loss.
+read_conn_ever_nonzero = False
+
+def _read_connectivity_probe(p, mem, obs, mask, tok_shape, key):
+    inj = jax.random.normal(key, tok_shape)          # synthetic NON-ZERO tokens (not from rollout)
+    zeros = jnp.zeros_like(inj)
+    p_open = {**p, "rmt_gate": jnp.ones_like(jnp.asarray(p["rmt_gate"]))}   # READ-ONLY forced-open copy
+    lg_on, _v1, _m1, _h1 = apply_eval_rmt(p_open, mem, obs, mask, inj)
+    lg_off, _v2, _m2, _h2 = apply_eval_rmt(p_open, mem, obs, mask, zeros)
+    lon = jnp.asarray(lg_on); loff = jnp.asarray(lg_off)
+    diff = float(jnp.max(jnp.abs(lon - loff)))
+    pon = jax.nn.softmax(lon, axis=-1); poff = jax.nn.softmax(loff, axis=-1)
+    kl = float(jnp.mean(jnp.sum(pon * (jnp.log(pon + 1e-12) - jnp.log(poff + 1e-12)), axis=-1)))
+    top_changed = float(jnp.mean(jnp.asarray(jnp.argmax(lon, axis=-1) != jnp.argmax(loff, axis=-1))))
+    def _loss(pp):
+        lg, vl, _mo, _ht = apply_eval_rmt(pp, mem, obs, mask, inj)
+        return jnp.asarray(lg).mean() + jnp.asarray(vl).mean()
+    g = jax.grad(_loss)(p_open)   # grad at forced-open gate: nonzero iff read params are WIRED to output
+    return dict(conn_logit_diff=diff, conn_KL=kl, conn_top_action_frac=top_changed,
+                conn_read_attn_grad=_leaf_norm_rm(g["rmt_read_attn"]),
+                conn_read_ln_grad=_leaf_norm_rm(g["rmt_read_ln"]))
+
+scan_fn = RL._make_scan_rmt(network, fp_cfg, rmt_cfg, args.carry_mode) if REPLAY_ON else None
+
+rng = jax.random.PRNGKey(args.seed + 1)
+rng, _rng = jax.random.split(rng)
+obsv, env_state = env.reset(_rng, env_params)
+memories = jnp.zeros((cfg.num_envs, cfg.window_mem, cfg.num_layers, cfg.embed_size))
+mem_mask = jnp.zeros((cfg.num_envs, cfg.num_heads, 1, cfg.window_mem + 1), jnp.bool_)
+mem_idx = jnp.full((cfg.num_envs,), cfg.window_mem, jnp.int32)   # P2 convention (derive_anchor matches)
+rmt_state = rmtm.rmt16_init(cfg.num_envs, rmt_cfg)
+action_rng = RU.make_action_rng(args.seed)
+
+CKPT_DIR = os.path.join(args.out, "ckpt"); LOG_DIR = os.path.join(args.out, "out")
+os.makedirs(CKPT_DIR, exist_ok=True); os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, f"{ARM}_train.jsonl")
+audit_path = os.path.join(LOG_DIR, f"{ARM}_replay_audit.jsonl")
+# Phase4A directive 2/3: probe output files (only written when PROBE) + equiv gate file.
+probe_episodes_path = os.path.join(LOG_DIR, f"{ARM}_probe_episodes.jsonl")
+probe_updates_path = os.path.join(LOG_DIR, f"{ARM}_probe_updates.jsonl")
+equiv_path = os.path.join(LOG_DIR, f"{ARM}_equiv.jsonl")
+PROBE_GE_LEN = 512   # directive length>=512 eligibility threshold (RECORD only; never a stop)
+
+update_count = 0
+accepted_policy_updates = 0; kl_rejected_updates = 0; hindsight_eligible = 0; hindsight_attempts = 0
+# Phase4A directive 2/3: probe cumulative state (used only when PROBE).
+probe_completed_episodes = []     # cumulative per-episode termination records
+probe_first_ge512 = None          # first length>=512 episode (RECORD only; never a stop)
+
+# ----------------------- checkpoint -----------------------
+def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag):
+    d = os.path.join(CKPT_DIR, str(step)); os.makedirs(d, exist_ok=True)
+    p_sha = _params_sha(params)
+    # full_state.pkl for the frozen evaluator (params wrapped + manifest)
+    with open(os.path.join(d, "full_state.pkl"), "wb") as f:
+        pickle.dump({"params": _to_np(params),
+                     "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
+                                  "carry_mode": args.carry_mode, "replay": args.replay,
+                                  "gpu_uuid": args.gpu_uuid, "seed": args.seed,
+                                  "config": {k: v for k, v in vars(cfg).items()},
+                                  "tag": tag}}, f, protocol=4)
+    # train_state.pkl for exact resume (opt/EMA/replay/rng/counters)
+    with open(os.path.join(d, "train_state.pkl"), "wb") as f:
+        pickle.dump({"params": _to_np(params), "ppo_opt_state": _to_np(ppo_opt_state),
+                     "replay_opt_state": _to_np(replay_opt_state),
+                     "target_params": _to_np(target_params),
+                     "replay_buffer": replay.state_dict(), "pending": pending.state_dict(),
+                     "rng": np.asarray(rng), "action_rng": RU.action_rng_state(action_rng),
+                     "update_count": update_count, "global_step": step,
+                     "memories": np.asarray(memories), "mem_mask": np.asarray(mem_mask),
+                     "mem_idx": np.asarray(mem_idx),
+                     "rmt_state": _to_np(rmt_state), "obsv": np.asarray(obsv),
+                     "counters": {"accepted_policy_updates": accepted_policy_updates,
+                                  "kl_rejected_updates": kl_rejected_updates,
+                                  "hindsight_eligible": hindsight_eligible,
+                                  "hindsight_attempts": hindsight_attempts},
+                     "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
+                                  "carry_mode": args.carry_mode, "replay": args.replay}},
+                    f, protocol=4)
+    print(f"[ckpt] step={step} params_sha={p_sha[:16]} tag={tag}", flush=True)
+    return p_sha
+
+# ----------------------- step-0 checkpoint -----------------------
+save_ckpt(0, params, ppo_opt_state, replay_opt_state, target_params, "step0")
+
+# ----------------------- training loop -----------------------
+for u in range(args.total_updates):
+    t_u = time.time()
+    # 1. collect
+    trajs, carry, rollout, stats = RC.collect_rollout_rmt(
+        env, env_state, network, params, obsv, memories, mem_mask, mem_idx, rmt_state,
+        rng, action_rng, pending, target_achievement_1d, cfg.num_steps, cfg.window_mem,
+        cfg.num_heads, rmt_cfg, args.carry_mode, collected_update_count=update_count,
+        apply_eval_rmt=apply_eval_rmt, env_params=env_params)
+    env_state = carry["env_state"]; obsv = carry["obsv"]
+    memories = carry["memories"]; mem_mask = carry["mem_mask"]
+    mem_idx = carry["mem_idx"]; rmt_state = carry["rmt_state"]; rng = carry["rng"]
+
+    for t in trajs:
+        assert bool(np.asarray(t.dones)[-1]), "HARD STOP episode-boundary: non-terminal trajectory"
+        replay.insert(t)                       # validates GTrXL + RMT anchor conservation
+        replay.counters.trajectories_collected += 1
+    assert replay.counters.trajectories_collected == replay.counters.trajectories_inserted, \
+        "HARD STOP conservation: collected != inserted"
+    # ---- Phase4A probe: per-episode records + per-update aggregation (directive 2/3; RECORD only) ----
+    if PROBE:
+        _new_eps = stats.get("episode_records", [])
+        probe_completed_episodes.extend(_new_eps)
+        with open(probe_episodes_path, "a") as f:
+            for _ep in _new_eps:
+                f.write(json.dumps(_ep, default=str) + "\n")
+        for _ep in _new_eps:
+            if probe_first_ge512 is None and int(_ep["length"]) >= PROBE_GE_LEN:
+                probe_first_ge512 = dict(
+                    first_ge512_update=int(_ep["update_index"]),
+                    first_ge512_global_step=int(_ep["completion_global_step"]),
+                    first_ge512_episode_id=int(_ep["episode_id"]),
+                    first_ge512_length=int(_ep["length"]))
+        _lens = [int(_e["length"]) for _e in probe_completed_episodes]
+        _reasons = {}
+        for _e in probe_completed_episodes:
+            _reasons[_e["done_reason"]] = _reasons.get(_e["done_reason"], 0) + 1
+        _la = np.array(_lens, float) if _lens else np.array([0.0])
+        probe_upd = dict(update=u, global_step=(u + 1) * STEPS_PER_UPDATE, arm=ARM,
+            completed_episode_count_cumulative=len(probe_completed_episodes),
+            completed_episode_count_this_update=len(_new_eps),
+            pending_episode_count=sum(1 for _ps in pending.slots if len(_ps["obs"]) > 0),
+            replay_buffer_trajectory_count=len(replay),
+            P50=float(np.percentile(_la, 50)), P75=float(np.percentile(_la, 75)),
+            P90=float(np.percentile(_la, 90)), P95=float(np.percentile(_la, 95)),
+            P99=float(np.percentile(_la, 99)), max_len=int(max(_lens) if _lens else 0),
+            count_ge_129=sum(1 for _L in _lens if _L >= 129),
+            count_ge_256=sum(1 for _L in _lens if _L >= 256),
+            count_ge_512=sum(1 for _L in _lens if _L >= 512),
+            fraction_ge_512=(sum(1 for _L in _lens if _L >= 512) / len(_lens) if _lens else 0.0),
+            termination_reason_counts=_reasons,
+            first_ge512=probe_first_ge512)
+        with open(probe_updates_path, "a") as f:
+            f.write(json.dumps(probe_upd, default=str) + "\n")
+        print(f"[probe u{u}] eps_cum={len(probe_completed_episodes)} this={len(_new_eps)} "
+              f"max_len={probe_upd['max_len']} ge512={probe_upd['count_ge_512']} "
+              f"first_ge512={probe_first_ge512}", flush=True)
+
+    # 2. last_value + GAE + PPO main update
+    _lg, last_value, _mo, _ht = apply_eval_rmt(
+        params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+    advantages, targets = PPO.compute_gae(
+        rollout["rewards"], rollout["values"], rollout["dones"], np.asarray(last_value),
+        cfg.gamma, cfg.gae_lambda, cfg.value_target_clip_min, cfg.value_target_clip_max)
+    params, ppo_opt_state, ppo_metrics = PPO.ppo_update_rmt(
+        network, params, ppo_opt_state, ppo_opt, rollout, advantages, targets,
+        ppo_cfg, rmt_cfg, args.carry_mode, rng)
+    update_count += 1
+    online_ppo_update_count += 1
+    assert ppo_metrics["ppo_finite"], "HARD STOP NaN/Inf in PPO update"
+    # ---- A/B training-no-perturbation gate artifacts (CC2 addendum; only with --equiv_dump) ----
+    # Deterministic hashes of the rollout + post-update params/optimizer/RMT state. A (probe OFF)
+    # and B (probe ON) both emit these; an exact match proves the probe instrumentation does not
+    # perturb training. Host-side reads only; no effect on training numerics / RNG stream.
+    if args.equiv_dump:
+        equiv = dict(update=u, global_step=(u + 1) * STEPS_PER_UPDATE,
+                     actions_hash=_arr_hash(rollout["actions"]),
+                     rewards_hash=_arr_hash(rollout["rewards"]),
+                     dones_hash=_arr_hash(rollout["dones"]),
+                     ard_hash=_arr_hash(rollout["actions"], rollout["rewards"], rollout["dones"]),
+                     params_sha=_params_sha(params),
+                     ppo_opt_sha=_params_sha(ppo_opt_state),
+                     rmt_state_sha=_params_sha(rmt_state),
+                     memories_sha=_params_sha(memories),
+                     mem_mask_sha=_params_sha(mem_mask),
+                     mem_idx_sha=_params_sha(mem_idx),
+                     ppo_actor=float(ppo_metrics["ppo_actor"]),
+                     ppo_entropy=float(ppo_metrics["ppo_entropy"]),
+                     ppo_value=float(ppo_metrics.get("ppo_value", 0.0)),
+                     online_ppo_update_count=online_ppo_update_count)
+        with open(equiv_path, "a") as f:
+            f.write(json.dumps(equiv, default=str) + "\n")
+
+    # 3. replay update (P2-Full-A frozen channel)
+    rep = {}
+    # ---- Replay eligibility instrumentation (every update, every arm; read-only query) ----
+    _rstats = _replay_stats(replay._buffer)
+    _pending_traj_count = sum(1 for _ps in pending.slots if len(_ps["obs"]) > 0)
+    if _rstats["replay_eligible_count_512"] > 0:
+        ever_eligible_512 = True
+    if REPLAY_ON and replay.can_sample():
+        so, sr = [], []
+        # PRECISE DRIVER-ONLY GUARD (CC2 directive): skip Replay ONLY when no trajectory
+        # can satisfy the requested L_SEQ. Explicit eligibility query (preferred path):
+        if _rstats["replay_eligible_count_512"] == 0:
+            replay_not_ready_skip_count += 1
+            print(f"REPLAY_NOT_READY requested_sequence_length={L_SEQ} "
+                  f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
+                  f"eligible_count_512={_rstats['replay_eligible_count_512']}", flush=True)
+        else:
+            _too_short_prefix = f"sequence_length {L_SEQ} > trajectory length"
+            for _ in range(K_BATCH):
+                hindsight_attempts += 1
+                try:
+                    s = replay.sample(sequence_length=L_SEQ)
+                except ValueError as _e:
+                    # TEMPORARY COMPAT GUARD (driver-only): sample() selects uniformly among
+                    # trajectories >= MIN_SEQUENCE_LENGTH; a random pick can be < L_SEQ and raise.
+                    # ONLY the precise "requested {L_SEQ} > picked trajectory length" case is a
+                    # benign redraw -> retry. ANY other ValueError is re-raised UNCHANGED.
+                    if str(_e).startswith(_too_short_prefix):
+                        continue
+                    raise
+                replay_sample_success_count += 1
+                replay_last_sampled_seq_len = int(getattr(s, "length", L_SEQ))
+                _src = replay._get_by_id(getattr(s, "source_trajectory_id", None))
+                replay_last_sampled_traj_len = int(_src.length) if _src is not None else None
+                try:
+                    rel = RH.relabel_sample_rmt(s, embedding_size=EMB)   # min achieved goal (Gate 5/6)
+                except ValueError:
+                    continue                            # not relabelable -> skip
+                hindsight_eligible += 1
+                so.append(s); sr.append(rel)
+        if len(so) >= 2:
+            params, target_params, replay_opt_state, m = RL.full_p2_update_rmt(
+                network, params, target_params, replay_opt_state, replay_opt,
+                apply_eval_rmt, scan_fn, so, sr, fp_cfg, rmt_cfg, args.carry_mode, update_count)
+            update_count += 1
+            assert bool(m["finite"]), "HARD STOP NaN/Inf in replay loss"
+            if bool(m.get("policy_committed")):
+                assert float(m["policy_kl"]) <= fp_cfg.kl_replay_max + 1e-12, \
+                    f"HARD STOP accepted policy_kl={float(m['policy_kl']):.5f} > {fp_cfg.kl_replay_max}"
+                accepted_policy_updates += 1
+            if bool(m.get("kl_rejected_update")):
+                assert not bool(m.get("policy_committed")), "HARD STOP KL-rejected committed policy"
+                kl_rejected_updates += 1
+            assert float(m["entropy"]) >= fp_cfg.ent_floor, \
+                f"HARD STOP entropy collapse {float(m['entropy']):.4f} < {fp_cfg.ent_floor}"
+            rep = {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
+                   for k, v in m.items() if not isinstance(v, (list, dict))}
+            rep["batch"] = len(so)
+            replay_update_success_count += 1
+            if replay_first_success_update is None:
+                replay_first_success_update = update_count
+    elif REPLAY_ON:
+        # EMA still tracks params on PPO-only updates
+        target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
+    if (not REPLAY_ON):
+        target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
+
+    # ---- RMT read-path monitor probe (post-update params + carried state) ----
+    mon = _read_path_monitor(params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+    mon["update"] = u
+    mon["global_step"] = (u + 1) * STEPS_PER_UPDATE
+    mon["arm"] = ARM
+    mon["accepted_policy_updates"] = accepted_policy_updates
+    # carried RMT memory-token analysis (per-arm carry / boundary-clear verification)
+    _carried_tok = np.asarray(rmt_state["mem_tokens"])
+    _carried_tok_maxabs = float(np.max(np.abs(_carried_tok)))
+    _gtrxl_mem_maxabs = float(np.max(np.abs(np.asarray(memories))))
+    mon["carried_rmt_token_maxabs"] = _carried_tok_maxabs
+    mon["gtrxl_window_mem_maxabs"] = _gtrxl_mem_maxabs
+    if not (bool(np.all(np.isfinite(_carried_tok))) and bool(np.all(np.isfinite(np.asarray(memories))))):
+        gtrxl_window_finite_all = False
+    if args.carry_mode == "persistent":
+        persistent_carry_nonzero_all = persistent_carry_nonzero_all and (_carried_tok_maxabs > 0.0)
+    elif args.carry_mode == "reset128":
+        reset128_boundary_clear_all = reset128_boundary_clear_all and (_carried_tok_maxabs == 0.0)
+    if mon["read_attn_probe_grad"] > 1e-12 or mon["read_ln_probe_grad"] > 1e-12:
+        read_ever_nonzero = True
+    if mon["mem_on_off_KL"] > 0.0 or mon["mem_on_off_logit_diff"] > 0.0:
+        mem_on_off_ever_nonzero = True
+    # ---- read-path CONNECTIVITY probe (forced-open gate + injected tokens; both arms) ----
+    conn = _read_connectivity_probe(params, memories, obsv, mem_mask,
+                                    np.asarray(rmt_state["mem_tokens"]).shape,
+                                    jax.random.PRNGKey(args.seed + 1000 + u))
+    if (conn["conn_logit_diff"] > 0.0 or conn["conn_KL"] > 0.0 or conn["conn_top_action_frac"] > 0.0
+            or conn["conn_read_attn_grad"] > 1e-12 or conn["conn_read_ln_grad"] > 1e-12):
+        read_conn_ever_nonzero = True
+    mon.update(conn)
+    mon["read_conn_ever_nonzero"] = read_conn_ever_nonzero
+    mon["read_ever_nonzero"] = read_ever_nonzero
+    mon["mem_on_off_ever_nonzero"] = mem_on_off_ever_nonzero
+    mon["persistent_carry_nonzero_all"] = persistent_carry_nonzero_all
+    mon["reset128_boundary_clear_all"] = reset128_boundary_clear_all
+    # ---- replay instrumentation record (per update, per arm) ----
+    mon.update(_rstats)
+    mon["replay_pending_trajectory_count"] = _pending_traj_count
+    mon["replay_not_ready_skip_count"] = replay_not_ready_skip_count
+    mon["replay_sample_success_count"] = replay_sample_success_count
+    mon["replay_update_success_count"] = replay_update_success_count
+    mon["replay_first_success_update"] = replay_first_success_update
+    mon["replay_sampled_sequence_length"] = replay_last_sampled_seq_len
+    mon["replay_sampled_trajectory_length"] = replay_last_sampled_traj_len
+    mon["online_ppo_update_count"] = online_ppo_update_count
+    with open(os.path.join(LOG_DIR, "RMT_PHASE4A_MONITOR.jsonl"), "a") as f:
+        f.write(json.dumps(mon, default=str) + "\n")
+    print(f"[readmon u{u}] gate={mon['gate_value']:.3e} gate_g={mon['gate_probe_grad']:.3e} "
+          f"read_attn_g={mon['read_attn_probe_grad']:.3e} read_ln_g={mon['read_ln_probe_grad']:.3e} "
+          f"mem_diff={mon['mem_on_off_logit_diff']:.3e} mem_KL={mon['mem_on_off_KL']:.3e} "
+          f"carry_tok={_carried_tok_maxabs:.3e} elig512={_rstats['replay_eligible_count_512']} "
+          f"rep_upd={replay_update_success_count}", flush=True)
+
+    global_step = (u + 1) * STEPS_PER_UPDATE
+    entry = dict(update=u, global_step=global_step, arm=ARM,
+                 completed_episodes=stats["completed_episodes"],
+                 mean_ep_return=stats["mean_ep_return"], mean_ep_length=stats["mean_ep_length"],
+                 replay_size=len(replay), replay_can_sample=replay.can_sample(),
+                 update_count=update_count, **ppo_metrics, **rep,
+                 t_s=round(time.time() - t_u, 1))
+    with open(log_path, "a") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
+    print(f"[u{u}] gs={global_step} ppo_actor={ppo_metrics['ppo_actor']:.4f} "
+          f"ent={ppo_metrics['ppo_entropy']:.4f} eps={stats['completed_episodes']} "
+          f"replay={len(replay)} kl={rep.get('policy_kl','-')} "
+          f"({time.time()-t_u:.1f}s)", flush=True)
+
+    # 4. checkpoint at save points
+    if (u + 1) % args.save_every == 0 or (u + 1) == args.total_updates:
+        save_ckpt(global_step, params, ppo_opt_state, replay_opt_state, target_params, "save")
+    # Phase4A probe DEBUG-ONLY early stop (default OFF; NON-COMPARATIVE debugging only). The formal
+    # probe MUST keep args.early_stop_len == 0 so both arms run the identical full fixed horizon.
+    if PROBE and args.early_stop_len and probe_first_ge512 is not None \
+            and int(probe_first_ge512["first_ge512_length"]) >= args.early_stop_len:
+        print(f"PROBE_DEBUG_EARLY_STOP fired at u{u} (early_stop_len={args.early_stop_len}); "
+              f"NON-COMPARATIVE debug only -- formal probe must NOT stop here.", flush=True)
+        break
+
+    # replay noise audit (directive §七)
+    if REPLAY_ON:
+        audit = dict(global_step=global_step, buffer_episodes=len(replay),
+                     stored_transitions=sum(t.length for t in replay._buffer),
+                     replay_drawn=replay.counters.replay_samples_drawn,
+                     accepted_policy_updates=accepted_policy_updates,
+                     kl_rejected_updates=kl_rejected_updates,
+                     hindsight_eligible=hindsight_eligible, hindsight_attempts=hindsight_attempts,
+                     ratio_max=rep.get("ratio_max"), ess=rep.get("ess"),
+                     policy_kl=rep.get("policy_kl"), awr_w_mean=rep.get("awr_w_mean"),
+                     awr_kl=rep.get("awr_kl"), entropy=rep.get("entropy"),
+                     ep_lengths=[int(t.length) for t in replay._buffer])
+        with open(audit_path, "a") as f:
+            f.write(json.dumps(audit, default=str) + "\n")
+
+# ---- Phase4A probe final summary (directive 4; RECORD only; NOT formal science) ----
+if PROBE:
+    _lens = [int(_e["length"]) for _e in probe_completed_episodes]
+    _reasons = {}
+    for _e in probe_completed_episodes:
+        _reasons[_e["done_reason"]] = _reasons.get(_e["done_reason"], 0) + 1
+    probe_summary = dict(
+        arm=ARM, carry_mode=args.carry_mode, probe="REACHABILITY_ONLY",
+        not_for_formal_science=True,
+        replay=args.replay,
+        replay_note="replay learner + hindsight OFF; buffer collection of complete done episodes ON",
+        total_updates=args.total_updates,
+        total_env_steps=args.total_updates * STEPS_PER_UPDATE,
+        online_ppo_update_count=online_ppo_update_count,
+        completed_episode_count=len(probe_completed_episodes),
+        all_episode_lengths_sorted=sorted(_lens),
+        count_ge_512=sum(1 for _L in _lens if _L >= 512),
+        fraction_ge_512=(sum(1 for _L in _lens if _L >= 512) / len(_lens) if _lens else 0.0),
+        first_ge512=probe_first_ge512,
+        termination_reason_counts=_reasons,
+        final_params_sha256=_params_sha(params), base_sha256=base_sha,
+        step0_params_in="ckpt/0/full_state.pkl",
+        early_stop_used=bool(args.early_stop_len and probe_first_ge512 is not None),
+        timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    with open(os.path.join(LOG_DIR, f"{ARM}_probe_summary.json"), "w") as f:
+        json.dump(probe_summary, f, indent=2, default=str)
+    print("RMT16_PROBE=REACHABILITY_ONLY NOT_FOR_FORMAL_SCIENCE", flush=True)
+    print("PROBE_SUMMARY=" + json.dumps(probe_summary, default=str), flush=True)
+    sys.exit(0)
+
+# ---- Phase4A per-arm final gates v2 (CC2 directive: reset128 read branch must be CONNECTED) ----
+RMT_READ_PATH_ACTIVE = bool(read_ever_nonzero and mem_on_off_ever_nonzero)  # carried-token activity
+READ_BRANCH_CONNECTED = bool(read_conn_ever_nonzero)                         # synthetic-token connectivity
+_carried_final_maxabs = float(np.max(np.abs(np.asarray(rmt_state["mem_tokens"]))))
+REPLAY_HORIZON_REACHED = bool(replay_update_success_count > 0)
+if args.carry_mode == "persistent":
+    # Persistent: write->carry->read connected; cross-boundary carry NON-ZERO; read affects output >=1.
+    CARRY_NONZERO = bool(persistent_carry_nonzero_all and _carried_final_maxabs > 0.0)
+    READ_AFFECTS_OUTPUT = bool(RMT_READ_PATH_ACTIVE or READ_BRANCH_CONNECTED)
+    PERSISTENT_READ_DEFECT = bool(CARRY_NONZERO and (not READ_AFFECTS_OUTPUT))
+    ARM_GATES_PASS = bool(REPLAY_HORIZON_REACHED and CARRY_NONZERO and RMT_READ_PATH_ACTIVE
+                          and READ_BRANCH_CONNECTED and gtrxl_window_finite_all)
+    if PERSISTENT_READ_DEFECT:
+        ARM_STATUS = "RMT_READ_PATH_ENGINEERING_DEFECT"
+    elif not REPLAY_HORIZON_REACHED:
+        ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS"
+    else:
+        ARM_STATUS = "FAIL"
+else:  # reset128 -- cross-boundary long-term carry read NOT required; read branch MUST be connected.
+    # (a) expected control: carried tokens zero (reset works) AND read branch connected (forced-open
+    #     gate + injected non-zero tokens produce detectable logit/KL/top-action change / read grad).
+    # (b) defect: read branch NEVER connected -> RMT_RESET128_READ_PATH_ENGINEERING_DEFECT.
+    BOUNDARY_CLEAR = bool(reset128_boundary_clear_all and _carried_final_maxabs == 0.0)
+    RESET128_READ_DEFECT = bool(not READ_BRANCH_CONNECTED)
+    ARM_GATES_PASS = bool(REPLAY_HORIZON_REACHED and BOUNDARY_CLEAR and READ_BRANCH_CONNECTED
+                          and gtrxl_window_finite_all)
+    if RESET128_READ_DEFECT:
+        ARM_STATUS = "RMT_RESET128_READ_PATH_ENGINEERING_DEFECT"
+    elif not BOUNDARY_CLEAR:
+        ARM_STATUS = "RESET128_BOUNDARY_CLEAR_FAILED"
+    elif not REPLAY_HORIZON_REACHED:
+        ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS"
+    else:
+        ARM_STATUS = "FAIL"
+print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
+      f"replay_upd={replay_update_success_count} read_active={RMT_READ_PATH_ACTIVE} "
+      f"read_conn={READ_BRANCH_CONNECTED} carry_final_maxabs={_carried_final_maxabs:.3e} "
+      f"persistent_carry_nonzero_all={persistent_carry_nonzero_all} "
+      f"reset128_boundary_clear_all={reset128_boundary_clear_all} "
+      f"ever_eligible_512={ever_eligible_512}", flush=True)
+# ----------------------- summary -----------------------
+summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
+               total_updates=args.total_updates, global_step=args.total_updates * STEPS_PER_UPDATE,
+               final_params_sha256=_params_sha(params), base_sha256=base_sha,
+               accepted_policy_updates=accepted_policy_updates,
+               kl_rejected_updates=kl_rejected_updates,
+               hindsight_eligible=hindsight_eligible, hindsight_attempts=hindsight_attempts,
+               replay_buffer_hash=replay.hash_digest() if REPLAY_ON else None,
+               config={k: v for k, v in vars(cfg).items()},
+               p2_frozen=dict(rho_bar=fp_cfg.rho_bar, c_bar=fp_cfg.c_bar, beta=fp_cfg.beta,
+                              w_max=fp_cfg.w_max, w_vtrace=fp_cfg.w_vtrace, w_awr=fp_cfg.w_awr,
+                              kl_replay_max=fp_cfg.kl_replay_max, ema_tau=fp_cfg.ema_tau,
+                              max_policy_lag=fp_cfg.max_policy_lag),
+               status="COMPLETE",
+               arm_status=ARM_STATUS,
+               arm_gates_pass=bool(ARM_GATES_PASS),
+               rmt_read_path_active=RMT_READ_PATH_ACTIVE,
+               read_ever_nonzero=read_ever_nonzero,
+               mem_on_off_ever_nonzero=mem_on_off_ever_nonzero,
+               replay_horizon_reached=REPLAY_HORIZON_REACHED,
+               online_ppo_update_count=online_ppo_update_count,
+               replay_sample_success_count=replay_sample_success_count,
+               replay_update_success_count=replay_update_success_count,
+               replay_not_ready_skip_count=replay_not_ready_skip_count,
+               replay_first_success_update=replay_first_success_update,
+               ever_eligible_512=ever_eligible_512,
+               persistent_carry_nonzero_all=persistent_carry_nonzero_all,
+               reset128_boundary_clear_all=reset128_boundary_clear_all,
+               carried_rmt_token_final_maxabs=_carried_final_maxabs,
+               gtrxl_window_finite_all=gtrxl_window_finite_all,
+               read_branch_connected=READ_BRANCH_CONNECTED,
+               read_conn_ever_nonzero=read_conn_ever_nonzero,
+               timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+with open(os.path.join(LOG_DIR, f"{ARM}_train_summary.json"), "w") as f:
+    json.dump(summary, f, indent=2, default=str)
+print("\n" + "=" * 78, flush=True)
+print(f"{ARM} COMPLETE  final_params_sha={summary['final_params_sha256'][:16]}", flush=True)
+print(f"  accepted_policy_updates={accepted_policy_updates} kl_rejected={kl_rejected_updates} "
+      f"hindsight={hindsight_eligible}/{hindsight_attempts}", flush=True)
+print("=" * 78, flush=True)
+print(f"PHASE4A_ARM_FINAL_STATUS={ARM_STATUS}", flush=True)
+if not ARM_GATES_PASS:
+    sys.exit(1)

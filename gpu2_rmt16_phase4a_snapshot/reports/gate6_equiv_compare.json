@@ -1,0 +1,38 @@
+{
+  "gate5_step0_sha": {
+    "frozen": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b",
+    "A": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b",
+    "B": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b",
+    "A_matches_frozen": true,
+    "B_matches_frozen": true,
+    "A_equals_B": true,
+    "PASS": true
+  },
+  "gate6_equiv": {
+    "A_n_updates": 2,
+    "B_n_updates": 2,
+    "expected_updates": 2,
+    "updates_compared": [
+      0,
+      1
+    ],
+    "per_update": {
+      "0": {
+        "present_in_both": true,
+        "n_mismatches": 0,
+        "mismatches": {},
+        "actions_hash_A": "4ff8b31fff6aec73991ecb243d9b33ab10abd0c2308527f0f74fc47661a66a04",
+        "params_sha_A": "5748a6f3cd3319d7719c1d3cceb9d56f11a7170287a9d4aa3bb10ba0b9360e28"
+      },
+      "1": {
+        "present_in_both": true,
+        "n_mismatches": 0,
+        "mismatches": {},
+        "actions_hash_A": "586e9a53fb65422286ab7641a22e0b78b8cd4103ed572abfd351c3631edce080",
+        "params_sha_A": "162ba039e409836794710c43d48a6c0acf72a9e402e4b845ef46ea8897797c7f"
+      }
+    },
+    "all_fields_bit_exact": true,
+    "PASS": true
+  }
+}

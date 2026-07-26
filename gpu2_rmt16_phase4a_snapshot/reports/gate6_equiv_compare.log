@@ -1,0 +1,10 @@
+[GATE5] A step0 sha=2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b
+[GATE5] B step0 sha=2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b
+[GATE5] frozen    =2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b
+GATE5_STEP0_SHA=PASS
+[GATE6] A equiv file=/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-GATE6-A/out/RMT16-Persistent-PPO_equiv.jsonl n_updates=2
+[GATE6] B equiv file=/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-GATE6-B/out/RMT16-Persistent-PPO_equiv.jsonl n_updates=2
+[GATE6 u0] mismatches=0  actions_hash=4ff8b31fff6aec73  params_sha=5748a6f3cd3319d7
+[GATE6 u1] mismatches=0  actions_hash=586e9a53fb654222  params_sha=162ba039e4098367
+PROBE_INSTRUMENTATION_TRAINING_EQUIVALENCE=PASS
+[saved] reports/gate6_equiv_compare.json

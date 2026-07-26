@@ -1,0 +1,42 @@
+182a183
+> 		probe_term: bool = False,
+184a186,210
+> 		# RMT16 Phase4A (CC2 directive 3): when False, step() emits an info dict IDENTICAL
+> 		# to the original wrapper (bit-exact). When True, additive _term_* logging keys only.
+> 		self.probe_term = bool(probe_term)
+> 		# RMT16 Phase4A (CC2 addendum): validate the time-limit threshold source for _term_done_steps.
+> 		# The env's REAL termination uses each task's self.params.max_timesteps (== the ctor EnvParams,
+> 		# == 4096 here), NOT env.default_params.max_timesteps (craftax default 100000). When probe_term
+> 		# is True we read EVERY task's params.max_timesteps, require >=1 task and FULL agreement, and
+> 		# otherwise RAISE (NO silent fallback, NO hardcoded 4096). Pure host-side Python at __init__, a
+> 		# compile-time constant; probe_term=False skips this entirely -> info/training remain bit-exact.
+> 		if self.probe_term:
+> 			_tasks = getattr(self._env, "tasks", None)
+> 			if not _tasks:
+> 				raise RuntimeError(
+> 				    "probe_term: base env exposes no .tasks; cannot validate time-limit threshold")
+> 			_thresholds = []
+> 			for _t in _tasks:
+> 				_tp = getattr(_t, "params", None)
+> 				if _tp is None or not hasattr(_tp, "max_timesteps"):
+> 					raise RuntimeError(
+> 					    "probe_term: a task lacks params.max_timesteps; cannot validate time-limit threshold")
+> 				_thresholds.append(int(_tp.max_timesteps))
+> 			if len(set(_thresholds)) != 1:
+> 				raise RuntimeError(
+> 				    "probe_term: inconsistent task max_timesteps across tasks: %r" % (_thresholds,))
+> 			self.probe_max_timesteps = _thresholds[0]
+258a285,297
+> 		# ---- RMT16 Phase4A READ-ONLY termination-reason logging (CC2 directive 3) ----
+> 		# GATED by self.probe_term (default False -> info dict IDENTICAL to original / bit-exact).
+> 		# Additive _term_* arrays from the TERMINAL (post-step, pre-reset) env_state. Fixed shape
+> 		# [num_envs], fixed dtype, pure JAX arrays, NO strings in the JIT path. done_reason strings
+> 		# are mapped host-side in the collector. This does NOT alter reset/step/done/reward/obs or
+> 		# the optimistic-reset logic below (this wrapper only auto-resets ALREADY-done envs; it never
+> 		# truncates a live episode, so optimistic_reset/wrapper_reset are never a done CAUSE here).
+> 		if self.probe_term:
+> 			info["_term_player_health"] = env_state.player_health
+> 			info["_term_player_level"] = env_state.player_level
+> 			info["_term_timestep"] = env_state.timestep
+> 			info["_term_is_dead"] = env_state.player_health <= 0
+> 			info["_term_done_steps"] = env_state.timestep >= self.probe_max_timesteps
