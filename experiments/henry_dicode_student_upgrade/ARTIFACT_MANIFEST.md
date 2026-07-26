@@ -23,3 +23,9 @@ Additional cleanup:
 - On 2026-07-26, D052 historical data files under `01_d052/` with extensions `.json`, `.jsonl`, `.csv`, and `.log` were removed by request.
 - The retained D052 content is engineering code and lightweight documentation only.
 - Removed D052 paths are listed in `inventory/d052_data_removed_by_request.txt`.
+
+Invalidated experiment archive:
+
+- D052 is marked as an invalid / void experiment-data archive because the experiment had protocol and evidence flaws.
+- D052 data must not be used as scientific evidence, paper evidence, SOTA evidence, model-selection evidence, or downstream comparative conclusions.
+- The repository intentionally retains only D052 engineering code and lightweight explanatory files for implementation reference.

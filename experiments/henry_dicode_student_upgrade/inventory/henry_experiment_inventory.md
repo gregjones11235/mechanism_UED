@@ -5,8 +5,9 @@
 ## D052
 
 - dir: `01_d052`
-- status: `FOUND`
-- archived small files: 538
+- status: `INVALID_DATA_CODE_ONLY`
+- archived small files: 12
+- note: D052 experiment data are void due to protocol/evidence flaws. Results must not be used as scientific, paper, SOTA, selection, or comparative evidence. The repository retains engineering code and lightweight documentation only.
 
 ## P2-v0
 
@@ -84,3 +85,7 @@
 ### 2026-07-26 cleanup
 
 D052 historical data files (`.json`, `.jsonl`, `.csv`, `.log`) were removed by request. D052 now retains engineering code and lightweight documentation only. Removed paths are listed in `d052_data_removed_by_request.txt`.
+
+### 2026-07-26 D052 invalidation
+
+D052 is explicitly archived as an invalid experiment-data line: the experiment had flaws, the data are void, and only code/reference material should remain in the repository.

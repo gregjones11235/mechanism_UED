@@ -7,7 +7,9 @@
       "file_count": 12,
       "files": [],
       "truncated_files_list": false,
-      "data_cleanup_note": "D052 .json/.jsonl/.csv/.log data artifacts removed by request on 2026-07-26; engineering code/docs retained."
+      "status": "INVALID_DATA_CODE_ONLY",
+      "data_cleanup_note": "D052 .json/.jsonl/.csv/.log data artifacts removed by request on 2026-07-26; engineering code/docs retained.",
+      "invalid_data_note": "D052 experiment data are void because the experiment had protocol and evidence flaws. Results must not be used as scientific evidence, paper evidence, SOTA evidence, model-selection evidence, or downstream comparative conclusions. Retained files are engineering-code/reference material only."
     },
     {
       "phase": "P2-v0",
