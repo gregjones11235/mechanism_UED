@@ -1,0 +1,250 @@
+[
+  {
+    "candidate_id": "cand_00",
+    "canonical_ids": [
+      56
+    ],
+    "canonical_names": [
+      "cast_fireball"
+    ],
+    "chash": "ec25ace1d7f0f34e033c8cac399943d92c87d475bb3ff05e19164a929c332965",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      56
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "81b6b8488063ab443b0f472c6b954199af1c9c53448d1e7a430f84e34b7d0ffd",
+    "training_task_id": "phase25_B/cand_00"
+  },
+  {
+    "candidate_id": "cand_01",
+    "canonical_ids": [
+      58
+    ],
+    "canonical_names": [
+      "cast_iceball"
+    ],
+    "chash": "df0a356a4a774968421c260b630d06450b70d015be84d8a42ea84934f379fa4c",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      58
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "5b722b847ca2b1ab2f33b71ba5583bf9954523f0c63e4c5282554fa19ee9d707",
+    "training_task_id": "phase25_B/cand_01"
+  },
+  {
+    "candidate_id": "cand_02",
+    "canonical_ids": [
+      17
+    ],
+    "canonical_names": [
+      "collect_coal"
+    ],
+    "chash": "94e85869a3bf760bb74414ff3e43462a4aac7a6e3bbe69f59e462b685f890709",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      17
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "fdcaffeb33ea62873a3d485b114792b27472346cac453555d2bc159266319b35",
+    "training_task_id": "phase25_B/cand_02"
+  },
+  {
+    "candidate_id": "cand_03",
+    "canonical_ids": [
+      19
+    ],
+    "canonical_names": [
+      "collect_diamond"
+    ],
+    "chash": "a07a7f2303e2d3a00eb97b273c01907f0f8228bffe57ebcb59bbfdc0ce696081",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      19
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "0cc821899fd1dcc1a4c6887f5ea9681d51c627aab0e42411c0cc5a9bc4345a40",
+    "training_task_id": "phase25_B/cand_03"
+  },
+  {
+    "candidate_id": "cand_04",
+    "canonical_ids": [
+      4
+    ],
+    "canonical_names": [
+      "collect_drink"
+    ],
+    "chash": "5f7c95e4bb5ba2f4a1700607c755bff8bb4989b40e71ff4e4c2c23ea7a93a3e8",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      4
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "afe9615f142d69f50ebd483be392487cb07d17af4e36bbf1f5d2a01429479ce3",
+    "training_task_id": "phase25_B/cand_04"
+  },
+  {
+    "candidate_id": "cand_05",
+    "canonical_ids": [
+      18
+    ],
+    "canonical_names": [
+      "collect_iron"
+    ],
+    "chash": "c0020d94da058539b9fe25e73c8e0ce9074867c3fda7d075b8e834a7da80cc31",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      18
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "1a44b60a45641904aba5490cfdce88a40daf9732b4477c76ab8a2a0922fc71a8",
+    "training_task_id": "phase25_B/cand_05"
+  },
+  {
+    "candidate_id": "cand_06",
+    "canonical_ids": [
+      59
+    ],
+    "canonical_names": [
+      "collect_ruby"
+    ],
+    "chash": "4e421aac58e6ee6e5627de4e8150bc1f904c6a2a98d686b3a2fa735e366cc264",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      59
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "29d2d0a54dde4d214f18d5157b2844cdad86bf830183ff8d301dbf2401ab1a29",
+    "training_task_id": "phase25_B/cand_06"
+  },
+  {
+    "candidate_id": "cand_07",
+    "canonical_ids": [
+      3
+    ],
+    "canonical_names": [
+      "collect_sapling"
+    ],
+    "chash": "cfd8c56a5ea49de4135d13c57bd87a40f97038b5516b937b0b25fe110d4d34ef",
+    "conditioning_dimension": 67,
+    "conditioning_type": "achievement_multi_hot",
+    "executed_as_intended": true,
+    "gates": {
+      "goal_vector_dim_67": true,
+      "goal_vector_index_aligned": true,
+      "no_silent_fallback": true,
+      "student_obs_dim_8335": true,
+      "target_is_canonical": true,
+      "task_compiled": true
+    },
+    "goal_vector_dim": 67,
+    "goal_vector_indices": [
+      3
+    ],
+    "goal_vector_ones": 1,
+    "notes": "",
+    "protocol_version": "canonical_v2",
+    "student_obs_dim": 8335,
+    "task_spec_hash": "3ac6ecc4a5cc1910fec33b5838d22a2dac3cca2c146a46aa3d96178e1b7e17a4",
+    "training_task_id": "phase25_B/cand_07"
+  }
+]

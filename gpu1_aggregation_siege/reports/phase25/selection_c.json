@@ -1,0 +1,23 @@
+{
+  "candidate_count_in": 16,
+  "critic_policy": "hard_veto",
+  "eligible_count": 16,
+  "k_requested": 8,
+  "protocol_version": "canonical_v2",
+  "rejected_by_critic": [],
+  "seed": 20260726,
+  "selected_ids": [
+    "cand_00",
+    "cand_01",
+    "cand_02",
+    "cand_03",
+    "cand_04",
+    "cand_05",
+    "cand_06",
+    "cand_08"
+  ],
+  "selection_hash": "e4dcd966a40b3b44cf24557c7abb3004bb70f77cfaa737fb295f7505a11932bc",
+  "selection_status": "OK",
+  "selector": "S2_FOUR_ROLE_MODELER",
+  "shortfall_note": ""
+}

@@ -1,0 +1,40 @@
+{
+  "context_hash": "0b32191741608bab1ffdebafb44d731bc33117181887447559144d3b1ca6e3af",
+  "evidence_check": "supported",
+  "firewall_attestation": {
+    "channel": "student_profile_sr_series_only",
+    "excluded_profile_fields": [
+      "per_depth_tier_mastery",
+      "mastered_count",
+      "proficient_count"
+    ],
+    "tier_labels_stripped": true
+  },
+  "latest_sr": {
+    "cast_fireball": 0.9,
+    "cast_iceball": 0.9,
+    "collect_coal": 0.9,
+    "collect_diamond": 0.9,
+    "collect_drink": 0.9,
+    "collect_iron": 0.9,
+    "collect_ruby": 0.9,
+    "collect_sapling": 0.9,
+    "collect_sapphire": 0.02,
+    "collect_stone": 0.9,
+    "collect_wood": 0.9,
+    "damage_necromancer": 0.9,
+    "defeat_archer": 0.9,
+    "defeat_deep_thing": 0.9,
+    "defeat_fire_elemental": 0.9,
+    "defeat_frost_troll": 0.9
+  },
+  "modeler_bonus_weight": 0.07,
+  "num_snapshots": 1,
+  "protocol_version": "canonical_v2",
+  "recommendation": "DEPTH",
+  "siege_foci": [
+    "collect_sapphire"
+  ],
+  "student_profile_hash": "dbd74ed7dbcdf2daaa558a6dbecd4a91be89d13addcd7a8feb0ba10dc10c2abe",
+  "student_state": "RISING"
+}

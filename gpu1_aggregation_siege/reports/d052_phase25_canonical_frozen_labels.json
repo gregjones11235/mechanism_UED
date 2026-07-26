@@ -1,0 +1,70 @@
+{
+  "D052_PHASE25_CANONICAL_INTEGRATION": "PASS",
+  "MATCHED_BC_PROTOCOL": "PASS",
+  "CANONICAL_TARGET_FIREWALL": "PASS",
+  "CANONICAL_B_SELECTED8": [
+    "cand_00",
+    "cand_01",
+    "cand_02",
+    "cand_03",
+    "cand_04",
+    "cand_05",
+    "cand_06",
+    "cand_07"
+  ],
+  "CANONICAL_C_SELECTED8": [
+    "cand_00",
+    "cand_01",
+    "cand_02",
+    "cand_03",
+    "cand_04",
+    "cand_05",
+    "cand_06",
+    "cand_08"
+  ],
+  "MODELER_CANONICAL_SELECTION_CHANGE": "1/8",
+  "D052_4096_AUTHORIZED": false,
+  "D052_LONG_TRAINING_RUNS": 0,
+  "D052_4096_SMOKE_AUTHORIZED": false,
+  "D052_24576_AUTHORIZED": false,
+  "D052_98304_AUTHORIZED": false,
+  "NO_UNAUTHORIZED_TRAINING": true,
+  "NO_SILENT_FALLBACK": true,
+  "NO_LEGACY_ARTIFACT_OVERWRITE": true,
+  "NO_RAW_DATA_NO_STRONG_CLAIM": true,
+  "baseline_head": "9eca2de",
+  "branch": "henry/d052-canonical-refactor",
+  "pool_id": "phase25_canonical_shared_frozen_v1",
+  "pool_hash": "189e13ef2435a5462ef4bef87a994bfa1d05d70654471ada4ed0089e6d3d1c80",
+  "selection_hash_b": "3a1665decf1d092a0fe18d81e579c0334a04094734d394506a7db7561a71a66e",
+  "selection_hash_c": "e4dcd966a40b3b44cf24557c7abb3004bb70f77cfaa737fb295f7505a11932bc",
+  "manifest_hash": "b88cafc462de0b8b18d2786e6c57db549fa516e8a9bde0a2dae3a99af47e3ab2",
+  "judgment_cache_hash": "d36d00bd89ea37d814c7976fef46a024e5e791a0a002e8d0605e3c99d726a088",
+  "modeler_context_hash": "0b32191741608bab1ffdebafb44d731bc33117181887447559144d3b1ca6e3af",
+  "student_profile_hash": "dbd74ed7dbcdf2daaa558a6dbecd4a91be89d13addcd7a8feb0ba10dc10c2abe",
+  "changed_in": [
+    "cand_08"
+  ],
+  "changed_out": [
+    "cand_07"
+  ],
+  "synthetic_fixtures_label": "SYNTHETIC_FIXTURE_deterministic_offline_v1",
+  "modeler_cc_package_status": "PENDING_NOT_ON_DISK (real prompts/judgment cache not fabricated)",
+  "gates": {
+    "gate1_BC_strict_match_except_modeler_conditioning": true,
+    "gate2_bit_identical_selection_hash_replay": true,
+    "gate3_salted_unknown_empty_hashmod_firewall": true,
+    "gate4_selected_pass_official67_mapping_and_cert": true,
+    "gate5_legacy_artifacts_47_of_48_unchanged_1_removed_by_committed_act": true,
+    "gate6_original_221_tests_pass": true,
+    "gate7_new_integration_tests_pass": true,
+    "gate8_training_steps_zero": true
+  },
+  "no_training_phase": {
+    "D052_LONG_TRAINING_RUNS": 0,
+    "D052_4096_SMOKE_AUTHORIZED": false,
+    "D052_24576_AUTHORIZED": false,
+    "D052_98304_AUTHORIZED": false,
+    "NO_UNAUTHORIZED_TRAINING": true
+  }
+}

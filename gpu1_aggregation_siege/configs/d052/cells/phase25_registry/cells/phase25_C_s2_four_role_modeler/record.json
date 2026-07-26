@@ -1,0 +1,51 @@
+{
+  "spec": {
+    "protocol_version": "canonical_v2",
+    "cell_id": "phase25_C_s2_four_role_modeler",
+    "title": "Phase 2.5 canonical arm C (S2_FOUR_ROLE_MODELER)",
+    "hypothesis": "arm C: modeler ON selection over phase25_canonical_shared_frozen_v1",
+    "pool_id": "phase25_canonical_shared_frozen_v1",
+    "pool_hash": "189e13ef2435a5462ef4bef87a994bfa1d05d70654471ada4ed0089e6d3d1c80",
+    "selector": {
+      "protocol_version": "canonical_v2",
+      "selector": "S2_FOUR_ROLE_MODELER",
+      "critic_policy": "hard_veto",
+      "k": 8,
+      "seed": 20260726,
+      "roles": [
+        "tutor",
+        "critic",
+        "explorer"
+      ],
+      "budget": null
+    },
+    "achievement_schema": "craftax_67_v1",
+    "conditioning_type": "achievement_multi_hot",
+    "conditioning_dimension": 67,
+    "student_obs_dim": 8335,
+    "candidate_pool_mode": "shared_frozen",
+    "score_normalization": "rank_percentile_v1",
+    "candidate_ids": [
+      "cand_00",
+      "cand_01",
+      "cand_02",
+      "cand_03",
+      "cand_04",
+      "cand_05",
+      "cand_06",
+      "cand_08"
+    ],
+    "selection_hash": "e4dcd966a40b3b44cf24557c7abb3004bb70f77cfaa737fb295f7505a11932bc",
+    "environment_version": "craftax==1.4.5",
+    "intended_total_timesteps": 0,
+    "output_dir": "gpu1_aggregation_siege/phase25_canonical_cells/cell_C",
+    "created_by": "d052_phase25_canonical_offline_harness"
+  },
+  "state": "DRAFT",
+  "seq": 0,
+  "history": [],
+  "authorization": null,
+  "prepared_bundle": null,
+  "launch_manifest": null,
+  "block_reason": ""
+}
