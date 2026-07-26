@@ -1,0 +1,8 @@
+{
+  "sr_base": 0.0,
+  "sr_ego": 0.0,
+  "diff_pp": 0.0,
+  "n_base": 660,
+  "n_ego": 667,
+  "passed": true
+}

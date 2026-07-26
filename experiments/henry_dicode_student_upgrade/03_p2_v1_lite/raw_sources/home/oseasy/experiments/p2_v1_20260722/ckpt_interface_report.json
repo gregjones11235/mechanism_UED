@@ -1,0 +1,29 @@
+{
+  "ckpt": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+  "devices": [
+    "cuda:0"
+  ],
+  "obs_dim": 8335,
+  "action_dim": 43,
+  "embedding_size": 67,
+  "load": {
+    "ok": true,
+    "param_leaves": 80,
+    "encoder_kernel": {
+      "/params/transformer/encoder/kernel": [
+        8335,
+        256
+      ]
+    },
+    "forward_logits": [
+      2,
+      43
+    ],
+    "forward_value": [
+      2
+    ],
+    "forward_finite": true,
+    "load_time_s": 21.7,
+    "kernel_matches_8335_256": false
+  }
+}

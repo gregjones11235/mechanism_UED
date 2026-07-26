@@ -1,0 +1,31 @@
+{
+  "label": "P9_VALIDATE",
+  "n_snapshots": 40,
+  "counts": {
+    "floor2_reached": 0,
+    "mid_clear": 0,
+    "gate_unlocked": 0,
+    "saw_stair_lost": 32,
+    "near_floor3_failed": 8
+  },
+  "bit_restorable": {
+    "checked": 40,
+    "bad": 0,
+    "pass_": true
+  },
+  "one_step_transition": {
+    "records": 8,
+    "bad": 0,
+    "max_obs_diff": 0.0,
+    "bad_examples": [],
+    "pass_": true
+  },
+  "no_leak_finite": {
+    "non_finite": 0,
+    "pass_": true
+  },
+  "P9_VALIDATE_PASS": true,
+  "capture_code_sha": "fc9f031100257906bd3f51f0072e628685cf9caf910516e27806a5603a5a0a7e",
+  "validate_code_sha": "b0f319542d88c58cf5cd0d33903e3dfe1911e790abbaa7e986924b01d95083d7",
+  "timestamp_utc": "2026-07-24T17:06:03Z"
+}

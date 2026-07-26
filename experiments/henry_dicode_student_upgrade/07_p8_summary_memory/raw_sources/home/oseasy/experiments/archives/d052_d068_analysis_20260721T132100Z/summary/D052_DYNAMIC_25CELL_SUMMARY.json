@@ -1,0 +1,252 @@
+[
+  {
+    "cell": "original_x_original",
+    "mechanism": "original",
+    "training": "original",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_original/seed0_1784441252/manifest.json",
+    "copied_files": 8
+  },
+  {
+    "cell": "original_x_tser_ppo",
+    "mechanism": "original",
+    "training": "tser_ppo",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_tser_ppo/seed0_1784451914/manifest.json",
+    "copied_files": 8
+  },
+  {
+    "cell": "original_x_lpg_hrl",
+    "mechanism": "original",
+    "training": "lpg_hrl",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_lpg_hrl/seed0_1784448381/manifest.json",
+    "copied_files": 11
+  },
+  {
+    "cell": "original_x_lpac",
+    "mechanism": "original",
+    "training": "lpac",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_lpac/seed0_1784453656/manifest.json",
+    "copied_files": 5
+  },
+  {
+    "cell": "original_x_clpa",
+    "mechanism": "original",
+    "training": "clpa",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_clpa/seed0_1784455651/manifest.json",
+    "copied_files": 5
+  },
+  {
+    "cell": "soft_copeland_x_original",
+    "mechanism": "soft_copeland",
+    "training": "original",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_original/seed0_1784462982/manifest.json",
+    "copied_files": 29
+  },
+  {
+    "cell": "soft_copeland_x_tser_ppo",
+    "mechanism": "soft_copeland",
+    "training": "tser_ppo",
+    "status": "ALL_ROUNDS_PASS",
+    "steps": "",
+    "verdict": "ALL_ROUNDS_PASS",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_tser_ppo/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "soft_copeland_x_lpg_hrl",
+    "mechanism": "soft_copeland",
+    "training": "lpg_hrl",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_lpg_hrl/seed0_1784457576/manifest.json",
+    "copied_files": 24
+  },
+  {
+    "cell": "soft_copeland_x_lpac",
+    "mechanism": "soft_copeland",
+    "training": "lpac",
+    "status": "ALL_ROUNDS_PASS",
+    "steps": "",
+    "verdict": "ALL_ROUNDS_PASS",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_lpac/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "soft_copeland_x_clpa",
+    "mechanism": "soft_copeland",
+    "training": "clpa",
+    "status": "ALL_ROUNDS_PASS",
+    "steps": "",
+    "verdict": "ALL_ROUNDS_PASS",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_clpa/manifest.json",
+    "copied_files": 33
+  },
+  {
+    "cell": "budgeted_soft_copeland_x_original",
+    "mechanism": "budgeted_soft_copeland",
+    "training": "original",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_original/seed0_1784462982/manifest.json",
+    "copied_files": 29
+  },
+  {
+    "cell": "budgeted_soft_copeland_x_tser_ppo",
+    "mechanism": "budgeted_soft_copeland",
+    "training": "tser_ppo",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_tser_ppo/seed0_1784572014/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "budgeted_soft_copeland_x_lpg_hrl",
+    "mechanism": "budgeted_soft_copeland",
+    "training": "lpg_hrl",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_lpg_hrl/seed0_1784524657/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "budgeted_soft_copeland_x_lpac",
+    "mechanism": "budgeted_soft_copeland",
+    "training": "lpac",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_lpac/seed0_1784572014/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "budgeted_soft_copeland_x_clpa",
+    "mechanism": "budgeted_soft_copeland",
+    "training": "clpa",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_clpa/seed0_1784526008/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "auction_raw_x_original",
+    "mechanism": "auction_raw",
+    "training": "original",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_original/seed0_1784462982/manifest.json",
+    "copied_files": 29
+  },
+  {
+    "cell": "auction_raw_x_tser_ppo",
+    "mechanism": "auction_raw",
+    "training": "tser_ppo",
+    "status": "ALL_ROUNDS_PASS",
+    "steps": "",
+    "verdict": "ALL_ROUNDS_PASS",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_tser_ppo/seed0_1784529589.d067_chat_archive/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "auction_raw_x_lpg_hrl",
+    "mechanism": "auction_raw",
+    "training": "lpg_hrl",
+    "status": "ALL_ROUNDS_PASS",
+    "steps": "",
+    "verdict": "ALL_ROUNDS_PASS",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_lpg_hrl/seed0_1784517797.d067_chat_archive/manifest.json",
+    "copied_files": 22
+  },
+  {
+    "cell": "auction_raw_x_lpac",
+    "mechanism": "auction_raw",
+    "training": "lpac",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_lpac/seed0_1784524793/manifest.json",
+    "copied_files": 24
+  },
+  {
+    "cell": "auction_raw_x_clpa",
+    "mechanism": "auction_raw",
+    "training": "clpa",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_clpa/seed0_1784601734/manifest.json",
+    "copied_files": 28
+  },
+  {
+    "cell": "auction_budgeted_x_original",
+    "mechanism": "auction_budgeted",
+    "training": "original",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_original/seed0_1784548257/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "auction_budgeted_x_tser_ppo",
+    "mechanism": "auction_budgeted",
+    "training": "tser_ppo",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_tser_ppo/seed0_1784629279/manifest.json",
+    "copied_files": 34
+  },
+  {
+    "cell": "auction_budgeted_x_lpg_hrl",
+    "mechanism": "auction_budgeted",
+    "training": "lpg_hrl",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_lpg_hrl/seed0_1784566018/manifest.json",
+    "copied_files": 21
+  },
+  {
+    "cell": "auction_budgeted_x_lpac",
+    "mechanism": "auction_budgeted",
+    "training": "lpac",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_lpac/seed0_1784565782/manifest.json",
+    "copied_files": 24
+  },
+  {
+    "cell": "auction_budgeted_x_clpa",
+    "mechanism": "auction_budgeted",
+    "training": "clpa",
+    "status": "COMPLETED",
+    "steps": 98304,
+    "verdict": "COMPLETED",
+    "latest_manifest": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_clpa/seed0_1784543391/manifest.json",
+    "copied_files": 24
+  }
+]

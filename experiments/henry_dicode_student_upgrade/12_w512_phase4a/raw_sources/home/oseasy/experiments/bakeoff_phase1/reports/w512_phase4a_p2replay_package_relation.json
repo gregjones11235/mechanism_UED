@@ -1,0 +1,62 @@
+{
+  "audit": "P2_REPLAY_PACKAGE_RELATION",
+  "timestamp_utc": "2026-07-26T01:46:52Z",
+  "relation": "FUNCTIONAL_MATCH_WITH_LISTED_DIFFERENCES",
+  "matches": [
+    "FullP2Config imported directly from p2_full_20260723/src/full_p2_learner.py (same file, same class)",
+    "capacity=64",
+    "L_SEQ=129, MIN_SEQUENCE_LENGTH=129",
+    "K_BATCH=4",
+    "ANCHOR_INTERVAL=128",
+    "OPTIMISTIC_RESET_RATIO=16",
+    "NUM_ENVS=16, ROLLOUT_STEPS=128",
+    "MASTER_SEED=42, LR=2e-5, adam_eps=1e-5",
+    "gamma=0.999, rho_bar=1.0, c_bar=1.0",
+    "beta=1.0, w_max=20.0, lambda_kl=0.01",
+    "ema_tau=0.995, kl_replay_max=0.05, kl_run_max=0.10",
+    "max_policy_lag=16",
+    "w_vtrace=0.5, w_awr=0.5, vf_coef=0.5, ent_coef=0.002",
+    "actor_step_scales=(1.0, 0.5, 0.25, 0.125)",
+    "ent_floor=0.05",
+    "UNREACHABLE_GUARD_ROLLOUTS=6",
+    "V-trace original + AWR relabeled loss structure",
+    "Transactional KL gate with critic-only fallback",
+    "EMA target network update",
+    "Hindsight relabel (goal-conditioned obs + reward)",
+    "Whole-episode buffer with sparse memory anchors"
+  ],
+  "differences": [
+    {
+      "field": "SAVE_STEPS",
+      "p2_full_a": "(0,4096,8192,12288,24576)",
+      "w512_p2replay": "(0,4096,8192,12288,16384,20480,24576)",
+      "impact": "cosmetic only, more intermediate checkpoints"
+    },
+    {
+      "field": "network",
+      "p2_full_a": "ActorCriticTransformer (base GTrXL-128)",
+      "w512_p2replay": "ActorCriticTransformerW512 (GTrXL-128 + 384-step cross-attention + zero-init gate)",
+      "impact": "structural - W512 has additional parameters (5268013 vs ~4906028)"
+    },
+    {
+      "field": "anchors",
+      "p2_full_a": "GTrXL memory only",
+      "w512_p2replay": "GTrXL memory + W512 long state (long_buf, long_mask, delay_buf, delay_idx, delay_count, long_idx)",
+      "impact": "W512 anchors carry additional state for reconstruction"
+    },
+    {
+      "field": "reconstruction",
+      "p2_full_a": "reconstruct GTrXL memory from anchor + burn-in",
+      "w512_p2replay": "reconstruct GTrXL memory + W512 long state from anchor + burn-in",
+      "impact": "W512 scan carries additional long state through loss window"
+    },
+    {
+      "field": "rollout collection",
+      "p2_full_a": "Python-level collect_rollout (full_p2_core.py)",
+      "w512_p2replay": "Python-level collect_rollout_w512 (w512_p2_core.py) with W512 step",
+      "impact": "W512 rollout calls w512_step to update long state each step"
+    }
+  ],
+  "control_p2replay_strict_reference": false,
+  "control_p2replay_reason": "Control@24576 was trained with on-policy PPO (not P2 Replay). There is no Control+P2Replay arm. Therefore Control cannot serve as a strict same-training-method reference for the P2Replay arms. The Control comparison in this report measures the combined effect of (W512 architecture + P2 Replay training) vs (base GTrXL + PPO training), not the isolated effect of W512 long memory under replay."
+}

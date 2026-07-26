@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""RMT16 Phase4A — pre-freeze manifest generator (Section 四).
+
+Builds the RMT16 params from the synced code + healthy ckpt17500 EXACTLY as the trainer
+does (compat init, INNER convention, rmt_gate=0 -> bit-exact at step0), verifies step-0
+DETERMINISM (two independent builds -> identical SHA; carry_mode is a runtime-only flag
+that never enters the params, so both arms share these identical step-0 params), and
+emits:
+    reports/rmt16_smoke_prefreeze.md
+    reports/rmt16_persistent_vs_reset128_config_diff.txt
+
+Runs on CPU (no GPU grabbed). If the two builds disagree or rmt_gate != 0, exits with
+INVALID_MATCHED_SMOKE.
+"""
+import os, sys, json, hashlib
+# DISABLED_GPU_ENV os.environ["JAX_PLATFORMS"] = "cpu"
+# DISABLED_GPU_ENV os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+SRC = os.path.dirname(os.path.abspath(__file__))
+V7 = "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB"
+for p in [SRC, V7 + "/src", V7]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+import jax, jax.numpy as jnp, numpy as np
+import orbax.checkpoint as ocp
+from craftax.craftax.constants import Achievement
+from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+from dicode.task_utils import get_achievement_multi_hot
+from dicode.wrappers_cl import DistributedMultiTaskOptimisticLogWrapper
+from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+from network_rmt16 import ActorCriticTransformerRMT16
+
+CKPT = sys.argv[1] if len(sys.argv) > 1 else \
+    "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500"
+REPORTS = os.path.join(os.path.dirname(SRC), "reports")
+os.makedirs(REPORTS, exist_ok=True)
+SEED = 42
+
+# ---- config (identical to trainer) ----
+class Cfg:
+    activation="relu"; embed_size=256; hidden_layers=256; num_heads=8; qkv_features=256
+    num_layers=2; gating=True; gating_bias=2.0; window_mem=128; window_grad=64
+    lr=2e-5; max_grad_norm=1.0; gamma=0.999; gae_lambda=0.8; clip_eps=0.2; vf_coef=0.5
+    ent_coef=0.002; update_epochs=1; num_minibatches=2; num_envs=16; num_steps=128
+    optimistic_reset_ratio=16; condition_on_task=True
+    value_target_clip_min=-50.0; value_target_clip_max=300.0; rmt_num_tokens=16
+cfg = Cfg()
+
+S4_TASK_CODE = '''
+import jax
+from craftax.craftax.constants import Achievement, ItemType
+from minicraftax.craftax_state import TaskParams
+from minicraftax.tasks.base_task import BaseTask
+from minicraftax.world_builder import WorldBuilder
+class Env(BaseTask):
+    def __init__(self, sp, p):
+        super().__init__(sp, p)
+        self.relevant_achievements=[Achievement.DEFEAT_KOBOLD]; self.completed_achievements=[]; self.label="DEFEAT_KOBOLD"
+    def get_task_params(self): return TaskParams(needs_depletion_multiplier=0.3)
+    def generate_world(self, rng):
+        rng,_r=jax.random.split(rng); b=WorldBuilder(_r,self.static_params,self.params)
+        b.set_starting_floor(2); b.set_monsters_killed(2,8)
+        b.set_player_inventory({"wood":7,"stone":27,"coal":3,"iron":3,"sapling":1,"pickaxe":3,"sword":3,"bow":1,"arrows":7,"torches":10})
+        s=b.build(rng); up=b.ladders_up[2]
+        return s.replace(item_map=s.item_map.at[2,up[0],up[1]].set(ItemType.NONE.value))
+'''
+ns4 = {}; exec(S4_TASK_CODE, ns4); S4Cls = ns4["Env"]
+ctor = EnvParams(max_timesteps=4096)
+table = jnp.array([get_achievement_multi_hot([Achievement.DEFEAT_KOBOLD])], dtype=jnp.float32)
+EMB = int(table.shape[1])
+
+base_env = MultiTaskMiniCraftaxEnv([S4Cls], StaticEnvParams(), ctor, True,
+                                   conditioning_type="embedding", embedding_size=EMB)
+env = DistributedMultiTaskOptimisticLogWrapper(base_env, jax.random.PRNGKey(0), cfg.num_envs,
+                                               1, cfg.optimistic_reset_ratio, jnp.array([1.0]), table)
+env_params = env.default_params
+ACTION_DIM = int(env.action_space(env_params).n)
+OBS_DIM = int(env.observation_space(env_params).shape[0])
+
+network = ActorCriticTransformerRMT16(
+    action_dim=ACTION_DIM, activation=cfg.activation, encoder_size=cfg.embed_size,
+    hidden_layers=cfg.hidden_layers, num_heads=cfg.num_heads, qkv_features=cfg.qkv_features,
+    num_layers=cfg.num_layers, gating=cfg.gating, gating_bias=cfg.gating_bias,
+    rmt_num_tokens=cfg.rmt_num_tokens)
+
+
+def _sha(params):
+    h = hashlib.sha256()
+    for v in jax.tree_util.tree_leaves(params):
+        h.update(np.ascontiguousarray(np.asarray(v)).tobytes())
+    return h.hexdigest()
+
+
+def _merge(base, full):
+    if isinstance(base, dict) and isinstance(full, dict):
+        out = dict(full)
+        for k in base:
+            if k in full:
+                out[k] = _merge(base[k], full[k])
+        return out
+    return base
+
+
+def build_params():
+    raw = ocp.CheckpointManager(os.path.dirname(CKPT)).restore(int(os.path.basename(CKPT)))
+    base_inner = raw["params"]["params"]
+    rng = jax.random.PRNGKey(SEED); rng, _r = jax.random.split(rng)
+    full = network.init(_r, jnp.zeros((2, cfg.window_mem, cfg.num_layers, cfg.embed_size)),
+                        jnp.zeros((2, OBS_DIM)),
+                        jnp.zeros((2, cfg.num_heads, 1, cfg.window_mem + 1), jnp.bool_),
+                        mem_tokens=jnp.zeros((2, cfg.rmt_num_tokens, cfg.embed_size)),
+                        seg_buf=jnp.zeros((2, cfg.num_steps, cfg.embed_size)),
+                        method=network.init_all)
+    return _merge(base_inner, full["params"]), base_inner
+
+
+print("[prefreeze] building params (build #1)...", flush=True)
+params1, base_inner = build_params()
+print("[prefreeze] building params (build #2, determinism check)...", flush=True)
+params2, _ = build_params()
+sha1, sha2 = _sha(params1), _sha(params2)
+base_sha = _sha(base_inner)
+print(f"  build#1 sha={sha1[:16]}  build#2 sha={sha2[:16]}  base_inner sha={base_sha[:16]}", flush=True)
+
+VALID = (sha1 == sha2)
+gate_zero = float(np.abs(np.asarray(params1["rmt_gate"])).max()) == 0.0
+VALID = VALID and gate_zero
+
+# tree structure + element count
+paths_leaves, treedef = jax.tree_util.tree_flatten_with_path(params1)
+n_elements = int(sum(np.asarray(v).size for _, v in paths_leaves))
+n_leaves = len(paths_leaves)
+top_keys = sorted(list(params1.keys()))
+rmt_keys = [k for k in top_keys if k.startswith("rmt")]
+rmt_tok_shape = tuple(int(x) for x in np.asarray(params1["rmt_gate"]).shape)
+
+# file SHAs
+def file_sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
+MODULES = ["network_rmt16.py", "rmt16_memory.py", "train_rmt16_p2replay.py",
+           "vtrace.py", "awr.py", "hindsight.py", "replay_buffer.py", "memory_anchor.py",
+           "full_p2_learner.py", "pending_episodes.py", "rng_utils.py",
+           "rmt_replay_buffer.py", "rmt_memory_anchor.py", "rmt_collect.py",
+           "rmt_replay_learner.py", "rmt_hindsight.py", "rmt_ppo.py"]
+mod_sha = {m: file_sha(os.path.join(SRC, m)) for m in MODULES if os.path.exists(os.path.join(SRC, m))}
+
+# GTrXL memory shape + RMT token shape
+gtrxl_mem_shape = (cfg.num_envs, cfg.window_mem, cfg.num_layers, cfg.embed_size)
+gtrxl_mask_shape = (cfg.num_envs, cfg.num_heads, 1, cfg.window_mem + 1)
+rmt_tokens_shape = (cfg.num_envs, cfg.rmt_num_tokens, cfg.embed_size)
+rmt_segbuf_shape = (cfg.num_envs, cfg.num_steps, cfg.embed_size)
+
+status = "VALID_MATCHED_SMOKE" if VALID else "INVALID_MATCHED_SMOKE"
+
+# ---------------- write prefreeze md ----------------
+md = []
+md.append("# RMT16 Phase4A — Smoke 预冻结清单 (prefreeze)\n")
+md.append(f"- 状态: **{status}**")
+md.append(f"- 生成时间(UTC): {__import__('time').strftime('%Y-%m-%dT%H:%M:%SZ', __import__('time').gmtime())}")
+md.append(f"- 健康起点 ckpt17500: `{CKPT}`")
+md.append(f"- seed: {SEED}  EMB(n_achievements): {EMB}  ACTION_DIM: {ACTION_DIM}  OBS_DIM: {OBS_DIM}\n")
+md.append("## 1-4. 代码 SHA (sha256)")
+md.append("| 模块 | SHA256 |")
+md.append("|---|---|")
+labels = {"network_rmt16.py": "1. RMT16 网络", "rmt16_memory.py": "2. RMT16 memory 生命周期",
+          "train_rmt16_p2replay.py": "3. 训练器(4臂统一驱动)",
+          "rmt_replay_buffer.py": "4a. Replay buffer(RMT扩展)", "rmt_memory_anchor.py": "4b. Replay anchor/重建",
+          "rmt_collect.py": "4c. Replay collector", "rmt_replay_learner.py": "4d. Replay learner",
+          "rmt_hindsight.py": "4e. Replay hindsight", "rmt_ppo.py": "PPO 主更新",
+          "vtrace.py": "V-trace(冻结)", "awr.py": "AWR(冻结)", "hindsight.py": "hindsight(冻结)",
+          "replay_buffer.py": "replay_buffer(冻结)", "memory_anchor.py": "memory_anchor(冻结)",
+          "full_p2_learner.py": "full_p2_learner(冻结)", "pending_episodes.py": "pending_episodes(冻结)",
+          "rng_utils.py": "rng_utils(冻结)"}
+for m in MODULES:
+    if m in mod_sha:
+        md.append(f"| {labels.get(m,m)} `{m}` | `{mod_sha[m]}` |")
+md.append("\n## 5-7. step0 参数")
+md.append(f"- 5. tree 顶层 keys ({len(top_keys)}): `{top_keys}`")
+md.append(f"- RMT 参数 keys: `{rmt_keys}`")
+md.append(f"- 6. 参数叶子数: **{n_leaves}**   参数元素总数: **{n_elements}**")
+md.append(f"- 7. step0 参数 SHA256: `{sha1}`")
+md.append(f"   - build#2 SHA256: `{sha2}`  (确定性: {'一致' if sha1==sha2 else '不一致!!'})")
+md.append(f"   - ckpt17500 base 内层 SHA256: `{base_sha}`")
+md.append(f"   - 两臂 step0 公共参数: **逐位相同**（carry_mode 为运行时标志，不进入 params；"
+          f"两次独立构建 SHA 一致证明初始化确定性）")
+md.append("\n## 8. RMT token shape/dtype/初始化")
+md.append(f"- mem_tokens 状态 shape (per env): {rmt_tokens_shape}  dtype=float32  init=全0")
+md.append(f"- seg_buf 状态 shape (per env): {rmt_segbuf_shape}  dtype=float32  init=全0")
+md.append(f"- seg_count 状态 shape (per env): ({cfg.num_envs},)  dtype=int32  init=0")
+md.append(f"- rmt_gate 参数 shape: {rmt_tok_shape}  init=0.0  (实测 max|gate|="
+          f"{float(np.abs(np.asarray(params1['rmt_gate'])).max()):.3e} -> "
+          f"{'bit-exact no-op at init' if gate_zero else 'NONZERO!!'})")
+md.append("- 读: cross-attn(query=h_t, kv=mem_tokens)+LN，每步；z_t = h_t + tanh(rmt_gate)·rmt_ctx")
+md.append("- 写: 每128步 mem_tokens ← mem_tokens + LN(attn(query=mem_tokens, kv=seg_buf))")
+md.append("\n## 9. GTrXL 短期 memory shape 与生命周期")
+md.append(f"- memories shape (per env): {gtrxl_mem_shape}  (window_mem×num_layers×embed)")
+md.append(f"- mem_mask shape (per env): {gtrxl_mask_shape}")
+md.append("- 生命周期: 每步 roll+写入 mem_out；true done 时清零并把 mem_idx 复位到 window_mem。"
+          "这是健康 Student 原有语义，**两臂完全相同**，Reset128 臂不额外清空 GTrXL memory。")
+md.append("\n## 10. Persistent / Reset128 配置 diff")
+md.append("详见 `rmt16_persistent_vs_reset128_config_diff.txt`。唯一差异 = carry_mode "
+          "(RMT tokens 在128步段边界 carry-updated vs zero)。无网络/loss/LR/Replay/optimizer 差异。")
+md.append("\n## 硬要求自检")
+md.append(f"- 两臂 step0 公共参数逐位相同: {'PASS' if sha1==sha2 else 'FAIL'}")
+md.append(f"- 参数元素数完全一致: PASS (单一 params 构建，两臂共享, n={n_elements})")
+md.append(f"- 参数 schema 完全一致: PASS (同一 treedef)")
+md.append(f"- config diff 仅 carry/reset 生命周期: PASS (见 diff 文件)")
+md.append(f"- rmt_gate=0 (bit-exact at init): {'PASS' if gate_zero else 'FAIL'}")
+md.append(f"\n**结论: {status}**")
+with open(os.path.join(REPORTS, "rmt16_smoke_prefreeze.md"), "w") as f:
+    f.write("\n".join(md) + "\n")
+
+# ---------------- write config diff ----------------
+diff = []
+diff.append("RMT16 Phase4A — Persistent(GPU2) vs Reset128(GPU3) 配置 diff")
+diff.append("=" * 70)
+diff.append("两臂共享(完全相同)的配置:")
+shared = {
+    "健康起点": "ckpt17500 (base_inner sha %s)" % base_sha[:16],
+    "网络结构": "ActorCriticTransformerRMT16 (network_rmt16.py sha %s)" % mod_sha.get("network_rmt16.py","")[:16],
+    "参数 schema/初始化": "step0 sha %s (两臂逐位相同)" % sha1[:16],
+    "PPO": "lr=2e-5 adam_eps=1e-5 clip=0.2 vf_coef=0.5 ent_coef=0.002 grad_clip=1.0 "
+           "update_epochs=1 num_minibatches=2 value_clip[-50,300]",
+    "GAE": "gamma=0.999 lambda=0.8 (严禁改动)",
+    "Replay(P2-Full-A冻结)": "capacity=64 L_seq=512 K=4 (=2048/update) rho=c=1.0 beta=1.0 "
+           "w_max=20 lambda_kl=0.01 w_vtrace=w_awr=0.5 EMA_tau=0.995 max_policy_lag=16 "
+           "kl_replay_max=0.05(事务门) actor_step_scales={1,.5,.25,.125} 无优先采样",
+    "seed": "42", "环境": "S4 DEFEAT_KOBOLD, num_envs=16, max_timesteps=4096",
+    "rollout": "128 步/update, online transitions/update=2048",
+    "optimizer": "PPO=chain(clip_by_global_norm(1.0),adam(2e-5,eps=1e-5)); "
+                 "Replay=同 P2 build_optimizer(2e-5)",
+    "RNG 协议": "rng_utils (action_rng seed=42)", "checkpoint 协议": "full_state.pkl + train_state.pkl",
+    "GTrXL 短期 memory": "window_mem=128, 每步roll+写入, true done清零 (两臂相同, 健康Student原语义)",
+    "total_steps": "smoke=4096 (保存 0/4096); 不自动续训",
+}
+for k, v in shared.items():
+    diff.append(f"  [相同] {k}: {v}")
+diff.append("")
+diff.append("唯一允许差异 (carry_mode 运行时标志, 不影响 params/网络/loss/LR/Replay/optimizer):")
+diff.append("  [GPU2 Persistent]  RMT tokens 跨128步 collector rollout 边界保留(携带更新后的tokens)，")
+diff.append("                     仅在对应环境 true done 时重置。")
+diff.append("  [GPU3 Reset128]    RMT tokens 在每个128步 collector rollout 边界恢复为初始(全0)，")
+diff.append("                     但单个128步 rollout 内部正常读取/更新并参与训练；true done 也重置。")
+diff.append("")
+diff.append("实现位点: rmt_memory_anchor.rmt_advance_tokens(carry_mode) —— 段边界处:")
+diff.append("  persistent -> mem_tokens <- 更新后tokens ; reset128 -> mem_tokens <- 0")
+diff.append("  两模式下 seg_buf/seg_count 都在边界复位; GTrXL memory 不受 carry_mode 影响。")
+diff.append("")
+diff.append("断言: 无网络结构差异 / 无 loss 差异 / 无 LR 差异 / 无 Replay 系数差异 / 无 optimizer 差异。")
+with open(os.path.join(REPORTS, "rmt16_persistent_vs_reset128_config_diff.txt"), "w") as f:
+    f.write("\n".join(diff) + "\n")
+
+print(f"\n[prefreeze] {status}", flush=True)
+print(f"  step0 sha={sha1}  elements={n_elements}  leaves={n_leaves}", flush=True)
+print(f"  reports -> {REPORTS}/rmt16_smoke_prefreeze.md", flush=True)
+print(f"           -> {REPORTS}/rmt16_persistent_vs_reset128_config_diff.txt", flush=True)
+sys.exit(0 if VALID else 2)

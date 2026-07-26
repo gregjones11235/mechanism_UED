@@ -1,0 +1,75 @@
+● Now let me fix the launcher with the correct task code from the task graph.
+
+  Thought for 2s, read 1 file (ctrl+o to expand)
+
+● Bash(python3 -c "
+      import sys…)
+  ⎿  Written s4_task_code.py (1931 chars)
+
+● Update(~/experiments/henry_student_p2_amago_20260721/src/stage_a_launcher.py)
+  ⎿  Added 3 lines, removed 20 lines
+      116  # S4 dark-corridor task (defeat_kobold, stage 4)
+      117  # ═════════════════════════════════════════════════════════════════════
+      118
+      119 -S4_CODE = """
+      120 -from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+      121 -from minicraftax.envs.craftax import CraftaxClassicSymbolicEnv
+      119 +# S4 task code loaded from the immutable task graph at runtime
+      120 +with open(os.path.join(EVIDENCE_DIR, "s4_task_code.py")) as f:
+      121 +    S4_CODE = f.read()
+      122
+      123 -class Env(CraftaxClassicSymbolicEnv):
+      124 -    def __init__(self,*a,**kw): super().__init__(*a,**kw)
+      125 -    @staticmethod
+      126 -    def default_params():
+      127 -        b=type("B",(),{})()
+      128 -        b.set_starting_floor=lambda f:None
+      129 -        b.set_monsters_killed=lambda f,k:None
+      130 -        b.set_needs_depletion_multiplier=lambda m:None
+      131 -        b.set_spawn_sub_stage=lambda s:None
+      132 -        b.build=lambda:(EnvParams(max_timesteps=4096),StaticEnvParams())
+      133 -        b.set_starting_floor(2)
+      134 -        b.set_monsters_killed(2,8)
+      135 -        b.set_needs_depletion_multiplier(0.3)
+      136 -        b.set_spawn_sub_stage(4)
+      137 -        return b.build()
+      138 -"""
+      123
+      140 -
+      124  # ═════════════════════════════════════════════════════════════════════
+      125  # Forward pass (compiled)
+      126  # ═════════════════════════════════════════════════════════════════════
+
+  Thought for 3s (ctrl+o to expand)
+
+● Bash(cd /home/oseasy/experiments/henry_student_p2_amago_20260721 && CUDA_VISIBLE_DEVICES=3 python3 src/stage_a_launcher.py 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+  Thought for 2s (ctrl+o to expand)
+
+● Bash(sleep 45 && cat /tmp/claude-1000/-home-oseasy-experiments-mechanism-UED-continuation-20260715-workers-gpu3-budgeted-auction/493884d7-5a13-4a10-96ad-756777abbbe2…)
+  ⎿  WARNING:absl:Configured `CheckpointManager` using deprecated legacy API. Please follow the instructions at https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html to migrate.
+     /home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/orbax/checkpoint/_src/serialization/jax_array_handlers.py:736: UserWarning: Sharding info not provided when restoring. Populating sharding info
+      from sharding file. Please note restoration time will be slightly increased due to reading from file. Note also that this option is unsafe when restoring on a different topology than the checkpoint was saved wi
+     … +5 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+  Thought for 2s (ctrl+o to expand)
+
+  Bash(sleep 60 && cat /tmp/claude-1000/-home-oseasy-experiments-mechanism-UED-continuation-20260715-workers-gpu3-budgeted-auction/493884d7-5a13-4a10-96ad-756777abbbe2…)
+  ⎿  Running… (16s · timeout 2m)
+     (ctrl+b ctrl+b (twice) to run in background)
+
+· Launching Stage A GPU3 preflight… (14m 34s · ↓ 45.9k tokens)
+  ⎿  ◼ Launch Stage A on GPU3 (≤24576 steps)
+     ◻ Launch Stage B on GPU3 (≤98304 steps)
+     ✔ Save GPU3 holder evidence and stop hold_gpu3.py
+     ✔ Explore Henry package probes, achievements, and task structure
+     ✔ Create isolated namespace and dependency compatibility report
+      … +2 completed
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt · ctrl+t to hide tasks · ← for agents
+

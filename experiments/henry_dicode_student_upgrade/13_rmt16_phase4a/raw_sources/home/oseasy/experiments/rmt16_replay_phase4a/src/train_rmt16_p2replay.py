@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""RMT16 × P2-Replay — unified training driver (Phase4A).
+
+ONE driver serves all four RMT16 arms via two flags:
+  --carry_mode {persistent, reset128}   the ONLY Persistent vs Reset128 difference
+                                        (tokens carried across 128-step segment boundaries
+                                         vs cleared at them; both clear on true done).
+  --replay {on, off}                    enable/disable the P2-Full-A replay channel.
+                                        off => clean RMT16 on-policy PPO (gate-4 reference).
+
+Per outer update (directive §三 / frozen design §7):
+  1. collect_rollout_rmt  (16 env x 128 steps; emits complete episodes + sparse GTrXL/RMT
+                           anchors; persists episodes across rollouts via pending buffers)
+  2. PPO MAIN update      (Original PPO, frozen hyperparams; rmt_ppo.ppo_update_rmt)
+  3. REPLAY update        (if buffer.can_sample(): K=4 relabelable sequences ->
+                           V-trace original-goal + hindsight AWR relabeled; transactional
+                           KL gate <=0.05 with actor step-scale retry + rollback; EMA target)
+  4. checkpoints at 0/4096/8192/12288/16384/20480/24576 (smoke: 0/4096). NO auto-98304.
+
+Frozen coefficients (PPO + Replay) are inherited from the bakeoff Cfg + FullP2Config and
+are NOT tuned here. GPU2=persistent, GPU3=reset128 (directive §二).
+"""
+import os, sys, json, time, hashlib, pickle, argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--carry_mode", required=True, choices=["persistent", "reset128"])
+ap.add_argument("--replay", required=True, choices=["on", "off"])
+ap.add_argument("--ckpt17500", required=True)
+ap.add_argument("--out", required=True)
+ap.add_argument("--gpu_uuid", required=True)
+ap.add_argument("--total_updates", type=int, default=12)     # 12 * 2048 = 24576
+ap.add_argument("--seed", type=int, default=42)
+ap.add_argument("--save_every", type=int, default=2)         # updates between saves (2 => every 4096)
+args = ap.parse_args()
+
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_uuid
+os.environ["XLA_FLAGS"] = "--xla_gpu_deterministic_ops=true"
+
+SRC = os.path.dirname(os.path.abspath(__file__))
+V7 = "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB"
+for p in [SRC, V7 + "/src", V7]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+import jax, jax.numpy as jnp, numpy as np, optax
+import orbax.checkpoint as ocp
+from craftax.craftax.constants import Achievement
+from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+from dicode.task_utils import get_achievement_multi_hot
+from dicode.wrappers_cl import DistributedMultiTaskOptimisticLogWrapper
+from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+
+from network_rmt16 import ActorCriticTransformerRMT16
+import rmt16_memory as rmtm
+import rng_utils as RU
+import rmt_collect as RC
+import rmt_ppo as PPO
+import rmt_replay_learner as RL
+import rmt_hindsight as RH
+from rmt_replay_buffer import RMTReplayBuffer
+from full_p2_learner import FullP2Config, build_optimizer
+from rmt_memory_anchor import make_apply_eval_rmt
+
+REPLAY_ON = (args.replay == "on")
+ARM = f"RMT16-{args.carry_mode.capitalize()}{'-P2Replay' if REPLAY_ON else '-PPO'}"
+
+# ----------------------- config (bakeoff frozen + P2 frozen) -----------------------
+class Cfg:
+    activation="relu"; embed_size=256; hidden_layers=256; num_heads=8; qkv_features=256
+    num_layers=2; gating=True; gating_bias=2.0; window_mem=128; window_grad=64
+    lr=2e-5; max_grad_norm=1.0; gamma=0.999; gae_lambda=0.8; clip_eps=0.2; vf_coef=0.5
+    ent_coef=0.002; update_epochs=1; num_minibatches=2; num_envs=16; num_steps=128
+    optimistic_reset_ratio=16; condition_on_task=True
+    value_target_clip_min=-50.0; value_target_clip_max=300.0; rmt_num_tokens=16
+cfg = Cfg()
+ppo_cfg = dict(window_mem=cfg.window_mem, num_heads=cfg.num_heads, num_layers=cfg.num_layers,
+               embed=cfg.embed_size, lr=cfg.lr, max_grad_norm=cfg.max_grad_norm,
+               gamma=cfg.gamma, gae_lambda=cfg.gae_lambda, clip_eps=cfg.clip_eps,
+               vf_coef=cfg.vf_coef, ent_coef=cfg.ent_coef, update_epochs=cfg.update_epochs,
+               num_minibatches=cfg.num_minibatches)
+fp_cfg = FullP2Config(window_mem=cfg.window_mem, num_heads=cfg.num_heads,
+                      num_layers=cfg.num_layers, embed=cfg.embed_size,
+                      gamma=cfg.gamma, vt_clip_min=cfg.value_target_clip_min,
+                      vt_clip_max=cfg.value_target_clip_max)
+rmt_cfg = rmtm.RMT16Config(num_tokens=cfg.rmt_num_tokens, segment_len=cfg.num_steps,
+                           encoder_size=cfg.embed_size)
+K_BATCH = 4
+L_SEQ = 512
+STEPS_PER_UPDATE = cfg.num_envs * cfg.num_steps     # 2048
+
+# ----------------------- Stage4 DEFEAT_KOBOLD task (identical to bakeoff) -----------------------
+S4_TASK_CODE = '''
+import jax
+from craftax.craftax.constants import Achievement, ItemType
+from minicraftax.craftax_state import TaskParams
+from minicraftax.tasks.base_task import BaseTask
+from minicraftax.world_builder import WorldBuilder
+class Env(BaseTask):
+    def __init__(self, sp, p):
+        super().__init__(sp, p)
+        self.relevant_achievements=[Achievement.DEFEAT_KOBOLD]; self.completed_achievements=[]; self.label="DEFEAT_KOBOLD"
+    def get_task_params(self): return TaskParams(needs_depletion_multiplier=0.3)
+    def generate_world(self, rng):
+        rng,_r=jax.random.split(rng); b=WorldBuilder(_r,self.static_params,self.params)
+        b.set_starting_floor(2); b.set_monsters_killed(2,8)
+        b.set_player_inventory({"wood":7,"stone":27,"coal":3,"iron":3,"sapling":1,"pickaxe":3,"sword":3,"bow":1,"arrows":7,"torches":10})
+        s=b.build(rng); up=b.ladders_up[2]
+        return s.replace(item_map=s.item_map.at[2,up[0],up[1]].set(ItemType.NONE.value))
+'''
+ns4 = {}; exec(S4_TASK_CODE, ns4); S4Cls = ns4["Env"]
+ctor = EnvParams(max_timesteps=4096)
+table = jnp.array([get_achievement_multi_hot([Achievement.DEFEAT_KOBOLD])], dtype=jnp.float32)
+EMB = int(table.shape[1])
+target_achievement_1d = np.asarray(table[0]).astype(np.float32)   # [n_ach] (P2 hindsight convention)
+from hindsight import DEFAULT_EMBEDDING_SIZE
+assert EMB == DEFAULT_EMBEDDING_SIZE, f"EMB {EMB} != DEFAULT_EMBEDDING_SIZE {DEFAULT_EMBEDDING_SIZE}"
+
+# ----------------------- helpers -----------------------
+def _params_sha(params):
+    h = hashlib.sha256()
+    for v in jax.tree_util.tree_leaves(params):
+        h.update(np.ascontiguousarray(np.asarray(v)).tobytes())
+    return h.hexdigest()
+
+def _to_np(pt):
+    return jax.tree_util.tree_map(lambda x: np.asarray(x), pt)
+
+def _merge(base, full):
+    if isinstance(base, dict) and isinstance(full, dict):
+        out = dict(full)
+        for k in base:
+            if k in full:
+                out[k] = _merge(base[k], full[k])
+        return out
+    return base
+
+# ----------------------- env + network + compat init -----------------------
+print("=" * 78, flush=True)
+print(f"{ARM}  driver  (Phase4A)", flush=True)
+print(f"  carry_mode={args.carry_mode} replay={args.replay} gpu={args.gpu_uuid}", flush=True)
+print(f"  devices={[str(d) for d in jax.devices()]}", flush=True)
+print("=" * 78, flush=True)
+
+base_env = MultiTaskMiniCraftaxEnv([S4Cls], StaticEnvParams(), ctor, True,
+                                   conditioning_type="embedding", embedding_size=EMB)
+env = DistributedMultiTaskOptimisticLogWrapper(
+    base_env, jax.random.PRNGKey(0), cfg.num_envs, 1, cfg.optimistic_reset_ratio,
+    jnp.array([1.0]), table)
+env_params = env.default_params
+assert env_params is not None, 'env_params (Craftax EnvParams) must resolve before collect/env.step'
+ACTION_DIM = int(env.action_space(env_params).n)
+OBS_DIM = int(env.observation_space(env_params).shape[0])
+fp_cfg.action_dim = ACTION_DIM; fp_cfg.obs_dim = OBS_DIM
+
+network = ActorCriticTransformerRMT16(
+    action_dim=ACTION_DIM, activation=cfg.activation, encoder_size=cfg.embed_size,
+    hidden_layers=cfg.hidden_layers, num_heads=cfg.num_heads, qkv_features=cfg.qkv_features,
+    num_layers=cfg.num_layers, gating=cfg.gating, gating_bias=cfg.gating_bias,
+    rmt_num_tokens=cfg.rmt_num_tokens)
+
+# compat init from ckpt17500 (base params loaded; RMT params fresh, rmt_gate=0 -> bit-exact)
+t0 = time.time()
+ckpt_mgr = ocp.CheckpointManager(os.path.dirname(args.ckpt17500))
+raw = ckpt_mgr.restore(int(os.path.basename(args.ckpt17500)))
+base_params = raw["params"]                 # {"params": {...}} wrapped (repo convention)
+base_inner = base_params["params"]          # INNER (apply convention used by make_apply_eval_rmt)
+base_sha = _params_sha(base_inner)
+print(f"[load] ckpt17500 leaves={len(jax.tree_util.tree_leaves(base_inner))} "
+      f"sha={base_sha[:16]} ({time.time()-t0:.1f}s)", flush=True)
+
+rng_init = jax.random.PRNGKey(args.seed); rng_init, _rng = jax.random.split(rng_init)
+full_params = network.init(
+    _rng, jnp.zeros((2, cfg.window_mem, cfg.num_layers, cfg.embed_size)),
+    jnp.zeros((2, OBS_DIM)),
+    jnp.zeros((2, cfg.num_heads, 1, cfg.window_mem + 1), jnp.bool_),
+    mem_tokens=jnp.zeros((2, cfg.rmt_num_tokens, cfg.embed_size)),
+    seg_buf=jnp.zeros((2, cfg.num_steps, cfg.embed_size)),
+    method=network.init_all)
+full_inner = full_params["params"]                  # flax init returns {"params": {...}}
+params = _merge(base_inner, full_inner)             # INNER: ckpt17500 base weights + fresh RMT
+assert _params_sha(_merge(base_inner, base_inner)) == base_sha, "base merge sanity"
+print(f"[merge] inner_leaves={len(jax.tree_util.tree_leaves(params))} base_sha={base_sha[:16]} "
+      f"(rmt_gate zero-init -> bit-exact at step0)", flush=True)
+
+# ----------------------- optimizers / EMA / buffers / state -----------------------
+ppo_opt = PPO.build_ppo_optimizer(ppo_cfg)
+replay_opt = build_optimizer(cfg.lr, fp_cfg)
+params = jax.tree_util.tree_map(jnp.asarray, params)
+ppo_opt_state = ppo_opt.init(params)
+replay_opt_state = replay_opt.init(params)
+target_params = params                                  # EMA target init = online (ckpt17500)
+
+replay = RMTReplayBuffer(capacity=64, seed=args.seed)
+pending = RC.RMTPendingEpisodeBuffers(cfg.num_envs, first_episode_id=0, first_policy_version=0)
+apply_eval_rmt = make_apply_eval_rmt(network)
+scan_fn = RL._make_scan_rmt(network, fp_cfg, rmt_cfg, args.carry_mode) if REPLAY_ON else None
+
+rng = jax.random.PRNGKey(args.seed + 1)
+rng, _rng = jax.random.split(rng)
+obsv, env_state = env.reset(_rng, env_params)
+memories = jnp.zeros((cfg.num_envs, cfg.window_mem, cfg.num_layers, cfg.embed_size))
+mem_mask = jnp.zeros((cfg.num_envs, cfg.num_heads, 1, cfg.window_mem + 1), jnp.bool_)
+mem_idx = jnp.full((cfg.num_envs,), cfg.window_mem, jnp.int32)   # P2 convention (derive_anchor matches)
+rmt_state = rmtm.rmt16_init(cfg.num_envs, rmt_cfg)
+action_rng = RU.make_action_rng(args.seed)
+
+CKPT_DIR = os.path.join(args.out, "ckpt"); LOG_DIR = os.path.join(args.out, "out")
+os.makedirs(CKPT_DIR, exist_ok=True); os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, f"{ARM}_train.jsonl")
+audit_path = os.path.join(LOG_DIR, f"{ARM}_replay_audit.jsonl")
+
+update_count = 0
+accepted_policy_updates = 0; kl_rejected_updates = 0; hindsight_eligible = 0; hindsight_attempts = 0
+
+# ----------------------- checkpoint -----------------------
+def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag):
+    d = os.path.join(CKPT_DIR, str(step)); os.makedirs(d, exist_ok=True)
+    p_sha = _params_sha(params)
+    # full_state.pkl for the frozen evaluator (params wrapped + manifest)
+    with open(os.path.join(d, "full_state.pkl"), "wb") as f:
+        pickle.dump({"params": _to_np(params),
+                     "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
+                                  "carry_mode": args.carry_mode, "replay": args.replay,
+                                  "gpu_uuid": args.gpu_uuid, "seed": args.seed,
+                                  "config": {k: v for k, v in vars(cfg).items()},
+                                  "tag": tag}}, f, protocol=4)
+    # train_state.pkl for exact resume (opt/EMA/replay/rng/counters)
+    with open(os.path.join(d, "train_state.pkl"), "wb") as f:
+        pickle.dump({"params": _to_np(params), "ppo_opt_state": _to_np(ppo_opt_state),
+                     "replay_opt_state": _to_np(replay_opt_state),
+                     "target_params": _to_np(target_params),
+                     "replay_buffer": replay.state_dict(), "pending": pending.state_dict(),
+                     "rng": np.asarray(rng), "action_rng": RU.action_rng_state(action_rng),
+                     "update_count": update_count, "global_step": step,
+                     "memories": np.asarray(memories), "mem_mask": np.asarray(mem_mask),
+                     "mem_idx": np.asarray(mem_idx),
+                     "rmt_state": _to_np(rmt_state), "obsv": np.asarray(obsv),
+                     "counters": {"accepted_policy_updates": accepted_policy_updates,
+                                  "kl_rejected_updates": kl_rejected_updates,
+                                  "hindsight_eligible": hindsight_eligible,
+                                  "hindsight_attempts": hindsight_attempts},
+                     "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
+                                  "carry_mode": args.carry_mode, "replay": args.replay}},
+                    f, protocol=4)
+    print(f"[ckpt] step={step} params_sha={p_sha[:16]} tag={tag}", flush=True)
+    return p_sha
+
+# ----------------------- step-0 checkpoint -----------------------
+save_ckpt(0, params, ppo_opt_state, replay_opt_state, target_params, "step0")
+
+# ----------------------- training loop -----------------------
+for u in range(args.total_updates):
+    t_u = time.time()
+    # 1. collect
+    trajs, carry, rollout, stats = RC.collect_rollout_rmt(
+        env, env_state, network, params, obsv, memories, mem_mask, mem_idx, rmt_state,
+        rng, action_rng, pending, target_achievement_1d, cfg.num_steps, cfg.window_mem,
+        cfg.num_heads, rmt_cfg, args.carry_mode, collected_update_count=update_count,
+        apply_eval_rmt=apply_eval_rmt, env_params=env_params)
+    env_state = carry["env_state"]; obsv = carry["obsv"]
+    memories = carry["memories"]; mem_mask = carry["mem_mask"]
+    mem_idx = carry["mem_idx"]; rmt_state = carry["rmt_state"]; rng = carry["rng"]
+
+    for t in trajs:
+        assert bool(np.asarray(t.dones)[-1]), "HARD STOP episode-boundary: non-terminal trajectory"
+        replay.insert(t)                       # validates GTrXL + RMT anchor conservation
+        replay.counters.trajectories_collected += 1
+    assert replay.counters.trajectories_collected == replay.counters.trajectories_inserted, \
+        "HARD STOP conservation: collected != inserted"
+
+    # 2. last_value + GAE + PPO main update
+    _lg, last_value, _mo, _ht = apply_eval_rmt(
+        params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+    advantages, targets = PPO.compute_gae(
+        rollout["rewards"], rollout["values"], rollout["dones"], np.asarray(last_value),
+        cfg.gamma, cfg.gae_lambda, cfg.value_target_clip_min, cfg.value_target_clip_max)
+    params, ppo_opt_state, ppo_metrics = PPO.ppo_update_rmt(
+        network, params, ppo_opt_state, ppo_opt, rollout, advantages, targets,
+        ppo_cfg, rmt_cfg, args.carry_mode, rng)
+    update_count += 1
+    assert ppo_metrics["ppo_finite"], "HARD STOP NaN/Inf in PPO update"
+
+    # 3. replay update (P2-Full-A frozen channel)
+    rep = {}
+    if REPLAY_ON and replay.can_sample():
+        so, sr = [], []
+        for _ in range(K_BATCH):
+            hindsight_attempts += 1
+            s = replay.sample(sequence_length=L_SEQ)
+            try:
+                rel = RH.relabel_sample_rmt(s, embedding_size=EMB)   # min achieved goal (Gate 5/6)
+            except ValueError:
+                continue                            # not relabelable -> skip
+            hindsight_eligible += 1
+            so.append(s); sr.append(rel)
+        if len(so) >= 2:
+            params, target_params, replay_opt_state, m = RL.full_p2_update_rmt(
+                network, params, target_params, replay_opt_state, replay_opt,
+                apply_eval_rmt, scan_fn, so, sr, fp_cfg, rmt_cfg, args.carry_mode, update_count)
+            update_count += 1
+            assert bool(m["finite"]), "HARD STOP NaN/Inf in replay loss"
+            if bool(m.get("policy_committed")):
+                assert float(m["policy_kl"]) <= fp_cfg.kl_replay_max + 1e-12, \
+                    f"HARD STOP accepted policy_kl={float(m['policy_kl']):.5f} > {fp_cfg.kl_replay_max}"
+                accepted_policy_updates += 1
+            if bool(m.get("kl_rejected_update")):
+                assert not bool(m.get("policy_committed")), "HARD STOP KL-rejected committed policy"
+                kl_rejected_updates += 1
+            assert float(m["entropy"]) >= fp_cfg.ent_floor, \
+                f"HARD STOP entropy collapse {float(m['entropy']):.4f} < {fp_cfg.ent_floor}"
+            rep = {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
+                   for k, v in m.items() if not isinstance(v, (list, dict))}
+            rep["batch"] = len(so)
+    elif REPLAY_ON:
+        # EMA still tracks params on PPO-only updates
+        target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
+    if (not REPLAY_ON):
+        target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
+
+    global_step = (u + 1) * STEPS_PER_UPDATE
+    entry = dict(update=u, global_step=global_step, arm=ARM,
+                 completed_episodes=stats["completed_episodes"],
+                 mean_ep_return=stats["mean_ep_return"], mean_ep_length=stats["mean_ep_length"],
+                 replay_size=len(replay), replay_can_sample=replay.can_sample(),
+                 update_count=update_count, **ppo_metrics, **rep,
+                 t_s=round(time.time() - t_u, 1))
+    with open(log_path, "a") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
+    print(f"[u{u}] gs={global_step} ppo_actor={ppo_metrics['ppo_actor']:.4f} "
+          f"ent={ppo_metrics['ppo_entropy']:.4f} eps={stats['completed_episodes']} "
+          f"replay={len(replay)} kl={rep.get('policy_kl','-')} "
+          f"({time.time()-t_u:.1f}s)", flush=True)
+
+    # 4. checkpoint at save points
+    if (u + 1) % args.save_every == 0 or (u + 1) == args.total_updates:
+        save_ckpt(global_step, params, ppo_opt_state, replay_opt_state, target_params, "save")
+
+    # replay noise audit (directive §七)
+    if REPLAY_ON:
+        audit = dict(global_step=global_step, buffer_episodes=len(replay),
+                     stored_transitions=sum(t.length for t in replay._buffer),
+                     replay_drawn=replay.counters.replay_samples_drawn,
+                     accepted_policy_updates=accepted_policy_updates,
+                     kl_rejected_updates=kl_rejected_updates,
+                     hindsight_eligible=hindsight_eligible, hindsight_attempts=hindsight_attempts,
+                     ratio_max=rep.get("ratio_max"), ess=rep.get("ess"),
+                     policy_kl=rep.get("policy_kl"), awr_w_mean=rep.get("awr_w_mean"),
+                     awr_kl=rep.get("awr_kl"), entropy=rep.get("entropy"),
+                     ep_lengths=[int(t.length) for t in replay._buffer])
+        with open(audit_path, "a") as f:
+            f.write(json.dumps(audit, default=str) + "\n")
+
+# ----------------------- summary -----------------------
+summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
+               total_updates=args.total_updates, global_step=args.total_updates * STEPS_PER_UPDATE,
+               final_params_sha256=_params_sha(params), base_sha256=base_sha,
+               accepted_policy_updates=accepted_policy_updates,
+               kl_rejected_updates=kl_rejected_updates,
+               hindsight_eligible=hindsight_eligible, hindsight_attempts=hindsight_attempts,
+               replay_buffer_hash=replay.hash_digest() if REPLAY_ON else None,
+               config={k: v for k, v in vars(cfg).items()},
+               p2_frozen=dict(rho_bar=fp_cfg.rho_bar, c_bar=fp_cfg.c_bar, beta=fp_cfg.beta,
+                              w_max=fp_cfg.w_max, w_vtrace=fp_cfg.w_vtrace, w_awr=fp_cfg.w_awr,
+                              kl_replay_max=fp_cfg.kl_replay_max, ema_tau=fp_cfg.ema_tau,
+                              max_policy_lag=fp_cfg.max_policy_lag),
+               status="COMPLETE",
+               timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+with open(os.path.join(LOG_DIR, f"{ARM}_train_summary.json"), "w") as f:
+    json.dump(summary, f, indent=2, default=str)
+print("\n" + "=" * 78, flush=True)
+print(f"{ARM} COMPLETE  final_params_sha={summary['final_params_sha256'][:16]}", flush=True)
+print(f"  accepted_policy_updates={accepted_policy_updates} kl_rejected={kl_rejected_updates} "
+      f"hindsight={hindsight_eligible}/{hindsight_attempts}", flush=True)
+print("=" * 78, flush=True)

@@ -1,0 +1,32 @@
+{
+  "cache_influence": 0.0,
+  "candidate_count": 32,
+  "cell": "budgeted_soft_copeland_x_tser_ppo",
+  "gen_new": 32,
+  "gen_resumed": 0,
+  "inf": false,
+  "jud_new": 96,
+  "jud_resumed": 0,
+  "judgment_count": 96,
+  "mechanism": "budgeted_soft_copeland",
+  "nan": false,
+  "param_leaves": 53,
+  "pool_hash": "c9481ddde832b7fe",
+  "prev_snapshot_hash": "de8f42ee2dd8b1dc",
+  "protocol": "PURE_DYNAMIC_D052",
+  "round": 3,
+  "selected_ids": [
+    "d052_r2_0010",
+    "d052_r2_0014",
+    "d052_r2_0023",
+    "d052_r2_0030",
+    "d052_r2_0007",
+    "d052_r2_0004",
+    "d052_r2_0012",
+    "d052_r2_0009"
+  ],
+  "selection_hash": "a231488d1d17b83a",
+  "snapshot_hash": "eef0a20267a21df4",
+  "steps_resolved": 24576,
+  "training": "tser_ppo"
+}

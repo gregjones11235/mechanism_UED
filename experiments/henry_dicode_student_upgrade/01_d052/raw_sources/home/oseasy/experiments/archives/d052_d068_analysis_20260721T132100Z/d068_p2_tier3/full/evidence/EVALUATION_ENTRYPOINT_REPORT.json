@@ -1,0 +1,14 @@
+{
+  "achievement_extraction": "env_state.env_state.achievements (stage_b lines 278-286)",
+  "action_selection": "greedy argmax \u2014 no sampling, no training",
+  "checkpoint": "/home/oseasy/experiments/henry_student_p2_amago_20260721/checkpoints/98304",
+  "entrypoint": "/home/oseasy/experiments/p2_student_performance_d068_native_eval_20260721/adapter/p2_native_eval.py",
+  "env": "MultiTaskMiniCraftaxEnv + DistributedMultiTaskOptimisticLogWrapper (16 envs, S4 DEFEAT_KOBOLD task)",
+  "extracted_from": "Henry P2 stage_b_launcher.py",
+  "known_issues": [
+    "forward_eval squeeze(0) requires num_envs >= 2",
+    "optimistic_reset_ratio must divide num_envs"
+  ],
+  "memory_management": "slides window (roll + set last) per stage_b lines 260-276",
+  "model_forward": "ActorCriticTransformer.model_forward_eval (network.py line 171)"
+}

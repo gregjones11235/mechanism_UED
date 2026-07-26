@@ -1,0 +1,63 @@
+{
+  "accepted_policy_updates": 47,
+  "adam_eps": 1e-05,
+  "any_nan_or_inf": false,
+  "budget": {
+    "end_step": 98304,
+    "num_envs": 16,
+    "num_rollouts_resume": 36,
+    "resume_env_steps": 73728,
+    "rollout_steps": 128,
+    "save_steps": [
+      49152,
+      73728,
+      98304
+    ],
+    "start_step": 24576,
+    "steps_per_rollout": 2048
+  },
+  "conservation_ok": true,
+  "experiment": "EXPLORATORY_DELAYED_ONSET_EXTENSION",
+  "final_params_sha256": "67689592cd10f6c92cd33f6fc0947847ba45193c6d60be9390f5e71502080a67",
+  "global_step": 98304,
+  "gpu_uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+  "hindsight_attempts": 188,
+  "hindsight_eligible": 188,
+  "kl_rejected_updates": 0,
+  "kl_replay_max": 0.05,
+  "kl_run_max": 0.1,
+  "label": "P2-Full-A-Resume-98304",
+  "lr": 2e-05,
+  "network_fingerprint": {
+    "entropy": 0.9791407585144043,
+    "ok": true,
+    "param_count": 4906028,
+    "params_sha256": "5dfe67dda87ef15aa716276730de7685d73ac4096761abbc405fc7198cc6cd61",
+    "problems": [],
+    "top_action": 12,
+    "top_prob": 0.7181775569915771,
+    "value": 3.5761349201202393
+  },
+  "num_envs": 16,
+  "pending_anchors": 178,
+  "pending_transitions": 22115,
+  "replay_can_sample": true,
+  "replay_size": 64,
+  "resume_from_step": 24576,
+  "resume_to_step": 98304,
+  "rollout_steps": 128,
+  "saved_checkpoints": {
+    "49152": "6b2a4fc5035a1c863fe5d2cfe616650595667b77fb76d2d29ca3c258461b232c",
+    "73728": "2d93352f238ec44797ccb05d103c00b70a17bf9d20a43c989003c16dfcfe9d84",
+    "98304": "67689592cd10f6c92cd33f6fc0947847ba45193c6d60be9390f5e71502080a67"
+  },
+  "seed": 42,
+  "segment_episodes": 71,
+  "segment_updates": 36,
+  "source_p2_24576_dir": "/home/oseasy/experiments/p2_full_20260723/checkpoints/p2_full_levelB_24576_20260724",
+  "source_p2_24576_params_sha256": "bd08422042788f6322b76d0963042598d6868c1cedf5756178492c2215a10d28",
+  "total_anchors_stored": 636,
+  "trajectories_collected": 95,
+  "trajectories_inserted": 95,
+  "update_count": 47
+}

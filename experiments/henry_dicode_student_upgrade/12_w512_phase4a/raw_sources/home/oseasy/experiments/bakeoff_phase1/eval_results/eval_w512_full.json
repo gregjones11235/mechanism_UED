@@ -1,0 +1,26 @@
+{
+  "arm": "w512",
+  "ablation": "full",
+  "num_worlds": 256,
+  "seed_base": 100000,
+  "max_steps": 4096,
+  "params_sha256": "8c84287c4bff203256dbd83aab7204529945b34c9f5a6b7fcfecd30e3be0e72d",
+  "dk_sr": 0.527344,
+  "dk_sr_ci95": [
+    0.466185,
+    0.588502
+  ],
+  "dk_successes": 135,
+  "floor3_rate": 1.0,
+  "floor3_count": 256,
+  "conditional_kill_rate": 0.527344,
+  "death_count": 222,
+  "death_rate": 0.867188,
+  "timeout_count": 0,
+  "timeout_rate": 0.0,
+  "mean_episode_length": 678.0,
+  "median_episode_length": 677.0,
+  "eval_time_s": 457.5,
+  "gpu": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+  "timestamp_utc": "2026-07-25T01:02:15Z"
+}

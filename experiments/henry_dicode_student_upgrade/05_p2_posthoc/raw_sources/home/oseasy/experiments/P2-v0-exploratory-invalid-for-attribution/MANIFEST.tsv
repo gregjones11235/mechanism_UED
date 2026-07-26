@@ -1,0 +1,35 @@
+path	type	copy_method	notes
+checkpoints/98304/default/	dir	cp -a	true copy, orbax ocdbt, ~47M
+checkpoints/98304/manifest.json	file	cp -a	checkpoint_step=98304, gradient_updates=47
+checkpoints/98304/replay_meta.pkl	file	hardlink	26580919296 bytes, inode 11407285 link=2, NOT chmod'd, integrity via SHA256
+checkpoints/122880/default/	dir	cp -a	true copy, orbax ocdbt, ~40M
+checkpoints/122880/manifest.json	file	cp -a	-
+checkpoints/122880/stage4_manifest.json	file	cp -a	checkpoint_step=122880, gradient_updates=59, resume_from_step=98304, optimizer_restarted_at_resume=true
+checkpoints/122880/MISSING_replay_meta.txt	file	new	NOT_FULLY_RESUMABLE (workdir 122880 has no replay_meta.pkl)
+outputs/stage_A/training_log.jsonl	file	cp -a	-
+outputs/stage_A/manifest.json	file	cp -a	-
+outputs/stage_A/source_hashes.json	file	cp -a	-
+outputs/stage_B/training_log.jsonl	file	cp -a	-
+outputs/stage_B/manifest.json	file	cp -a	-
+outputs/stage_B/source_hashes.json	file	cp -a	-
+outputs/stage4_continue/session_20260722T032514Z/training_log.jsonl	file	cp -a	only off_loss logged (no on-policy PPO main update)
+outputs/stage4_continue/session_20260722T032514Z/stage4_manifest.json	file	cp -a	-
+outputs/stage4_continue/session_20260722T032514Z/source_hashes.json	file	cp -a	run-time hashes (stage4 launcher=2c13d267...)
+src/checkpointing.py	file	cp -a	current bytes 25dd3006... == run-time
+src/hindsight.py	file	cp -a	current bytes 6cf0c114... == run-time
+src/long_context_learner.py	file	cp -a	current bytes 9c1ac31f... == run-time
+src/stage4_continue_launcher.py	file	cp -a	current bytes 55058e06... != run-time 2c13d267... (edited post-122880; producing bytes unrecoverable)
+src/stage_a_launcher.py	file	cp -a	current bytes 2872dcf3... == run-time
+src/stage_b_launcher.py	file	cp -a	current bytes fd39c1ce... == run-time
+src/trajectory_replay.py	file	cp -a	current bytes 9cf75a73... == run-time
+tests/test_checkpoint.py	file	cp -a	-
+tests/test_learner.py	file	cp -a	-
+tests/test_replay_hindsight.py	file	cp -a	-
+evidence/	dir	cp -a	evaluations, test reports, s4_task_code.py, ckpt_restore_report.json, etc.
+LABEL.txt	file	new	-
+MANIFEST.tsv	file	new	this file
+SHA256SUMS	file	new	sha256 of every archived file incl hardlinked replay_meta.pkl
+SOURCE_PATHS.txt	file	new	-
+COMMANDS.txt	file	new	-
+KNOWN_ISSUES.md	file	new	9 defects + provenance caveats
+RESULTS_LIMITATIONS.md	file	new	mandatory interpretation constraints

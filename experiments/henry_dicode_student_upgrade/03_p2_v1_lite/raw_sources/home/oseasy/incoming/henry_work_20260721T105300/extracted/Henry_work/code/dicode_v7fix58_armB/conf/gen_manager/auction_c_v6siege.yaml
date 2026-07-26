@@ -1,0 +1,236 @@
+# conf/gen_manager/auction_c_v6siege.yaml
+# v6 SIEGE = the v6 method (Focused Milestone-Chain Curriculum, v6_design.md §3) on top of the v5y
+# coop mechanism + the v6 cost-saving providers. This is the METHOD run; auction_c_v6.yaml is the
+# pure provider-switch control (v5y mechanism unchanged) — keep them separate so "provider switch"
+# and "siege mechanism" stay independent variables.
+#
+# Contents below are a VERBATIM copy of auction_c_v6.yaml (same providers + v5y coop mechanism), plus
+# the single `siege: true` switch — mirroring how auction_c_v5yA copies auction_c_v5y (no same-group
+# Hydra inheritance; each gen_manager config is self-contained under `- default`).
+#
+# What siege: true turns on (all purely additive; siege: false == byte-for-byte v5y coop):
+#   1. A persistent SiegeNotebook (auction/siege_notebook.py) in the run cwd (survives resume) — the
+#      modeler's cross-session siege journal (§3.5): up to 3 parallel foci (§2.6) / each focus's prereq
+#      chain / verified chains (success experience, deduped-by-target & combat-vs-enabler categorised,
+#      §2.5) / protected set. B-layer code enforces every hard constraint (SR-computed mastery flags,
+#      §3.2 scope, per-focus anti-thrash stall/retire, EARLY-TRAINING maturity gate, the §2.6 expand
+#      gate, and §2① incremental success-experience recording).
+#   2. The modeler runs diagnose_siege instead of diagnose: same v5 diagnosis PLUS a proposed notebook
+#      update (a "foci" list, each focus + its prereq_tree). Depth inferred from SR + mechanics (§3.3).
+#   3. proposers get a SIEGE_DIRECTIVE naming the focus + still-unmastered links they must NOT compress
+#      into Completed (§3.4 prompt-side), and a hard code gate (completed_gate.py) pulls any illegally-
+#      compressed unmastered link back into Relevant (§3.4 code backstop).
+#
+#   4. (c) per-episode achievement co-occurrence (v6_design.md §3.8): the held-out eval collects a
+#      per-env achievement multi-hot -> cross-session-accumulated count/cooc arrays + total finished
+#      episodes (SR denominator). The siege modeler is fed "when the student BEAT a deep skill, which
+#      prereqs did it actually co-reach (with its empirical SR)", grounding the prereq chain in real
+#      trajectories. Guarded by a RELATIVE SR threshold (MIN_SR=3%, user 2026-07-05): trusted only once
+#      the deep skill is solved often enough; otherwise the modeler falls back to (b) mechanics.
+#
+# Mastery flags for the siege links still come from the held-out AGGREGATE per-skill SR; (c) only
+# enriches the modeler's prereq-chain reasoning (additive, no-op until a deep skill's SR clears MIN_SR).
+
+defaults:
+  - default
+
+# --- v5y coop mechanism (unchanged from auction_c_v6.yaml) ---
+auction_modeler: true
+auction: false
+modeler_recent_k: 8
+
+# --- v6 SIEGE switch (the ONE addition over auction_c_v6) ---
+siege: true
+
+# --- v6 coop QUALITY SELECTION: PURE-LEARNABILITY top-k (user 2026-07-05) ---
+# v5 evidence (v5yA, 24->18) showed a WEAK positive from a light coop cull; v6 adopts it but drops
+# AmbitionGain's depth pressure. Rationale: AmbitionGain = gap x DEPTH_WEIGHT systematically favours
+# DEEP levels, which would cull the SHALLOW prereq-chain levels the siege course exists to protect.
+# In v6 the "push deeper" job is owned by the SIEGE focus + completed_gate (which force the full
+# prereq chain to stay in Relevant), so topk should ONLY judge "is this learnable right now", not
+# "is this ambitious". Hence w_amb=0, w_lrn=1. NOTE: rehearsal levels are IMMUNE to this cull — they
+# are APPENDED at the training-sampling stage from the archive (append_rehearsal_tasks), a different
+# stage from generation-time _coop_select which only ever sees the freshly-proposed 24 (v6_design.md
+# §8.3).
+coop_select_k: 18      # keep top-18 of the 24 candidates each round (drops ~25% least-learnable)
+coop_w_amb: 0.0        # AmbitionGain OFF (depth pressure lives in the siege focus, not the cull)
+coop_w_lrn: 1.0        # Learnability: p*(1-p) — keep the learnable, drop too-hard/too-easy
+coop_w_cov: 0.0        # Coverage OFF: breadth is handled by the 2-proposer division of labour
+
+# --- v6 SIEGE B-layer thresholds (user 2026-07-05: every hard-coded knob is now config-tunable) ---
+# These override auction/siege_notebook.py's module-constant defaults via SiegeThresholds.from_config.
+# Any key you delete falls back to that documented default, so this block is safe to trim. Values here
+# ARE the current defaults — spelled out so the highest-leverage knobs are visible and sweepable.
+#
+#   ★ Highest-leverage: siege_mastered_sr gates compression; siege_maturity_* gates whether a siege
+#     ever opens at all. If the student's real ceiling on hard skills is low, an 80% bar means NO link
+#     ever "consolidates" — lower these to match reality.
+#   ★ user 2026-07-05 (2nd round): CONQUERED is NO LONGER a one-shot SR-threshold retire gate
+#     (conquered != saturated). A focus records success experience INCREMENTALLY (every +record_delta_pp
+#     rise, deduped-by-target, combat vs enabler categorised) and retires only on STALL. So there is no
+#     siege_conquered_sr anymore. Saturated is a HIGH bar (80) for BOTH combat and gear (a combat skill
+#     at 40% is still a wall worth attacking, not saturated — a human expert beats a hard boss near 100%).
+#   ★ user 2026-07-05 (3rd round): up to siege_max_focus parallel walls; a new one may open only once an
+#     existing focus reaches siege_focus_expand_sr (cross-achievement assist).
+siege_mastered_sr: 70.0            # SR (%) at/above which a LINK is CONSOLIDATED (may compress into
+                                   #   Completed). user 2026-07-05: 70 (independent of saturated — this
+                                   #   judges a prereq link, saturated judges a focus candidate).
+siege_unmastered_sr: 20.0          # SR (%) at/below which a link is UNMASTERED (forbidden in Completed)
+siege_saturated_sr: 80.0           # SR (%) at/above which a skill is too easy to be a FOCUS (scope rule)
+siege_maturity_min_snapshots: 4    # fewer eval snapshots than this => too early to open any siege
+siege_maturity_min_mastered: 20    # real v5 curve: 15(tier1)+~5(tier2) at SR>=50 = burst->plateau knee
+siege_maturity_skill_sr: 50.0      # a skill counts toward "maturity" once its SR is at/above this
+# (v7fix3.1: siege_focus_min_stall_sessions removed — the fix4-era stall ratchet decided nothing;
+#  retirement is frozen_sessions/ladder-driven)
+siege_focus_improve_pp: 3.0        # SR gain (percentage points) that counts as "the focus improved"
+siege_max_focus: 3                 # max parallel siege foci (§2.6, user 2026-07-05)
+siege_focus_expand_sr: 50.0        # a focus must reach this SR before a NEW parallel focus may open
+siege_record_delta_pp: 10.0        # min SR rise vs last record to (re)write a success-experience entry
+# §2⑥ family-split rehearsal FORGETTING prefilter: combat milestones peak LOW (~15%), so they get a
+# low peak/drop bar (else a forgetting combat milestone would never be flagged); gear/gather/explore
+# keep the higher bar. This is what makes "everything recorded as success experience can be rehearsed".
+siege_forgetting_min_peak: 40.0        # non-combat: peaked >= this to be a rehearsal candidate
+siege_forgetting_drop_pp: 20.0         # non-combat: fell >= this off its peak to count as forgetting
+siege_forgetting_combat_min_peak: 15.0 # combat: low peak bar (matches the combat record floor)
+siege_forgetting_combat_drop_pp: 10.0  # combat: a 10pp slip off a low plateau is already a real slide
+
+# --- v7fix3 relay unlock + ecology economics (all knobs mirror siege_notebook.py defaults; ---
+# --- spelled out here so the run's operative values are visible and sweepable) ---------------
+siege_tier4_relay_only: true     # P1: VERY_ADVANCED (tier-4) walls open ONLY as relay campaigns
+siege_relay_attach: true         # P2: re-proposing an ACTIVE zero-win focus WITH relay_r0_floor
+                                 #     upgrades it in place (kept() no longer swallows the ask)
+siege_relay_expand_exempt: true  # P3: a relay open needs only a free slot (+relay_max), not
+                                 #     "any existing focus >= 50%" — a 0% focus can't lock it out
+siege_focus_force_cap: 8         # P5: per-wall/session cap on FULL-price force-activations.
+                                 #     Calibrated 2026-07-10: fix8's winning gnome phase ran
+                                 #     6-10/session (mean 7.2) — cap sits above the healthy band;
+                                 #     fix11's iron monopoly ran 17-24 kept/session unthrottled.
+siege_breadth_frontier_sr: 60.0  # P6: trained SR at the frontier floor that unlocks the next
+siege_breadth_spawn_quota: 6     # P6: max deep-spawn BREADTH levels kept per session (v7fix2's
+                                 #     healthy dormant phase used 1-7/session, mean 3.7)
+
+# --- v7fix4 habitat fidelity (fable_research_reports/v7fix4真实世界接力与栖息地保真方案.md) ---
+# v7fix3 post-mortem: lizard's relay ran attach->graduate->SEWN yet held-out stayed exactly 0
+# (gap 97pp) — the FM-authored rung levels moved the lizard shallower with the annealing spawn.
+siege_wall_floor_anchor: true      # P1: R0 anchored to the wall's habitat floor + deep lock +
+                                   #     entrance-chain autofill (all from WALL_NATIVE_FLOOR)
+siege_deep_wall_relay_floor: 3     # P1: habitat floor >= this => relay-only (floor-3+ doors have
+                                   #     never opened naturally in any full run; floor-2 gnome
+                                   #     class keeps the fix10 door-gate route — fix8's win path)
+siege_relay_kit_strip: true        # P3: final rung = natural spawn + EMPTY kit (== held-out
+                                   #     distribution); only its graduation SEWs
+siege_sandbox_mismatch_readings: 3 # P4 sentinel: SEWN wall trained>=graduate & held-out ~0 for
+                                   #     this many gap readings -> retire as sandbox_mismatch
+siege_relay_worldgen: base         # P2: relay levels SYSTEM-BUILT on the real 9-level world
+                                   #     generator ("fm" = v7fix3 FM-authored, the ablation arm)
+siege_zero_win_force_cap: 4    # v7fix5.5 launch: pairs the fix54 quota bump below (C.3 gate) —
+                               # 4 relay levels/session need 4 force-activation slots; fix54s
+                               # own job 4056461 died at this exact gate (quota raised, cap not)
+siege_relay_levels_per_session: 4  # P2: system relay levels built per wall per session (each is
+                                   #     a fresh-world DISTRIBUTION per reset, so 2 covers the
+                                   #     zero-win activation lane; raise toward 4 if the relay
+                                   #     rung shows no fresh reading on consecutive decisions)
+
+# --- v7fix4.2 deep-wall relay trigger (2026-07-12 hot patch; siege_notebook.py constants block) ---
+# fix4-run s77 post-mortem: zero deep-wall proposals in 77 sessions — the deep lock had closed the
+# only relay on-ramp any run ever used, and relay start was left prompt-soft. Three-layer repair:
+# autoconvert (ordinary deep proposal -> relay in place) + journal directive + K-session force.
+siege_deep_wall_autoconvert: true      # (1) ordinary floor-3+ proposal converts to relay in place
+siege_relay_trigger_hint: true         # (2) journal renders the ★RELAY TRIGGER directive
+siege_relay_trigger_force_sessions: 3  # (3) directive ignored this many decisions -> system opens
+
+# --- v7fix4.5 attribution-driven succession + expand-gate relay exclusion (2026-07-13) ------------
+# fix4.4-run s114 post-mortem: the kobold relay at FULL dose crawled at 9-14%, and the modeler's
+# own VERIFIED attribution named the missing enabler (chain_unreached -> enchant_sword; its tactic
+# added learn/cast_fireball) — but every road to ACT on that diagnosis was locked: the equipment
+# walls are deep-locked (relay-only) behind the busy relay slot, and ordinary expansion was held
+# hostage by the relay focus's by-construction-zero held-out SR (s112 expand_refused). Succession
+# lets the run's own diagnosis pick the next campaign; exclusion frees ordinary expansion.
+siege_relay_succession: true       # P1: stalled relay w/ verified chain_unreached -> its chain's
+                                   #     unmastered deep walls lead the trigger queue (tree order)
+siege_relay_expand_excluded: true  # P2: the expand test ignores ACTIVE relay foci (ordinary foci
+                                   #     still gate each other — anti-sprawl semantics preserved)
+
+# --- v7fix4.6 descent-wall cliff-split sub-rungs (2026-07-13; siege_notebook.py constants block) ---
+# Double post-mortem, BOTH arms (fast 3941260 / 8100-replay 3940678): kobold R0 (floor-3
+# point-blank) graduated cleanly at 73% — then the floor-2 rung read 0% flat. One floor of descent
+# is a COMPOUND gate (8 kills unlock the down ladder + dark-floor traversal to a random far tile;
+# offline calibration over 80 real worlds: entry->down-ladder Manhattan P50=24-28, P90 up to 49)
+# and a zero-success cliff has no PPO gradient. A cliff now SPLITS into within-floor scaffold
+# sub-stages (spawn-radius + clear-gate-credit dials, both real world_builder primitives); two
+# liveness holes close alongside (per-rung best ratchet via best_by_rung + a regress budget), and
+# the succession also accepts verified execution_failure diagnoses (non-entrance keys).
+siege_rung_cliff_split: true        # P1 master switch (false = pre-4.6 whole-floor rungs, ablation)
+siege_rung_cliff_sr: 5.0            # P1: a reading at/below this is cliff evidence (~no gradient)
+siege_rung_cliff_readings: 2        # P1: consecutive cliff readings at a fresh FULL rung -> SPLIT
+                                    #     (fires BEFORE the 4-reading stall — a cliff never regresses)
+siege_rung_substage_graduate_x: 1   # P1: scaffold stages advance on x1 (FULL keeps the x2 philosophy)
+siege_rung_ladder_radii: [1, 8, 20] # P1: stages 5/4/3 spawn radius, Manhattan (offline-calibrated:
+                                    #     obs-window half-extent is 4-5; entry distance P50=24-28)
+siege_rung_clear_credit_full: 8     # P1: stages 5..2 pre-credited kills (clear gate open)
+siege_rung_clear_credit_half: 4     # P1: stage 1 pre-credited kills (kill 4 of 8)
+siege_relay_max_regressions: 4      # P2: regress-family moves per campaign; the move over budget
+                                    #     retires (oscillation hands its diagnosis to the succession)
+
+# --- v7fix4.7 (2026-07-14): R0 scaffold + DEFEND-driven relay patience + blacklist exemption ------
+# Zero-shot arbitration (jobs 3966171/3966348): ckpt-8100's TRUE zero-shot on the kobold R0 level
+# is 0.28% — the 15% "first readings" were within-session PPO takeoff (a dice roll); the 0.5-2%
+# rolls were the same student climbing x1.4/reading UNDER the +3pp new-high bar (retired 2-3
+# readings before escape velocity). R0 now cliff-splits too (LIT arena away from the entry; the
+# clear-gate stages 2/1 are skipped and the R0 down-gate stays LOCKED), and patience exhaustion
+# with the micro-ratchet still rising opens a facts-verified defence window instead of retiring
+# (the modeler must cite the actual readings; rising retirements don't stack the blacklist).
+siege_rung_r0_scaffold: true        # Q1 master switch (false = fix4.6 "R0 never splits", ablation)
+siege_relay_defend_budget: 2        # Q2: defence windows per campaign
+siege_relay_defend_rising_k: 2      # Q2: micro-ratchet must rise >= K of the last 3 readings
+
+# v7fix3 P4: the 18 main seats split 10 (siege arm) + 8 (ecology arm) — same bid scoring, each
+# role ranks its own queue, unfilled quota backfills across roles on merit. Calibrated: fix8
+# (healthiest run) kept 3-10 non-siege levels/session; fix11's collapse kept 0-4.
+coop_role_quota: [10, 8]
+
+personas:
+  - ambitious_coop   # <-> proposers[0] = DeepSeek-V4 (DeepSeek 官方, think off) — 攻坚位 (siege arm)
+  - ecology_coop     # <-> proposers[1] = Qwen3.5-397B (阿里 dashscope-us, think off) — 生态位 (P4):
+                     #     no SIEGE_DIRECTIVE, gets the ECOLOGY_DIRECTIVE; siege tags stripped in code
+
+proposers:
+  # proposer[0]: DeepSeek-V4-Pro -> DeepSeek 官方 API。out 省 66%。
+  - provider: deepseek
+    base_url: https://api.deepseek.com/v1
+    model: deepseek-v4-pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # DeepSeek官方 v4-pro 默认 thinking ON; llm.py 按 provider=='deepseek' 发
+                     #  {"thinking":{"type":"disabled"}} 真关 (reasoning_effort:none 会 400)。
+  # proposer[1]: Qwen3.5-397B -> 阿里百炼 美国(弗吉尼亚) dashscope-us (人民币, Oscar延迟极低)。
+  - provider: dashscope
+    base_url: https://dashscope-us.aliyuncs.com/compatible-mode/v1
+    model: qwen3.5-397b-a17b
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # llm.py provider=='dashscope' 发 enable_thinking:false 真关。
+
+# MODELER: GLM-5.2 留 DeepInfra (用户决定 2026-07-04)。与 v5y/v6 完全一致。
+# 攻坚模式下走 modeler.diagnose_siege (同一 LLM, 只是 prompt 多了 siege 规划 + 笔记读写)。
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 131072  # v7fix5.5 (2026-07-17 实测): DeepInfra 不校验该参数(1e6 被接受),
+                      # 实际上限=200K 上下文-输入;抬高后'烧穿→content 全空'失效模式降级为多花 token
+  temperature: 0.4
+  top_p: 0.95
+  think: false     # v7fix5.1 (用户拍板 2026-07-15): v5 起的 think:true 在 v7 prompt 规模下让
+                   #  reasoning 长度重尾跑飞 (真实 prompt 重放: 27k-126k 字符), 20-50% 的调用烧光
+                   #  max_tokens 32768 → finish_reason=length 且 content 全空 = siege 大脑半速。
+                   #  no-think 实测 5/5 完整 JSON (67 state+foci+ranked_walls), 快 ~4×;推理程序
+                   #  已由 SIEGE ROLE 块显式教学、硬约束全在代码闸, thinking 不再是必需品。
+
+# --- v7fix5.4 hotfix arm ---
+siege_rung_quantile_ladder: true   # v7fix5.4 hotfix arm: code-calibrated quantile radius rungs

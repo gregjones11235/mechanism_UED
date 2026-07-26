@@ -1,0 +1,10 @@
+{
+  "obs_dim": 8335,
+  "dense_vs_zero_changed_dim_count": 67,
+  "changed_dims_min": 8268,
+  "changed_dims_max": 8334,
+  "changed_dims_contiguous": true,
+  "goal_block_is_obs_8268_8335": true,
+  "embedding_values_match_ramp": true,
+  "dk_offset_for_idx41": 41
+}

@@ -1,0 +1,7 @@
+{
+  "error": "Rejected: fresh-state replay \u2014 initial_memory is all zeros (D059 Gate 4 negative).",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/oseasy/experiments/henry_student_p2_amago_20260721/src/stage_a_launcher.py\", line 316, in main\n    replay.insert(traj)\n  File \"/home/oseasy/experiments/henry_student_p2_amago_20260721/src/trajectory_replay.py\", line 147, in insert\n    raise ValueError(\nValueError: Rejected: fresh-state replay \u2014 initial_memory is all zeros (D059 Gate 4 negative).\n",
+  "env_steps": 17456,
+  "update": 8,
+  "timestamp": "2026-07-21T04:14:44.999967+00:00"
+}

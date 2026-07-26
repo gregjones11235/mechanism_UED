@@ -1,0 +1,68 @@
+{
+  "label": "LC_SLOWGRU_RESET128_RESET128_GATES",
+  "network": "LC-SLOWGRU-RESET128",
+  "carry_mode": "RESET128",
+  "gates": {
+    "req1_schema_identical": {
+      "pass_": true,
+      "n_leaves_reset128": 102,
+      "n_leaves_persistent": 102,
+      "tree_struct_equal": true,
+      "shapes_equal": true
+    },
+    "req2_step0_bit_identical": {
+      "pass_": true,
+      "reset128_init_sha256": "5ae94ed0257f50fabfba6a928169acf0eb8e05aa34705c3763bc342eed3218ab",
+      "persistent_ckpt0_sha256": "5ae94ed0257f50fabfba6a928169acf0eb8e05aa34705c3763bc342eed3218ab",
+      "known_persistent_init_sha16": "5ae94ed0257f50fa",
+      "match_persistent": true,
+      "match_known": true
+    },
+    "req3_param_count_identical": {
+      "pass_": true,
+      "n_elements_reset128": 5695020,
+      "n_elements_persistent": 5695020,
+      "n_leaves_reset128": 102,
+      "n_leaves_persistent": 102
+    },
+    "sanity_feature_off_eq_teacher": {
+      "pass_": true,
+      "max_logit_diff": 0.0
+    },
+    "sanity_init_zero_gate_eq_teacher": {
+      "pass_": true,
+      "max_logit_diff": 0.0
+    },
+    "req7_env_no_crosstalk": {
+      "pass_": true,
+      "env0_changed": false
+    },
+    "req4_within_rollout_readwrite": {
+      "pass_": true
+    },
+    "req8_true_done_reset": {
+      "pass_": true
+    },
+    "req13_long_module_grad": {
+      "pass_": true,
+      "all_finite": true,
+      "any_nonzero": true,
+      "residual_gate_key": "slow_to_actor",
+      "residual_gate_norm": 23.432762501340168,
+      "residual_gate_finite": true,
+      "per_module_norm": {
+        "pool_q": 0.0,
+        "pool_k": 0.0,
+        "pool_v": 0.0,
+        "slow_in": 0.0,
+        "slow_gru": 0.0,
+        "slow_read": 0.0,
+        "slow_to_actor": 23.4327625
+      }
+    }
+  },
+  "NON_TRAINING_GATES_PASS": true,
+  "trainer_level_gates": "req5(boundary_clear)/req6(GTrXL_unchanged)/req9(ckpt)/req10(exact_resume)/req11(no_nan)/req12(entropy) verified by training run",
+  "persistent_ckpt0": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru/train_24576/ckpt/0/full_state.pkl",
+  "timestamp_utc": "2026-07-25T01:18:00Z"
+}

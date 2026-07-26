@@ -1,0 +1,20 @@
+{
+  "all_gates_pass": true,
+  "description": "long_context_learner + off-policy gradient update tests",
+  "directive": "D059",
+  "failed": 0,
+  "gates": {
+    "Gate 2 (long-context learner)": true,
+    "Gate 7 (finite nonzero gradients)": true
+  },
+  "passed": 4,
+  "results": {
+    "Gate 2: consumes long sequence": "PASS",
+    "Gate 2: rejects short sequence": "PASS",
+    "Gate 7: hindsight update": "PASS",
+    "Gate 7: two updates finite nonzero": "PASS"
+  },
+  "step": 2,
+  "timestamp": "2026-07-21T03:59:22.529518+00:00",
+  "total": 4
+}

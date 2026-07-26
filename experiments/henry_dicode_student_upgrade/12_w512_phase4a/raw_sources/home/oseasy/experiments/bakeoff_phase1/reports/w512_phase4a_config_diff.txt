@@ -1,0 +1,20 @@
+W512 Phase4A Config Diff
+========================
+
+P2Replay Persistent vs Reset128:
+  ONLY DIFFERENCE: carry_mode
+    persistent: long_buf/long_mask persist across rollout boundary
+    reset128:   long_buf/long_mask cleared at rollout boundary (start of each rollout)
+  All other config: IDENTICAL (same FullP2Config, same seed, same lr, same env, same network)
+
+P2Replay vs P2-Full-A (historical):
+  SAVE_STEPS: P2Replay adds 16384, 20480 intermediate checkpoints (cosmetic)
+  Network: P2Replay uses ActorCriticTransformerW512 (W512 additions) vs P2-Full-A uses ActorCriticTransformer (base GTrXL)
+  Anchors: P2Replay stores W512 long state in anchors (additional fields)
+  FullP2Config: IDENTICAL (imported from same source)
+  Replay logic: IDENTICAL (same buffer, same sampling, same update)
+  Loss: IDENTICAL (V-trace + AWR, same weights)
+
+PPO Persistent vs Reset128:
+  ONLY DIFFERENCE: reset128 clears long_buf/long_mask at rollout boundary
+  All other config: IDENTICAL (same ppo_tr_w512.py base, same hyperparams)

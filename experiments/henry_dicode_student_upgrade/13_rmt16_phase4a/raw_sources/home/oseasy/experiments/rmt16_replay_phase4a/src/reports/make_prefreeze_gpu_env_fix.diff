@@ -1,0 +1,13 @@
+--- make_prefreeze.py.before_gpu_env_fix	2026-07-25 21:35:09.453097921 +0800
++++ make_prefreeze.py	2026-07-26 00:13:38.454063791 +0800
+@@ -13,8 +13,8 @@
+ INVALID_MATCHED_SMOKE.
+ """
+ import os, sys, json, hashlib
+-os.environ["JAX_PLATFORMS"] = "cpu"
+-os.environ["CUDA_VISIBLE_DEVICES"] = ""
++# DISABLED_GPU_ENV os.environ["JAX_PLATFORMS"] = "cpu"
++# DISABLED_GPU_ENV os.environ["CUDA_VISIBLE_DEVICES"] = ""
+ 
+ SRC = os.path.dirname(os.path.abspath(__file__))
+ V7 = "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB"

@@ -1,0 +1,20 @@
+
+[eval] arm=control step=98304 worlds=256
+/home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/jax/_src/ops/scatter.py:93: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=float32 to dtype=int32 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+  [eval] control step=98304: SR=0.000 avg_len=0.0 n=2298
+
+[eval] arm=egomap step=98304 worlds=256
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+  [eval] egomap step=98304: SR=0.000 avg_len=0.0 n=2209
+Traceback (most recent call last):
+  File "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_p7.py", line 197, in <module>
+    main()
+  File "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_p7.py", line 181, in main
+    result = compare_arms(ctrl, ego)
+  File "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_p7.py", line 152, in compare_arms
+    diff = ego_succ - ctrl_succ
+TypeError: numpy boolean subtract, the `-` operator, is not supported, use the bitwise_xor, the `^` operator, or the logical_xor function instead.

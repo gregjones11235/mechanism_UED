@@ -1,0 +1,1147 @@
+{
+ "foci": [
+  {
+   "skill": "make_diamond_armour",
+   "started_session": 222,
+   "best_sr": 0.0,
+   "last_recorded_sr": 0.0,
+   "prereq_tree": [
+    {
+     "skill": "enter_dungeon",
+     "role": "reach floor 1",
+     "state": "CONSOLIDATED",
+     "sr": 96.54255319148936
+    },
+    {
+     "skill": "enter_gnomish_mines",
+     "role": "reach floor 2 where diamonds spawn",
+     "state": "RISING",
+     "sr": 24.867021276595743
+    },
+    {
+     "skill": "make_iron_pickaxe",
+     "role": "mine diamond ore on floor 2",
+     "state": "RISING",
+     "sr": 41.48936170212766
+    },
+    {
+     "skill": "collect_diamond",
+     "role": "mine 3+ diamonds for armour recipe",
+     "state": "RISING",
+     "sr": 28.856382978723403
+    },
+    {
+     "skill": "collect_coal",
+     "role": "smelting fuel for diamond armour",
+     "state": "CONSOLIDATED",
+     "sr": 94.14893617021276
+    },
+    {
+     "skill": "place_furnace",
+     "role": "smelting station",
+     "state": "CONSOLIDATED",
+     "sr": 97.73936170212765
+    },
+    {
+     "skill": "place_table",
+     "role": "crafting station",
+     "state": "CONSOLIDATED",
+     "sr": 99.73404255319149
+    }
+   ],
+   "style_note": "Diamond armour requires diamonds mined on floor 2. Student's enter_gnomish_mines at 25% and make_iron_pickaxe at 41% are both RISING \u2014 the descent chain is the live bottleneck, not the crafting action. Winners of floor-2 fights co-reach collect_diamond 42% and make_iron_pickaxe 72%. Tactic: full-pressure floor 0-2 levels where student must craft iron pickaxe, descend to floor 2, mine 3+ diamonds plus coal, return to stations, smelt and craft diamond armour. Force resource stockpiling: over-mine stone to 30+, craft 10+ torches for the dark descent.",
+   "sr_history": [
+    0.0,
+    0.0
+   ],
+   "link_best": {},
+   "frozen_sessions": 1,
+   "ladder_level": 0,
+   "last_siege_type": "DEPTH",
+   "consecutive_mastered": 0,
+   "note_status": "active",
+   "note_last_supported_session": null,
+   "consecutive_graduate": 0,
+   "gap_sessions": 0,
+   "gap_forced": false,
+   "siege_sessions": 1,
+   "opened_by": "auto",
+   "gateway_for": "defeat_gnome_warrior",
+   "resume_lock": 0,
+   "attrib_depth_required": false,
+   "relay": null,
+   "relay_sewn": false,
+   "failure_attribution": {
+    "class": "chain_unreached",
+    "key_missing_link": "enter_gnomish_mines",
+    "verified": false
+   }
+  }
+ ],
+ "verified_chains": [
+  {
+   "target": "defeat_orc_solider",
+   "links": [
+    "enter_dungeon",
+    "defeat_zombie",
+    "make_wood_sword",
+    "find_bow",
+    "open_chest",
+    "fire_bow",
+    "drink_potion",
+    "eat_snail"
+   ],
+   "category": "combat_milestone",
+   "first_recorded_sr": 20.718462823725982,
+   "last_recorded_sr": 53.350296861747246,
+   "last_recorded_session": 31,
+   "evidence": "held-out SR 53.350296861747246% (recorded at s31)",
+   "style_note": "Winners run ~964 steps, 52% movement/idle: DO 169x, SHOOT_ARROW 24x, PLACE_TORCH 19x, PLACE_STONE 18x, potion cycling PINK/GREEN/BLUE/YELLOW ~12-15x each. Tactic: find bow + open chest for potions before engaging, stockpile 6+ torches for dungeon light, engage orc at range behind stone barriers, cycle potions for sustain, keep food (snails) for long fights. Forensics: failures miss drink_potion 70%, eat_snail 64%, fire_bow 51% \u2014 resource quantity gap, not chain break. SR climbing 16\u219236% confirms tactic working.",
+   "status": "progress"
+  },
+  {
+   "target": "defeat_orc_mage",
+   "links": [
+    "enter_dungeon",
+    "find_bow",
+    "open_chest",
+    "fire_bow",
+    "drink_potion",
+    "eat_snail",
+    "defeat_orc_solider"
+   ],
+   "category": "combat_milestone",
+   "first_recorded_sr": 20.98950524737631,
+   "last_recorded_sr": 51.30344108446298,
+   "last_recorded_session": 57,
+   "evidence": "held-out SR 51.30344108446298% (recorded at s57)",
+   "style_note": "Gap gate FORCED: trained 99% vs held-out 51% (48pp), drills don't transfer. DEPTH only \u2014 full pressure, no sandbox. Winners: ~1334 steps, DO 204x, PLACE_STONE 29x, SHOOT_ARROW 26x, DRINK_POTION_YELLOW 15x. 52% failures reach orc_solider and still die \u2014 execution quantity gap. 54% miss drink_potion in-fight. Resource gap: 7 torches vs 4, 3 arrows vs 2. Tactic: stockpile 7+ torches/4+ arrows, cycle potions WHILE under attack, stone barriers for firing windows, kite between shots, escalate mage count for denser crossfire.",
+   "status": "progress"
+  },
+  {
+   "target": "make_iron_pickaxe",
+   "links": [
+    "collect_wood",
+    "collect_stone",
+    "collect_coal",
+    "collect_iron",
+    "place_table",
+    "place_furnace",
+    "make_stone_pickaxe"
+   ],
+   "category": "enabler",
+   "first_recorded_sr": 25.660377358490567,
+   "last_recorded_sr": 37.677725118483416,
+   "last_recorded_session": 90,
+   "evidence": "held-out SR 37.677725118483416% (recorded at s90)",
+   "style_note": "GAP GATE now at 3/3 consecutive readings (trained 98% vs held-out 38%, gap 60pp) \u2014 DEPTH is FORCED. Drills won in sandbox but do not transfer. Held-out SR rising 28\u219238% confirms full-pressure levels are working. Winners run ~2042 steps: DO 278x, PLACE_STONE 44x, PLACE_TORCH 32x, SHOOT_ARROW 31x, MAKE_ARROW 25x, DRINK_POTION_YELLOW 25x, DESCEND 24x. Resource gap confirmed: winners carry 35 stone vs 13, 4 coal vs 2, 3 iron vs 1. Tactic: full-pressure dungeon levels where student must over-mine stone (30+), coal (3+), and iron (3+) BEFORE smelting \u2014 the craft is one event in a 2000-step survival marathon, not a finale. Place torches every 10 steps, cycle yellow/pink potions throughout, make arrows mid-run for sustained ranged combat. The student dies at ~332 steps post-chain from under-stocking, not interruption.",
+   "status": "progress"
+  },
+  {
+   "target": "enter_gnomish_mines",
+   "links": [
+    "enter_dungeon",
+    "make_iron_pickaxe",
+    "make_stone_pickaxe",
+    "collect_iron",
+    "collect_coal",
+    "defeat_orc_solider",
+    "defeat_orc_mage"
+   ],
+   "category": "enabler",
+   "first_recorded_sr": 0.2074688796680498,
+   "last_recorded_sr": 14.598540145985401,
+   "last_recorded_session": 125,
+   "evidence": "held-out SR 14.598540145985401% (recorded at s125)",
+   "style_note": "Winners run ~3043 steps, 51% movement/idle: DO 370x, PLACE_TORCH 48x, PLACE_STONE 47x, MAKE_IRON_SWORD 39x, DRINK_POTION_BLUE 38x, SHOOT_ARROW 37x, DESCEND 37x. Resource gap: winners carry 31 stone vs 17, 10 torches vs 7, 7 wood vs 6. 96% of failures reach enter_dungeon and still fail \u2014 gap is resource QUANTITY, not chain break. Tactic: treat floor 2 descent as a resource-gated expedition \u2014 over-mine stone (30+), craft 10+ torches, craft iron sword + armour, stockpile potions before attempting stairs. Student must survive a 3000+ step marathon on floor 1 before descending.",
+   "status": "progress"
+  },
+  {
+   "target": "defeat_kobold",
+   "links": [
+    "enter_dungeon",
+    "enter_gnomish_mines",
+    "enter_sewers",
+    "make_iron_pickaxe",
+    "make_iron_sword",
+    "defeat_orc_solider",
+    "defeat_orc_mage",
+    "defeat_gnome_warrior",
+    "defeat_gnome_archer",
+    "eat_bat",
+    "make_iron_armour",
+    "place_torch",
+    "make_torch",
+    "drink_potion",
+    "find_bow",
+    "fire_bow",
+    "make_arrow",
+    "open_chest",
+    "collect_iron",
+    "collect_coal",
+    "place_table",
+    "place_furnace",
+    "defeat_lizard"
+   ],
+   "category": "combat_milestone",
+   "first_recorded_sr": 0.0,
+   "last_recorded_sr": 0.0,
+   "last_recorded_session": 167,
+   "evidence": "held-out SR 0.0% (recorded at s167)",
+   "style_note": "Rung 1 (floor 2 spawn with winner-median kit): 92% of failures miss make_iron_armour \u2014 smelt provided iron at furnace and craft iron armour BEFORE descending. Kit has only 2-3 iron; mine more iron on floor 2 if recipe needs 4+. Clear 8 mobs on floor 2 to unlock down-stairs, torch the descent route, descend to floor 3, engage kobold with iron sword + bow kiting, cycle potions for sustain. Winners of related floor-2 fights (gnome_warrior) run ~3100 steps with heavy PLACE_STONE, MAKE_DIAMOND_SWORD, MAKE_DIAMOND_ARMOUR, READ_BOOK \u2014 over-craft gear and over-stock resources for the long descent. No winning episodes yet at this rung; held-out 0% is expected.",
+   "status": "progress"
+  },
+  {
+   "target": "make_iron_armour",
+   "links": [
+    "make_stone_pickaxe",
+    "collect_iron",
+    "collect_coal",
+    "place_table",
+    "place_furnace",
+    "make_iron_sword",
+    "make_iron_pickaxe"
+   ],
+   "category": "enabler",
+   "first_recorded_sr": 11.279069767441861,
+   "last_recorded_sr": 12.73176761433869,
+   "last_recorded_session": 209,
+   "evidence": "held-out SR 12.73176761433869% (recorded at s209)",
+   "style_note": "L1 DEFEND (new reason): make_iron_pickaxe just hit 43% (s177, highest ever) and make_iron_sword at 56% \u2014 both RISING simultaneously for the first time in the siege. The attack tree is NOT frozen \u2014 chain links are actively climbing. The wall's own SR (8-16%) hasn't moved yet but should follow as prerequisites solidify. GAP GATE remains active (trained 99% vs held-out 16%) \u2014 DEPTH only, drills suspended. Real winners run ~3202 steps: PLACE_STONE 59x, MAKE_ARROW 45x, MAKE_DIAMOND_SWORD 44x, MAKE_IRON_SWORD 40x, DRINK_POTION_BLUE 39x, PLACE_TORCH 39x. Resource gap: iron winners 4 vs failures 1 (only 12% reach winners' level), stone winners 40 vs failures 16. Tactic: full-pressure levels forcing 4+ iron mining before smelting \u2014 craft sword\u2192pickaxe\u2192armour in order, over-mine stone to 40+, cycle blue/green potions across 3000+ step marathon with continuous mob pressure. The student stops at 1 iron and rushes to craft \u2014 force resource stockpiling discipline under combat.",
+   "status": "progress"
+  },
+  {
+   "target": "defeat_gnome_warrior",
+   "links": [
+    "enter_dungeon",
+    "enter_gnomish_mines"
+   ],
+   "category": "combat_milestone",
+   "first_recorded_sr": 18.39080459770115,
+   "last_recorded_sr": 18.39080459770115,
+   "last_recorded_session": 189,
+   "evidence": "held-out SR 18.39080459770115% (recorded at s189)",
+   "style_note": "",
+   "status": "progress"
+  },
+  {
+   "target": "enchant_sword",
+   "links": [
+    "enter_dungeon",
+    "enter_gnomish_mines",
+    "enter_sewers",
+    "learn_fireball",
+    "make_iron_sword"
+   ],
+   "category": "enabler",
+   "first_recorded_sr": 0.0,
+   "last_recorded_sr": 0.0,
+   "last_recorded_session": 209,
+   "evidence": "held-out SR 0.0% (recorded at s209)",
+   "style_note": "Floor-3 enchantment enabler for deeper combat. Winners of defeat_gnome_archer use ENCHANT_SWORD 43x and READ_BOOK 47x \u2014 enchanting is a core combat multiplier the student never reaches. Entire chain is unreached: enter_sewers 0%, learn_fireball 0%. Relay R0 spawns on floor 3 with winner kit; student learns the enchant loop (find book\u2192learn spell\u2192enchant sword) first, then anneals back up through floor 2 descent. Tactic at R0: locate enchantment table on floor 3, read spell book to learn_fireball, hold sword, execute enchant_sword \u2014 the fight itself is secondary at this rung.",
+   "status": "progress"
+  },
+  {
+   "target": "make_diamond_armour",
+   "links": [],
+   "category": "enabler",
+   "first_recorded_sr": 0.0,
+   "last_recorded_sr": 0.0,
+   "last_recorded_session": 224,
+   "evidence": "held-out SR 0.0% (recorded at s224)",
+   "style_note": "Diamond armour requires diamonds mined on floor 2. Student's enter_gnomish_mines at 25% and make_iron_pickaxe at 41% are both RISING \u2014 the descent chain is the live bottleneck, not the crafting action. Winners of floor-2 fights co-reach collect_diamond 42% and make_iron_pickaxe 72%. Tactic: full-pressure floor 0-2 levels where student must craft iron pickaxe, descend to floor 2, mine 3+ diamonds plus coal, return to stations, smelt and craft diamond armour. Force resource stockpiling: over-mine stone to 30+, craft 10+ torches for the dark descent.",
+   "status": "progress"
+  }
+ ],
+ "protected_set": [
+  "defeat_orc_mage",
+  "defeat_orc_solider",
+  "drink_potion",
+  "eat_snail",
+  "enter_dungeon",
+  "find_bow",
+  "fire_bow",
+  "make_wood_sword",
+  "open_chest"
+ ],
+ "last_session": 224,
+ "history": [
+  {
+   "session": 15,
+   "event": "breadth_frontier_advanced",
+   "floor": 2,
+   "trained": 83.23412698412699
+  },
+  {
+   "session": 15,
+   "event": "focus_opened",
+   "focus": "defeat_orc_solider",
+   "opened_by": "llm"
+  },
+  {
+   "session": 21,
+   "event": "focus_yielded_watch",
+   "focus": "defeat_orc_solider",
+   "sr": 36.39921722113503,
+   "gain_2readings": 15.68075439740905
+  },
+  {
+   "session": 25,
+   "event": "focus_opened",
+   "focus": "defeat_orc_mage",
+   "opened_by": "llm"
+  },
+  {
+   "session": 31,
+   "event": "focus_graduated_maintenance",
+   "focus": "defeat_orc_solider",
+   "sr": 53.350296861747246,
+   "held_snapshots": 2
+  },
+  {
+   "session": 49,
+   "event": "breadth_frontier_advanced",
+   "floor": 3,
+   "trained": 86.11898016997166
+  },
+  {
+   "session": 57,
+   "event": "focus_graduated_maintenance",
+   "focus": "defeat_orc_mage",
+   "sr": 51.30344108446298,
+   "held_snapshots": 2
+  },
+  {
+   "session": 63,
+   "event": "focus_opened",
+   "focus": "make_iron_pickaxe",
+   "opened_by": "llm"
+  },
+  {
+   "session": 67,
+   "event": "tactic_revision_rejected",
+   "focus": "make_iron_pickaxe"
+  },
+  {
+   "session": 69,
+   "event": "tactic_revision_rejected",
+   "focus": "make_iron_pickaxe"
+  },
+  {
+   "session": 71,
+   "event": "gap_gate_forced_depth",
+   "focus": "make_iron_pickaxe",
+   "trained": 98.5553772070626,
+   "held": 25.041322314049587
+  },
+  {
+   "session": 71,
+   "event": "focus_yielded_watch",
+   "focus": "make_iron_pickaxe",
+   "sr": 25.041322314049587,
+   "gain_2readings": 15.271608427099133
+  },
+  {
+   "session": 71,
+   "event": "focus_opened",
+   "focus": "enter_gnomish_mines",
+   "opened_by": "llm"
+  },
+  {
+   "session": 82,
+   "event": "focus_opened",
+   "focus": "defeat_kobold",
+   "opened_by": "llm",
+   "relay_r0_floor": 3
+  },
+  {
+   "session": 86,
+   "event": "focus_retired_budget",
+   "focus": "enter_gnomish_mines",
+   "best_sr": 5.17578125,
+   "siege_sessions": 8
+  },
+  {
+   "session": 86,
+   "event": "focus_resumed_from_watch",
+   "focus": "make_iron_pickaxe",
+   "sr": 34.75750577367206
+  },
+  {
+   "session": 88,
+   "event": "breadth_frontier_advanced",
+   "floor": 4,
+   "trained": 90.42553191489363
+  },
+  {
+   "session": 92,
+   "event": "gap_gate_forced_depth",
+   "focus": "make_iron_pickaxe",
+   "trained": 97.47675962815406,
+   "held": 27.763157894736842
+  },
+  {
+   "session": 94,
+   "event": "focus_retired_budget",
+   "focus": "make_iron_pickaxe",
+   "best_sr": 37.677725118483416,
+   "siege_sessions": 8
+  },
+  {
+   "session": 98,
+   "event": "fix44_counter_reset",
+   "focus": "defeat_kobold",
+   "reason": "stall/patience were fed by dose-bug artifact readings (9/14 relay levels culled into husks); best kept honest",
+   "before": {
+    "stall_patience": 3,
+    "rung_stall_streak": 3,
+    "best_rung_trained": 20.38488952245189,
+    "spawn_floor": 3
+   }
+  },
+  {
+   "session": 103,
+   "event": "tactic_revision_rejected",
+   "focus": "defeat_kobold"
+  },
+  {
+   "session": 105,
+   "event": "fix44b_anchor_reset",
+   "focus": "defeat_kobold",
+   "reason": "best=20.4 came from the starved-dose era (one overtrained level); fresh full-dose levels read 4-8% honestly, so the new-high bar was unreachable and patience counted real learning as stall. best->None re-anchors on the next reading.",
+   "before": {
+    "best_rung_trained": 20.38488952245189,
+    "stall_patience": 3,
+    "rung_stall_streak": 3,
+    "spawn_floor": 3
+   }
+  },
+  {
+   "session": 123,
+   "event": "focus_opened",
+   "focus": "enter_gnomish_mines",
+   "opened_by": "auto"
+  },
+  {
+   "session": 121,
+   "event": "chain_autofilled",
+   "focus": "enter_gnomish_mines",
+   "added": [
+    "enter_dungeon"
+   ]
+  },
+  {
+   "session": 129,
+   "event": "attrib_shortcut_armed_earlystop",
+   "focus": "enter_gnomish_mines",
+   "key": "make_iron_armour",
+   "held": 11.267605633802816
+  },
+  {
+   "session": 133,
+   "event": "tactic_revision_rejected",
+   "focus": "enter_gnomish_mines"
+  },
+  {
+   "session": 139,
+   "event": "focus_retired_budget",
+   "focus": "enter_gnomish_mines",
+   "best_sr": 18.875,
+   "siege_sessions": 8
+  },
+  {
+   "session": 143,
+   "event": "rung_graduated",
+   "focus": "defeat_kobold",
+   "spawn_floor": 2
+  },
+  {
+   "session": 143,
+   "event": "focus_opened",
+   "focus": "make_iron_armour",
+   "opened_by": "llm",
+   "gateway_for": "defeat_gnome_warrior"
+  },
+  {
+   "session": 149,
+   "event": "breadth_frontier_advanced",
+   "floor": 5,
+   "trained": 77.36943907156673
+  },
+  {
+   "session": 153,
+   "event": "rung_regressed",
+   "focus": "defeat_kobold",
+   "spawn_floor": 3
+  },
+  {
+   "session": 159,
+   "event": "focus_retired_budget",
+   "focus": "make_iron_armour",
+   "best_sr": 14.0,
+   "siege_sessions": 8
+  },
+  {
+   "session": 165,
+   "event": "focus_retired_relay_stalled",
+   "focus": "defeat_kobold",
+   "best_sr": 0.0,
+   "relay_r0_floor": 3,
+   "relay_spawn_floor": 3,
+   "relay_sub_stage": null,
+   "relay_best_rung_trained": 77.16346153846155,
+   "stall_patience": 6
+  },
+  {
+   "session": 167,
+   "event": "focus_opened",
+   "focus": "make_iron_armour",
+   "opened_by": "auto"
+  },
+  {
+   "session": 173,
+   "event": "rung_cliff_split",
+   "focus": "defeat_kobold",
+   "spawn_floor": 2,
+   "sub_stage": 5
+  },
+  {
+   "session": 177,
+   "event": "rung_substage_graduated",
+   "focus": "defeat_kobold",
+   "spawn_floor": 2,
+   "sub_stage": 4
+  },
+  {
+   "session": 177,
+   "event": "gap_gate_forced_depth",
+   "focus": "make_iron_armour",
+   "trained": 99.24528301886792,
+   "held": 15.501905972045744
+  },
+  {
+   "session": 181,
+   "event": "rung_substage_graduated",
+   "focus": "defeat_kobold",
+   "spawn_floor": 2,
+   "sub_stage": 3
+  },
+  {
+   "session": 183,
+   "event": "focus_retired_budget",
+   "focus": "make_iron_armour",
+   "best_sr": 15.501905972045744,
+   "siege_sessions": 8
+  },
+  {
+   "session": 187,
+   "event": "rung_substage_graduated",
+   "focus": "defeat_kobold",
+   "spawn_floor": 2,
+   "sub_stage": 2
+  },
+  {
+   "session": 187,
+   "event": "focus_opened",
+   "focus": "defeat_gnome_warrior",
+   "opened_by": "auto"
+  },
+  {
+   "session": 185,
+   "event": "chain_autofilled",
+   "focus": "defeat_gnome_warrior",
+   "added": [
+    "enter_dungeon",
+    "enter_gnomish_mines"
+   ]
+  },
+  {
+   "session": 197,
+   "event": "rung_substage_regressed",
+   "focus": "defeat_kobold",
+   "spawn_floor": 2,
+   "sub_stage": 3
+  },
+  {
+   "session": 205,
+   "event": "focus_retired_relay_stalled",
+   "focus": "defeat_kobold",
+   "best_sr": 0.0,
+   "relay_r0_floor": 3,
+   "relay_spawn_floor": 2,
+   "relay_sub_stage": 3,
+   "relay_best_rung_trained": 70.29816513761467,
+   "stall_patience": 6,
+   "ratchet_rising": false
+  },
+  {
+   "session": 207,
+   "event": "focus_retired_style_rejected",
+   "focus": "defeat_gnome_warrior",
+   "best_sr": 19.04296875,
+   "gap_stall": 6,
+   "gap_force_baseline": 19.04296875,
+   "held": 18.231292517006803,
+   "trained": 77.77777777777779
+  },
+  {
+   "session": 207,
+   "event": "focus_opened",
+   "focus": "enchant_sword",
+   "opened_by": "llm",
+   "relay_r0_floor": 3
+  },
+  {
+   "session": 207,
+   "event": "focus_opened",
+   "focus": "make_iron_armour",
+   "opened_by": "auto"
+  },
+  {
+   "session": 213,
+   "event": "rung_cliff_split",
+   "focus": "enchant_sword",
+   "spawn_floor": 3,
+   "sub_stage": 5
+  },
+  {
+   "session": 222,
+   "event": "focus_retired_budget",
+   "focus": "make_iron_armour",
+   "best_sr": 16.89453125,
+   "siege_sessions": 8
+  },
+  {
+   "session": 222,
+   "event": "focus_opened",
+   "focus": "make_diamond_armour",
+   "opened_by": "auto",
+   "gateway_for": "defeat_gnome_warrior"
+  },
+  {
+   "session": 224,
+   "event": "focus_retired_relay_stalled",
+   "focus": "enchant_sword",
+   "best_sr": 0.0,
+   "relay_r0_floor": 3,
+   "relay_spawn_floor": 3,
+   "relay_sub_stage": 5,
+   "relay_best_rung_trained": 0.0,
+   "stall_patience": 3,
+   "ratchet_rising": false
+  }
+ ],
+ "retired": {
+  "enter_gnomish_mines": {
+   "count": 2,
+   "failed_notes": [
+    "Gap gate active (trained 33% vs held-out 5%) \u2014 drills do not transfer, DEPTH only. make_iron_pickaxe climbing 26\u219235% confirms it remains the live bottleneck (69% of failures miss it). enter_gnomish_mines slowly rising 0\u21925%. Full-pressure floor-1 levels where student must craft iron pickaxe under real combat, stockpile 21+ stone / 9+ torches / 6+ arrows, then descend. Winners run ~2086 steps: DO 292x, PLACE_STONE 53x, SHOOT_ARROW 38x, PLACE_TORCH 30x, DESCEND 29x, DRINK_POTION_YELLOW 25x. 59% of failures reach defeat_orc_mage and still die \u2014 the gap is resource QUANTITY (torch/stone/iron stockpile), not chain break or combat interruption. Tactic: force the student to over-mine coal and over-craft torches on floor 1 before attempting stairs; treat the descent as a resource-gated expedition.",
+    "SR 17% slowly rising \u2014 full-pressure DEPTH working. make_iron_armour at 11% is the live gap (91% of failures miss it). Winners run ~3051 steps: DO 366x, PLACE_STONE 47x, PLACE_TORCH 45x, MAKE_DIAMOND_SWORD 39x, SHOOT_ARROW 37x, MAKE_ARROW 37x, DRINK_POTION_GREEN 36x, DRINK_POTION_PINK 35x. Resource gap: winners carry 13 torches vs 7, 21 stone vs 16, 4 coal vs 2. Tactic: full-pressure floor-1 marathon \u2014 over-mine stone (30+), craft 12+ torches, make iron pickaxe + iron sword + iron armour, stockpile 7+ arrows and cycle green/pink potions, then descend. Winners also craft diamond sword from floor-2 diamonds \u2014 collect diamonds if reachable for extra combat edge."
+   ],
+   "last_session": 139,
+   "last_event": "focus_retired_budget",
+   "sr_at_retirement": 18.875,
+   "link_sr_at_retirement": {
+    "enter_dungeon": 94.40389294403893,
+    "defeat_orc_solider": 86.87430478309233,
+    "defeat_orc_mage": 75.08342602892102,
+    "make_iron_pickaxe": 43.559096945551126,
+    "make_iron_sword": 60.995370370370374,
+    "make_iron_armour": 15.318627450980392,
+    "drink_potion": 78.08676307007786,
+    "eat_snail": 90.43381535038932,
+    "find_bow": 95.66184649610679,
+    "fire_bow": 93.77085650723025,
+    "make_arrow": 96.88542825361513,
+    "open_chest": 95.66184649610679,
+    "collect_iron": 79.97775305895439,
+    "collect_coal": 94.97549019607843,
+    "place_table": 99.44382647385984,
+    "place_furnace": 97.77530589543937,
+    "make_torch": 95.21690767519466,
+    "place_torch": 92.88097886540601,
+    "collect_stone": 98.10901001112347,
+    "collect_wood": 99.77753058954394
+   },
+   "links_at_retirement": [
+    "enter_dungeon",
+    "defeat_orc_solider",
+    "defeat_orc_mage",
+    "make_iron_pickaxe",
+    "make_iron_sword",
+    "make_iron_armour",
+    "drink_potion",
+    "eat_snail",
+    "find_bow",
+    "fire_bow",
+    "make_arrow",
+    "open_chest",
+    "collect_iron",
+    "collect_coal",
+    "place_table",
+    "place_furnace",
+    "make_torch",
+    "place_torch",
+    "collect_stone",
+    "collect_wood"
+   ],
+   "failure_attribution_at_retirement": {
+    "class": "resource_shortfall",
+    "key_missing_link": "make_iron_armour",
+    "verified": true
+   },
+   "chain_frontier_advanced": true
+  },
+  "make_iron_pickaxe": {
+   "count": 1,
+   "failed_notes": [
+    "GAP GATE FORCED (trained 98% vs held-out 30%, gap 60pp) \u2014 DEPTH only, drills suspended. Winners run ~2065 steps: DO 279x, PLACE_STONE 43x, PLACE_TORCH 32x, SHOOT_ARROW 31x, MAKE_ARROW 26x, DRINK_POTION_YELLOW 25x, DRINK_POTION_PINK 24x, DESCEND 24x. Resource gap: winners carry 29 stone vs 14, 4 coal vs 2, 4 arrows vs 2. Tactic: full-pressure dungeon levels where student must over-mine stone (30+), coal (3+), iron (3+) BEFORE smelting \u2014 the craft is one event in a 2000-step survival marathon. Place torches every 10 steps, cycle yellow/pink potions, make arrows mid-run for sustained ranged combat. Student dies ~307 steps post-chain from under-stocking, not interruption."
+   ],
+   "last_session": 94,
+   "last_event": "focus_retired_budget",
+   "sr_at_retirement": 37.677725118483416,
+   "link_sr_at_retirement": {
+    "collect_wood": 99.74842767295597,
+    "collect_stone": 97.86163522012579,
+    "collect_coal": 92.63157894736842,
+    "collect_iron": 80.45023696682465,
+    "place_table": 99.24528301886792,
+    "place_furnace": 96.22641509433963,
+    "make_stone_pickaxe": 91.32231404958678
+   },
+   "links_at_retirement": [
+    "collect_wood",
+    "collect_stone",
+    "collect_coal",
+    "collect_iron",
+    "place_table",
+    "place_furnace",
+    "make_stone_pickaxe"
+   ],
+   "chain_frontier_advanced": true
+  },
+  "make_iron_armour": {
+   "count": 3,
+   "failed_notes": [
+    "Winners run ~3230 steps: DO 391x, PLACE_STONE 60x, MAKE_DIAMOND_SWORD 45x, MAKE_ARROW 44x, MAKE_IRON_SWORD 41x, PLACE_TORCH 40x, DRINK_POTION_BLUE 39x, READ_BOOK 39x. Resource gap: iron 4 vs 1, stone 49 vs 18, torches 15 vs 9, coal 5 vs 2. Student reaches furnace 98% but mines only 1 iron and rushes to craft. Tactic: mine 4+ iron before smelting; over-mine stone to 30+; craft sword\u2192pickaxe\u2192armour; cycle blue/green potions across 3000+ step marathon; winners craft diamond sword and read books \u2014 collect floor-2 diamonds if reachable for combat edge.",
+    "GAP GATE active (trained 79% vs held-out 15%). make_iron_pickaxe RISING to 44% and make_iron_sword RISING to 59% \u2014 chain links climbing simultaneously, wall SR rising to 15%. Real winners run ~3183 steps: PLACE_STONE 58x, MAKE_ARROW 45x, MAKE_DIAMOND_SWORD 43x, MAKE_IRON_SWORD 40x, DRINK_POTION_BLUE 38x, READ_BOOK 40x. Resource gap: iron winners 4 vs failures 1, stone winners 39 vs failures 16. DEPTH only \u2014 drills suspended. Tactic: full-pressure levels forcing 4+ iron mining before smelting, craft sword\u2192pickaxe\u2192armour in order, over-mine stone to 40+, cycle blue potions across 3000+ step marathon with continuous mob pressure. Student stops at 1 iron and rushes to craft \u2014 force resource stockpiling discipline under combat.",
+    "s222: tree still climbing \u2014 make_iron_pickaxe 47% (new high), make_iron_sword 61% (stable), wall 18% (new high). GAP GATE active (trained 94% vs held-out 18%) \u2014 DEPTH only, drills suspended. Real winners run ~3198 steps: DO 384x, PLACE_STONE 56x, MAKE_ARROW 45x, MAKE_DIAMOND_SWORD 44x, READ_BOOK 42x, MAKE_IRON_SWORD 39x. Resource gap: iron 4 vs 1, stone 40 vs 16. Tactic: full-pressure floor 0-2 levels seeding iron/coal near spawn \u2014 student must mine 4+ iron before smelting, craft sword\u2192pickaxe\u2192armour in order, over-mine stone to 40+, cycle potions across 3000+ step marathon. Student stops at 1 iron and rushes to craft \u2014 force resource stockpiling discipline under combat."
+   ],
+   "last_session": 222,
+   "last_event": "focus_retired_budget",
+   "sr_at_retirement": 16.89453125,
+   "link_sr_at_retirement": {
+    "make_stone_pickaxe": 96.6796875,
+    "collect_iron": 85.546875,
+    "collect_coal": 95.1171875,
+    "place_table": 99.609375,
+    "place_furnace": 98.33984375,
+    "make_iron_pickaxe": 46.6030989272944,
+    "make_iron_sword": 62.40234375
+   },
+   "links_at_retirement": [
+    "make_stone_pickaxe",
+    "collect_iron",
+    "collect_coal",
+    "place_table",
+    "place_furnace",
+    "make_iron_pickaxe",
+    "make_iron_sword"
+   ],
+   "failure_attribution_at_retirement": {
+    "class": "resource_shortfall",
+    "key_missing_link": "make_iron_pickaxe",
+    "verified": true
+   }
+  },
+  "defeat_kobold": {
+   "count": 1,
+   "failed_notes": [
+    "Relay sub-stage 3 (spawn within 20 of down ladder, 8/8 kills pre-credited): trained SR 62\u219266% \u2014 climbing toward the 70% threshold for floor advancement. Student can reach floor 2 and descend to floor 3 in training levels. Tactic: on spawn, torch direct path to down ladder (within 20 tiles), descend to floor 3, torch descent route, locate kobold, engage with iron sword + bow kite, cycle potions for sustain. Remaining 34% failures likely die on floor 3 to kobold/lizard before engaging \u2014 focus on floor 3 dark-floor traversal and combat execution. Held-out 0% is EXPECTED until relay completes; do not abandon."
+   ],
+   "last_session": 205,
+   "last_event": "focus_retired_relay_stalled",
+   "sr_at_retirement": 0.0,
+   "link_sr_at_retirement": {
+    "enter_dungeon": 94.921875,
+    "defeat_orc_solider": 90.71680376028202,
+    "defeat_orc_mage": 79.0834312573443,
+    "enter_gnomish_mines": 23.449131513647643,
+    "defeat_gnome_warrior": 20.320197044334975,
+    "defeat_gnome_archer": 13.96484375,
+    "eat_bat": 19.82758620689655,
+    "enter_sewers": 0.0,
+    "make_iron_pickaxe": 46.0880195599022,
+    "make_iron_sword": 59.48905109489051,
+    "make_iron_armour": 20.306513409961685,
+    "place_torch": 94.46092977250247,
+    "make_torch": 94.04296875,
+    "drink_potion": 81.69533169533169,
+    "find_bow": 96.42401021711366,
+    "fire_bow": 95.18213866039953,
+    "make_arrow": 97.36328125,
+    "open_chest": 96.42401021711366,
+    "collect_iron": 82.59212198221093,
+    "collect_coal": 95.40229885057471,
+    "place_table": 99.609375,
+    "place_furnace": 97.4609375,
+    "defeat_lizard": 0.0
+   },
+   "links_at_retirement": [
+    "enter_dungeon",
+    "enter_gnomish_mines",
+    "enter_sewers",
+    "make_iron_pickaxe",
+    "make_iron_sword",
+    "make_iron_armour",
+    "defeat_gnome_warrior",
+    "defeat_gnome_archer",
+    "defeat_lizard",
+    "eat_bat",
+    "place_torch",
+    "make_torch",
+    "drink_potion",
+    "find_bow",
+    "fire_bow",
+    "make_arrow",
+    "open_chest",
+    "collect_iron",
+    "collect_coal",
+    "place_table",
+    "place_furnace"
+   ],
+   "failure_attribution_at_retirement": {
+    "class": "chain_unreached",
+    "key_missing_link": "enter_sewers",
+    "verified": true
+   }
+  },
+  "defeat_gnome_warrior": {
+   "count": 1,
+   "failed_notes": [
+    "GAP GATE forced \u2014 DEPTH only. Winners run ~3153 steps: DO 366x, PLACE_STONE 48x, MAKE_ARROW 43x, MAKE_DIAMOND_SWORD 41x, PLACE_TORCH 40x, READ_BOOK 37x, MAKE_IRON_PICKAXE 37x, ENCHANT_SWORD 36x. Diamond gear chain is the live gap: make_diamond_armour 0%, make_diamond_sword 4%, collect_diamond 26%. Tactic: full-pressure floor 2 levels \u2014 mine diamonds on floor 2, craft diamond sword + armour, clear gnome_archer with ranged kiting, then engage gnome_warrior with diamond melee + bow. Over-mine stone to 25+, craft 13+ torches, stockpile 12+ arrows. The diamond gear chain must be built before the fight \u2014 winners craft it 36-41x, failures never reach it."
+   ],
+   "last_session": 207,
+   "last_event": "focus_retired_style_rejected",
+   "sr_at_retirement": 19.04296875,
+   "link_sr_at_retirement": {
+    "enter_dungeon": 97.70114942528735,
+    "enter_gnomish_mines": 22.094508301404854,
+    "make_iron_sword": 59.85221674876847,
+    "make_iron_pickaxe": 46.19164619164619,
+    "eat_bat": 18.45703125,
+    "defeat_gnome_archer": 13.96484375,
+    "place_torch": 94.82421875,
+    "make_torch": 95.21484375,
+    "drink_potion": 80.46875,
+    "find_bow": 94.53125,
+    "fire_bow": 96.42857142857143,
+    "make_arrow": 97.36328125,
+    "open_chest": 0.0,
+    "collect_iron": 85.22167487684729,
+    "collect_coal": 93.45703125,
+    "place_table": 99.609375,
+    "place_furnace": 97.0703125,
+    "collect_diamond": 29.19921875,
+    "make_diamond_sword": 3.3203125,
+    "make_diamond_armour": 0.0
+   },
+   "links_at_retirement": [
+    "enter_dungeon",
+    "enter_gnomish_mines",
+    "make_iron_pickaxe",
+    "make_iron_sword",
+    "collect_diamond",
+    "make_diamond_sword",
+    "make_diamond_armour",
+    "defeat_gnome_archer",
+    "eat_bat",
+    "place_torch",
+    "make_torch",
+    "drink_potion",
+    "find_bow",
+    "fire_bow",
+    "make_arrow",
+    "collect_iron",
+    "collect_coal",
+    "place_table",
+    "place_furnace"
+   ],
+   "failure_attribution_at_retirement": {
+    "class": "resource_shortfall",
+    "key_missing_link": "make_diamond_armour",
+    "verified": true
+   },
+   "chain_frontier_advanced": true
+  },
+  "enchant_sword": {
+   "count": 1,
+   "failed_notes": [
+    "R0 sub-stage 5 LIT arena: 0% trained for 2 readings. Forensics: 100% of failures miss learn_fireball \u2014 student reaches place_torch (94%) but never reads the spell book. The READ_BOOK\u2192learn_fireball interaction is the live gap, not darkness or combat. Re-derived tactic: the student must find the enchantment table and read the spell book as the FIRST priority \u2014 torches and combat are secondary. The enchant loop is: find table \u2192 read book \u2192 learn_fireball \u2192 hold iron sword \u2192 enchant. The student is placing torches but not navigating to the table/book. R0 sub-stage should make the enchantment table and spell book the most salient nearby targets. BINDING-ACCESS enter_gnomish_mines (24% held-out) is bypassed by relay spawn; held-out 0% expected until ladder reaches natural spawn."
+   ],
+   "last_session": 224,
+   "last_event": "focus_retired_relay_stalled",
+   "sr_at_retirement": 0.0,
+   "link_sr_at_retirement": {
+    "enter_dungeon": 96.16810877626699,
+    "enter_gnomish_mines": 19.77750309023486,
+    "enter_sewers": 0.0,
+    "learn_fireball": 0.0,
+    "make_iron_sword": 61.43386897404203,
+    "place_torch": 95.58998808104887
+   },
+   "links_at_retirement": [
+    "enter_dungeon",
+    "enter_gnomish_mines",
+    "make_iron_sword",
+    "enter_sewers",
+    "place_torch",
+    "learn_fireball"
+   ],
+   "failure_attribution_at_retirement": {
+    "class": "chain_unreached",
+    "key_missing_link": "enter_gnomish_mines",
+    "verified": true
+   }
+  }
+ },
+ "maintenance": {
+  "defeat_orc_solider": {
+   "graduated_session": 31,
+   "sr_at_graduation": 53.350296861747246,
+   "links": [
+    "enter_dungeon",
+    "find_bow",
+    "open_chest",
+    "fire_bow",
+    "drink_potion",
+    "eat_snail",
+    "make_wood_sword"
+   ],
+   "style_note": "Winners run ~964 steps, 52% movement/idle: DO 169x, SHOOT_ARROW 24x, PLACE_TORCH 19x, PLACE_STONE 18x, potion cycling PINK/GREEN/BLUE/YELLOW ~12-15x each. Tactic: find bow + open chest for potions before engaging, stockpile 6+ torches for dungeon light, engage orc at range behind stone barriers, cycle potions for sustain, keep food (snails) for long fights. Forensics: failures miss drink_potion 70%, eat_snail 64%, fire_bow 51% \u2014 resource quantity gap, not chain break. SR climbing 16\u219236% confirms tactic working."
+  },
+  "defeat_orc_mage": {
+   "graduated_session": 57,
+   "sr_at_graduation": 51.30344108446298,
+   "links": [
+    "enter_dungeon",
+    "find_bow",
+    "open_chest",
+    "fire_bow",
+    "drink_potion",
+    "eat_snail",
+    "defeat_orc_solider"
+   ],
+   "style_note": "Gap gate FORCED: trained 99% vs held-out 51% (48pp), drills don't transfer. DEPTH only \u2014 full pressure, no sandbox. Winners: ~1334 steps, DO 204x, PLACE_STONE 29x, SHOOT_ARROW 26x, DRINK_POTION_YELLOW 15x. 52% failures reach orc_solider and still die \u2014 execution quantity gap. 54% miss drink_potion in-fight. Resource gap: 7 torches vs 4, 3 arrows vs 2. Tactic: stockpile 7+ torches/4+ arrows, cycle potions WHILE under attack, stone barriers for firing windows, kite between shots, escalate mage count for denser crossfire."
+  }
+ },
+ "relay_trigger": {
+  "armed": true,
+  "ignored": 0,
+  "candidates": [
+   "learn_fireball",
+   "defeat_kobold",
+   "defeat_lizard",
+   "defeat_troll",
+   "cast_fireball",
+   "cast_iceball"
+  ],
+  "succession_from": "enchant_sword",
+  "succession_missing": ""
+ },
+ "watch": {},
+ "highwater": {
+  "collect_wood": 100.0,
+  "place_table": 99.85,
+  "eat_cow": 98.2,
+  "collect_sapling": 100.0,
+  "collect_drink": 98.77,
+  "make_wood_pickaxe": 99.27,
+  "make_wood_sword": 98.62,
+  "place_plant": 99.9,
+  "wake_up": 98.83,
+  "defeat_zombie": 88.86,
+  "collect_stone": 98.98,
+  "place_stone": 98.78,
+  "make_stone_sword": 97.19,
+  "place_furnace": 98.72,
+  "make_stone_pickaxe": 94.87,
+  "collect_coal": 94.87,
+  "make_arrow": 98.47,
+  "make_torch": 96.67,
+  "defeat_skeleton": 77.15,
+  "collect_iron": 84.96,
+  "place_torch": 95.44,
+  "enter_dungeon": 97.66,
+  "find_bow": 96.92,
+  "open_chest": 96.92,
+  "eat_snail": 92.6,
+  "fire_bow": 96.31,
+  "defeat_orc_solider": 91.82,
+  "drink_potion": 80.67,
+  "defeat_orc_mage": 81.82,
+  "make_iron_sword": 61.43
+ },
+ "highwater_pending": {
+  "collect_coal": [
+   224,
+   94.14893617021276
+  ],
+  "collect_drink": [
+   224,
+   98.40425531914893
+  ],
+  "collect_iron": [
+   224,
+   86.17021276595744
+  ],
+  "collect_sapling": [
+   224,
+   99.86702127659575
+  ],
+  "collect_stone": [
+   224,
+   98.67021276595744
+  ],
+  "collect_wood": [
+   224,
+   100.0
+  ],
+  "defeat_orc_mage": [
+   224,
+   81.51595744680851
+  ],
+  "defeat_orc_solider": [
+   224,
+   89.8936170212766
+  ],
+  "defeat_skeleton": [
+   224,
+   72.20744680851064
+  ],
+  "defeat_zombie": [
+   224,
+   77.92553191489361
+  ],
+  "drink_potion": [
+   224,
+   78.32446808510639
+  ],
+  "eat_cow": [
+   224,
+   96.40957446808511
+  ],
+  "eat_snail": [
+   224,
+   92.2872340425532
+  ],
+  "enter_dungeon": [
+   224,
+   96.54255319148936
+  ],
+  "find_bow": [
+   224,
+   95.2127659574468
+  ],
+  "fire_bow": [
+   224,
+   94.94680851063829
+  ],
+  "make_arrow": [
+   224,
+   98.00531914893617
+  ],
+  "make_stone_pickaxe": [
+   224,
+   94.81382978723404
+  ],
+  "make_stone_sword": [
+   224,
+   96.27659574468085
+  ],
+  "make_torch": [
+   224,
+   95.74468085106383
+  ],
+  "make_wood_pickaxe": [
+   224,
+   98.80319148936171
+  ],
+  "make_wood_sword": [
+   224,
+   97.47340425531915
+  ],
+  "open_chest": [
+   224,
+   95.2127659574468
+  ],
+  "place_furnace": [
+   224,
+   97.73936170212765
+  ],
+  "place_plant": [
+   224,
+   99.73404255319149
+  ],
+  "place_stone": [
+   224,
+   97.73936170212765
+  ],
+  "place_table": [
+   224,
+   99.73404255319149
+  ],
+  "place_torch": [
+   224,
+   94.28191489361703
+  ],
+  "wake_up": [
+   224,
+   98.93617021276596
+  ],
+  "make_iron_sword": [
+   224,
+   65.15957446808511
+  ]
+ },
+ "pending_track": {
+  "defeat_gnome_archer": {
+   "session": 222,
+   "links": []
+  }
+ },
+ "breadth_frontier": 5,
+ "tier_locked_last": [],
+ "access_caps": {
+  "session": 224,
+  "caps": {
+   "defeat_kobold": {
+    "frontier": "enter_gnomish_mines",
+    "frontier_idx": 1,
+    "reach_frac": 0.2793,
+    "cond": 0.0105,
+    "certified": false,
+    "n_episodes": 1024,
+    "reached_n": 286
+   },
+   "defeat_gnome_warrior": {
+    "frontier": "enter_gnomish_mines",
+    "frontier_idx": 1,
+    "reach_frac": 0.2793,
+    "cond": 0.7692,
+    "certified": true,
+    "n_episodes": 1024,
+    "reached_n": 286
+   },
+   "enchant_sword": {
+    "frontier": "enter_gnomish_mines",
+    "frontier_idx": 1,
+    "reach_frac": 0.2793,
+    "cond": 0.0,
+    "certified": false,
+    "n_episodes": 1024,
+    "reached_n": 286
+   }
+  }
+ }
+}

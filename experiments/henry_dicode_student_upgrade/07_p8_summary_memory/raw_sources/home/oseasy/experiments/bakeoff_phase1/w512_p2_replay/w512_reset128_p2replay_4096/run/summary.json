@@ -1,0 +1,41 @@
+{
+  "label": "W512-RESET128-P2REPLAY",
+  "steps": 4096,
+  "gpu_uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+  "carry_mode": "reset128",
+  "seed": 42,
+  "lr": 2e-05,
+  "global_step": 4096,
+  "update_count": 1,
+  "total_episodes": 4,
+  "total_updates": 1,
+  "accepted_policy_updates": 1,
+  "kl_rejected_updates": 0,
+  "hindsight_attempts": 4,
+  "hindsight_eligible": 4,
+  "any_nan": false,
+  "total_time_s": 322.2,
+  "saved_checkpoints": {
+    "0": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd",
+    "4096": "9586673b972c8eda2b201a5e3d07a8283edb19812c483b68a3f5f9fec170c425"
+  },
+  "replay_size": 4,
+  "source_fingerprint": {
+    "params_sha256": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd",
+    "param_count": 5268013,
+    "value": 3.575946569442749,
+    "top_action": 12,
+    "top_prob": 0.7183421850204468
+  },
+  "budget": {
+    "num_envs": 16,
+    "rollout_steps": 128,
+    "num_updates": 2,
+    "total_env_steps": 4096,
+    "save_steps": [
+      0,
+      4096
+    ],
+    "carry_mode": "reset128"
+  }
+}

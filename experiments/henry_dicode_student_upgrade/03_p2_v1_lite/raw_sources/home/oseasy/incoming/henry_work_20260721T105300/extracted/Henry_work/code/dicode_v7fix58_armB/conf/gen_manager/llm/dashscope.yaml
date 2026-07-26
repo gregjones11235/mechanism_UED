@@ -1,0 +1,27 @@
+provider: dashscope
+base_url: https://dashscope-us.aliyuncs.com/compatible-mode/v1
+# v6 cost-saving (v6模型省钱策略.md): the DiCode-baseline reasoning FM (Qwen3-235B-A22B-Thinking)
+# moved from DeepInfra -> Alibaba 百炼 美国(弗吉尼亚) dashscope-us (人民币计价, Oscar延迟极低). Used by
+# task_generator / env_generator / interestingness_critic (env_generator = the code-compilation role
+# with reflection retries + think=true = biggest out-token sink, so moving it off DeepInfra is the win).
+#
+# ⚠️ v7fix4 (v7模型省钱策略.md §9, 拍板 2026-07-10): this llm-group config is NO LONGER REFERENCED
+# by any override — env_generator moved to llm/deepseek.yaml (DeepSeek-V4-Pro official, output 2.7x
+# cheaper + automatic prompt caching); the task_generator/interestingness_critic dashscope overrides
+# were DELETED (dead roles in the coop path — critic is never instantiated, task_designer never
+# queried; they fall back to local_gen, loud-fail if an unexpected live path ever calls them).
+# proposer[1]'s Qwen3.5-397B stays on dashscope but is configured INLINE in auction_c_v6siege.yaml's
+# `proposers:` list, not through this file. Also: this model id (qwen3-235b-a22b-thinking-2507) is
+# scheduled for DELISTING 2026-10-10. File kept for reference / rollback only.
+#
+# ✅实测确认 (Oscar 2026-07-04): model id 'qwen3-235b-a22b-thinking-2507' 在 dashscope-us /models 中,
+# enable_thinking:true -> reasoning ON (459 reasoning_tokens). llm.py provider=='dashscope' 发此开关。
+model: qwen3-235b-a22b-thinking-2507
+llm_type: generation
+max_tokens: 32768
+temperature: 0.6
+top_p: 0.95
+# think=true: this IS the reasoning FM (same role as the DeepInfra baseline). Keep thinking on.
+# ⚠️ verify thinking actually engages on Alibaba's endpoint (its extra_body switch support may
+# differ from DeepInfra's vLLM): grep reasoning_content non-empty / out tokens not collapsed.
+think: true

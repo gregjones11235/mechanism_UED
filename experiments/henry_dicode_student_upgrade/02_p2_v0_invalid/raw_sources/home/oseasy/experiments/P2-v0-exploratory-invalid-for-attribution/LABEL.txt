@@ -1,0 +1,22 @@
+LABEL: P2-v0-exploratory-invalid-for-attribution
+VERDICT: SEVERE_REGRESSION_FROM_HEALTHY_STAGE4_BASELINE
+CREATED_UTC: 2026-07-22
+DIRECTOR: local_CC_sole_controller (single-director mandate; no sub-CC)
+
+TREATMENT: AMAGO_STYLE_EXPLORATORY_P2 (directive D059, Experiment A)
+SOURCE_WORKDIR: /home/oseasy/experiments/henry_student_p2_amago_20260721
+ARCHIVE_TYPE: independent read-only COPY (sibling dir, NOT inside the workdir)
+
+STATUS:
+  - NOT_VALID_EVIDENCE_FOR_P2_MECHANISM
+  - CONTAINS_KNOWN_ALIGNMENT_AND_PPO_MISSING_BUGS (see KNOWN_ISSUES.md)
+  - CHECKPOINTS_98304_AND_122880 = historical v0 artifacts only
+  - NEVER resume from 98304 or 122880
+  - NEVER use 122880>98304 as evidence P2 works (local recovery in a degraded state)
+
+READ-ONLY POLICY:
+  - Read-only (chmod a-w) applied ONLY to the true-copied subtrees of THIS archive.
+  - checkpoints/98304/replay_meta.pkl is a HARDLINK to the original workdir file
+    (same inode 11407285, 0 extra disk); it is deliberately NOT chmod'd, so the
+    original workdir permission is unaffected. Its integrity is anchored by SHA256.
+  - The ORIGINAL workdir was NOT chmod'd, modified, moved, or deleted.

@@ -1,0 +1,139 @@
+{
+  "label": "P3_ATTRIBUTION_GATES",
+  "arms": [
+    "DETACH",
+    "MATCHED_MLP"
+  ],
+  "gates": {
+    "G1_G2_public_params_bit_identical": {
+      "pass_": true,
+      "public_sha_teacher": "ede4860bb16babe8",
+      "public_sha_full": "ede4860bb16babe8",
+      "public_sha_detach": "ede4860bb16babe8",
+      "public_sha_mlp": "ede4860bb16babe8",
+      "detach_full_tree_eq_full": true,
+      "full_init_sha16": "5ae94ed0257f50fa",
+      "known_full_init_sha16": "5ae94ed0257f50fa",
+      "teacher_sha16": "d4e85af58b7f87d6",
+      "known_teacher_sha16": "d4e85af58b7f87d6"
+    },
+    "G3_config_diff_empty_except_ablation": {
+      "pass_": true,
+      "detach_tree_eq_full": true,
+      "mlp_removed_keys": [
+        "slow_gru"
+      ],
+      "mlp_added_keys": [
+        "slow_mlp_1",
+        "slow_mlp_2"
+      ],
+      "mlp_common_subtrees_identical": true
+    },
+    "G4_protocol_identical": {
+      "pass_": true,
+      "diff_keys": [],
+      "config": {
+        "NUM_ENVS": "16",
+        "ROLLOUT_STEPS": "128",
+        "TOTAL_STEPS": "24576",
+        "MASTER_SEED": "42",
+        "LR": "2e-5",
+        "ADAM_EPS": "1e-5",
+        "GAMMA": "0.999",
+        "GAE_LAMBDA": "0.8",
+        "CLIP_EPS": "0.2",
+        "VF_COEF": "0.5",
+        "ENT_COEF": "0.002",
+        "MAX_GRAD_NORM": "1.0",
+        "WINDOW_MEM": "128",
+        "WINDOW_GRAD": "64",
+        "NUM_HEADS": "8",
+        "NUM_LAYERS": "2",
+        "EMBED_SIZE": "256",
+        "HIDDEN_LAYERS": "256",
+        "QKV_FEATURES": "256",
+        "OPTIMISTIC_RESET_RATIO": "16",
+        "NUM_MINIBATCHES": "2",
+        "UPDATE_EPOCHS": "1",
+        "SAVE_STEPS": "0, 4096, 24576"
+      }
+    },
+    "G6_env_no_crosstalk": {
+      "pass_": true,
+      "detach_no_crosstalk": true,
+      "mlp_no_crosstalk": true,
+      "detach_env0_changed": false,
+      "mlp_env0_changed": false,
+      "note": "env0 unchanged at init is expected (zero-init residual gate); crosstalk = env1..3 unchanged"
+    },
+    "G9_slow_module_grad": {
+      "pass_": true,
+      "full": true,
+      "detach": true,
+      "mlp": true,
+      "full_norms": {
+        "pool_q": 0.00051,
+        "pool_k": 0.000506,
+        "pool_v": 0.003984,
+        "slow_in": 0.003952,
+        "slow_gru": 0.005513,
+        "slow_read": 0.003802,
+        "slow_to_actor": 0.000316
+      },
+      "detach_norms": {
+        "pool_q": 0.00051,
+        "pool_k": 0.000506,
+        "pool_v": 0.003984,
+        "slow_in": 0.003952,
+        "slow_gru": 0.005513,
+        "slow_read": 0.003802,
+        "slow_to_actor": 0.000316
+      },
+      "mlp_norms": {
+        "pool_q": 0.001901,
+        "pool_k": 0.001887,
+        "pool_v": 0.019344,
+        "slow_in": 0.019187,
+        "slow_mlp_1": 0.030987,
+        "slow_mlp_2": 0.030771,
+        "slow_read": 0.017437,
+        "slow_to_actor": 0.001378
+      }
+    },
+    "DA_detach_blocks_backbone_grad": {
+      "pass_": true,
+      "backbone_grad_differs": true,
+      "backbone_grad_rel_diff": 0.9162648320198059,
+      "full_transformer_grad_norm": 0.005768714472651482,
+      "detach_transformer_grad_norm": 0.0023337644524872303,
+      "detach_slow_branch_still_trains": true
+    },
+    "MB_mlp_param_match": {
+      "pass_": true,
+      "gru_params": 394240,
+      "mlp_params": 394240,
+      "mlp_match_pct": 0.0,
+      "total_params_full": 5695020,
+      "total_params_mlp": 5695020,
+      "total_equal": true
+    },
+    "MR_mlp_non_recurrent": {
+      "pass_": true,
+      "mlp_h_independent_of_prev_h": true,
+      "full_h_depends_on_prev_h": true
+    },
+    "G10_separate_output_dirs": {
+      "pass_": true,
+      "detach_dir": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_slowgru_reset128_attribution/train_detach",
+      "mlp_dir": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_slowgru_reset128_attribution/train_mlp"
+    },
+    "frozen_network_integrity": {
+      "pass_": true,
+      "attr_src_slowgru_network_sha16": "b265210597d00321",
+      "known_frozen_sha16": "b265210597d00321"
+    }
+  },
+  "ATTRIBUTION_GATES_PASS": true,
+  "trainer_level_gates": "G5(exact_resume)/G7(no_nan)/G8(entropy) verified by training runs",
+  "timestamp_utc": "2026-07-25T03:46:45Z"
+}

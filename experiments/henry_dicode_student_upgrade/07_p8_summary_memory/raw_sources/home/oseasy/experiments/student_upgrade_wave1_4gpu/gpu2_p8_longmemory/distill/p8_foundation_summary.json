@@ -1,0 +1,13 @@
+{
+  "inherited_leaves": 80,
+  "fresh_leaves": 12,
+  "teacher_equiv_logit_diff": 0.0,
+  "teacher_equiv_value_diff": 0.0,
+  "valid_summaries_after_run": 2,
+  "valid_after_true_done_reset": 0,
+  "env_isolation": 0.0,
+  "feature_off_diff": 0.0,
+  "K": 64,
+  "N": 16,
+  "coverage_steps": 1024
+}

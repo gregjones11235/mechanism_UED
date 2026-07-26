@@ -1,0 +1,43 @@
+{
+  "phase": "3",
+  "timestamp": "2026-07-22T04:37:02.620159+00:00",
+  "frozen_evaluator": {
+    "path": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/workers/gpu2_budgeted_soft_copeland/evidence/d052_pilot_via_run_session_eval.py",
+    "sha256": "01f7f92f5f4f4cbe5780cf82fc746cfbbd8c03827adf57dfad028d5904f80ee6"
+  },
+  "phase3_script": {
+    "path": "/home/oseasy/experiments/henry_student_p2_amago_20260721/evidence/d052_phase3_eval.py",
+    "sha256": "283bb6b18d0804de15d9367775390d50e5f2922655f1d6f5fe1f21882d29584c"
+  },
+  "config": {
+    "num_episodes_per_cell": 128,
+    "max_steps": 8192,
+    "eval_seed": 42,
+    "gpu": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+    "step": 98304,
+    "per_cell_isolation": "independent subprocess (avoid JAX memory fragmentation)"
+  },
+  "checkpoints": {
+    "auction_budgeted_x_lpg_hrl": {
+      "path": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_lpg_hrl/seed0_1784566018/checkpoints/98304",
+      "training": "auction_budgeted",
+      "aggregation": "lpg_hrl",
+      "cond_dim": 8,
+      "param_leaves": 57
+    },
+    "auction_budgeted_x_lpac": {
+      "path": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_lpac/seed0_1784565782/checkpoints/98304",
+      "training": "auction_budgeted",
+      "aggregation": "lpac",
+      "cond_dim": 8,
+      "param_leaves": 47
+    },
+    "auction_budgeted_x_clpa": {
+      "path": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_clpa/seed0_1784543391/checkpoints/98304",
+      "training": "auction_budgeted",
+      "aggregation": "clpa",
+      "cond_dim": 8,
+      "param_leaves": 47
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "all_gates_pass": true,
+  "description": "trajectory_replay + hindsight module tests",
+  "directive": "D059",
+  "failed": 0,
+  "gates": {
+    "Gate 3 (sample >128)": true,
+    "Gate 4 (reject truncated/fresh)": true,
+    "Gate 5 (literal achieved goals)": true,
+    "Gate 6 (reject fabricated)": true
+  },
+  "passed": 11,
+  "results": {
+    "Counters increment": "PASS",
+    "Gate 3: multiple lengths": "PASS",
+    "Gate 3: sample > 128": "PASS",
+    "Gate 4: reject fresh-state": "PASS",
+    "Gate 4: reject truncated-only": "PASS",
+    "Gate 5: achieved indices match": "PASS",
+    "Gate 5: auto-pick first achieved": "PASS",
+    "Gate 5: relabel achieved goal": "PASS",
+    "Gate 6: reject empty achievements": "PASS",
+    "Gate 6: reject fabricated goal": "PASS",
+    "Gate 6: reject fabricated sample": "PASS"
+  },
+  "source_hashes": {
+    "hindsight.py": "618524ba60148edd",
+    "trajectory_replay.py": "3b4ae1692363f1d5"
+  },
+  "step": 1,
+  "timestamp": "2026-07-23T04:13:02.909920+00:00",
+  "total": 11
+}

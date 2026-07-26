@@ -1,0 +1,69 @@
+# conf/gen_manager/default.yaml
+
+defaults:
+  - llm@task_generator: local_gen
+  - llm@env_generator: local_gen
+  - llm@interestingness_critic: local_gen
+  - llm@embedding_model: local_embed
+
+tags: []
+
+# --- Auction (multi-FM) method switches. Declared here (default OFF) so Hydra struct mode
+# --- accepts command-line overrides without crashing. auction=false == DiCode baseline. ---
+auction: false        # route ②description layer through evolve_mastered_auction
+auction_k: null       # #descriptions to keep after the auction (null -> #parents, fair budget)
+proposers: null       # list of N Proposer LLM configs; null -> reuse task_generator as sole proposer
+auction_endorsement: true   # run one round of Proposer cross-rating for the Endorsement bid term
+auction_w_cov: 1.0    # bid weight: Coverage (complementary achievement coverage, submodular)
+auction_w_end: 1.0    # bid weight: Endorsement (cross-rating agreement, modular)
+auction_w_amb: 1.0    # bid weight: AmbitionGain (depth x target-gap, modular)
+auction_w_lrn: 1.0    # bid weight: Learnability (parent's official p*(1-p), modular; balances depth bias)
+# Ability gate (2026-07-02, v1_experiment.md 10.9): anchor ambition to the student's reach so it
+# can't out-bid feasible on tiers the student hasn't consolidated. The prompt-side ABILITY_GATE is
+# REMOVED in v3 (persona templates carry no tier constraint, like baseline's plain evolve prompt);
+# over-reach control is bid-side ONLY: the ambition gap discount above the reachable ceiling. (the
+# ban starved tier-3 supply — v2 tier-3 held-out only ~60% of baseline while tier-1/2 were on par;
+# baseline mixes tier-3 in at tier-2~65% mastery and wins. Relax: lower threshold so the frontier
+# unlocks the next tier earlier, and soften decay so stretch levels still get a real voice.)
+# v3 (2026-07-02) values from a counterfactual replay on the v1 task_graph:
+#   threshold 0.60: tier-3 first in-reach ~session 15 (64% of sessions) - avoids the fragile s11-14
+#     window yet matches baseline mixing density; 0.50 re-opens the v1 B-band tier-3-crowds-out-tier-2
+#     pathology (in-reach from s10), 0.70 unlocks too late (s23).
+#   decay 0.40: in the pre-reach early window shrinks a tier-3 level's ambition bid to ~0.34
+#     (0.30 -> 0.26 too harsh now the prompt ban is gone; 0.50 -> 0.45 too permissive as bid is the
+#     sole brake).
+auction_ability_gate: true         # master switch for the ability gate (false -> legacy, no gate)
+auction_mastery_threshold: 0.60    # a tier is "mastered" at >= this mean SR; ceiling = first below
+auction_overreach_decay: 0.4       # geometric gap discount per tier beyond ceiling (1 over -> 0.40)
+
+num_generations: 5
+num_examples: 6
+num_parents: 1
+
+mode: ${dicode_manager.mode}
+graph_path: "task_graph.graphml"
+
+example_paths:
+  - src/minicraftax/tasks/seed_tasks/collecting.py
+  - src/minicraftax/tasks/seed_tasks/combat.py
+  - src/minicraftax/tasks/seed_tasks/crafting.py
+  - src/minicraftax/tasks/seed_tasks/survive.py
+
+prompts:
+  env_generation: "dicode.dreaming.prompts.cl_.gen_env"
+  wrapper_mechanics: "dicode.dreaming.prompts.cl_.minicraftax_coder"
+  wrapper_mechanics_r: "dicode.dreaming.prompts.cl_.minicraftax_coder_r"
+  craftax_mechanics: "dicode.dreaming.prompts.cl_.knowledge_base_designer"
+  craftax_code: "dicode.dreaming.prompts.cl_.craftax_coder"
+  evolve_mastered: "dicode.dreaming.prompts.dicode.evolve"
+  evolve_mastered_r: "dicode.dreaming.prompts.cl_.evolve_mastered_r"
+  ablation: "dicode.dreaming.prompts.dicode.ablation"
+  # v2 persona-differentiated proposer prompts (auction only). Keyed by persona name used in
+  # gen_manager.personas; each reuses DiCode's hardcore blocks, differs only in role/guiding principle.
+  persona_ambitious: "dicode.dreaming.prompts.dicode.persona_ambitious"
+  persona_feasible: "dicode.dreaming.prompts.dicode.persona_feasible"
+  persona_breadth: "dicode.dreaming.prompts.dicode.persona_breadth"
+  persona_ambitious_coop: "dicode.dreaming.prompts.dicode.persona_ambitious_coop"
+  # v7fix3 P4: the ECOLOGY role — never receives the siege directive; gets the system-computed
+  # ecology brief (starved families / declines / breadth spawn frontier) instead.
+  persona_ecology_coop: "dicode.dreaming.prompts.dicode.persona_ecology_coop"

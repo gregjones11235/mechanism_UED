@@ -1,0 +1,89 @@
+{
+  "label": "P3_LONGRUN_RESUME_GATES",
+  "ckpt": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru_reset128/train_24576/ckpt/24576/full_state.pkl",
+  "gates": {
+    "G1_24576_sha_matches": {
+      "pass_": true,
+      "ckpt_params_sha256": "2ffdd269b94e1e6b37877d55ed315232867f2adc78d5518ac43fd346ead07a70",
+      "manifest_params_sha256": "2ffdd269b94e1e6b37877d55ed315232867f2adc78d5518ac43fd346ead07a70",
+      "known": "2ffdd269b94e1e6b37877d55ed315232867f2adc78d5518ac43fd346ead07a70",
+      "carry_mode": "RESET128"
+    },
+    "G2_trees_complete": {
+      "pass_": true,
+      "present_keys": [
+        "params",
+        "opt_state",
+        "opt_step",
+        "env_state",
+        "memories",
+        "memories_mask",
+        "memories_mask_idx",
+        "obs",
+        "done",
+        "true_done",
+        "longstate",
+        "step_env_currentloop",
+        "update_step",
+        "rng",
+        "global_step",
+        "config",
+        "code_sha256",
+        "manifest"
+      ],
+      "missing_keys": [],
+      "config_complete": true,
+      "n_param_leaves": 102,
+      "n_opt_leaves": 205
+    },
+    "G3_restore_no_reinit": {
+      "pass_": true,
+      "restored_params_sha256": "2ffdd269b94e1e6b37877d55ed315232867f2adc78d5518ac43fd346ead07a70",
+      "opt_step": 24,
+      "update_step": 12,
+      "note": "opt_step==24 & update_step==12 (NOT reset to 0) -> training continues from 24576; live first-step continuation verified by smoke + real run"
+    },
+    "G4_boundary_clear_preserved": {
+      "pass_": true,
+      "trainer_has_clear_block": true,
+      "init_ls_hash16": "229bcd099658fc1b",
+      "known_init_ls_hash16": "229bcd099658fc1b",
+      "init_ls_match": true,
+      "note": "live boundary_clear_pass verified by smoke + real run reset128_gates"
+    },
+    "G5_gtrxl_unchanged": {
+      "pass_": true,
+      "longrun_network_sha16": "b265210597d00321",
+      "known_frozen_sha16": "b265210597d00321"
+    },
+    "G6_env_no_crosstalk": {
+      "pass_": true,
+      "no_crosstalk": true,
+      "env0_changed": true
+    },
+    "G7_det_config_unchanged": {
+      "pass_": true,
+      "config_mismatches": {},
+      "xla_det_flag": true,
+      "xla_flags": "--xla_gpu_deterministic_ops=true",
+      "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    },
+    "G8_no_nan_inf": {
+      "pass_": true,
+      "params_finite": true,
+      "opt_state_finite": true
+    },
+    "G9_entropy_no_collapse": {
+      "pass_": true,
+      "verified_by": "smoke + real run per_update entropy range",
+      "note": "Phase2 training of this exact ckpt had healthy entropy; live re-verified at each save node"
+    },
+    "G10_roundtrip": {
+      "pass_": true,
+      "reload_bit_exact": true
+    }
+  },
+  "LONGRUN_GATES_PASS": true,
+  "live_gates": "G3(live first-step)/G4(live boundary_clear)/G9(entropy) completed by smoke + real run",
+  "timestamp_utc": "2026-07-25T03:49:08Z"
+}

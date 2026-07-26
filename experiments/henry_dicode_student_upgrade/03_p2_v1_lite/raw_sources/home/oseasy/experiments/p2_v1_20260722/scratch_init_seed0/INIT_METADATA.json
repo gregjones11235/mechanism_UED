@@ -1,0 +1,67 @@
+{
+  "action_dim": 43,
+  "all_pass": true,
+  "artifact": "scratch_init_seed0 (common random init for from-scratch fair comparison)",
+  "embedding_size": 67,
+  "encoder_kernel": [
+    8335,
+    256
+  ],
+  "frozen_code_sha256": {
+    "checkpointing.py": "9b8cf1a276aeda4173494ae3d9575dec74df7e93d435ff2c056a810bc3c5a56a",
+    "long_context_learner.py": "6689426b77bb030c8ce3a3a3c97ddab7bd0248d2eaa1d477146dff44ccf1c386",
+    "p2_v1_core.py": "6e20d2e60b638e45bba7ba32cdb44b3b871d8ca69b61f47239dff23e1e798974",
+    "stage4_continue_launcher.py": "36ec9cd9eef7f3408b6b8680be7d2d21552be4577e78946cf0948b0b9ca9079f"
+  },
+  "gates": {
+    "artifact_saved": true,
+    "encoder_kernel_8335_256": true,
+    "fresh_opt_step_0": true,
+    "launcher_init_bitexact": true,
+    "launcher_init_fresh_opt0": true,
+    "launcher_init_opt_count0": true,
+    "launcher_init_replay_empty": true,
+    "launcher_init_step0": true,
+    "launcher_init_update0": true,
+    "obs_dim_8335": true,
+    "params_finite": true,
+    "reload_bitexact": true
+  },
+  "init_seed": 0,
+  "network_config": {
+    "activation": "relu",
+    "embed_size": 256,
+    "gating": true,
+    "gating_bias": 2.0,
+    "hidden_layers": 256,
+    "num_heads": 8,
+    "num_layers": 2,
+    "qkv_features": 256,
+    "window_grad": 64,
+    "window_mem": 128
+  },
+  "obs_dim": 8335,
+  "optimizer_config": {
+    "anneal_lr": false,
+    "eps": 1e-05,
+    "fresh_opt_step_at_init": 0,
+    "lr": 0.0002,
+    "max_grad_norm": 1.0,
+    "type": "optax.chain(clip_by_global_norm(max_grad_norm), adam(lr, eps=1e-5))"
+  },
+  "param_leaves": 80,
+  "params_sha256": "e78426c8fe9097d26039c982e64185fbc8db4695a175ed2e37a839fb7e37d48e",
+  "ppo_config": {
+    "clip_eps": 0.2,
+    "ent_coef": 0.002,
+    "gae_lambda": 0.8,
+    "gamma": 0.999,
+    "num_envs": 16,
+    "num_minibatches": 2,
+    "rollout_steps": 128,
+    "update_epochs": 1,
+    "vf_coef": 0.5
+  },
+  "scratch_step0_dir": "/home/oseasy/experiments/p2_v1_20260722/scratch_init_seed0/0",
+  "training_seed": 42
+}

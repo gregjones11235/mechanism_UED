@@ -1,0 +1,731 @@
+{
+  "actor_enabled": false,
+  "actor_loss": 0.0,
+  "detail": [
+    {
+      "changed": false,
+      "group": "actor_head",
+      "param": "['params']['actor_ln1']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "actor_head",
+      "param": "['params']['actor_ln1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "actor_head",
+      "param": "['params']['actor_ln2']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "actor_head",
+      "param": "['params']['actor_ln2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "actor_head",
+      "param": "['params']['actor_out']['bias']",
+      "shape": [
+        43
+      ]
+    },
+    {
+      "changed": false,
+      "group": "actor_head",
+      "param": "['params']['actor_out']['kernel']",
+      "shape": [
+        256,
+        43
+      ]
+    },
+    {
+      "changed": true,
+      "group": "critic_head",
+      "param": "['params']['critic_ln1']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": true,
+      "group": "critic_head",
+      "param": "['params']['critic_ln1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": true,
+      "group": "critic_head",
+      "param": "['params']['critic_ln2']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": true,
+      "group": "critic_head",
+      "param": "['params']['critic_ln2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": true,
+      "group": "critic_head",
+      "param": "['params']['critic_out']['bias']",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "changed": true,
+      "group": "critic_head",
+      "param": "['params']['critic_out']['kernel']",
+      "shape": [
+        256,
+        1
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['encoder']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['encoder']['kernel']",
+      "shape": [
+        128,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['key']['bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['key']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['out']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['out']['kernel']",
+      "shape": [
+        8,
+        32,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['pos_embed_mat']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['query']['bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['query']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['r_r_bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['r_w_bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['value']['bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['attention1']['value']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['dense1']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['dense1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['dense2']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['dense2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['Dense_0']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['Dense_1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['Dense_2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['Dense_3']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['Dense_4']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['Dense_5']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate1']['gating_bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['Dense_0']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['Dense_1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['Dense_2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['Dense_3']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['Dense_4']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['Dense_5']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['gate2']['gating_bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['ln1']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['ln1']['scale']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['ln2']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_0']['ln2']['scale']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['key']['bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['key']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['out']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['out']['kernel']",
+      "shape": [
+        8,
+        32,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['pos_embed_mat']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['query']['bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['query']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['r_r_bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['r_w_bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['value']['bias']",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['attention1']['value']['kernel']",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['dense1']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['dense1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['dense2']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['dense2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['Dense_0']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['Dense_1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['Dense_2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['Dense_3']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['Dense_4']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['Dense_5']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate1']['gating_bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['Dense_0']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['Dense_1']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['Dense_2']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['Dense_3']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['Dense_4']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['Dense_5']['kernel']",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['gate2']['gating_bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['ln1']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['ln1']['scale']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['ln2']['bias']",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "changed": false,
+      "group": "shared_trunk",
+      "param": "['params']['transformer']['tf_layers_1']['ln2']['scale']",
+      "shape": [
+        256
+      ]
+    }
+  ],
+  "directive": "P2-v1 \u65b9\u68482 replay-aux param-isolation probe (#57/#61)",
+  "grad_norm": 0.9774763584136963,
+  "groups": {
+    "actor_head": {
+      "changed": 0,
+      "total": 6
+    },
+    "critic_head": {
+      "changed": 6,
+      "total": 6
+    },
+    "shared_trunk": {
+      "changed": 0,
+      "total": 68
+    }
+  },
+  "isolated_to_critic_head": true,
+  "replay_actor_update": false,
+  "timestamp_utc": "2026-07-23T04:12:47.936069+00:00",
+  "value_loss": 0.11942437291145325
+}

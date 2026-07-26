@@ -1,0 +1,777 @@
+{
+  "action_dim": 43,
+  "ckpt17500": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+  "config": {
+    "activation": "relu",
+    "anneal_lr": false,
+    "bonus_type": "none",
+    "clip_eps": 0.2,
+    "completion_bonus_min": 0.0,
+    "completion_bonus_scale": 0.0,
+    "condition_on_task": true,
+    "dynamic_bonus_k": 0.0,
+    "embed_size": 256,
+    "ent_coef": 0.002,
+    "gae_lambda": 0.8,
+    "gamma": 0.999,
+    "gating": true,
+    "gating_bias": 2.0,
+    "hidden_layers": 256,
+    "lr": 0.0002,
+    "max_grad_norm": 1.0,
+    "min_lr": 2e-06,
+    "num_envs": 16,
+    "num_heads": 8,
+    "num_layers": 2,
+    "num_minibatches": 2,
+    "num_steps": 128,
+    "qkv_features": 256,
+    "update_epochs": 1,
+    "vf_coef": 0.5,
+    "window_grad": 64,
+    "window_mem": 128
+  },
+  "dummy_zero_obs_policy": {
+    "logits_first8": [
+      -9.392315864562988,
+      -10.215399742126465,
+      -7.697440147399902,
+      -11.381686210632324,
+      -2.8874144554138184,
+      -9.045611381530762,
+      -28.658676147460938,
+      -13.582037925720215
+    ],
+    "probs": {
+      "entropy": 0.9791407585144043,
+      "top5_actions": [
+        12,
+        18,
+        4,
+        11,
+        21
+      ],
+      "top5_probs": [
+        0.7181775569915771,
+        0.14443069696426392,
+        0.055720098316669464,
+        0.03948848694562912,
+        0.025713149458169937
+      ]
+    },
+    "value": 3.5761349201202393
+  },
+  "gpu_uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+  "leaves": [
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/actor_ln1/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/actor_ln1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/actor_ln2/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/actor_ln2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 43,
+      "path": "params/actor_out/bias",
+      "shape": [
+        43
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 11008,
+      "path": "params/actor_out/kernel",
+      "shape": [
+        256,
+        43
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/critic_ln1/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/critic_ln1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/critic_ln2/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/critic_ln2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 1,
+      "path": "params/critic_out/bias",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/critic_out/kernel",
+      "shape": [
+        256,
+        1
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/encoder/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 2133760,
+      "path": "params/transformer/encoder/kernel",
+      "shape": [
+        8335,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/attention1/key/bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/attention1/key/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/attention1/out/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/attention1/out/kernel",
+      "shape": [
+        8,
+        32,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/attention1/pos_embed_mat/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/attention1/query/bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/attention1/query/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/attention1/r_r_bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/attention1/r_w_bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/attention1/value/bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/attention1/value/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/dense1/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/dense1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/dense2/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/dense2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate1/Dense_0/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate1/Dense_1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate1/Dense_2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate1/Dense_3/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate1/Dense_4/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate1/Dense_5/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/gate1/gating_bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate2/Dense_0/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate2/Dense_1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate2/Dense_2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate2/Dense_3/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate2/Dense_4/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_0/gate2/Dense_5/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/gate2/gating_bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/ln1/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/ln1/scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/ln2/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_0/ln2/scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/attention1/key/bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/attention1/key/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/attention1/out/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/attention1/out/kernel",
+      "shape": [
+        8,
+        32,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/attention1/pos_embed_mat/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/attention1/query/bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/attention1/query/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/attention1/r_r_bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/attention1/r_w_bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/attention1/value/bias",
+      "shape": [
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/attention1/value/kernel",
+      "shape": [
+        256,
+        8,
+        32
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/dense1/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/dense1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/dense2/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/dense2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate1/Dense_0/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate1/Dense_1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate1/Dense_2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate1/Dense_3/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate1/Dense_4/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate1/Dense_5/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/gate1/gating_bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate2/Dense_0/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate2/Dense_1/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate2/Dense_2/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate2/Dense_3/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate2/Dense_4/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 65536,
+      "path": "params/transformer/tf_layers_1/gate2/Dense_5/kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/gate2/gating_bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/ln1/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/ln1/scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/ln2/bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "n": 256,
+      "path": "params/transformer/tf_layers_1/ln2/scale",
+      "shape": [
+        256
+      ]
+    }
+  ],
+  "num_leaves": 80,
+  "obs_dim": 8335,
+  "params_sha256": "5dfe67dda87ef15aa716276730de7685d73ac4096761abbc405fc7198cc6cd61",
+  "task_embedding_size": 67,
+  "total_params": 4906028
+}

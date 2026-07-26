@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Measure EXACTLY which parameter leaves the replay AUXILIARY update changes.
+
+Scientific-boundary probe for #57 section 三(B) / 六(3): "replay must NOT modify
+Actor params" / "Actor NOT modified by replay aux path".
+
+With replay_actor_update=False the actor-surrogate term is disabled
+(actor_loss=0).  But the value-aux loss backprops through the value head AND the
+shared encoder/transformer trunk that the actor also uses.  This probe runs ONE
+replay aux update on the REAL network and reports, per parameter leaf, whether
+the replay aux update changed it — grouped as actor-head / critic-head /
+shared-trunk (encoder + transformer layers).  This gives the user a definitive,
+measured basis to decide whether condition (3) is met.
+
+Read-only w.r.t. checkpoints; runs on CPU.
+"""
+import os
+import sys
+import json
+from datetime import datetime, timezone
+
+import numpy as np
+import jax
+import jax.numpy as jnp
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+import stage4_continue_launcher as L
+from long_context_learner import LongContextLearner
+from trajectory_replay import ReplaySample
+
+OBS_DIM = 128
+EMB = 67
+N_ACH = 67
+ACTION_DIM = 43
+
+
+def classify(path_str):
+    p = path_str.lower()
+    if "actor" in p:
+        return "actor_head"
+    if "critic" in p:
+        return "critic_head"
+    # encoder + transformer layers are the shared trunk
+    return "shared_trunk"
+
+
+def main():
+    print("=" * 64)
+    print("Replay-aux parameter-change probe (real network, CPU)")
+    print("=" * 64)
+    cfg = L.Cfg()
+    network = L.ActorCriticTransformer(
+        action_dim=ACTION_DIM, activation=cfg.activation,
+        hidden_layers=cfg.hidden_layers, encoder_size=cfg.embed_size,
+        num_heads=cfg.num_heads, qkv_features=cfg.qkv_features,
+        num_layers=cfg.num_layers, gating=cfg.gating,
+        gating_bias=cfg.gating_bias)
+    learner = LongContextLearner(network, cfg, jax.random.PRNGKey(0))
+
+    WM, LAY, E, W = cfg.window_mem, cfg.num_layers, cfg.embed_size, cfg.window_grad
+    rng = jax.random.PRNGKey(0)
+    params = network.init(rng, jnp.zeros((1, WM, LAY, E)),
+                          jnp.zeros((1, W, OBS_DIM)),
+                          jnp.zeros((1, cfg.num_heads, W, WM + W), dtype=jnp.bool_),
+                          method=network.model_forward_train)
+
+    # nonterminal replay sample (episode_done=False) -> exercises value bootstrap
+    r = np.random.RandomState(0)
+    length = 200
+    obs = (r.randn(length, OBS_DIM) * 0.1).astype(np.float32)
+    tgt = np.zeros(N_ACH, np.float32); tgt[0] = 1.0
+    obs[:, OBS_DIM - EMB:] = tgt[:EMB]
+    sample = ReplaySample(
+        observations=obs,
+        actions=r.randint(0, ACTION_DIM, length).astype(np.int32),
+        rewards=(r.randn(length) * 0.1).astype(np.float32),
+        dones=np.zeros(length, bool),
+        values=(r.randn(length) * 0.1).astype(np.float32),
+        log_probs=r.randn(length).astype(np.float32),
+        initial_memory=(r.randn(WM, LAY, E) * 0.01).astype(np.float32),
+        achievements=np.zeros((length, N_ACH), np.float32),
+        target_achievements=tgt, source_trajectory_id=0, start_step=0,
+        length=length,
+        memory_sequence=(r.randn(length, WM, LAY, E) * 0.01).astype(np.float32),
+        next_observations=np.concatenate([obs[1:], obs[-1:]], 0).copy(),
+        next_value=0.0, episode_done=False)
+
+    from flax.training.train_state import TrainState
+    import optax
+    tx = optax.chain(optax.clip_by_global_norm(cfg.max_grad_norm),
+                     optax.adam(cfg.lr, eps=1e-5))
+    ts = TrainState.create(apply_fn=network.apply, params=params, tx=tx)
+
+    ts2, metrics = learner.update(ts, sample, current_update_count=2,
+                                  replay_actor_update=False)
+
+    flat_old = jax.tree_util.tree_leaves_with_path(ts.params)
+    flat_new = dict((p, v) for p, v in
+                    jax.tree_util.tree_leaves_with_path(ts2.params))
+    groups = {"actor_head": [0, 0], "critic_head": [0, 0],
+              "shared_trunk": [0, 0]}   # [changed, total]
+    detail = []
+    for path, oldv in flat_old:
+        ps = jax.tree_util.keystr(path)
+        newv = flat_new[path]
+        changed = bool(jnp.any(jnp.asarray(oldv) != jnp.asarray(newv)))
+        g = classify(ps)
+        groups[g][1] += 1
+        if changed:
+            groups[g][0] += 1
+        detail.append({"param": ps, "group": g, "changed": changed,
+                       "shape": list(np.asarray(oldv).shape)})
+
+    print(f"  actor_enabled (replay actor term) = {metrics['actor_enabled']}")
+    print(f"  actor_loss = {metrics['actor_loss']}")
+    print(f"  value_loss = {metrics['value_loss']:.6f}  "
+          f"grad_norm = {metrics['grad_norm']:.6f}")
+    print("\n  param-leaf change groups (changed/total):")
+    for g in ("actor_head", "critic_head", "shared_trunk"):
+        c, t = groups[g]
+        print(f"    {g:14s}: {c}/{t} changed")
+
+    report = {
+        "directive": "P2-v1 replay-aux param-change boundary probe (#57 三B/六3)",
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "replay_actor_update": False,
+        "actor_enabled": bool(metrics["actor_enabled"]),
+        "actor_loss": float(metrics["actor_loss"]),
+        "value_loss": float(metrics["value_loss"]),
+        "grad_norm": float(metrics["grad_norm"]),
+        "groups": {g: {"changed": groups[g][0], "total": groups[g][1]}
+                   for g in groups},
+        "detail": detail,
+    }
+    ev = os.path.join(os.path.dirname(__file__), "..", "evidence")
+    os.makedirs(ev, exist_ok=True)
+    with open(os.path.join(ev, "replay_aux_param_change_probe.json"), "w") as f:
+        json.dump(report, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print("\n  evidence: evidence/replay_aux_param_change_probe.json")
+
+
+if __name__ == "__main__":
+    main()

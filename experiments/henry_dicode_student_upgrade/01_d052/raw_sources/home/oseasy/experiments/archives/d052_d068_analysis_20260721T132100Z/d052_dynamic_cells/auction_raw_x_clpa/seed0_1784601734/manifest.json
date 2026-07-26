@@ -1,0 +1,22 @@
+{
+  "aggregation": "auction_raw",
+  "cache_influence": 0.0,
+  "cell": "auction_raw_x_clpa",
+  "commit": "e6765fb26d2cca8b7a49bd3b1ce6a2626d72f69b",
+  "directive": "052",
+  "gate_passed": true,
+  "gate_violations": 0,
+  "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "llm_judgments": true,
+  "mechanism": "auction_raw",
+  "no_api_ppo": true,
+  "output_dir": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_clpa/seed0_1784601734",
+  "protocol": "PURE_DYNAMIC_D052",
+  "rounds": 4,
+  "seed": 0,
+  "status": "COMPLETED",
+  "steps_per_round": 24576,
+  "timestamp": 1784610578.3522503,
+  "total_steps": 98304,
+  "training": "clpa"
+}

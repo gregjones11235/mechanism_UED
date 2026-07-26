@@ -1,0 +1,57 @@
+{
+  "label": "LC_SLOWGRU_BAKEOFF_QUALIFICATION",
+  "candidate": "SlowGRU (GPU2 candidate B)",
+  "network": "LC-SLOWGRU-PPO",
+  "at_step": 24576,
+  "note": "Eval script used the relative floor3 criterion (retain >=90% of same-step Control). QUALIFIED on the literal bakeoff gate. ABLATION CAVEAT: the long-term slow state is NOT the causal driver of the gain (D_off >= A_on).",
+  "anchors_reproduced": {
+    "BASELINE_teacher17500_SR_pp": 39.453125,
+    "CTL_24576_SR_pp": 36.328125,
+    "CTL_24576_matches_canonical": true
+  },
+  "slowgru_vs_control": {
+    "A_on_SR_pp": 42.96875,
+    "CTL_SR_pp": 36.328125,
+    "SR_delta_pp": 6.640625,
+    "SR_delta_worlds": 17,
+    "floor3_delta_pp": 7.421875,
+    "floor3_retain_vs_ctl": 1.1712,
+    "cond_kill_delta_pp": 0.77,
+    "death_delta_pp": -5.46875,
+    "timeout_delta_pp": -1.171875,
+    "sewers_delta_pp": 7.421875,
+    "note_vs_baseline": "SlowGRU@24576 (42.97%) EXCEEDS the healthy teacher17500 baseline (39.45%) by +3.52pp."
+  },
+  "ablation_SR_pp": {
+    "A_on": 42.96875,
+    "B_clear_each_step": 42.1875,
+    "C_hdim_perm": 41.40625,
+    "D_short_only_off": 43.75,
+    "interpretation": "D_off (43.75%) >= A_on (42.97%): disabling the slow channel IMPROVES SR slightly. B_clear (42.19%, h forced to 0 so slow channel contributes nothing) is also ~ A_on. => the +6.64pp gain over Control lives ENTIRELY in the co-trained SHORT-TERM policy; the accumulated slow state contributes ~0 (A_on - B_clear = +0.78pp) and is neutral-to-slightly-harmful (A_on - D_off = -0.78pp)."
+  },
+  "significance": {
+    "mcnemar_p": 0.071838,
+    "paired_bootstrap_SRdiff_CI95_pp": [0.0, 13.28],
+    "verdict": "MARGINALLY significant: +6.64pp = +17 worlds; McNemar p=0.072 (not <0.05); 95% CI lower bound exactly 0. Much stronger than EventMemory32 but still not below the 0.05 threshold."
+  },
+  "memory_engagement": {
+    "slow_to_actor_norm_init": 0.0,
+    "slow_to_actor_norm_24576": 0.0257,
+    "gate10_action_kl_on_vs_off": 0.0000643,
+    "gate10_pass": true,
+    "memory_used_by_gate": true,
+    "caveat": "gate10 KL=6.4e-5 is very small; combined with D_off>=A_on, the slow state is barely used and not beneficial."
+  },
+  "qualification_criteria": {
+    "SR_drop_pass": true,
+    "floor3_pass": true,
+    "death_pass": true,
+    "directional_signal": true,
+    "memory_used": true,
+    "gate10_pass": true,
+    "gates_1_10_pass": true
+  },
+  "SLOWGRU": "QUALIFIED",
+  "SLOWGRU_with_caveat": "QUALIFIED on the gate and CLEARLY the stronger performer vs EventMemory32 (+6.64pp vs +1.17pp). BUT the causal ablation shows the gain is from the co-trained short-term policy, NOT the long-term slow state (D_off >= A_on). Advancing SlowGRU as a long-term-memory STRUCTURE is therefore not clearly justified by the mechanism, even though the trained arm is strong.",
+  "timestamp_utc": "2026-07-25T04:28:00Z"
+}

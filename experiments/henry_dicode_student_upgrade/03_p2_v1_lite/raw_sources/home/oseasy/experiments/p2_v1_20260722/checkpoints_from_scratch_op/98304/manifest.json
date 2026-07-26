@@ -1,0 +1,22 @@
+{
+  "action_rng_state_saved": true,
+  "aux_opt_state_saved": false,
+  "checkpoint_step": 98304,
+  "collector_state_saved": true,
+  "counters": {
+    "gradient_updates": 48,
+    "relabelled_samples": 0,
+    "replay_samples_drawn": 0,
+    "target_achievement_coverage": {},
+    "total_sequence_length": 0,
+    "trajectories_collected": 409,
+    "trajectories_inserted": 409
+  },
+  "global_step": 98304,
+  "pending_buffers_saved": true,
+  "pending_total_transitions": 3335,
+  "replay_buffer_size": 256,
+  "replay_longest_trajectory": 1550,
+  "timestamp_utc": "2026-07-23T09:54:47.479002+00:00",
+  "update_count": 48
+}

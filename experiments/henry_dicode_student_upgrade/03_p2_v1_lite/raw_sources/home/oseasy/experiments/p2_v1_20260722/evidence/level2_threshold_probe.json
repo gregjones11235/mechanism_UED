@@ -1,0 +1,58 @@
+{
+  "all_max_le_rollout_steps": true,
+  "conclusion": "REPLAY_AUX_UNREACHABLE: captured trajectory length is bounded by rollout_steps=128 < MIN_SEQUENCE_LENGTH=129, so can_sample() is always False regardless of env-step budget.",
+  "config": {
+    "MIN_SEQUENCE_LENGTH": 129,
+    "NUM_ENVS": 4,
+    "ROLLOUT_STEPS": 128,
+    "num_updates_per_probe": 24
+  },
+  "directive": "P2-v1 Level 2 threshold probe (\u9636\u6bb54)",
+  "min_seq_gt_rollout_steps": true,
+  "probe_passed": true,
+  "replay_aux_reachable": false,
+  "replay_can_sample_ever": false,
+  "results_by_ep_len": {
+    "ep_len_128": {
+      "can_sample_ever": false,
+      "max_le_rollout_steps": true,
+      "max_len": 128,
+      "min_len": 128,
+      "num_trajectories": 96,
+      "replay_size": 96
+    },
+    "ep_len_129": {
+      "can_sample_ever": false,
+      "max_le_rollout_steps": true,
+      "max_len": 23,
+      "min_len": 1,
+      "num_trajectories": 92,
+      "replay_size": 92
+    },
+    "ep_len_200": {
+      "can_sample_ever": false,
+      "max_le_rollout_steps": true,
+      "max_len": 120,
+      "min_len": 8,
+      "num_trajectories": 60,
+      "replay_size": 60
+    },
+    "ep_len_4096": {
+      "can_sample_ever": false,
+      "max_le_rollout_steps": true,
+      "max_len": 0,
+      "min_len": null,
+      "num_trajectories": 0,
+      "replay_size": 0
+    },
+    "ep_len_50": {
+      "can_sample_ever": false,
+      "max_le_rollout_steps": true,
+      "max_len": 50,
+      "min_len": 2,
+      "num_trajectories": 244,
+      "replay_size": 244
+    }
+  },
+  "timestamp_utc": "2026-07-22T15:58:54.583515+00:00"
+}

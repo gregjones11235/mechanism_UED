@@ -1,0 +1,26 @@
+{
+  "control": {
+    "sr": 0.0,
+    "n_episodes": 2298
+  },
+  "egomap": {
+    "sr": 0.0,
+    "n_episodes": 2209
+  },
+  "comparison": {
+    "sr_diff_pp": 0.0,
+    "ci_95": [
+      0.0,
+      0.0
+    ],
+    "mcnemar_chi2": 0.0,
+    "mcnemar_b": 0,
+    "mcnemar_c": 0
+  },
+  "positive_gate": {
+    "sr_ge_control_plus_8pp": false,
+    "no_collapse": true,
+    "verdict": "NO_POSITIVE_SIGNAL"
+  },
+  "note": "Both arms SR=0.000 at 98304 steps from ckpt17500. DEFEAT_KOBOLD is a hard achievement; 98304 fine-tune steps insufficient. EgoMap mechanism is structurally sound (G1-G6 all passed) but no positive signal on this task/budget."
+}

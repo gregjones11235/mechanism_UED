@@ -1,0 +1,38 @@
+{
+  "all_pass": true,
+  "checkpoint": "/home/oseasy/experiments/p2_v1_20260722/checkpoints/2048",
+  "directive": "P2-v1 Level 1 acceptance (\u9636\u6bb51 gates 10/14/15)",
+  "gates": {
+    "10_params_changed_vs_session175": true,
+    "10sanity_base_differs_from_random": true,
+    "10sanity_ckpt_differs_from_random": true,
+    "11_restored_params_finite": true,
+    "14_restore_succeeds": true,
+    "15_action_rng_state_present": true,
+    "15_global_step_2048": true,
+    "15_optimizer_step_matches_updates": true,
+    "15_optimizer_step_trained_not_fresh": true,
+    "15_replay_len_3": true,
+    "15_roundtrip_action_rng_stream": true,
+    "15_roundtrip_global_step": true,
+    "15_roundtrip_opt_bitexact": true,
+    "15_roundtrip_params_bitexact": true,
+    "15_roundtrip_replay_len": true,
+    "15_roundtrip_rng_equal": true,
+    "15_roundtrip_update_count": true,
+    "15_update_count_1": true
+  },
+  "jax_devices": "[CudaDevice(id=0)]",
+  "restored": {
+    "action_rng_state_present": true,
+    "global_step": 2048,
+    "optimizer_step": 2,
+    "optimizer_step_derivation": "2 minibatches * 1 epochs * 1 update_count",
+    "optimizer_step_expected": 2,
+    "replay_len": 3,
+    "update_count": 1
+  },
+  "session175_source_sha256": "5dfe67dda87ef15aa716276730de7685d73ac4096761abbc405fc7198cc6cd61",
+  "timestamp_utc": "2026-07-22T15:51:44.846131+00:00",
+  "training_log": "/home/oseasy/experiments/p2_v1_20260722/outputs/stage4_continue/session_20260722T152440Z/training_log.jsonl"
+}

@@ -1,0 +1,231 @@
+"""Tests for GreedyTopKSelector: correctness, assembled-bid submodularity, and (1-1/e) bound."""
+
+import itertools
+import math
+import random
+
+import pytest
+
+from auction.coverage import coverage
+from auction.mock_proposals import random_pool, random_proposal
+from auction.proposal import Proposal
+from auction.selectors import (
+    GreedyTopKSelector,
+    SelectionContext,
+    assembled_marginal_bid,
+    bid_breakdown,
+)
+
+
+def _p(pid, achs, proposer="mock"):
+    return Proposal(pid, proposer, "task_0", "d", "r", frozenset(achs))
+
+
+# ---------------------------------------------------------------------------
+# Basic correctness
+# ---------------------------------------------------------------------------
+
+def test_picks_complementary_not_redundant():
+    # Greedy on Coverage should pick complementary proposals, not three copies of the best one.
+    a = _p("a", {"defeat_archer"})                 # weight 8
+    a_dup = _p("a2", {"defeat_archer"})            # same coverage -> redundant
+    b = _p("b", {"defeat_necromancer"})            # weight 8, disjoint
+    sel = GreedyTopKSelector().select([a, a_dup, b], k=2, context=SelectionContext())
+    ids = {p.proposal_id for p in sel}
+    assert ids == {"a", "b"} or ids == {"a2", "b"}  # never {a, a2}
+
+
+def test_k_bounds():
+    pool = [_p("a", {"collect_wood"}), _p("b", {"collect_stone"})]
+    assert GreedyTopKSelector().select(pool, 0, SelectionContext()) == []
+    assert len(GreedyTopKSelector().select(pool, 5, SelectionContext())) == 2  # clamped to pool
+    assert GreedyTopKSelector().select([], 3, SelectionContext()) == []
+
+
+def test_already_covered_changes_choice():
+    a = _p("a", {"defeat_archer"})
+    b = _p("b", {"collect_wood", "collect_stone"})  # weight 1+1=2 vs a's 8
+    ctx_fresh = SelectionContext()
+    # fresh: a (8) beats b (2)
+    assert GreedyTopKSelector().select([a, b], 1, ctx_fresh)[0].proposal_id == "a"
+    # if archive already covers defeat_archer, a gives 0 new -> b wins
+    ctx = SelectionContext(already_covered=frozenset({"defeat_archer"}))
+    assert GreedyTopKSelector().select([a, b], 1, ctx)[0].proposal_id == "b"
+
+
+# ---------------------------------------------------------------------------
+# Term normalization: rescue a small-magnitude term (Learnability) from being drowned
+# (job 3591148: amb 55-71% share, lrn 0.1-0.8% at equal weights due to scale mismatch)
+# ---------------------------------------------------------------------------
+
+def test_normalization_rescues_drowned_learnability():
+    from auction.craftax_achievements import ALL_ACHIEVEMENTS
+    # Two candidates with SAME coverage/ambition (so those don't decide), differing ONLY in
+    # Learnability. Ambition is huge (many deep achievements w/ gap) so raw lrn (<=0.25) is dwarfed.
+    achs = frozenset(list(ALL_ACHIEVEMENTS)[:1])
+    lo = Proposal("lo", "p0", "parent_lo", "d", "r", achs)
+    hi = Proposal("hi", "p1", "parent_hi", "d", "r", achs)  # identical coverage
+    gap = {a: 1.0 for a in ALL_ACHIEVEMENTS}                # huge ambition for both, equal
+    parent_lrn = {"parent_lo": 0.0, "parent_hi": 0.25}      # hi is in the learnable band, lo is not
+
+    # RAW: ambition dominates; lrn difference (0 vs 0.25) is negligible vs ambition (~tens).
+    # Both have identical ambition/coverage, so lrn SHOULD be the tiebreaker even raw — but its
+    # weighted magnitude is tiny. Normalized makes lrn a full [0,1] term ⇒ 'hi' clearly wins.
+    ctx_norm = SelectionContext(target_gap=gap, parent_learnability=parent_lrn, normalize_terms=True)
+    winner = GreedyTopKSelector().select([lo, hi], 1, ctx_norm)[0]
+    assert winner.proposal_id == "hi"  # learnability now has real voice
+
+    # Under normalization, with a strong w_lrn, learnability share must be non-trivial (not <1%).
+    bd = bid_breakdown([hi], SelectionContext(
+        target_gap=gap, parent_learnability=parent_lrn, w_lrn=1.0, normalize_terms=True,
+    ), all_proposals=[lo, hi])
+    assert bd["per_winner"][0]["shares"]["lrn"] > 0.05  # rescued from the <5% drowned zone
+
+
+def test_normalization_preserves_submodular_coverage_pick():
+    # Normalizing Coverage by a pool constant must NOT change the complementary-vs-redundant logic.
+    a = _p("a", {"defeat_archer"})
+    a_dup = _p("a2", {"defeat_archer"})
+    b = _p("b", {"defeat_necromancer"})
+    sel = GreedyTopKSelector().select([a, a_dup, b], k=2, context=SelectionContext(normalize_terms=True))
+    ids = {p.proposal_id for p in sel}
+    assert ids == {"a", "b"} or ids == {"a2", "b"}  # still complementary, never {a, a2}
+
+
+def test_normalize_terms_off_reproduces_raw():
+    # normalize_terms=False must give byte-identical behaviour to the pre-fix raw magnitudes.
+    from auction.craftax_achievements import ALL_ACHIEVEMENTS
+    achs = frozenset(list(ALL_ACHIEVEMENTS)[:1])
+    p = Proposal("x", "p0", "par", "d", "r", achs)
+    gap = {a: 1.0 for a in ALL_ACHIEVEMENTS}
+    ctx = SelectionContext(target_gap=gap, parent_learnability={"par": 0.25}, normalize_terms=False)
+    bd = bid_breakdown([p], ctx, all_proposals=[p])
+    # raw ambition contribution equals ambition_gain unchanged (divisor 1.0)
+    from auction.ambition import ambition_gain
+    assert abs(bd["per_winner"][0]["amb"] - ambition_gain(p, gap)) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# bid_breakdown: the "voice" reporting helper (§3.5 drowned/dominating watch)
+# ---------------------------------------------------------------------------
+
+def test_bid_breakdown_shares_sum_to_one_and_match_totals():
+    # Two disjoint deep achievements; add endorsement + ambition + learnability signals.
+    a = _p("a", {"defeat_archer"}, proposer="proposer_0")       # tier -> cov weight 8
+    b = _p("b", {"collect_wood"}, proposer="proposer_1")        # cov weight 1
+    winners = [a, b]
+    ratings = {"proposer_0": {"b": 0.4}, "proposer_1": {"a": 0.8}}
+    from auction.craftax_achievements import ALL_ACHIEVEMENTS
+    gap = {x: 0.0 for x in ALL_ACHIEVEMENTS}
+    gap["defeat_archer"] = 0.5
+    ctx = SelectionContext(
+        cross_ratings=ratings,
+        target_gap=gap,
+        parent_learnability={"task_0": 0.2},
+    )
+    bd = bid_breakdown(winners, ctx, all_proposals=winners)
+    # every winner's four shares sum to 1 (when total>0)
+    for w in bd["per_winner"]:
+        assert abs(sum(w["shares"].values()) - 1.0) < 1e-9
+    # per-winner weighted terms sum to that winner's total
+    for w in bd["per_winner"]:
+        assert abs((w["cov"] + w["end"] + w["amb"] + w["lrn"]) - w["total"]) < 1e-9
+    # aggregate total equals sum of per-winner totals
+    assert abs(bd["totals"]["total"] - sum(w["total"] for w in bd["per_winner"])) < 1e-9
+    # by_proposer counts each persona once here
+    assert bd["by_proposer"] == {"proposer_0": 1, "proposer_1": 1}
+
+
+def test_bid_breakdown_coverage_uses_selection_order():
+    # Two winners cover the SAME achievement; the second (in order) must get 0 marginal coverage.
+    a = _p("a", {"defeat_archer"}, proposer="p0")
+    a2 = _p("a2", {"defeat_archer"}, proposer="p1")  # redundant coverage
+    bd = bid_breakdown([a, a2], SelectionContext(), all_proposals=[a, a2])
+    assert bd["per_winner"][0]["cov"] > 0.0
+    assert bd["per_winner"][1]["cov"] == 0.0  # already covered by the first -> marginal 0
+
+
+def test_bid_breakdown_weights_scale_contributions():
+    a = _p("a", {"defeat_archer"}, proposer="p0")
+    base = bid_breakdown([a], SelectionContext(w_cov=1.0), all_proposals=[a])
+    scaled = bid_breakdown([a], SelectionContext(w_cov=3.0), all_proposals=[a])
+    assert abs(scaled["per_winner"][0]["cov"] - 3.0 * base["per_winner"][0]["cov"]) < 1e-9
+
+
+def test_bid_breakdown_no_signals_all_coverage():
+    # With no endorsement/ambition/learnability, all voice goes to Coverage.
+    a = _p("a", {"defeat_archer"}, proposer="p0")
+    bd = bid_breakdown([a], SelectionContext(), all_proposals=[a])
+    assert bd["avg_share"]["cov"] == 1.0
+    assert bd["avg_share"]["end"] == 0.0
+    assert bd["avg_share"]["amb"] == 0.0
+    assert bd["avg_share"]["lrn"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Assembled-bid submodularity (the discipline: WHOLE bid, not just Coverage)
+# ---------------------------------------------------------------------------
+
+def test_assembled_bid_is_submodular():
+    rng = random.Random(7)
+    for _ in range(1000):
+        pool = random_pool(rng, rng.randint(2, 8))
+        # random modular signals
+        ratings = {
+            f"r{i}": {p.proposal_id: rng.random() for p in pool} for i in range(3)
+        }
+        from auction.craftax_achievements import ALL_ACHIEVEMENTS
+        gap = {a: rng.random() for a in ALL_ACHIEVEMENTS}
+        ctx = SelectionContext(cross_ratings=ratings, target_gap=gap)
+        cut = rng.randint(0, len(pool))
+        S, T = pool[:cut], pool
+        x = random_proposal(rng, "x")
+        gS = assembled_marginal_bid(x, S, ctx)
+        gT = assembled_marginal_bid(x, T, ctx)
+        assert gS >= gT - 1e-9, f"assembled bid not submodular: {gS} < {gT}"
+
+
+# ---------------------------------------------------------------------------
+# (1 - 1/e) guarantee: greedy >= 0.632 * brute-force-optimal k-subset coverage
+# ---------------------------------------------------------------------------
+
+def _brute_force_best_coverage(pool, k, ctx):
+    best = 0.0
+    for combo in itertools.combinations(pool, k):
+        c = coverage(combo, ctx.weights, already_covered=ctx.already_covered)
+        best = max(best, c)
+    return best
+
+
+def test_greedy_meets_one_minus_one_over_e_bound():
+    rng = random.Random(11)
+    ratio = 1.0 - 1.0 / math.e  # ~0.632
+    ctx = SelectionContext()  # pure Coverage so brute force is well-defined
+    for _ in range(300):
+        n = rng.randint(3, 8)
+        k = rng.randint(1, n)
+        pool = random_pool(rng, n)
+        greedy = GreedyTopKSelector().select(pool, k, ctx)
+        greedy_cov = coverage(greedy, ctx.weights)
+        opt_cov = _brute_force_best_coverage(pool, k, ctx)
+        if opt_cov > 0:
+            assert greedy_cov >= ratio * opt_cov - 1e-9, (
+                f"(1-1/e) violated: greedy={greedy_cov} < {ratio}*opt={ratio*opt_cov}"
+            )
+
+
+def test_greedy_often_optimal_in_practice():
+    # In practice greedy on coverage is usually exactly optimal; sanity that it's not far off.
+    rng = random.Random(12)
+    ctx = SelectionContext()
+    hits = 0
+    trials = 100
+    for _ in range(trials):
+        n = rng.randint(3, 6)
+        k = rng.randint(1, n)
+        pool = random_pool(rng, n)
+        greedy = coverage(GreedyTopKSelector().select(pool, k, ctx), ctx.weights)
+        opt = _brute_force_best_coverage(pool, k, ctx)
+        if abs(greedy - opt) < 1e-9:
+            hits += 1
+    assert hits >= trials * 0.7  # greedy is exactly optimal in the large majority of cases

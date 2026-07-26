@@ -1,0 +1,52 @@
+{
+  "blocked": false,
+  "checkpoint_path": "/home/oseasy/experiments/henry_student_p2_amago_20260721/checkpoints/98304",
+  "checkpoint_step": 98304,
+  "ckpt_param_leaves": 80,
+  "crash_info": null,
+  "directive": "D068",
+  "elapsed_s": 500.0,
+  "episodes_crash": 0,
+  "episodes_total": 128,
+  "episodes_valid": 128,
+  "evaluation_type": "native_henry_p2_forward_eval",
+  "finished_utc": "2026-07-21T13:11:45.551983+00:00",
+  "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "inf_count": 0,
+  "memory_interface": {
+    "mask_shape": [
+      16,
+      8,
+      1,
+      129
+    ],
+    "mem_out_shape": [
+      16,
+      2,
+      256
+    ],
+    "mem_shape": [
+      16,
+      128,
+      2,
+      256
+    ]
+  },
+  "nan_count": 0,
+  "num_envs": 16,
+  "pid": 1350096,
+  "seed": 0,
+  "started_utc": "2026-07-21T13:03:25.601912+00:00",
+  "tier3_achievements_found": [
+    "COLLECT_IRON",
+    "ENTER_DUNGEON",
+    "MAKE_IRON_PICKAXE",
+    "MAKE_IRON_SWORD"
+  ],
+  "tier3_denominator": 128,
+  "tier3_numerator": 128,
+  "tier3_sr": 1.0,
+  "total_env_steps": 191456,
+  "treatment": "P2_AMAGO_STYLE_EXPLORATORY",
+  "verdict": "P2_TIER3_SR_NONZERO_VALID"
+}

@@ -1,0 +1,44 @@
+--- rmt_collect.py.before_env_params_fix	2026-07-25 19:24:36.976644375 +0800
++++ rmt_collect.py	2026-07-26 09:39:29.982881068 +0800
+@@ -82,11 +82,13 @@
+     rmt_cfg, carry_mode: str,
+     collected_update_count: int = 0,
+     apply_eval_rmt=None,
++    env_params=None,  # Craftax EnvParams (NOT network params); driver must pass explicitly
+ ):
+     """Run rollout_steps vectorized env steps; emit completed RMTTrajectories (w/ anchors).
+ 
+     Returns (trajectories, carry, stats). carry holds env/GTrXL/RMT/rng state for the next
+     rollout (memory/mask/idx AND rmt_state persist across rollouts for Persistent)."""
++    assert env_params is not None, 'collect_rollout_rmt: env_params (Craftax EnvParams) must be passed explicitly'
+     num_envs = int(np.asarray(obsv).shape[0])
+     if apply_eval_rmt is None:
+         apply_eval_rmt = make_apply_eval_rmt(network)
+@@ -128,7 +130,7 @@
+         obs_pre = np.asarray(obsv).copy()
+ 
+         rng, s_rng = jax.random.split(rng)
+-        next_obsv, env_state, reward_j, done_j, info = env.step(s_rng, env_state, actions_np)
++        next_obsv, env_state, reward_j, done_j, info = env.step(s_rng, env_state, actions_np, env_params)
+         reward_np = np.asarray(reward_j)
+         done_np = np.asarray(done_j).astype(bool)
+         next_obs_np = np.asarray(next_obsv).copy()
+--- train_rmt16_p2replay.py.before_env_params_fix	2026-07-25 19:28:43.442343682 +0800
++++ train_rmt16_p2replay.py	2026-07-26 09:39:29.982881068 +0800
+@@ -147,6 +147,7 @@
+     base_env, jax.random.PRNGKey(0), cfg.num_envs, 1, cfg.optimistic_reset_ratio,
+     jnp.array([1.0]), table)
+ env_params = env.default_params
++assert env_params is not None, 'env_params (Craftax EnvParams) must resolve before collect/env.step'
+ ACTION_DIM = int(env.action_space(env_params).n)
+ OBS_DIM = int(env.observation_space(env_params).shape[0])
+ fp_cfg.action_dim = ACTION_DIM; fp_cfg.obs_dim = OBS_DIM
+@@ -255,7 +256,7 @@
+         env, env_state, network, params, obsv, memories, mem_mask, mem_idx, rmt_state,
+         rng, action_rng, pending, target_achievement_1d, cfg.num_steps, cfg.window_mem,
+         cfg.num_heads, rmt_cfg, args.carry_mode, collected_update_count=update_count,
+-        apply_eval_rmt=apply_eval_rmt)
++        apply_eval_rmt=apply_eval_rmt, env_params=env_params)
+     env_state = carry["env_state"]; obsv = carry["obsv"]
+     memories = carry["memories"]; mem_mask = carry["mem_mask"]
+     mem_idx = carry["mem_idx"]; rmt_state = carry["rmt_state"]; rng = carry["rng"]

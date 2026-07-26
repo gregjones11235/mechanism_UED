@@ -1,0 +1,62 @@
+{
+  "pass_details": {
+    "finite_nonzero_gradient_update": true,
+    "hindsight_relabel_evidence": true,
+    "no_crash": true,
+    "num_grad_updates": 11,
+    "num_samples_long": 11,
+    "num_trajs_long": 31,
+    "params_changed_by_update": true,
+    "relabel_evidence": [
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      },
+      {
+        "from_goal_idx": 41,
+        "to_goal_idx": 0
+      }
+    ],
+    "replay_samples_from_long_sequence": true,
+    "total_env_steps_eq_24576": true,
+    "trajectories_longer_than_128": true
+  },
+  "stage": "A",
+  "status": "PASS"
+}

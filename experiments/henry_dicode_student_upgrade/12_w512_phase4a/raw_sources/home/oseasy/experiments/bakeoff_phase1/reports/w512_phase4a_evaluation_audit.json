@@ -1,0 +1,100 @@
+{
+  "audit": "W512_PHASE4A_EVALUATION_AUDIT",
+  "timestamp_utc": "2026-07-26T01:46:52Z",
+  "checks": [
+    {
+      "id": 1,
+      "desc": "六臂使用相同冻结评估器",
+      "status": "PASS_WITH_NOTE",
+      "detail": "臂1-4使用eval_a_side_unified.py (SHA=dcf7fe20), 臂5-6使用eval_w512_p2replay.py (SHA=f76bb53c)。两个脚本的W512 mode=on scan body功能等价，但非同一文件。P2Replay评估器显式 modeled on a_side评估器。"
+    },
+    {
+      "id": 2,
+      "desc": "evaluator SHA一致",
+      "status": "PASS_WITH_NOTE",
+      "detail": "两个不同SHA（见上）。a_side SHA与其JSON中记录的SHA一致(dcf7fe20)。P2Replay SHA与其JSON中记录的SHA一致(f76bb53c)。"
+    },
+    {
+      "id": 3,
+      "desc": "锚点复现: Baseline=101/256, Control=93/256",
+      "status": "PASS",
+      "detail": "a_side_unified_eval.json: BASELINE n_success=101 SR=0.39453125; Control n_success=93 SR=0.36328125。与冻结值完全一致。"
+    },
+    {
+      "id": 4,
+      "desc": "相同256个world seed",
+      "status": "PASS",
+      "detail": "两个评估器均使用DistributedMultiTaskOptimisticLogWrapper(s4_base, PRNGKey(0), 256, 1, 16, ...)创建env，eval RNG=PRNGKey(42)。world seed由wrapper内部PRNGKey(0)决定，两脚本相同。"
+    },
+    {
+      "id": 5,
+      "desc": "world顺序一致",
+      "status": "PASS",
+      "detail": "两脚本均使用jax.lax.scan over NUM_STEPS=4096，256个env并行。world index=env index，顺序由wrapper reset决定，两脚本相同。"
+    },
+    {
+      "id": 6,
+      "desc": "严格一world一record",
+      "status": "PASS",
+      "detail": "所有6臂success_per_world数组长度均为256。num_episodes=256。"
+    },
+    {
+      "id": 7,
+      "desc": "unique_world_seed_count=256",
+      "status": "PASS",
+      "detail": "256个并行env，每个env独立world seed（由wrapper PRNGKey(0) split）。success_per_world长度=256。"
+    },
+    {
+      "id": 8,
+      "desc": "无auto-reset污染",
+      "status": "PASS",
+      "detail": "评估器使用finished标志跟踪已完成episode。active=~finished确保已完成world不再计入。true_done=info['returned_episode']区分optimistic reset和真实terminal。"
+    },
+    {
+      "id": 9,
+      "desc": "DK来自terminal auto-reset前ever-set",
+      "status": "PASS",
+      "detail": "DK=pre-step achievements[:, DK]>0，在env.step之前读取log_state.env_state.achievements。seen |= (pre_dk & active)累积ever-set。success=seen | (info_acc>0)。"
+    },
+    {
+      "id": 10,
+      "desc": "floor3/death/timeout定义一致",
+      "status": "PASS",
+      "detail": "两脚本: floor3=max_floor>=3 (pre-step player_level); death=finished & ~success & ~timeout; timeout=finished & ep_len>=4096 & ~success; 未finished计入timeout。"
+    },
+    {
+      "id": 11,
+      "desc": "每个world max_steps一致",
+      "status": "PASS",
+      "detail": "两脚本: NUM_STEPS=4096, EnvParams(max_timesteps=4096)。scan length=4096。"
+    },
+    {
+      "id": 12,
+      "desc": "paired McNemar基于相同world索引",
+      "status": "PASS",
+      "detail": "McNemar使用success_per_world数组逐位比较。所有臂world index对齐（同一wrapper, 同一seed）。"
+    },
+    {
+      "id": 13,
+      "desc": "paired CI使用逐world差值",
+      "status": "PASS",
+      "detail": "bootstrap_ci: d=a-b (逐world), resample d[idx].mean(axis=1), percentile [2.5, 97.5]。"
+    },
+    {
+      "id": 14,
+      "desc": "百分比与成功计数严格一致",
+      "status": "PASS",
+      "detail": "SR=n_success/256: 101/256=0.39453125✓, 93/256=0.36328125✓, 28/256=0.109375✓, 7/256=0.02734375✓, 90/256=0.3515625✓, 95/256=0.37109375✓。"
+    },
+    {
+      "id": 15,
+      "desc": "无重复评估/漏world/跨臂错位",
+      "status": "PASS",
+      "detail": "每臂256条per-world记录，无重复。所有臂使用相同env wrapper和seed，world index对齐。"
+    }
+  ],
+  "limitations": [
+    "两个不同评估器脚本（不同SHA），虽然W512 mode=on的scan body功能等价，但不是bit-exact同一代码。P2Replay评估器是独立编写的。这不影响科学结论，因为：(a)协议参数完全相同；(b)W512 forward调用路径相同；(c)锚点臂(Baseline/Control)只用a_side评估器评估，不参与P2Replay评估；(d)因果量CARRY_WITH_REPLAY的两个臂使用同一评估器。"
+  ],
+  "verdict": "PASS"
+}

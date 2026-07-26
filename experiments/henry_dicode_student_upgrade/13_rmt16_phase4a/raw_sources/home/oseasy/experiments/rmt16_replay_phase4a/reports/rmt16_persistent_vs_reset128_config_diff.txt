@@ -1,0 +1,29 @@
+RMT16 Phase4A — Persistent(GPU2) vs Reset128(GPU3) 配置 diff
+======================================================================
+两臂共享(完全相同)的配置:
+  [相同] 健康起点: ckpt17500 (base_inner sha d4e85af58b7f87d6)
+  [相同] 网络结构: ActorCriticTransformerRMT16 (network_rmt16.py sha b5c37d7aa2e9cac1)
+  [相同] 参数 schema/初始化: step0 sha 2f8cd875993ae103 (两臂逐位相同)
+  [相同] PPO: lr=2e-5 adam_eps=1e-5 clip=0.2 vf_coef=0.5 ent_coef=0.002 grad_clip=1.0 update_epochs=1 num_minibatches=2 value_clip[-50,300]
+  [相同] GAE: gamma=0.999 lambda=0.8 (严禁改动)
+  [相同] Replay(P2-Full-A冻结): capacity=64 L_seq=512 K=4 (=2048/update) rho=c=1.0 beta=1.0 w_max=20 lambda_kl=0.01 w_vtrace=w_awr=0.5 EMA_tau=0.995 max_policy_lag=16 kl_replay_max=0.05(事务门) actor_step_scales={1,.5,.25,.125} 无优先采样
+  [相同] seed: 42
+  [相同] 环境: S4 DEFEAT_KOBOLD, num_envs=16, max_timesteps=4096
+  [相同] rollout: 128 步/update, online transitions/update=2048
+  [相同] optimizer: PPO=chain(clip_by_global_norm(1.0),adam(2e-5,eps=1e-5)); Replay=同 P2 build_optimizer(2e-5)
+  [相同] RNG 协议: rng_utils (action_rng seed=42)
+  [相同] checkpoint 协议: full_state.pkl + train_state.pkl
+  [相同] GTrXL 短期 memory: window_mem=128, 每步roll+写入, true done清零 (两臂相同, 健康Student原语义)
+  [相同] total_steps: smoke=4096 (保存 0/4096); 不自动续训
+
+唯一允许差异 (carry_mode 运行时标志, 不影响 params/网络/loss/LR/Replay/optimizer):
+  [GPU2 Persistent]  RMT tokens 跨128步 collector rollout 边界保留(携带更新后的tokens)，
+                     仅在对应环境 true done 时重置。
+  [GPU3 Reset128]    RMT tokens 在每个128步 collector rollout 边界恢复为初始(全0)，
+                     但单个128步 rollout 内部正常读取/更新并参与训练；true done 也重置。
+
+实现位点: rmt_memory_anchor.rmt_advance_tokens(carry_mode) —— 段边界处:
+  persistent -> mem_tokens <- 更新后tokens ; reset128 -> mem_tokens <- 0
+  两模式下 seg_buf/seg_count 都在边界复位; GTrXL memory 不受 carry_mode 影响。
+
+断言: 无网络结构差异 / 无 loss 差异 / 无 LR 差异 / 无 Replay 系数差异 / 无 optimizer 差异。

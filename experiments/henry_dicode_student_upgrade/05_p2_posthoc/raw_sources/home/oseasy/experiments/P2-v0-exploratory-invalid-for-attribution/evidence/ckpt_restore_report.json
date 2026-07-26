@@ -1,0 +1,110 @@
+{
+  "archive_sha256": "1fa512070e1111b3538bea8963bebd6319be411a82f9b9482baefc9a5ca7cec0",
+  "checkpoint_source": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+  "checkpoint_step": 17500,
+  "directive": "D059",
+  "env_protocol": {
+    "achievement_embedding_size": 67,
+    "floor": 2,
+    "max_timesteps": 4096,
+    "stage": 4,
+    "task": "defeat_kobold"
+  },
+  "gae_lambda": 0.8,
+  "gamma": 0.999,
+  "network_architecture": {
+    "embed_size": 256,
+    "gating": true,
+    "gating_bias": 2.0,
+    "hidden_layers": 256,
+    "num_heads": 8,
+    "num_layers": 2,
+    "type": "ActorCriticTransformer (GTrXL)",
+    "window_grad": 64,
+    "window_mem": 128
+  },
+  "newly_initialized": [],
+  "optimizer_continuation": "PARTIAL \u2014 optimizer state restored from ckpt 17500, but AMAGO-style learner changes architecture/optimizer semantics. Do not claim full optimizer continuation (D059 \u00a711).",
+  "optimizer_paths_restored": [
+    "opt_state.[1].[0]..count",
+    "opt_state.[1].[0]..mu.params.actor_ln1.bias",
+    "opt_state.[1].[0]..mu.params.actor_ln1.kernel",
+    "opt_state.[1].[0]..mu.params.actor_ln2.bias",
+    "opt_state.[1].[0]..mu.params.actor_ln2.kernel",
+    "opt_state.[1].[0]..mu.params.actor_out.bias",
+    "opt_state.[1].[0]..mu.params.actor_out.kernel",
+    "opt_state.[1].[0]..mu.params.critic_ln1.bias",
+    "opt_state.[1].[0]..mu.params.critic_ln1.kernel",
+    "opt_state.[1].[0]..mu.params.critic_ln2.bias",
+    "..."
+  ],
+  "optimizer_step_restored": 560000,
+  "parameter_count": 80,
+  "parameter_paths_restored": [
+    "params.actor_ln1.bias",
+    "params.actor_ln1.kernel",
+    "params.actor_ln2.bias",
+    "params.actor_ln2.kernel",
+    "params.actor_out.bias",
+    "params.actor_out.kernel",
+    "params.critic_ln1.bias",
+    "params.critic_ln1.kernel",
+    "params.critic_ln2.bias",
+    "params.critic_ln2.kernel",
+    "params.critic_out.bias",
+    "params.critic_out.kernel",
+    "params.transformer.encoder.bias",
+    "params.transformer.encoder.kernel",
+    "params.transformer.tf_layers_0.attention1.key.bias",
+    "params.transformer.tf_layers_0.attention1.key.kernel",
+    "params.transformer.tf_layers_0.attention1.out.bias",
+    "params.transformer.tf_layers_0.attention1.out.kernel",
+    "params.transformer.tf_layers_0.attention1.pos_embed_mat.kernel",
+    "params.transformer.tf_layers_0.attention1.query.bias",
+    "..."
+  ],
+  "parameter_sample": [
+    {
+      "dtype": "float32",
+      "path": "params.actor_ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "path": "params.actor_ln1.kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "path": "params.actor_ln2.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "path": "params.actor_ln2.kernel",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "dtype": "float32",
+      "path": "params.actor_out.bias",
+      "shape": [
+        43
+      ]
+    }
+  ],
+  "restore_status": "SUCCESS",
+  "skipped_params": [],
+  "timestamp_utc": "2026-07-21T03:21:01.604356+00:00",
+  "treatment": "AMAGO_STYLE_EXPLORATORY_P2",
+  "verdict": "CKPT 17500 weights loaded. Optimizer state preserved (step counter intact). Ready for AMAGO-style treatment initialization."
+}

@@ -1,0 +1,323 @@
+"""v7fix5.5 PROBE-AS-TOOL executor — the modeler's measurement tool, run on the MAIN thread.
+
+Ports the researcher probes (probe_kobold_death.py / probe_whatif.py, 2026-07-16/17) into the
+run itself: when the siege notebook holds a validated ``probe_pending`` request, this module
+rolls the CURRENT policy (live train_state — no checkpoint load) on the wall's CURRENT rung
+level (diagnose) or on a paired {base, one-knob variant} pair (whatif, same seeds), captures
+per-episode last-alive snapshots, and delivers a numbers-only report back to the notebook for
+the NEXT journal page.
+
+Contracts:
+  - The snapshot fields derive from siege_notebook.PROBE_SENSORS (single source — the filter
+    compiler, the journal's sensor list and this executor can never drift apart).
+  - Level code comes from TaskGenerator._relay_level_build (the SAME template the ladder
+    trains on; a variant is the same template rendered from a one-step knob dict) — never
+    string surgery.
+  - A probe only MEASURES: nothing here writes training state, seats, or rung readings.
+    GPU cost ~1-2 min (256 envs x 2048 steps) in the session gap.
+"""
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+from auction.siege_notebook import PROBE_SENSORS, PROBE_SNAPSHOT_K
+
+PROBE_NUM_ENVS = 256
+PROBE_NUM_STEPS = 2048
+
+
+def _snap_fn(spawn_floor: int):
+    """Single-env last-alive snapshot (vmapped) — fields == PROBE_SENSORS keys."""
+    from craftax.craftax.constants import BlockType, ItemType
+
+    ladder_vals = [ItemType.LADDER_DOWN.value]
+    if hasattr(ItemType, "LADDER_DOWN_BLOCKED"):
+        ladder_vals.append(ItemType.LADDER_DOWN_BLOCKED.value)
+    lava = BlockType.LAVA.value
+
+    def snap(s):
+        pos = s.player_position
+        lvl = s.player_level
+        x, y = pos[0], pos[1]
+
+        def mobstats(m):
+            mpos = m.position[lvl]
+            mask = m.mask[lvl]
+            d = jnp.abs(mpos - pos[None, :]).sum(axis=1)
+            d = jnp.where(mask, d, 9999)
+            return d.min(), (d <= 3).sum(), (d <= 8).sum()
+
+        mel_near, mel_c3, mel_c8 = mobstats(s.melee_mobs)
+        rng_near, rng_c3, rng_c8 = mobstats(s.ranged_mobs)
+
+        offs = jnp.array([(i, j) for i in (-1, 0, 1) for j in (-1, 0, 1)])
+        hw = jnp.array(s.map.shape[1:]) - 1
+        xy = jnp.clip(pos[None, :] + offs, 0, hw)
+        lava_n = (s.map[lvl, xy[:, 0], xy[:, 1]] == lava).sum()
+
+        lmask = jnp.zeros(s.item_map.shape[1:], dtype=bool)
+        for v in ladder_vals:
+            lmask = lmask | (s.item_map[lvl] == v)
+        hh, ww = s.item_map.shape[1], s.item_map.shape[2]
+        dmap = jnp.abs(jnp.arange(hh)[:, None] - x) + jnp.abs(jnp.arange(ww)[None, :] - y)
+        lad_d = jnp.where(lmask, dmap, 9999).min()
+
+        inv = s.inventory
+        rec = {
+            "health": s.player_health.astype(jnp.float32),
+            "food": jnp.asarray(s.player_food, jnp.int32),
+            "drink": jnp.asarray(s.player_drink, jnp.int32),
+            "energy": jnp.asarray(s.player_energy, jnp.int32),
+            "sleeping": jnp.asarray(s.is_sleeping, jnp.int32),
+            "floor": jnp.asarray(lvl, jnp.int32),
+            "melee_near": mel_near, "melee_c3": mel_c3, "melee_c8": mel_c8,
+            "ranged_near": rng_near, "ranged_c3": rng_c3, "ranged_c8": rng_c8,
+            "lava3x3": lava_n,
+            "ladder_dist": lad_d,
+            "kills_gate": jnp.asarray(s.monsters_killed[spawn_floor], jnp.int32) - 8,
+            "light": (
+                s.light_map[lvl, x, y].astype(jnp.float32)
+                if hasattr(s, "light_map") else jnp.float32(1.0)
+            ),
+            "inv_potions": jnp.asarray(getattr(inv, "potions", jnp.zeros(6)), jnp.int32).sum(),
+        }
+        for f in ("torches", "arrows", "stone", "wood"):
+            rec[f"inv_{f}"] = jnp.asarray(getattr(inv, f, 0), jnp.int32)
+        assert set(rec) == set(PROBE_SENSORS), (
+            f"snap fields drifted from PROBE_SENSORS: {set(rec) ^ set(PROBE_SENSORS)}"
+        )
+        return rec
+
+    return snap
+
+
+def _rollout(config, rng, train_state, code: str, wall: str, spawn_floor: int) -> dict:
+    """One condition's rollout: numpy arrays {finished, ep_len, success, died, death_<f>...}."""
+    from craftax.craftax.constants import Achievement
+    from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+
+    from dicode.network import ActorCriticTransformer
+    from dicode.task_utils import get_achievement_multi_hot
+    from dicode.wrappers_cl import DistributedMultiTaskOptimisticLogWrapper
+    from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+
+    cfg = config.training
+    ach = Achievement[wall.upper()]
+    table = jnp.array([get_achievement_multi_hot([ach])], dtype=jnp.float32)
+    emb = int(table.shape[1])
+
+    ns: dict = {}
+    exec(code, ns)  # noqa: S102 — our own system-built level template output
+    env_cls = ns["Env"]
+    ctor_params = EnvParams(max_timesteps=PROBE_NUM_STEPS)
+    base_env = MultiTaskMiniCraftaxEnv(
+        [env_cls], StaticEnvParams(), ctor_params, True,
+        conditioning_type="embedding", embedding_size=emb,
+    )
+    env = DistributedMultiTaskOptimisticLogWrapper(
+        base_env, jax.random.PRNGKey(0), PROBE_NUM_ENVS, 1, 16, jnp.array([1.0]), table
+    )
+    network = ActorCriticTransformer(
+        action_dim=base_env.action_space(ctor_params).n,
+        activation=cfg.activation, hidden_layers=cfg.hidden_layers,
+        encoder_size=cfg.embed_size, num_heads=cfg.num_heads,
+        qkv_features=cfg.qkv_features, num_layers=cfg.num_layers,
+        gating=cfg.gating, gating_bias=cfg.gating_bias,
+    )
+    snap = _snap_fn(int(spawn_floor))
+
+    rng, reset_rng = jax.random.split(rng)
+    obsv, log_state = env.reset(reset_rng, ctor_params)
+    vsnap = jax.vmap(snap)
+    death_rec = jax.tree.map(lambda x: jnp.zeros_like(x), vsnap(log_state.env_state))
+
+    memories = jnp.zeros((PROBE_NUM_ENVS, cfg.window_mem, cfg.num_layers, cfg.embed_size))
+    mem_mask = jnp.zeros((PROBE_NUM_ENVS, cfg.num_heads, 1, cfg.window_mem + 1), dtype=jnp.bool_)
+    mem_idx = jnp.zeros((PROBE_NUM_ENVS,), dtype=jnp.int32) + (cfg.window_mem + 1)
+    init = (
+        log_state, memories, mem_mask, mem_idx, obsv,
+        jnp.zeros((PROBE_NUM_ENVS,), dtype=jnp.bool_),   # done_prev
+        jnp.zeros((PROBE_NUM_ENVS,), dtype=jnp.bool_),   # finished
+        jnp.zeros((PROBE_NUM_ENVS,), dtype=jnp.int32),   # ep_len
+        jnp.zeros((PROBE_NUM_ENVS,), dtype=jnp.bool_),   # ach seen pre-step
+        jnp.zeros((PROBE_NUM_ENVS,), dtype=jnp.float32),  # ach info at done
+        death_rec, rng,
+    )
+    ach_idx = int(ach.value)
+
+    def step_fn(carry, _):
+        (log_state, memories, mem_mask, mem_idx, last_obs, done, finished, ep_len,
+         seen, info_acc, death_rec, rng) = carry
+        mem_idx = jnp.where(done, cfg.window_mem, jnp.clip(mem_idx - 1, 0, cfg.window_mem))
+        mem_mask = jnp.where(done[:, None, None, None], jnp.zeros_like(mem_mask), mem_mask)
+        ohot = jax.nn.one_hot(mem_idx, cfg.window_mem + 1)
+        ohot = ohot[:, None, None, :].repeat(cfg.num_heads, 1)
+        mem_mask = jnp.logical_or(mem_mask, ohot)
+
+        rng, a_rng, s_rng = jax.random.split(rng, 3)
+        pi, _, mem_out = network.apply(
+            train_state.params, memories, last_obs, mem_mask,
+            method=network.model_forward_eval,
+        )
+        action = pi.sample(seed=a_rng)
+        memories = jnp.roll(memories, -1, axis=1).at[:, -1].set(mem_out)
+
+        pre_state = log_state.env_state
+        next_obs, next_log_state, reward, next_done, info = env.step(
+            s_rng, log_state, action, ctor_params
+        )
+        active = ~finished
+        newly = next_done & active
+        cur = vsnap(pre_state)
+        death_rec = jax.tree.map(
+            lambda acc, c: jnp.where(newly.reshape((-1,) + (1,) * (c.ndim - 1)), c, acc),
+            death_rec, cur,
+        )
+        ep_len = ep_len + active.astype(jnp.int32)
+        # success = target achievement seen pre-step OR reported by the done-step info (an
+        # achievement earned on the terminal step never reaches a pre-step snapshot — the
+        # researcher probe tracked both for the same reason).
+        seen = seen | (pre_state.achievements[:, ach_idx].astype(bool) & active)
+        keys = [k for k in info if "Achievements" in k and wall.lower() in k.lower()]
+        if keys:
+            info_acc = info_acc + jnp.asarray(info[keys[0]], jnp.float32) * newly.astype(
+                jnp.float32
+            )
+        finished = finished | next_done
+        return (next_log_state, memories, mem_mask, mem_idx, next_obs, next_done,
+                finished, ep_len, seen, info_acc, death_rec, rng), None
+
+    final, _ = jax.lax.scan(step_fn, init, None, PROBE_NUM_STEPS)
+    (_, _, _, _, _, _, finished, ep_len, seen, info_acc, death_rec, _) = final
+
+    fin = np.asarray(finished)
+    ep = np.asarray(ep_len)
+    success = np.asarray(seen) | (np.asarray(info_acc) > 0)
+    timeout = fin & (ep >= PROBE_NUM_STEPS) & ~success
+    died = fin & ~success & ~timeout
+    out = {
+        "finished": fin, "ep_len": ep, "success": success, "timeout": timeout, "died": died,
+    }
+    for k, v in death_rec.items():
+        out[f"death_{k}"] = np.asarray(v)
+    return out
+
+
+def _pct(x) -> float:
+    return float(np.round(100.0 * np.mean(x), 1)) if len(x) else float("nan")
+
+
+def _marginals(death: dict) -> dict:
+    """Per-sensor stats over death snapshots: rate for binaries, p25/med/p75 otherwise."""
+    marg = {}
+    for f in sorted(PROBE_SENSORS):
+        v = death.get(f)
+        if v is None or not len(v):
+            continue
+        v = np.asarray(v, dtype=float)
+        lo, hi = PROBE_SENSORS[f]
+        if (lo, hi) == (0, 1):
+            marg[f] = {"rate_pct": float(np.round(100.0 * np.mean(v > 0), 1))}
+        else:
+            q = np.quantile(v, (0.25, 0.5, 0.75))
+            marg[f] = {"p25": float(np.round(q[0], 1)), "med": float(np.round(q[1], 1)),
+                       "p75": float(np.round(q[2], 1))}
+    return marg
+
+
+def _pick_snapshots(death: dict, filt: dict | None, rng_seed: int) -> tuple:
+    """K raw snapshots — filter-matched subset when a compiled filter is given, else uniform
+    random. Randomness only prevents deterministic-selection priors (design rule)."""
+    n = len(next(iter(death.values()))) if death else 0
+    if n == 0:
+        return [], 0
+    idx = np.arange(n)
+    matched = n
+    if filt:
+        v = np.asarray(death.get(filt["field"]), dtype=float)
+        op = filt["op"]
+        m = (v == filt["value"]) if op == "==" else (v > filt["value"]) if op == ">" \
+            else (v < filt["value"])
+        idx = idx[m]
+        matched = int(m.sum())
+        if matched == 0:
+            idx = np.arange(n)     # empty match -> uniform (reported via filter_matched=0)
+    rs = np.random.RandomState(rng_seed)
+    pick = rs.choice(idx, size=min(PROBE_SNAPSHOT_K, len(idx)), replace=False)
+    snaps = []
+    for i in pick:
+        snaps.append({
+            f: (round(float(death[f][i]), 2) if isinstance(death[f][i], (np.floating, float))
+                else int(death[f][i]))
+            for f in sorted(PROBE_SENSORS) if f in death
+        })
+    return snaps, matched
+
+
+def run_pending_probe(config, rng, train_state, gen_manager, session_idx: int,
+                      ckpt_step: int) -> None:
+    """Execute the notebook's pending probe and deliver the report (run_dicode Step 4c)."""
+    holder = getattr(gen_manager, "task_generator", None) or gen_manager
+    nb = getattr(holder, "_siege_notebook", None)
+    if nb is None:
+        return
+    pend = nb.probe_pending()
+    if not pend:
+        return
+    wall = str(pend.get("wall"))
+    kind = str(pend.get("kind"))
+    floor = nb.required_spawn_floor(wall)
+    if floor is None:
+        nb.clear_probe_pending("wall_no_longer_a_relay", session_idx)
+        return
+    scaffold = nb.relay_scaffold(wall)
+    stripped = bool(getattr(nb, "relay_kit_stripped", lambda _w: False)(wall))
+    # v7fix5.5 P2: a Tier-2 verify pair is only meaningful against the ladder context it was
+    # scheduled under — if the rung moved in between, drop it (budget spent; housekeeping
+    # reverts the hypothesis to `recorded` and may reschedule within the freshness window).
+    if pend.get("verify_hypothesis_id") is not None:
+        if int((scaffold or {}).get("sub_stage") or 0) != int(pend.get("verify_sub_stage") or 0):
+            nb.clear_probe_pending("ladder_moved_before_verify", session_idx)
+            return
+    _, base_code, _, _ = holder._relay_level_build(wall, int(floor), scaffold, stripped)
+    print(f"[siege][PROBE] session={session_idx}: executing {kind} on {wall} "
+          f"(floor {int(floor)}, {PROBE_NUM_ENVS} envs x {PROBE_NUM_STEPS} steps, "
+          f"ckpt {ckpt_step}).")
+
+    report = {
+        "wall": wall, "kind": kind, "ckpt_step": int(ckpt_step),
+        "n_envs": PROBE_NUM_ENVS,
+        # v7fix5.5 P2: the ladder context this measurement ran under — the hypothesis loop's
+        # free-verdict shortcut and stale-context guard both compare against these.
+        "spawn_floor": int(floor),
+        "sub_stage": int((scaffold or {}).get("sub_stage") or 0),
+    }
+    if kind == "whatif":
+        _, var_code, _, _ = holder._relay_level_build(
+            wall, int(floor), pend.get("variant_knobs"), stripped
+        )
+        base = _rollout(config, rng, train_state, base_code, wall, int(floor))
+        var = _rollout(config, rng, train_state, var_code, wall, int(floor))  # SAME rng: paired
+        b, v = _pct(base["success"]), _pct(var["success"])
+        report.update(
+            step_desc=pend.get("step_desc"), base_success_pct=b, variant_success_pct=v,
+            delta_pp=float(np.round(v - b, 1)),
+            base_timeout_pct=_pct(base["timeout"]), variant_timeout_pct=_pct(var["timeout"]),
+            axis=pend.get("axis"), direction=pend.get("direction"),
+        )
+    else:
+        o = _rollout(config, rng, train_state, base_code, wall, int(floor))
+        death = {k[len("death_"):]: v[o["died"]] for k, v in o.items()
+                 if k.startswith("death_")}
+        snaps, matched = _pick_snapshots(
+            death, pend.get("filter"), rng_seed=int(session_idx) * 1000 + 55
+        )
+        report.update(
+            success_pct=_pct(o["success"]), died_pct=_pct(o["died"]),
+            timeout_pct=_pct(o["timeout"]),
+            filter_used=pend.get("filter"), filter_error=pend.get("filter_error"),
+            filter_matched=matched, marginals=_marginals(death), snapshots=snaps,
+        )
+    nb.deliver_probe_report(report, session_idx)
+    print(f"[siege][PROBE] session={session_idx}: report delivered for {wall}/{kind}.")

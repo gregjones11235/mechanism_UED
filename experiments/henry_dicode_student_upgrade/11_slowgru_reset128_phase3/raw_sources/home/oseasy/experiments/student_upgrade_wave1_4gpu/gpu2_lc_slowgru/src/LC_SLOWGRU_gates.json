@@ -1,0 +1,42 @@
+{
+  "label": "LC_SLOWGRU_GATES",
+  "network": "LC_SLOWGRU",
+  "gates": {
+    "gate1_feature_off": {
+      "pass_": true,
+      "max_logit_diff_off": 0.0
+    },
+    "gate1_init_zero_gate": {
+      "pass_": true,
+      "max_logit_diff_init": 0.0
+    },
+    "gate2_env_isolation": {
+      "pass_": true,
+      "env0_changed": false
+    },
+    "gate3_rollout_continuity": {
+      "pass_": true
+    },
+    "gate4_true_done_reset": {
+      "pass_": true
+    },
+    "gate8_long_grad": {
+      "pass_": true,
+      "all_finite": true,
+      "any_nonzero": true,
+      "residual_gate_norm": 23.432762501340168,
+      "residual_gate_finite": true,
+      "per_module_norm": {
+        "pool_q": 0.0,
+        "pool_k": 0.0,
+        "pool_v": 0.0,
+        "slow_in": 0.0,
+        "slow_gru": 0.0,
+        "slow_read": 0.0,
+        "slow_to_actor": 23.4327625
+      }
+    }
+  },
+  "ALL_PASS": true,
+  "timestamp_utc": "2026-07-24T19:36:04Z"
+}

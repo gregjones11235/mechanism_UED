@@ -1,0 +1,51 @@
+{
+  "label": "W512-RESET128-P2REPLAY",
+  "steps": 24576,
+  "gpu_uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+  "carry_mode": "reset128",
+  "seed": 42,
+  "lr": 2e-05,
+  "global_step": 24576,
+  "update_count": 11,
+  "total_episodes": 23,
+  "total_updates": 11,
+  "accepted_policy_updates": 11,
+  "kl_rejected_updates": 0,
+  "hindsight_attempts": 44,
+  "hindsight_eligible": 44,
+  "any_nan": false,
+  "total_time_s": 955.8,
+  "saved_checkpoints": {
+    "0": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd",
+    "4096": "433fb664089caab07dc435b96796abaa563b476b2cfd0765f5480d33c6dac46b",
+    "8192": "52bb16873c983f12aef81d9b7ecd03435507213ca1ab40637c69e5886163593e",
+    "12288": "8c7fecc1c2976ba9ce04e8fc19c6a7a5dc1e5214e9804d2121fa922f60d120c5",
+    "16384": "c283007b081fd30ec876d60d0dc6cfb6fa159255446080b20fd0959b75533b26",
+    "20480": "3df5d505369b2442290c5c187eb7ef49f1342d8017000dd5205df0282e930190",
+    "24576": "c6271247b73fc1c9c121efa705c5336269e860ed324a51e55367cf7348185864"
+  },
+  "replay_size": 23,
+  "source_fingerprint": {
+    "params_sha256": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd",
+    "param_count": 5268013,
+    "value": 3.5761349201202393,
+    "top_action": 12,
+    "top_prob": 0.7181775569915771
+  },
+  "budget": {
+    "num_envs": 16,
+    "rollout_steps": 128,
+    "num_updates": 12,
+    "total_env_steps": 24576,
+    "save_steps": [
+      0,
+      4096,
+      8192,
+      12288,
+      16384,
+      20480,
+      24576
+    ],
+    "carry_mode": "reset128"
+  }
+}

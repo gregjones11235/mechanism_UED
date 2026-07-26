@@ -1,0 +1,107 @@
+{
+  "d": "046",
+  "final_step": 64,
+  "gpu": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+  "mech": "soft_copeland",
+  "no_api_ppo": true,
+  "results": [
+    {
+      "elapsed": 6001.7,
+      "gen_new": 32,
+      "gen_resumed": 0,
+      "jud_new": 97,
+      "jud_resumed": 0,
+      "n_tasks": 8,
+      "n_unique_hashes": 8,
+      "pool_hash": "a01ce9e58efb5b00",
+      "round": 0,
+      "selected_ids": [
+        "candidate_0001",
+        "candidate_0016",
+        "candidate_0003",
+        "candidate_0002",
+        "candidate_0027",
+        "candidate_0012",
+        "candidate_0024",
+        "candidate_0026"
+      ],
+      "selection_hash": "75cb8a191e99f359",
+      "train_s": 7.7
+    },
+    {
+      "elapsed": 7042.6,
+      "gen_new": 32,
+      "gen_resumed": 0,
+      "jud_new": 117,
+      "jud_resumed": 0,
+      "n_tasks": 8,
+      "n_unique_hashes": 8,
+      "pool_hash": "75e8fbb905e38681",
+      "round": 1,
+      "selected_ids": [
+        "candidate_0030",
+        "candidate_0002",
+        "candidate_0013",
+        "candidate_0017",
+        "candidate_0024",
+        "candidate_0021",
+        "candidate_0007",
+        "candidate_0026"
+      ],
+      "selection_hash": "3815d37a44a91a91",
+      "train_s": 242.7
+    },
+    {
+      "elapsed": 10008.7,
+      "gen_new": 32,
+      "gen_resumed": 0,
+      "jud_new": 120,
+      "jud_resumed": 0,
+      "n_tasks": 8,
+      "n_unique_hashes": 8,
+      "pool_hash": "ceea40191be4b282",
+      "round": 2,
+      "selected_ids": [
+        "candidate_0027",
+        "candidate_0019",
+        "candidate_0009",
+        "candidate_0014",
+        "candidate_0029",
+        "candidate_0026",
+        "candidate_0000",
+        "candidate_0016"
+      ],
+      "selection_hash": "de640717b090dcf0",
+      "train_s": 237.2
+    },
+    {
+      "elapsed": 8387.6,
+      "gen_new": 32,
+      "gen_resumed": 0,
+      "jud_new": 114,
+      "jud_resumed": 0,
+      "n_tasks": 8,
+      "n_unique_hashes": 8,
+      "pool_hash": "87321e7b81a29e5e",
+      "round": 3,
+      "selected_ids": [
+        "candidate_0029",
+        "candidate_0012",
+        "candidate_0028",
+        "candidate_0027",
+        "candidate_0007",
+        "candidate_0003",
+        "candidate_0009",
+        "candidate_0021"
+      ],
+      "selection_hash": "0b9becd8ed5f0ab7",
+      "train_s": 239.8
+    }
+  ],
+  "rounds": 4,
+  "seed": 0,
+  "spr": 24576,
+  "status": "ALL_ROUNDS_PASS",
+  "total": 98304,
+  "train": "tser_ppo"
+}

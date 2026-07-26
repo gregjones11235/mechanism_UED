@@ -1,0 +1,699 @@
+"""P2-v1 learner: native on-policy PPO main update + constrained replay aux.
+
+P2-v1 design (user directives 2026-07-22):
+
+MAIN UPDATE — native on-policy PPO
+  The primary update is textbook on-policy PPO on the freshly collected,
+  time-aligned rollout batch.  With replay and hindsight disabled this is
+  exactly native PPO (see ``test_original_ppo_equivalence``).  The loss matches
+  Henry's ``ppo_tr.py`` form: clipped surrogate + clipped value loss + entropy
+  bonus, with a windowed Transformer forward (memory before each window).
+
+AUXILIARY UPDATE — constrained replay (value/goal auxiliary)
+  Replay is an AUXILIARY update and never replaces the PPO main update.  The v1
+  initial implementation uses a goal-conditioned VALUE auxiliary loss only (no
+  replay actor gradient by default):
+
+    * Hindsight relabeling changes the goal-conditioned observation AND the
+      recomputed reward (see ``hindsight.py``), so the value target changes.
+    * Every replay update RECORDS the off-policy diagnostics required for
+      honest attribution: behavior log-prob, policy version
+      (``collected_update_count``), policy lag, importance ratio, and ESS.
+    * A replay ACTOR update is disabled by default.  If enabled it requires
+      explicit importance-sampling correction AND ``policy_lag <=
+      max_policy_lag``; stale samples drop the actor term (never the recorded
+      diagnostics).
+
+Bootstrap rule (both paths):
+    terminal slice / done env  -> next_value = 0
+    nonterminal                -> next_value = V(next state) from the network
+"""
+
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from flax.training.train_state import TrainState
+
+from trajectory_replay import ReplaySample
+
+
+def _cfg_get(config, key, default):
+    try:
+        return config.get(key, default)
+    except AttributeError:
+        return getattr(config, key, default)
+
+
+@dataclass
+class RolloutBatch:
+    """Aligned on-policy rollout batch.
+
+    All per-step arrays are shaped ``[num_envs, num_steps, ...]`` and aligned:
+        obs[e, t]       observation used to choose action[e, t]
+        action[e, t]    action sampled from policy(obs[e, t])
+        reward[e, t]    reward received after action[e, t]
+        done[e, t]      terminal flag after action[e, t]
+        value[e, t]     V(obs[e, t]) from the acting policy
+        log_prob[e, t]  log pi(action[e, t] | obs[e, t])
+        next_obs[e, t]  observation returned after action[e, t]
+        memory[e, t]    Transformer memory BEFORE obs[e, t]/action[e, t]
+                        shape [..., window_mem, num_layers, embed_size]
+        mask[e, t]      eval memory mask BEFORE the step
+                        shape [..., num_heads, 1, window_mem + 1]
+    """
+
+    obs: jnp.ndarray
+    action: jnp.ndarray
+    reward: jnp.ndarray
+    done: jnp.ndarray
+    value: jnp.ndarray
+    log_prob: jnp.ndarray
+    next_obs: jnp.ndarray
+    memory: jnp.ndarray
+    mask: jnp.ndarray
+    # Memory and mask AFTER the final rollout step, per env.  Used only for the
+    # bootstrap value V(next_obs) at the rollout boundary.
+    memory_after_final: jnp.ndarray
+    mask_after_final: jnp.ndarray
+    num_envs: int
+    num_steps: int
+
+
+def reference_gae(
+    rewards: np.ndarray,
+    values: np.ndarray,
+    dones: np.ndarray,
+    next_value: float,
+    gamma: float,
+    gae_lambda: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Deterministic numpy reference GAE with explicit terminal bootstrap.
+
+    rewards/values/dones are 1-D arrays of length L.  ``next_value`` must be 0.0
+    if ``dones[-1]`` is True, otherwise ``V(s_L)``.  Returns (adv, targets) where
+    ``targets = adv + values``.
+    """
+    rewards = np.asarray(rewards, dtype=np.float64)
+    values = np.asarray(values, dtype=np.float64)
+    dones = np.asarray(dones, dtype=np.float64)
+    L = len(rewards)
+    adv = np.zeros(L, dtype=np.float64)
+    g = 0.0
+    nv = float(next_value)
+    for t in reversed(range(L)):
+        delta = rewards[t] + gamma * nv * (1.0 - dones[t]) - values[t]
+        g = delta + gamma * gae_lambda * (1.0 - dones[t]) * g
+        adv[t] = g
+        nv = values[t]
+    targets = adv + values
+    return adv.astype(np.float32), targets.astype(np.float32)
+
+
+class LongContextLearner:
+    """P2-v1 learner: native on-policy PPO main + constrained replay auxiliary."""
+
+    MIN_SEQUENCE_LENGTH: int = 129  # replay sequences strictly > 128
+
+    def __init__(self, network, config, rng: jax.random.PRNGKey):
+        self.network = network
+        self.config = config
+        self.rng = rng
+
+        self.gamma = float(_cfg_get(config, "gamma", 0.999))
+        self.gae_lambda = float(_cfg_get(config, "gae_lambda", 0.8))
+        self.clip_eps = float(_cfg_get(config, "clip_eps", 0.2))
+        self.vf_coef = float(_cfg_get(config, "vf_coef", 0.5))
+        self.ent_coef = float(_cfg_get(config, "ent_coef", 0.002))
+        self.max_grad_norm = float(_cfg_get(config, "max_grad_norm", 1.0))
+        self.window_grad = int(_cfg_get(config, "window_grad", 64))
+        self.window_mem = int(_cfg_get(config, "window_mem", 128))
+        self.num_heads = int(_cfg_get(config, "num_heads", 8))
+        self.embed_size = int(_cfg_get(config, "embed_size", 256))
+        self.num_layers = int(_cfg_get(config, "num_layers", 2))
+        self.num_steps = int(_cfg_get(config, "num_steps", 128))
+        self.num_minibatches = int(_cfg_get(config, "num_minibatches", 1))
+        self.update_epochs = int(_cfg_get(config, "update_epochs", 1))
+        self.vt_clip_min = float(_cfg_get(config, "value_target_clip_min", -50.0))
+        self.vt_clip_max = float(_cfg_get(config, "value_target_clip_max", 300.0))
+        # Maximum off-policy lag permitted for a replay ACTOR update.
+        self.max_policy_lag = int(_cfg_get(config, "max_policy_lag", 8))
+
+    # ------------------------------------------------------------------
+    # GAE (JAX reverse scan with explicit bootstrap)
+    # ------------------------------------------------------------------
+
+    def _gae(
+        self,
+        rewards: jnp.ndarray,
+        values: jnp.ndarray,
+        dones: jnp.ndarray,
+        next_value: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        # Reverse scan directly over the (r, v, d) triples.  With reverse=True
+        # jax feeds the LAST timestep first (with the bootstrap next_value as the
+        # carry) and propagates backwards, re-reversing the stacked output so
+        # adv[t]/tgt[t] correspond to timestep t.  (The previous arange + [-1-t]
+        # indexing combined with reverse=True double-reversed the sequence and
+        # mis-aligned advantages; this form is unambiguous.)
+        def _step(carry, x):
+            g, nv = carry
+            r, v, d = x
+            delta = r + self.gamma * nv * (1.0 - d) - v
+            g = delta + self.gamma * self.gae_lambda * (1.0 - d) * g
+            return (g, v), (g, g + v)
+
+        _, (adv, tgt) = jax.lax.scan(
+            _step,
+            (jnp.array(0.0, dtype=jnp.float32),
+             jnp.asarray(next_value, dtype=jnp.float32)),
+            (jnp.asarray(rewards, dtype=jnp.float32),
+             jnp.asarray(values, dtype=jnp.float32),
+             jnp.asarray(dones, dtype=jnp.float32)),
+            reverse=True,
+        )
+        return adv, tgt
+
+    # ------------------------------------------------------------------
+    # Windowed training-mask construction (matches Henry ppo_tr.py)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _causal_roll(mask: jnp.ndarray, window_grad: int) -> jnp.ndarray:
+        """Roll each query row q of ``mask[..., q, :]`` by q along the last axis.
+
+        Reproduces Henry's ``roll_vmask`` causal construction.  ``mask`` has
+        shape ``[..., window_grad, window_mem + window_grad]``; True = attend.
+        """
+        shifts = jnp.arange(window_grad)
+        return jax.vmap(
+            lambda s, row: jnp.roll(row, s, axis=-1),
+            in_axes=(0, -2),
+            out_axes=-2,
+        )(shifts, mask)
+
+    def _window_train_mask(self, mask_pre: jnp.ndarray, window_grad: int) -> jnp.ndarray:
+        """Build the windowed training mask from per-step eval masks.
+
+        mask_pre: [B, eff_T, num_heads, window_mem + 1]  (the eval mask used
+        before each step, ``1`` axis already squeezed).  Returns
+        [B * n_win, num_heads, window_grad, window_mem + window_grad].
+        """
+        B, eff_T, H, WM1 = mask_pre.shape
+        W = window_grad
+        n_win = eff_T // W
+        m = mask_pre.reshape(B, n_win, W, H, WM1)
+        m = m.reshape(B * n_win, W, H, WM1)
+        m = jnp.swapaxes(m, 1, 2)  # [B*n_win, H, W, WM1]
+        m = jnp.concatenate(
+            [m, jnp.zeros(m.shape[:-1] + (W - 1,), dtype=jnp.bool_)], axis=-1
+        )  # [B*n_win, H, W, WM + W]
+        return self._causal_roll(m, W)
+
+    @staticmethod
+    def _replay_window_mask(n_win: int, num_heads: int, window_mem: int,
+                            window_grad: int) -> jnp.ndarray:
+        """All-memory-valid + causal-within-window mask for replay windows.
+
+        Replay samples are long (>128) so the memory window is fully populated;
+        memory keys are all attended, window keys are causal.  True = attend.
+        Returns [n_win, num_heads, window_grad, window_mem + window_grad].
+        """
+        mem_part = jnp.ones((window_grad, window_mem), dtype=jnp.bool_)
+        win_part = jnp.tril(jnp.ones((window_grad, window_grad), dtype=jnp.bool_), 0)
+        row = jnp.concatenate([mem_part, win_part], axis=-1)  # [W, WM+W]
+        return jnp.broadcast_to(
+            row[None, None, :, :],
+            (n_win, num_heads, window_grad, window_mem + window_grad),
+        )
+
+    # ------------------------------------------------------------------
+    # Windowize an aligned rollout batch for the Transformer train forward
+    # ------------------------------------------------------------------
+
+    def windowize_batch(self, batch: RolloutBatch):
+        """Reshape an aligned rollout batch into training windows.
+
+        Window k covers steps [k*W, (k+1)*W); its memory is the memory BEFORE
+        step k*W (``batch.memory[:, k*W]``), identical to the rolling memory the
+        rollout used at that step.  Returns a dict of flat tensors with leading
+        batch dim ``num_envs * n_win`` and a window axis ``window_grad``.
+        """
+        W = self.window_grad
+        B, T = batch.num_envs, batch.num_steps
+        if T % W != 0:
+            raise ValueError(
+                f"num_steps ({T}) must be divisible by window_grad ({W})."
+            )
+        n_win = T // W
+        eff_T = n_win * W
+
+        def _win(x):  # [B, T, ...] -> [B, n_win, W, ...]
+            return x[:, :eff_T].reshape((B, n_win, W) + x.shape[2:])
+
+        obs_w = _win(batch.obs)
+        act_w = _win(batch.action)
+        val_w = _win(batch.value)
+        lp_w = _win(batch.log_prob)
+
+        # memory before each window start step
+        mem_w = batch.memory[:, :eff_T:W]  # [B, n_win, WM, L, E]
+
+        # eval mask [B, T, H, 1, WM+1] -> [B, eff_T, H, WM+1]
+        mask_pre = batch.mask[:, :eff_T, :, 0, :]
+        train_mask = self._window_train_mask(mask_pre, W)  # [B*n_win, H, W, WM+W]
+
+        flat = lambda x: x.reshape((B * n_win,) + x.shape[2:])
+        return {
+            "memories": flat(mem_w),
+            "obs": flat(obs_w),
+            "action": flat(act_w),
+            "value": flat(val_w),
+            "log_prob": flat(lp_w),
+            "mask": train_mask,
+            "num_envs": B,
+            "n_win": n_win,
+            "window_grad": W,
+        }
+
+    # ------------------------------------------------------------------
+    # Native on-policy PPO main update
+    # ------------------------------------------------------------------
+
+    def native_ppo_loss(
+        self,
+        params: dict,
+        win: dict,
+        advantages: jnp.ndarray,
+        targets: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
+        """Textbook clipped PPO loss over windowed, aligned transitions.
+
+        ``advantages``/``targets`` are shaped [rows, window_grad] matching the
+        flat window batch.  Advantage normalization is over the batch (minibatch
+        when minibatching).  Memory for each window is the memory before it, so
+        the forward reproduces the acting policy.
+        """
+        pi, value = self.network.apply(
+            params, win["memories"], win["obs"], win["mask"],
+            method=self.network.model_forward_train,
+        )
+        log_prob = pi.log_prob(win["action"])
+        ratio = jnp.exp(log_prob - win["log_prob"])
+
+        adv = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        pg_loss1 = -ratio * adv
+        pg_loss2 = -jnp.clip(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv
+        policy_loss = jnp.maximum(pg_loss1, pg_loss2).mean()
+
+        val_clipped = win["value"] + (value - win["value"]).clip(
+            -self.clip_eps, self.clip_eps
+        )
+        value_loss = 0.5 * jnp.maximum(
+            jnp.square(value - targets),
+            jnp.square(val_clipped - targets),
+        ).mean()
+
+        entropy = pi.entropy().mean()
+        total = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
+        return total, (policy_loss, value_loss, entropy)
+
+    def ppo_update(
+        self,
+        train_state: TrainState,
+        batch: RolloutBatch,
+        advantages: jnp.ndarray,
+        targets: jnp.ndarray,
+    ) -> Tuple[TrainState, dict]:
+        """One native on-policy PPO main update (minibatches/epochs from cfg).
+
+        ``advantages``/``targets`` are [num_envs, num_steps].  With
+        num_minibatches=1 and update_epochs=1 this is a single deterministic
+        full-batch PPO gradient step.
+        """
+        win = self.windowize_batch(batch)
+        B, n_win, W = win["num_envs"], win["n_win"], win["window_grad"]
+        rows = B * n_win
+
+        # Windowize advantages/targets to [B, n_win, W] then flat [rows, W].
+        adv_w = advantages[:, : n_win * W].reshape(B, n_win, W)
+        tgt_w = targets[:, : n_win * W].reshape(B, n_win, W)
+
+        grad_fn = jax.value_and_grad(self.native_ppo_loss, has_aux=True)
+        rng = self.rng
+        params_before = train_state.params
+
+        agg = {"total": 0.0, "policy": 0.0, "value": 0.0, "entropy": 0.0,
+               "grad_norm": 0.0, "n": 0}
+
+        adv_flat = adv_w.reshape(rows, W)
+        tgt_flat = tgt_w.reshape(rows, W)
+
+        def _mb(x):  # [rows, ...] -> [num_minibatches, rows/mb, ...]
+            return x.reshape((self.num_minibatches, -1) + x.shape[1:])
+
+        for _epoch in range(self.update_epochs):
+            if self.num_minibatches > 1:
+                rng, _rng = jax.random.split(rng)
+                perm = jax.random.permutation(_rng, rows)
+            else:
+                perm = jnp.arange(rows)
+
+            mb = {
+                "memories": _mb(win["memories"][perm]),
+                "obs": _mb(win["obs"][perm]),
+                "action": _mb(win["action"][perm]),
+                "value": _mb(win["value"][perm]),
+                "log_prob": _mb(win["log_prob"][perm]),
+                "mask": _mb(win["mask"][perm]),
+            }
+            mb_adv = _mb(adv_flat[perm])
+            mb_tgt = _mb(tgt_flat[perm])
+
+            for mbi in range(self.num_minibatches):
+                mb_win = {k: v[mbi] for k, v in mb.items()}
+                (total_loss, (p_loss, v_loss, ent)), grads = grad_fn(
+                    train_state.params, mb_win, mb_adv[mbi], mb_tgt[mbi]
+                )
+                grad_norm = optax.global_norm(grads)
+                if not bool(jnp.all(jnp.isfinite(grad_norm))):
+                    raise RuntimeError(
+                        f"PPO main update FAIL: gradient norm non-finite ({grad_norm})."
+                    )
+                if not bool(grad_norm > 1e-12):
+                    raise RuntimeError(
+                        f"PPO main update FAIL: gradient norm zero ({grad_norm})."
+                    )
+                train_state = train_state.apply_gradients(grads=grads)
+                agg["total"] += float(total_loss)
+                agg["policy"] += float(p_loss)
+                agg["value"] += float(v_loss)
+                agg["entropy"] += float(ent)
+                agg["grad_norm"] += float(grad_norm)
+                agg["n"] += 1
+
+        n = max(1, agg["n"])
+        params_changed = any(
+            bool(jnp.any(o != nw))
+            for o, nw in zip(
+                jax.tree_util.tree_leaves(params_before),
+                jax.tree_util.tree_leaves(train_state.params),
+            )
+        )
+        metrics = {
+            "ppo_total_loss": agg["total"] / n,
+            "ppo_policy_loss": agg["policy"] / n,
+            "ppo_value_loss": agg["value"] / n,
+            "ppo_entropy": agg["entropy"] / n,
+            "ppo_grad_norm": agg["grad_norm"] / n,
+            "ppo_params_changed": bool(params_changed),
+            "ppo_num_transitions": int(B * n_win * W),
+            "ppo_num_minibatches": self.num_minibatches,
+            "ppo_update_epochs": self.update_epochs,
+        }
+        return train_state, metrics
+
+    def compute_on_policy_gae(
+        self,
+        params: dict,
+        batch: RolloutBatch,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """GAE for a rollout batch with explicit terminal-zero bootstrap.
+
+        Bootstrap: done env at the final rollout step -> 0; otherwise
+        V(next_obs) from the current network using the memory/mask after the
+        final rollout step.  Targets are clipped to the configured return range.
+        """
+        rewards = jnp.asarray(batch.reward)
+        values = jnp.asarray(batch.value)
+        dones = jnp.asarray(batch.done)
+
+        final_next_obs = batch.next_obs[:, -1]
+        final_done = batch.done[:, -1]
+        _, bootstrap_value, _ = self.network.apply(
+            params,
+            batch.memory_after_final,
+            final_next_obs,
+            batch.mask_after_final,
+            method=self.network.model_forward_eval,
+        )
+        bootstrap_value = jnp.where(final_done, 0.0, bootstrap_value)
+
+        def env_gae(carry, env_idx):
+            adv, tgt = self._gae(
+                rewards[env_idx], values[env_idx], dones[env_idx],
+                bootstrap_value[env_idx],
+            )
+            return carry, (adv, tgt)
+
+        _, (adv_env, tgt_env) = jax.lax.scan(
+            env_gae, None, jnp.arange(batch.num_envs)
+        )
+        tgt_env = jnp.clip(tgt_env, self.vt_clip_min, self.vt_clip_max)
+        return adv_env, tgt_env
+
+    # ------------------------------------------------------------------
+    # Constrained replay auxiliary update (value / goal auxiliary)
+    # ------------------------------------------------------------------
+
+    def _validate_sequence_length(self, sample: ReplaySample) -> None:
+        if sample.length <= 128:
+            raise ValueError(
+                f"Gate 2: long-context replay auxiliary requires sequence > 128, "
+                f"got {sample.length}.  Fallback to a 128-step on-policy path is "
+                f"REJECTED."
+            )
+
+    def _replay_forward(self, params: dict, sample: ReplaySample):
+        """Windowed forward over a (goal-conditioned) replay sample.
+
+        Returns (pi, value, n_win, eff_L, mem_timeline).  Window k uses the
+        memory before step k*W (initial_memory for k=0, else
+        memory_sequence[k*W-1]).
+        """
+        L = sample.length
+        W = self.window_grad
+        n_win = max(1, L // W)
+        eff_L = n_win * W
+
+        obs = jnp.asarray(sample.observations[:eff_L]).reshape(n_win, W, -1)
+        initial_mem = jnp.asarray(sample.initial_memory)
+        if sample.memory_sequence is not None and np.size(sample.memory_sequence) > 0:
+            mem_seq = jnp.asarray(sample.memory_sequence)
+            mem_timeline = jnp.concatenate([initial_mem[None], mem_seq], axis=0)
+        else:
+            mem_timeline = jnp.tile(initial_mem[None], (eff_L + 1, 1, 1, 1))
+
+        mem_pos = jnp.clip(jnp.arange(n_win) * W, 0, eff_L)
+        memories_batch = mem_timeline[mem_pos]  # [n_win, WM, L, E]
+        mask = self._replay_window_mask(
+            n_win, self.num_heads, self.window_mem, W
+        )
+
+        pi, value = self.network.apply(
+            params, memories_batch, obs, mask,
+            method=self.network.model_forward_train,
+        )
+        return pi, value, n_win, eff_L, mem_timeline
+
+    def _replay_aux_loss(
+        self,
+        params: dict,
+        sample: ReplaySample,
+        current_update_count: int,
+        replay_actor_update: bool,
+    ) -> Tuple[jnp.ndarray, dict]:
+        """Goal-conditioned value auxiliary loss + off-policy diagnostics.
+
+        The value target is the lambda-return of the RECOMPUTED (relabeled)
+        reward under the relabeled goal conditioning, bootstrapped with 0 for
+        terminal slices and V(next state) otherwise.  A replay actor term is
+        only applied when explicitly enabled and the policy lag is within bound.
+        """
+        L = sample.length
+        W = self.window_grad
+        n_win = max(1, L // W)
+        eff_L = n_win * W
+
+        pi, value, n_win, eff_L, mem_timeline = self._replay_forward(params, sample)
+        value_flat = value.reshape(eff_L)
+
+        rewards = jnp.asarray(sample.rewards[:eff_L], dtype=jnp.float32)
+        dones = jnp.asarray(sample.dones[:eff_L], dtype=jnp.float32)
+
+        # Bootstrap value under the relabeled goal conditioning.
+        if sample.episode_done:
+            bootstrap = jnp.array(0.0, dtype=jnp.float32)
+        else:
+            if sample.next_observations is not None and np.size(sample.next_observations) > 0:
+                next_obs_b = jnp.asarray(sample.next_observations[eff_L - 1])[None]
+            else:
+                next_obs_b = jnp.asarray(sample.observations[eff_L - 1])[None]
+            boot_mem = mem_timeline[jnp.clip(eff_L, 0, mem_timeline.shape[0] - 1)][None]
+            boot_mask = jnp.ones(
+                (1, self.num_heads, 1, self.window_mem + 1), dtype=jnp.bool_
+            )
+            # Henry forward_eval does an unguarded ``x.squeeze()`` that
+            # collapses the BATCH axis when batch==1 (it is written for the
+            # rollout batch = num_envs >= 2).  With this single bootstrap
+            # state (batch==1) the 2nd transformer layer would receive
+            # x[:,None] of shape (E,1) instead of (1,1,E) and crash the
+            # concatenate.  Batch elements are fully independent in
+            # forward_eval (attention is over the seq axis only; mask and
+            # pos_embed broadcast over the batch), so we TILE to batch==2 to
+            # keep the batch axis alive and read element [0] — the returned
+            # V(next_state) is bit-identical to the intended single-state
+            # bootstrap.  No change to the Henry base (read-only) and no
+            # change to the computed value.  Regression-covered by
+            # tests/test_replay_aux_bootstrap.py.
+            next_obs_b2 = jnp.tile(next_obs_b, (2, 1))
+            boot_mem2 = jnp.tile(boot_mem, (2, 1, 1, 1))
+            _, boot_val, _ = self.network.apply(
+                params, boot_mem2, next_obs_b2, boot_mask,
+                method=self.network.model_forward_eval,
+            )
+            bootstrap = boot_val[0]
+
+        # Semi-gradient value target: lambda-return with a stopped-gradient
+        # value baseline, so the regression target does not backprop through
+        # itself.
+        value_base = jax.lax.stop_gradient(value_flat)
+        adv, tgt = self._gae(rewards, value_base, dones, bootstrap)
+        targets = jnp.clip(tgt, self.vt_clip_min, self.vt_clip_max)
+        value_loss = 0.5 * jnp.mean(jnp.square(value_flat - targets))
+
+        # ---- Off-policy diagnostics (always recorded) ----
+        actions_w = jnp.asarray(sample.actions[:eff_L]).reshape(n_win, W)
+        behavior_lp = jnp.asarray(sample.log_probs[:eff_L], dtype=jnp.float32)
+        current_lp = pi.log_prob(actions_w).reshape(eff_L)
+        log_ratio = current_lp - behavior_lp
+        ratio = jnp.exp(log_ratio)
+        w = ratio
+        ess = (w.sum() ** 2) / (jnp.sum(jnp.square(w)) + 1e-12)
+        ess_fraction = ess / float(eff_L)
+
+        policy_version = int(sample.collected_update_count)
+        policy_lag = int(current_update_count) - policy_version
+
+        # ---- Optional, constrained replay ACTOR update (default OFF) ----
+        actor_loss = jnp.array(0.0, dtype=jnp.float32)
+        actor_enabled = bool(replay_actor_update)
+        actor_skipped_reason = "disabled_by_default"
+        if actor_enabled:
+            if policy_lag > self.max_policy_lag:
+                actor_enabled = False
+                actor_skipped_reason = (
+                    f"policy_lag {policy_lag} > max_policy_lag {self.max_policy_lag}"
+                )
+            else:
+                adv_norm = (adv - adv.mean()) / (adv.std() + 1e-8)
+                a1 = ratio * adv_norm
+                a2 = jnp.clip(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv_norm
+                actor_loss = -jnp.minimum(a1, a2).mean()
+                actor_skipped_reason = "none"
+
+        total = value_loss + actor_loss
+
+        # NOTE: this function is differentiated via jax.value_and_grad(has_aux=True).
+        # Traced loss/diagnostic values must NOT be passed through float() here
+        # (that forces concretization under the trace and raises
+        # ConcretizationTypeError). Keep them as traced arrays; the caller
+        # (update) converts them to Python floats AFTER grad returns. Python
+        # scalars/bool/str that are genuinely static are fine as-is.
+        diag = {
+            "total_loss": total,
+            "value_loss": value_loss,
+            "actor_loss": actor_loss,
+            "actor_enabled": actor_enabled,
+            "actor_skipped_reason": actor_skipped_reason,
+            "behavior_log_prob_mean": behavior_lp.mean(),
+            "policy_version": policy_version,
+            "policy_lag": policy_lag,
+            "max_policy_lag": self.max_policy_lag,
+            "importance_ratio_mean": ratio.mean(),
+            "importance_ratio_max": ratio.max(),
+            "importance_ratio_min": ratio.min(),
+            "ess": ess,
+            "ess_fraction": ess_fraction,
+            "sequence_length": int(eff_L),
+            "episode_done": bool(sample.episode_done),
+            "bootstrap_value": bootstrap,
+            "hindsight_goal_index": int(np.argmax(np.asarray(sample.target_achievements))),
+        }
+        return total, diag
+
+    def update(
+        self,
+        train_state: TrainState,
+        sample: ReplaySample,
+        current_update_count: int = 0,
+        replay_actor_update: bool = False,
+    ) -> Tuple[TrainState, dict]:
+        """One constrained replay AUXILIARY gradient update (value/goal aux).
+
+        Never replaces the PPO main update.  Records behavior log-prob, policy
+        version, policy lag, importance ratio and ESS.  The replay actor term is
+        off by default and, if enabled, requires IS correction + policy-lag
+        bound.
+        """
+        self._validate_sequence_length(sample)
+
+        grad_fn = jax.value_and_grad(self._replay_aux_loss, has_aux=True)
+        (total_loss, diag), grads = grad_fn(
+            train_state.params, sample, current_update_count, replay_actor_update
+        )
+
+        grad_norm = optax.global_norm(grads)
+        if not bool(jnp.all(jnp.isfinite(grad_norm))):
+            raise RuntimeError(
+                f"Replay aux FAIL: gradient norm non-finite ({grad_norm})."
+            )
+        if not bool(grad_norm > 1e-12):
+            raise RuntimeError(
+                f"Replay aux FAIL: gradient norm zero ({grad_norm}) — no-op update."
+            )
+
+        new_train_state = train_state.apply_gradients(grads=grads)
+
+        old_leaves = jax.tree_util.tree_leaves(train_state.params)
+        new_leaves = jax.tree_util.tree_leaves(new_train_state.params)
+        params_changed = any(
+            bool(jnp.any(o != n)) for o, n in zip(old_leaves, new_leaves)
+        )
+
+        # Traced diagnostic arrays returned in diag become concrete now that
+        # grad_fn has returned; convert the loss/ratio/ESS/bootstrap quantities
+        # to Python floats. Genuinely static fields (bool/str/int) pass through.
+        _FLOAT_KEYS = {
+            "total_loss", "value_loss", "actor_loss", "behavior_log_prob_mean",
+            "importance_ratio_mean", "importance_ratio_max", "importance_ratio_min",
+            "ess", "ess_fraction", "bootstrap_value",
+        }
+        metrics = {
+            k: (float(v) if k in _FLOAT_KEYS else v) for k, v in diag.items()
+        }
+        metrics["grad_norm"] = float(grad_norm)
+        metrics["params_changed"] = bool(params_changed)
+        metrics["replay_aux"] = True
+        return new_train_state, metrics
+
+    def update_batch(
+        self,
+        train_state: TrainState,
+        samples: list,
+        current_update_count: int = 0,
+        replay_actor_update: bool = False,
+    ) -> Tuple[TrainState, list]:
+        metrics_list = []
+        for sample in samples:
+            train_state, metrics = self.update(
+                train_state, sample,
+                current_update_count=current_update_count,
+                replay_actor_update=replay_actor_update,
+            )
+            metrics_list.append(metrics)
+        return train_state, metrics_list

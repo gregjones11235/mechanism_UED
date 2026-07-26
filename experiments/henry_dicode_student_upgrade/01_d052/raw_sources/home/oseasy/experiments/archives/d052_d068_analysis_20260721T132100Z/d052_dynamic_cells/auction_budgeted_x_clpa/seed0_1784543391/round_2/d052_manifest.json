@@ -1,0 +1,32 @@
+{
+  "cache_influence": 0.0,
+  "candidate_count": 32,
+  "cell": "auction_budgeted_x_clpa",
+  "gen_new": 32,
+  "gen_resumed": 0,
+  "inf": false,
+  "jud_new": 105,
+  "jud_resumed": 0,
+  "judgment_count": 96,
+  "mechanism": "auction_budgeted",
+  "nan": false,
+  "param_leaves": 47,
+  "pool_hash": "cba5dc035d0bea0b",
+  "prev_snapshot_hash": "5119d75218dfaced",
+  "protocol": "PURE_DYNAMIC_D052",
+  "round": 2,
+  "selected_ids": [
+    "d052_r1_0019",
+    "d052_r1_0020",
+    "d052_r1_0000",
+    "d052_r1_0031",
+    "d052_r1_0025",
+    "d052_r1_0028",
+    "d052_r1_0005",
+    "d052_r1_0010"
+  ],
+  "selection_hash": "3e9b82a7bad1f90e",
+  "snapshot_hash": "4237f415068c38ba",
+  "steps_resolved": 24576,
+  "training": "clpa"
+}

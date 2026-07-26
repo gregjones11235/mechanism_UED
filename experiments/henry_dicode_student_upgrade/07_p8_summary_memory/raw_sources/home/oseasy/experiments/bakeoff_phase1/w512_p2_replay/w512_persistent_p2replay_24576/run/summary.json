@@ -1,0 +1,51 @@
+{
+  "label": "W512-PERSISTENT-P2REPLAY",
+  "steps": 24576,
+  "gpu_uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+  "carry_mode": "persistent",
+  "seed": 42,
+  "lr": 2e-05,
+  "global_step": 24576,
+  "update_count": 11,
+  "total_episodes": 21,
+  "total_updates": 11,
+  "accepted_policy_updates": 11,
+  "kl_rejected_updates": 0,
+  "hindsight_attempts": 44,
+  "hindsight_eligible": 44,
+  "any_nan": false,
+  "total_time_s": 938.7,
+  "saved_checkpoints": {
+    "0": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd",
+    "4096": "50e23c7114013e0fe4ed47b1c846f999df5e055b0826f1574d2941b60acf4ff7",
+    "8192": "f8b758ee93d1add9d0caf0cccb1c3202bb6d4c86b24b34a88c204a6bafe791e9",
+    "12288": "edef01b601a8fc8bcf1f5a5d9f5b71443b5bb3ed3312e902c2b30cbe34651637",
+    "16384": "86c8bda348c964480fd08727193ebffeff42e2786ecce765b6b09d3f1fa425fd",
+    "20480": "07c20ce12344b8f4980edc84ff183a8dc3c818c93f51047af9370e5c215ead42",
+    "24576": "7f23a9cba37882fe1664068996b63782cfde4f84d8fb1672f9c3c5cf1d50b4b8"
+  },
+  "replay_size": 21,
+  "source_fingerprint": {
+    "params_sha256": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd",
+    "param_count": 5268013,
+    "value": 3.5761349201202393,
+    "top_action": 12,
+    "top_prob": 0.7181775569915771
+  },
+  "budget": {
+    "num_envs": 16,
+    "rollout_steps": 128,
+    "num_updates": 12,
+    "total_env_steps": 24576,
+    "save_steps": [
+      0,
+      4096,
+      8192,
+      12288,
+      16384,
+      20480,
+      24576
+    ],
+    "carry_mode": "persistent"
+  }
+}

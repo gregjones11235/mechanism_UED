@@ -1,0 +1,60 @@
+# conf/gen_manager/auction_c_v5y.yaml
+# v5-debate 方案A "合作补位式", 对照 Y: 2 ambitious-coop proposers + 1 GLM modeler.
+# Verifies "竞争(via cooperative complementary fill)是否有效" vs 对照X(1 proposer). See v5_design.md.
+#
+# Mechanism (v5_design.md §3, 方案A):
+#   - MODELER (GLM-5.2) diagnoses the student's CURRENT held-out state each session (fixes the
+#     stale-A/B/C/D-status root cause of tier2->tier3 dependency collapse) and recommends a level
+#     TYPE (DEPTH/BREADTH/CONSOLIDATE) per parent.
+#   - 2 ambitious-coop proposers write levels IN TURN (order rotates); the 2nd sees the 1st's output
+#     and covers a complementary TYPE. BOTH kept (no auction culling, like baseline).
+#   - Eq.6 A/B/C/D frontier parent selection = UNCHANGED from baseline (strict).
+#
+# LLM roles set on the CLI like the repro/auction scripts (avoids Hydra "Multiple values" conflict).
+
+defaults:
+  - default
+
+# v5 coop switch: routes evolve_tasks -> evolve_mastered_coop (modeler + sequential fill).
+auction_modeler: true
+# auction=false: we do NOT use the v4 top-k auction culling; coop keeps both proposals.
+auction: false
+modeler_recent_k: 6   # how many recent held-out snapshots the modeler reads for trend judgement
+
+# Both proposers use the COOPERATIVE ambitious persona (paired by index).
+personas:
+  - ambitious_coop   # <-> proposers[0] = DeepSeek-V4-Pro (thinking on, strongest reasoning)
+  - ambitious_coop   # <-> proposers[1] = Qwen3.5-397B    (heterogeneous partner)
+
+proposers:
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: deepseek-ai/DeepSeek-V4-Pro
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # both proposers NO-THINK for symmetry: they alternate turn order, so a thinking
+                     #  asymmetry would confound "cooperation" with "one proposer just being stronger".
+                     #  Reasoning is the MODELER's job (think=true below); proposers only execute.
+  - provider: deepinfra
+    base_url: https://api.deepinfra.com/v1/openai
+    model: Qwen/Qwen3.5-397B-A17B
+    llm_type: generation
+    max_tokens: 32768
+    temperature: 0.6
+    top_p: 0.95
+    think: false     # symmetric with proposer[0]; heterogeneity comes from the model itself, not think
+
+# MODELER: GLM-5.2 (native structured output + calibration — best for the diagnostic role).
+modeler:
+  provider: deepinfra
+  base_url: https://api.deepinfra.com/v1/openai
+  model: zai-org/GLM-5.2
+  llm_type: generation
+  max_tokens: 32768
+  temperature: 0.4   # slightly cooler — diagnosis wants consistency over creativity
+  top_p: 0.95
+  think: true        # MODELER is the reasoning-heavy role (read SR series, judge shape, infer deps);
+                     #  thinking helps diagnosis most. GLM native structured-output + tolerant JSON
+                     #  parse (_parse_modeler_json) keep the JSON stable even with thinking on.

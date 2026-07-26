@@ -1,0 +1,321 @@
+{
+  "label": "LONG_MEMORY_CAUSAL_CARRY_ABLATION_PHASE2",
+  "objective": "判定 SlowGRU 与 EventMemory32 的性能变化是否真正来自跨128步长期状态(carry)，而非额外参数/共训练/优化扰动/短期表示变化。方法：训练期匹配消融 Persistent vs Reset128（唯一区别=长期状态是否跨rollout携带）。",
+  "section1_engineering_consistency": {
+    "note": "两臂除『长期状态跨rollout携带 vs 每rollout边界清空』外完全一致。13工程门全过。",
+    "config_diff": "Persistent vs Reset128 训练器 diff 仅含: rollout边界 longstate 清空块 + gate5记录/汇报 + 命名/路由/manifest carry_mode。_env_step/memories/mask/GAE/_loss_fn/优化器/配置/init-merge 逐字未改。网络文件 sha 两臂冻结不变。",
+    "SlowGRU": {
+      "gates_non_training_pass": true,
+      "gates": {
+        "req1_schema_identical": true,
+        "req2_step0_bit_identical": true,
+        "req3_param_count_identical": true,
+        "sanity_feature_off_eq_teacher": true,
+        "sanity_init_zero_gate_eq_teacher": true,
+        "req7_env_no_crosstalk": true,
+        "req4_within_rollout_readwrite": true,
+        "req8_true_done_reset": true,
+        "req13_long_module_grad": true
+      },
+      "req5_boundary_clear": true,
+      "req5_clear_nontrivial": true,
+      "req5_n_rollouts": 12,
+      "req9_roundtrip_ok": true,
+      "req10_exact_resume": "EXACT_RESUME_PASS (A@8192==B2@8192=1a4232e6)",
+      "req11_no_nan": true,
+      "req12_entropy": {
+        "n": 12,
+        "first": 0.44,
+        "last": 1.35,
+        "min": 0.44,
+        "max": 1.35
+      },
+      "ALL_13_PASS": true
+    },
+    "EventMem": {
+      "gates_non_training_pass": true,
+      "gates": {
+        "req1_schema_identical": true,
+        "req2_step0_bit_identical": true,
+        "req3_param_count_identical": true,
+        "sanity_feature_off_eq_teacher": true,
+        "sanity_init_zero_gate_eq_teacher": true,
+        "req7_env_no_crosstalk": true,
+        "req4_within_rollout_readwrite": true,
+        "req8_true_done_reset": true,
+        "req13_long_module_grad": true
+      },
+      "req5_boundary_clear": true,
+      "req5_clear_nontrivial": true,
+      "req5_n_rollouts": 12,
+      "req9_roundtrip_ok": true,
+      "req10_exact_resume": "EXACT_RESUME_PASS (A@8192==B2@8192=67ee581c)",
+      "req11_no_nan": true,
+      "req12_entropy": {
+        "n": 12,
+        "first": 0.44,
+        "last": 0.956,
+        "min": 0.44,
+        "max": 1.694
+      },
+      "ALL_13_PASS": true
+    }
+  },
+  "section2_five_arm_eval_table": {
+    "protocol": "冻结256世界Stage4, 随机策略, seed42, max4096, S4_dark自然起点, 按世界配对",
+    "anchor_reproduction": {
+      "BASELINE_teacher17500_SR_pp": 39.453,
+      "Control_24576_SR_pp": 36.328,
+      "control_matches_canonical_36p33": true
+    },
+    "arms": {
+      "Control_24576": {
+        "SR_pp": 36.328,
+        "n_success": 93,
+        "floor3_pp": 43.359,
+        "ENTER_SEWERS_pp": 43.359,
+        "cond_kill_pp": 83.78,
+        "death": 156,
+        "timeout": 7,
+        "eplen": 861.9
+      },
+      "SlowGRU_Persistent_24576": {
+        "SR_pp": 42.969,
+        "n_success": 110,
+        "floor3_pp": 50.781,
+        "ENTER_SEWERS_pp": 50.781,
+        "cond_kill_pp": 84.62,
+        "death": 142,
+        "timeout": 4,
+        "eplen": 795.8
+      },
+      "SlowGRU_Reset128_24576": {
+        "SR_pp": 44.531,
+        "n_success": 114,
+        "floor3_pp": 49.609,
+        "ENTER_SEWERS_pp": 49.609,
+        "cond_kill_pp": 89.76,
+        "death": 137,
+        "timeout": 5,
+        "eplen": 921.1
+      },
+      "EventMem_Persistent_24576": {
+        "SR_pp": 37.5,
+        "n_success": 96,
+        "floor3_pp": 43.75,
+        "ENTER_SEWERS_pp": 43.75,
+        "cond_kill_pp": 85.71,
+        "death": 156,
+        "timeout": 4,
+        "eplen": 959.6
+      },
+      "EventMem_Reset128_24576": {
+        "SR_pp": 40.234,
+        "n_success": 103,
+        "floor3_pp": 46.484,
+        "ENTER_SEWERS_pp": 46.484,
+        "cond_kill_pp": 86.55,
+        "death": 148,
+        "timeout": 5,
+        "eplen": 887.2
+      }
+    }
+  },
+  "section3_carry_effect_Persistent_minus_Reset128": {
+    "note": "carry = Persistent_on − Reset128_on (配对)。这是跨rollout长期状态的因果贡献。",
+    "SlowGRU_carry": {
+      "SR_delta_pp": -1.5625,
+      "worlds": -4,
+      "floor3_delta_pp": 1.171875,
+      "death_delta_pp": 1.953125,
+      "mcnemar_p": 0.737316,
+      "ci95": {
+        "diff_pp": -1.562,
+        "ci95_low_pp": -8.203,
+        "ci95_high_pp": 5.078
+      },
+      "verdict": "carry为负(Reset128≥Persistent)，跨rollout携带无益"
+    },
+    "EventMem_carry": {
+      "SR_delta_pp": -2.734375,
+      "worlds": -7,
+      "floor3_delta_pp": -2.734375,
+      "death_delta_pp": 3.125,
+      "mcnemar_p": 0.510162,
+      "ci95": {
+        "diff_pp": -2.734,
+        "ci95_low_pp": -9.766,
+        "ci95_high_pp": 4.297
+      },
+      "verdict": "carry为负(Reset128≥Persistent)，跨rollout携带无益"
+    }
+  },
+  "section4_cotrain_effect_Reset128_minus_Control": {
+    "note": "co-training = Reset128_on − Control (配对)。这是含长期模块+额外参数+rollout内计算但无跨rollout携带相对Control的净效应。",
+    "SlowGRU_cotrain": {
+      "SR_delta_pp": 8.203125,
+      "worlds": 21,
+      "floor3_delta_pp": 6.25,
+      "death_delta_pp": -7.421875,
+      "mcnemar_p": 0.038088,
+      "ci95": {
+        "diff_pp": 8.203,
+        "ci95_low_pp": 0.781,
+        "ci95_high_pp": 15.234
+      },
+      "verdict": "大幅正向且显著(p=0.038)：增益主要来自共训练/正则"
+    },
+    "EventMem_cotrain": {
+      "SR_delta_pp": 3.90625,
+      "worlds": 10,
+      "floor3_delta_pp": 3.125,
+      "death_delta_pp": -3.125,
+      "mcnemar_p": 0.363278,
+      "ci95": {
+        "diff_pp": 3.906,
+        "ci95_low_pp": -3.906,
+        "ci95_high_pp": 11.328
+      },
+      "verdict": "正向但不显著"
+    },
+    "warning": "不得把 Persistent−Control 解释为长期记忆收益: SG Persistent−Control=+6.64pp, EM=+1.17pp，其中carry贡献≤0。"
+  },
+  "section5_behavior_policy_ablation": {
+    "inference_disable": {
+      "note": "推理期关闭长期通道(use_longmem=False)的SR下降。因果门5要求≥2pp。",
+      "SlowGRU_Persistent_on_vs_off_pp": -0.781,
+      "SlowGRU_Reset128_on_vs_off_pp": 7.031,
+      "EventMem_Persistent_on_vs_off_pp": 1.172,
+      "EventMem_Reset128_on_vs_off_pp": 3.125
+    },
+    "actor_reads_long": {
+      "note": "动作KL(on||off)与top-action翻转率(因果门6)。populated长期态下Actor是否真实读取。",
+      "SlowGRU": {
+        "action_kl_on_vs_off": 6.43430685158819e-05,
+        "max_logit_diff": 0.182220458984375,
+        "top_action_flip_rate": 0.0,
+        "residual_gate_norm": 0.025711279142627913
+      },
+      "EventMem": {
+        "action_kl_on_vs_off": 0.0008100754348561168,
+        "max_logit_diff": 1.6815872192382812,
+        "top_action_flip_rate": 0.0,
+        "residual_gate_norm": 0.02569187259153406
+      }
+    },
+    "full_off_variants": {
+      "SG_Persistent_off": {
+        "SR_pp": 43.75,
+        "n_success": 112,
+        "floor3_pp": 48.047,
+        "ENTER_SEWERS_pp": 48.047,
+        "cond_kill_pp": 91.06,
+        "death": 141,
+        "timeout": 3,
+        "eplen": 877.2
+      },
+      "SG_Reset128_off": {
+        "SR_pp": 37.5,
+        "n_success": 96,
+        "floor3_pp": 44.531,
+        "ENTER_SEWERS_pp": 44.531,
+        "cond_kill_pp": 84.21,
+        "death": 155,
+        "timeout": 5,
+        "eplen": 932.9
+      },
+      "EM_Persistent_off": {
+        "SR_pp": 36.328,
+        "n_success": 93,
+        "floor3_pp": 41.797,
+        "ENTER_SEWERS_pp": 41.797,
+        "cond_kill_pp": 86.92,
+        "death": 159,
+        "timeout": 4,
+        "eplen": 893.8
+      },
+      "EM_Reset128_off": {
+        "SR_pp": 37.109,
+        "n_success": 95,
+        "floor3_pp": 41.406,
+        "ENTER_SEWERS_pp": 41.406,
+        "cond_kill_pp": 89.62,
+        "death": 159,
+        "timeout": 2,
+        "eplen": 807.2
+      }
+    }
+  },
+  "section6_final_labels": {
+    "SlowGRU": "SLOWGRU_TRAINING_REGULARIZATION_ONLY",
+    "EventMem": "EVENTMEM_TRAINING_REGULARIZATION_ONLY",
+    "SlowGRU_causal_conditions": {
+      "c1_carry_ge_4pp": false,
+      "c2_floor3_not_lower": true,
+      "c3_death_not_worse": true,
+      "c4_significance": false,
+      "c5_inference_disable_ge_2pp": false,
+      "c6_actor_reads_long": false,
+      "ALL_PASS": false
+    },
+    "EventMem_causal_conditions": {
+      "c1_carry_ge_4pp": false,
+      "c2_floor3_not_lower": false,
+      "c3_death_not_worse": false,
+      "c4_significance": false,
+      "c5_inference_disable_ge_2pp": false,
+      "c6_actor_reads_long": true,
+      "ALL_PASS": false
+    },
+    "LONG_MEMORY_CAUSAL_SIGNAL": {
+      "SlowGRU": false,
+      "EventMem": false
+    },
+    "TRAINING_REGULARIZATION_SIGNAL": {
+      "SlowGRU": true,
+      "EventMem": true
+    },
+    "LONG_MEMORY_WINNER": "NONE",
+    "interpretation": "两臂跨rollout carry均为负(Reset128≥Persistent)，6条件因果资格门c1(≥+4pp)均失败。无任何长期记忆结构通过carry因果门。增益全部归于共训练/正则(含额外参数与rollout内计算)。SlowGRU共训练效应大且显著(+8.20pp,p=0.038)，但其长期慢状态本身非赢因。"
+  },
+  "section7_paths_and_sha": {
+    "meta": {
+      "teacher_ckpt17500_sha": "d4e85af58b7f87d6",
+      "control_24576_sha": "ece6fa9962e815123ce947577a93040057bc9df0b1e686dd28424cb2bbdabf55",
+      "slowgru_network_sha": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+      "eventmem_network_sha": "6a5cd6955ac34cd873dff8dda087036e76d93108c4017448dae8288b0d22d914",
+      "eval_script": "eval_phase2_unified.py",
+      "eval_sha": "224514026aefd273a6647e055fc2e1a434760dc5f4b6b9acd0624bbba57035a1",
+      "slowgru": {
+        "init_sha": "5ae94ed0257f50fa",
+        "persistent_24576_sha": "1bd4fbfe91ab4da4",
+        "reset128_24576_sha": "2ffdd269b94e1e6b",
+        "exact_resume_8192_sha": "1a4232e6fb816987",
+        "gate5_init_ls_hash": "229bcd099658fc1b"
+      },
+      "eventmem": {
+        "init_sha": "2a9a0f8bc90fa312",
+        "persistent_24576_sha": "11307081315f8059",
+        "reset128_24576_sha": "a3030f387c2e8cbb",
+        "exact_resume_8192_sha": "67ee581c7ddbca20",
+        "gate5_init_ls_hash": "2919d3ce66d6406e"
+      }
+    },
+    "dirs": {
+      "slowgru_reset128": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru_reset128",
+      "eventmem_reset128": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_lc_eventmem32_reset128",
+      "slowgru_persistent_ref": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru (只读参照)",
+      "eventmem_persistent_ref": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_eventmem32 (只读参照)",
+      "control_ref": "/home/oseasy/experiments/exploratory_delayed_onset_20260724/control_RUN2 (只读参照)",
+      "unified_eval_json": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/reports/phase2_unified_eval.json",
+      "this_report": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/reports/long_memory_carry_ablation_phase2.json"
+    },
+    "gpus": "GPU2=SlowGRU-Reset128, GPU3=EventMem-Reset128 (并行); 统一评估在GPU2"
+  },
+  "authorizations": {
+    "TRAINING_TO_98304_AUTHORIZED": false,
+    "P2_FULL_B_AUTHORIZED": false,
+    "TWO_BY_TWO_ABLATION_AUTHORIZED": false
+  },
+  "timestamp": "2026-07-25T02:19:16Z"
+}

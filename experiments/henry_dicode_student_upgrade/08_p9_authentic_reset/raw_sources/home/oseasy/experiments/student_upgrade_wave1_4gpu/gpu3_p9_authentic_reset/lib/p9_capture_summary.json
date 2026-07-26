@@ -1,0 +1,20 @@
+{
+  "label": "P9_CAPTURE",
+  "total_snapshots": 40,
+  "counts": {
+    "floor2_reached": 0,
+    "mid_clear": 0,
+    "gate_unlocked": 0,
+    "saw_stair_lost": 32,
+    "near_floor3_failed": 8
+  },
+  "cat_cap": 32,
+  "view_radius": 3,
+  "recent_window": 8,
+  "capture_steps": 8192,
+  "seed": 42,
+  "n_val_records": 8,
+  "code_sha": "fc9f031100257906bd3f51f0072e628685cf9caf910516e27806a5603a5a0a7e",
+  "teacher_ckpt": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+  "timestamp_utc": "2026-07-24T17:00:18Z"
+}

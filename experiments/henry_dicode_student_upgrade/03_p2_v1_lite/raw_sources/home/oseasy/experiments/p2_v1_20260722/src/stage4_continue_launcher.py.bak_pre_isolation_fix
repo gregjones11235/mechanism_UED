@@ -1,0 +1,1700 @@
+#!/usr/bin/env python3
+"""D059 Stage4 Continuation Launcher — Experiment A (AMAGO_STYLE_EXPLORATORY_P2).
+
+P2-v0-exploratory-invalid-for-attribution (FROZEN 2026-07-22):
+  This launcher produced checkpoints 98304/122880 under the invalid v0 P2
+  implementation.  Those checkpoints are historical exploratory results only
+  and MUST NOT be used to attribute P2 mechanism efficacy.  Formal chained
+  continuation from 98304/122880 is STOPPED.  Set
+  P2_V0_CONTINUATION_ALLOWED=1 to override this freeze for debugging only.
+
+P2-v1 FRESH START — weights-only init from healthy session175 (base 17500):
+  This is the P2-v1 launcher (NOT the frozen P2-v0 chained-continuation path).
+  It performs a WEIGHTS-ONLY initialization from the healthy v7 Student base
+  ``base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500`` (internal name:
+  "healthy session175", SR_STAGE4_NATIVE_DEFEAT_KOBOLD = 25/64 = 39.0625%).
+
+  Loaded from session175 (weights-only, load_opt_state=False):
+    - Model parameters ONLY (encoder kernel must be (8335, 256); fail closed).
+
+  NEWLY CREATED (NOT carried over from P2-v0 — nothing from 98304/122880 is
+  loaded; in particular NO P2-v0 optimizer / replay / RNG / global_step /
+  update_count):
+    - optimizer state (fresh Adam: clip_by_global_norm(1.0)+adam(lr=2e-4, eps=1e-5))
+    - replay buffer (EMPTY, capacity 256)
+    - JAX RNG key (fresh, from P2_V1_MASTER_SEED)
+    - action RNG (fresh numpy PCG64 Generator, checkpointable)
+    - environment RNG (fresh, from reset split)
+    - replay RNG (fresh, buffer seed)
+    - policy_version = 0
+    - update_count = 0
+    - p2_v1_global_step = 0   (the checkpoint dir name "17500" is the SESSION175
+                               base step and is NOT treated as a P2 env step)
+
+  Provenance recorded every run: source_checkpoint = session175/17500,
+  source_checkpoint_sha256 (content hash of the loaded weights), p2_v1_global_step=0,
+  p2_v1_update_count=0, replay_size=0.
+
+Runs sessions of exactly 24,576 env steps each (16 envs × 128 rollout × 12
+updates).  After every session, saves an atomic checkpoint containing:
+  params, optimizer, RNG, global_step, resolved_config, source_hash,
+  replay_meta, and Stage4 identity.
+
+Fixed Stage4 configuration:
+  - gamma=0.999, lambda=0.8 (unchanged from base checkpoint)
+  - anneal_lr=False (NO automatic learning-rate annealing)
+  - Floor-2 spawn, 8/8 monster gate pre-cleared, up-ladder REMOVED
+  - Winner-median starting kit, DEFEAT_KOBOLD target
+  - depletion_multiplier=0.3
+
+Independent output — never overwrites existing checkpoints or D059 outputs.
+
+Usage:
+  python src/stage4_continue_launcher.py [--max-sessions N] [--num-updates U] [--smoke-test]
+
+  --num-updates U  run exactly U on-policy PPO updates then save & stop
+                   (1 update = NUM_ENVS*ROLLOUT_STEPS = 2048 env steps).
+                   Level 1 smoke = 1 update; Level 3 full session = 12 updates.
+"""
+
+import hashlib
+import json
+import os
+import pickle
+import shutil
+import sys
+import time
+import traceback
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+import orbax.checkpoint as ocp
+from flax.training.train_state import TrainState
+
+# ── Paths ────────────────────────────────────────────────────────────
+_HENRY_SRC = ("/home/oseasy/incoming/henry_work_20260721T105300/extracted/"
+              "Henry_work/code/dicode_v7fix58_armB/src")
+_AMAGO_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+sys.path.insert(0, _HENRY_SRC)
+sys.path.insert(0, _AMAGO_SRC)
+
+from craftax.craftax.constants import Achievement
+from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+from dicode.network import ActorCriticTransformer
+from dicode.task_utils import get_achievement_multi_hot
+from dicode.utils.general.train_state_utils import load_weights_only
+from minicraftax.envs.craftax import CraftaxAugObsTrain
+from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+from dicode.wrappers_cl import DistributedMultiTaskOptimisticLogWrapper
+
+from trajectory_replay import Trajectory, TrajectoryReplayBuffer
+from hindsight import relabel_sample
+from long_context_learner import LongContextLearner
+from checkpointing import save_full_checkpoint, restore_full_checkpoint
+from pending_episodes import PendingEpisodeBuffers
+from rng_utils import make_action_rng, restore_action_rng, action_rng_state
+from p2_v1_core import collect_rollout, p2_v1_update
+
+# ═══════════════════════════════════════════════════════════════════════
+# IMMUTABLE CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════
+
+EXPECTED_GPU_UUID = "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+SESSION_ENV_STEPS = 24576
+NUM_ENVS = 16
+ROLLOUT_STEPS = 128
+NUM_UPDATES_PER_SESSION = 12  # 16 * 128 * 12 == 24576
+assert NUM_ENVS * ROLLOUT_STEPS * NUM_UPDATES_PER_SESSION == SESSION_ENV_STEPS, \
+    f"STEP ARITHMETIC FAIL: {NUM_ENVS}*{ROLLOUT_STEPS}*{NUM_UPDATES_PER_SESSION} != {SESSION_ENV_STEPS}"
+
+GAMMA = 0.999
+GAE_LAMBDA = 0.8
+
+# ── P2-v1 fresh start: weights-only init from healthy session175 ───────
+# This is the ONLY allowed start point for P2-v1.  It is the healthy v7
+# Student base (SR_STAGE4_NATIVE_DEFEAT_KOBOLD = 25/64 = 39.0625%).
+# P2-v0 checkpoints 98304/122880 are FORBIDDEN as a start point.
+SESSION175_CKPT = (
+    "/home/oseasy/incoming/henry_work_20260721T105300/extracted/"
+    "Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500")
+# Single documented master seed; ALL RNG streams (JAX, action, replay, env)
+# derive from it deterministically.  No extra/ad-hoc seeds (禁止额外 seed).
+P2_V1_MASTER_SEED = 42
+REPLAY_CAPACITY = 256
+# The session175 base checkpoint dir name "17500" is NOT a P2 env step.
+# P2-v1 counters start fresh at 0.
+P2_V1_GLOBAL_STEP_START = 0
+P2_V1_UPDATE_COUNT_START = 0
+# Substrings that identify the forbidden P2-v0 checkpoints (fail-closed guard).
+_FORBIDDEN_V0_MARKERS = ("henry_student_p2_amago_20260721", "/98304", "/122880")
+
+# ── Self-resume checkpoint root (P2-v1's OWN checkpoints only) ─────────
+CKPT_PARENT = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", "checkpoints"))
+# CKPT_RESUME_STEP is now dynamic: set via --resume-from or auto-detected
+# from the latest numbered step directory under checkpoints/.
+
+# ── Output paths ──────────────────────────────────────────────────────
+OUTPUT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "outputs"))
+CKPT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "checkpoints"))
+EVIDENCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "evidence"))
+S4_TASK_PATH = os.path.join(EVIDENCE_DIR, "s4_task_code.py")
+
+for d in [OUTPUT_ROOT, CKPT_ROOT, EVIDENCE_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+
+def detect_latest_checkpoint_step(ckpt_parent: str) -> int:
+    """Scan the checkpoints directory for the highest-numbered step.
+
+    Only considers directories whose names are pure integers and that
+    contain a valid 'default/' orbax subdirectory + 'replay_meta.pkl'.
+    Skips 0 (the Stage A/B initial template checkpoint) and any
+    underscore-prefixed smoke-test directories.
+    """
+    root = Path(ckpt_parent)
+    candidates = []
+    for d in root.iterdir():
+        if not d.is_dir():
+            continue
+        if not d.name.isdigit():
+            continue
+        step = int(d.name)
+        if step == 0:
+            continue  # skip initial template checkpoint
+        # Must contain orbax data (default/) AND replay_meta.pkl
+        if not (d / "default").is_dir():
+            continue
+        if not (d / "replay_meta.pkl").exists():
+            continue
+        candidates.append(step)
+
+    if not candidates:
+        raise FileNotFoundError(
+            f"No valid checkpoint steps found under {ckpt_parent}. "
+            f"Expected at least one numbered directory with default/ and replay_meta.pkl."
+        )
+
+    latest = max(candidates)
+    print(f"[detect] Latest checkpoint step: {latest}  "
+          f"(candidates: {sorted(candidates)})")
+    return latest
+
+# ═══════════════════════════════════════════════════════════════════════
+# Stage4 Fixed Config (anneal_lr=False — no automatic annealing)
+# ═══════════════════════════════════════════════════════════════════════
+
+class Cfg:
+    """Stage4 config: gamma=0.999, lambda=0.8, NO annealing."""
+    lr = 2e-4
+    min_lr = 2e-6
+    num_envs = NUM_ENVS
+    num_steps = ROLLOUT_STEPS
+    update_epochs = 1
+    num_minibatches = 2
+    gamma = GAMMA
+    gae_lambda = GAE_LAMBDA
+    clip_eps = 0.2
+    ent_coef = 0.002
+    vf_coef = 0.5
+    max_grad_norm = 1.0
+    activation = "relu"
+    anneal_lr = False  # ← Stage4: NO automatic annealing
+    qkv_features = 256
+    embed_size = 256
+    num_heads = 8
+    num_layers = 2
+    hidden_layers = 256
+    window_mem = 128
+    window_grad = 64
+    gating = True
+    gating_bias = 2.0
+    condition_on_task = True
+    optimistic_reset_ratio = 16
+    mode = "score"
+    bonus_type = "none"
+    dynamic_bonus_k = 0.0
+    completion_bonus_scale = 0.0
+    completion_bonus_min = 0.0
+    max_updates_per_session = NUM_UPDATES_PER_SESSION
+    total_timesteps = 2_005_401_600
+    scoring_window_updates = 4
+    value_target_clip_min = -50.0
+    value_target_clip_max = 300.0
+    guard_session_vloss_max = 1000.0
+    guard_session_entropy_min = 0.10
+    guard_max_consecutive_reverts = 2
+    lr_restart = 0.0
+    lr_restart_at = 0
+    lr_restart_horizon = 0
+    lr_restart_warmup = 50
+    sil = False
+    sil_pools = []
+
+
+def _cfg_resolved_dict(cfg: type) -> dict:
+    """Extract the resolved config as a plain dict for checkpoint metadata."""
+    result = {}
+    for k in dir(cfg):
+        if k.startswith("__") or k.startswith("_"):
+            continue
+        v = getattr(cfg, k)
+        if callable(v):
+            continue
+        result[k] = v
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Guards
+# ═══════════════════════════════════════════════════════════════════════
+
+def verify_gpu():
+    """Verify the target GPU is present and JAX can see it."""
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader"],
+            text=True
+        ).strip().split("\n")
+    except Exception:
+        print("STOP: cannot query nvidia-smi"); sys.exit(1)
+
+    if EXPECTED_GPU_UUID not in out:
+        print(f"STOP: GPU {EXPECTED_GPU_UUID} not found. Available: {out}")
+        sys.exit(1)
+
+    devices = jax.devices("gpu")
+    if not devices:
+        print("STOP: JAX sees no GPU devices (CPU fallback)")
+        sys.exit(1)
+
+    # Bind JAX to the specific GPU
+    target_idx = out.index(EXPECTED_GPU_UUID)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(target_idx)
+    print(f"[guard] GPU OK  |  target={EXPECTED_GPU_UUID}  "
+          f"index={target_idx}  JAX devices={len(devices)}")
+
+
+def guard_output_collision(session_dir: str) -> str:
+    """Ensure the session output directory is fresh (timestamped for uniqueness).
+
+    Unlike D059 stage_A/stage_B, this does NOT fail on collision — it
+    creates a unique timestamped subdirectory so multiple continuation
+    runs never overwrite each other.
+    """
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    unique_dir = os.path.join(session_dir, f"session_{ts}")
+    os.makedirs(unique_dir, exist_ok=False)
+    return unique_dir
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Network initialization (matching load_weights_only internals exactly)
+# ═══════════════════════════════════════════════════════════════════════
+
+def init_network_params(
+    network: ActorCriticTransformer,
+    obs_dim: int,
+    cfg: type,
+    rng: jax.random.PRNGKey,
+) -> dict:
+    """Initialize network parameters with the correct shapes.
+
+    MUST match the init call inside load_weights_only in
+    dicode/utils/general/train_state_utils.py exactly:
+      - batch_size = 2
+      - NO method= parameter (uses default apply)
+      - memory shape: [B, window_mem, num_layers, embed_size]
+      - obs shape: [B, obs_dim]
+      - mask shape: [B, num_heads, 1, window_mem + 1]
+    """
+    rng, _rng = jax.random.split(rng)
+    init_obs = jnp.zeros((2, obs_dim))
+    init_memory = jnp.zeros((2, cfg.window_mem, cfg.num_layers, cfg.embed_size))
+    init_mask = jnp.zeros((2, cfg.num_heads, 1, cfg.window_mem + 1), dtype=jnp.bool_)
+    return network.init(_rng, init_memory, init_obs, init_mask)
+
+
+def build_matching_template(
+    network: ActorCriticTransformer,
+    obs_dim: int,
+    rng: jax.random.PRNGKey,
+) -> TrainState:
+    """Build a TrainState template matching the SAVED checkpoint structure.
+
+    The checkpoint at 98304 was saved with anneal_lr=True (schedule-based
+    Adam).  We must create an identical optimizer structure so orbax can
+    deserialize the saved opt_state.  After restore we extract params and
+    rebuild with anneal_lr=False.
+    """
+    # Use a temporary config with anneal_lr=True to match saved structure
+    class _MatchCfg:
+        lr = 2e-4; min_lr = 2e-6; num_envs = NUM_ENVS; num_steps = ROLLOUT_STEPS
+        update_epochs = 1; num_minibatches = 2
+        gamma = GAMMA; gae_lambda = GAE_LAMBDA
+        clip_eps = 0.2; ent_coef = 0.002; vf_coef = 0.5; max_grad_norm = 1.0
+        activation = "relu"; anneal_lr = True  # ← match saved structure
+        qkv_features = 256; embed_size = 256; num_heads = 8; num_layers = 2
+        hidden_layers = 256; window_mem = 128; window_grad = 64
+        gating = True; gating_bias = 2.0
+        condition_on_task = True; optimistic_reset_ratio = 16
+        mode = "score"; bonus_type = "none"; dynamic_bonus_k = 0.0
+        completion_bonus_scale = 0.0; completion_bonus_min = 0.0
+        max_updates_per_session = NUM_UPDATES_PER_SESSION
+        total_timesteps = 2_005_401_600
+        scoring_window_updates = 4
+        value_target_clip_min = -50.0; value_target_clip_max = 300.0
+        guard_session_vloss_max = 1000.0; guard_session_entropy_min = 0.10
+        guard_max_consecutive_reverts = 2
+        lr_restart = 0.0; lr_restart_at = 0
+        lr_restart_horizon = 0; lr_restart_warmup = 50
+        sil = False; sil_pools = []
+
+    mc = _MatchCfg()
+
+    network_params = init_network_params(network, obs_dim, mc, rng)
+
+    # Reconstruct the EXACT optimizer used when the checkpoint was saved
+    TOTAL_GLOBAL_UPDATES = (
+        (mc.total_timesteps // mc.num_envs // mc.num_steps // mc.max_updates_per_session) + 1
+    ) * mc.max_updates_per_session
+
+    def linear_schedule(count):
+        u = count // (mc.num_minibatches * mc.update_epochs)
+        frac = 1.0 - u / TOTAL_GLOBAL_UPDATES
+        frac = jnp.maximum(frac, 0.0)
+        lr_val = mc.min_lr + (mc.lr - mc.min_lr) * frac
+        if (getattr(mc, "lr_restart", 0.0) or 0.0) > 0.0:
+            span = mc.lr_restart_horizon - mc.lr_restart_at
+            frac2 = jnp.clip((mc.lr_restart_horizon - u) / span, 0.0, 1.0)
+            leg2 = mc.min_lr + (mc.lr_restart - mc.min_lr) * frac2
+            warm = jnp.clip((u - mc.lr_restart_at) / mc.lr_restart_warmup, 0.0, 1.0)
+            leg2 = mc.min_lr + (leg2 - mc.min_lr) * warm
+            lr_val = jnp.where(u >= mc.lr_restart_at, leg2, lr_val)
+        return lr_val
+
+    tx = optax.chain(
+        optax.clip_by_global_norm(mc.max_grad_norm),
+        optax.adam(learning_rate=linear_schedule, eps=1e-5),
+    )
+    return TrainState.create(apply_fn=network.apply, params=network_params, tx=tx)
+
+
+def build_stage4_train_state(
+    network: ActorCriticTransformer,
+    restored_params: dict,
+    cfg: type,
+) -> TrainState:
+    """Build a fresh Stage4 TrainState with restored params and NO annealing."""
+    tx = optax.chain(
+        optax.clip_by_global_norm(cfg.max_grad_norm),
+        optax.adam(cfg.lr, eps=1e-5),
+    )
+    return TrainState.create(apply_fn=network.apply, params=restored_params, tx=tx)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-v1 fresh start (weights-only init from healthy session175)
+# ═══════════════════════════════════════════════════════════════════════
+
+def verify_not_v0_source(ckpt_path: str) -> None:
+    """Fail closed if the start checkpoint looks like a forbidden P2-v0 ckpt.
+
+    P2-v1 MUST start weights-only from healthy session175.  Continuation from
+    P2-v0 98304/122880 is forbidden (SEVERE_REGRESSION, invalid for attribution).
+    """
+    norm = ckpt_path.replace("\\", "/")
+    for marker in _FORBIDDEN_V0_MARKERS:
+        if marker in norm:
+            raise RuntimeError(
+                f"REFUSED: start checkpoint '{ckpt_path}' matches forbidden P2-v0 "
+                f"marker '{marker}'. P2-v1 must start weights-only from healthy "
+                f"session175 ({SESSION175_CKPT}).")
+
+
+def _params_content_sha256(params) -> str:
+    """Deterministic content hash over flattened parameter leaves.
+
+    Serves as the reproducible 'source_checkpoint_sha256' for the weights-only
+    init: it hashes the actual loaded weight values (not the orbax directory
+    layout), so the provenance is stable and verifiable.
+    """
+    h = hashlib.sha256()
+    for leaf in jax.tree_util.tree_leaves(params):
+        arr = np.asarray(leaf)
+        h.update(str(arr.shape).encode())
+        h.update(np.ascontiguousarray(arr).tobytes())
+    return h.hexdigest()
+
+
+def _find_encoder_kernel_shape(params) -> Optional[tuple]:
+    """Return the encoder kernel shape (obs_dim, embed_size) if present."""
+    found = None
+
+    def _walk(node, prefix):
+        nonlocal found
+        if hasattr(node, "items"):
+            for k, v in node.items():
+                _walk(v, f"{prefix}/{k}")
+        elif hasattr(node, "shape"):
+            if "encoder" in prefix and prefix.endswith("kernel"):
+                found = tuple(int(x) for x in node.shape)
+
+    _walk(params, "")
+    return found
+
+
+def _optimizer_step_count(train_state: TrainState) -> int:
+    """Read the optimizer iteration counter from a TrainState's opt_state."""
+    leaves = jax.tree_util.tree_leaves(train_state.opt_state)
+    # optax ScaleByAdamState carries `count` as its first leaf; a fresh
+    # optimizer has count == 0.
+    return int(leaves[0]) if leaves else -1
+
+
+def init_fresh_from_session175(
+    network: ActorCriticTransformer,
+    env,
+    env_params,
+    cfg: type,
+    obs_dim: int,
+) -> dict:
+    """Weights-only init from healthy session175 + fresh everything else.
+
+    Loads ONLY the model parameters from session175/17500 (load_opt_state=False)
+    and creates fresh optimizer / replay / RNGs / counters.  Nothing from P2-v0
+    98304/122880 is loaded.  Fails closed if the encoder kernel is not
+    (obs_dim, embed_size) == (8335, 256).
+
+    Returns dict with: train_state, replay_buffer, rng, action_rng, global_step,
+    update_count, source_checkpoint, source_checkpoint_sha256, replay_size,
+    param_leaves, encoder_kernel, optimizer_step, master_seed.
+    """
+    verify_not_v0_source(SESSION175_CKPT)
+    print(f"\n[fresh-start] Weights-only init from healthy session175:")
+    print(f"  source_checkpoint = {SESSION175_CKPT}")
+
+    # 1. Load model params ONLY (no optimizer state) from session175.
+    ts_loaded = load_weights_only(
+        SESSION175_CKPT, env, env_params, cfg, load_opt_state=False)
+    loaded_params = ts_loaded.params
+    param_leaves = len(jax.tree_util.tree_leaves(loaded_params))
+
+    # 2. Fail-closed shape verification: encoder kernel must be (obs_dim, embed).
+    kernel_shape = _find_encoder_kernel_shape(loaded_params)
+    expected_kernel = (int(obs_dim), int(cfg.embed_size))
+    if kernel_shape != expected_kernel:
+        raise RuntimeError(
+            f"REFUSED: session175 encoder kernel {kernel_shape} != expected "
+            f"{expected_kernel}. Fail closed on schema mismatch (no override).")
+    print(f"  encoder kernel    = {kernel_shape}  (== {expected_kernel} OK)")
+    print(f"  param_leaves      = {param_leaves}")
+
+    # 3. Build a FRESH TrainState: restored params + NEW Adam optimizer state.
+    ts = build_stage4_train_state(network, loaded_params, cfg)
+    opt_step = _optimizer_step_count(ts)
+    if opt_step != 0:
+        raise RuntimeError(
+            f"REFUSED: fresh optimizer step != 0 (got {opt_step}). "
+            f"P2-v1 must start with a brand-new optimizer.")
+    print(f"  optimizer         = FRESH Adam(clip(1.0)+lr={cfg.lr}, eps=1e-5), step={opt_step}")
+
+    # 4. Fresh empty replay buffer (NOT restored from P2-v0).
+    replay = TrajectoryReplayBuffer(capacity=REPLAY_CAPACITY, seed=P2_V1_MASTER_SEED)
+    if len(replay) != 0:
+        raise RuntimeError("REFUSED: fresh replay buffer is not empty.")
+    print(f"  replay_buffer     = EMPTY (capacity={REPLAY_CAPACITY}, len={len(replay)})")
+
+    # 5. Fresh JAX RNG + fresh action RNG (both from the documented master seed).
+    rng = jax.random.PRNGKey(P2_V1_MASTER_SEED)
+    action_rng = make_action_rng(P2_V1_MASTER_SEED)
+    print(f"  JAX rng           = PRNGKey({P2_V1_MASTER_SEED}) (fresh)")
+    print(f"  action rng        = PCG64(seed={P2_V1_MASTER_SEED}) (fresh, checkpointable)")
+
+    # 6. Fresh counters — do NOT treat the dir name 17500 as a P2 env step.
+    global_step = P2_V1_GLOBAL_STEP_START
+    update_count = P2_V1_UPDATE_COUNT_START
+    print(f"  p2_v1_global_step = {global_step}  (17500 is session175 base step, NOT a P2 env step)")
+    print(f"  p2_v1_update_count= {update_count}")
+
+    # 7. Provenance: content hash of the loaded weights.
+    source_sha = _params_content_sha256(loaded_params)
+    print(f"  source_checkpoint_sha256 (weights content) = {source_sha}")
+
+    return {
+        "train_state": ts,
+        "replay_buffer": replay,
+        "rng": rng,
+        "action_rng": action_rng,
+        "global_step": global_step,
+        "update_count": update_count,
+        "source_checkpoint": SESSION175_CKPT,
+        "source_checkpoint_sha256": source_sha,
+        "replay_size": len(replay),
+        "param_leaves": param_leaves,
+        "encoder_kernel": list(kernel_shape) if kernel_shape else None,
+        "optimizer_step": opt_step,
+        "master_seed": P2_V1_MASTER_SEED,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Checkpoint resume
+# ═══════════════════════════════════════════════════════════════════════
+
+def restore_from_checkpoint(
+    ckpt_parent: str,
+    ckpt_step: int,
+    network: ActorCriticTransformer,
+    cfg: type,
+    obs_dim: int,
+) -> dict:
+    """Restore full training state from a D059 checkpoint.
+
+    Strategy:
+      1. Try restoring with the Stage4 template (anneal_lr=False) first —
+         this works for checkpoints saved by THIS launcher.
+      2. If that fails (legacy checkpoints like 98304 use anneal_lr=True),
+         fall back to a matching template (anneal_lr=True) for orbax
+         deserialization.
+      3. Extract params from whichever restore succeeded.
+      4. ALWAYS rebuild with Stage4 anneal_lr=False optimizer (documented
+         optimizer restart when falling back to legacy template).
+      5. Restore replay buffer + RNG + global_step from replay_meta.pkl.
+
+    Returns dict with keys: train_state, replay_buffer, rng, global_step,
+    step, manifest, optimizer_restarted.
+    """
+    print(f"\n[resume] Restoring from: {ckpt_parent}  step={ckpt_step}")
+
+    init_rng = jax.random.PRNGKey(0)
+    root = Path(ckpt_parent)
+    checkpointer = ocp.PyTreeCheckpointer()
+    options = ocp.CheckpointManagerOptions(create=False)
+    ckpt_manager = ocp.CheckpointManager(str(root), checkpointer, options=options)
+
+    restored_params = None
+    optimizer_restarted = False
+    optimizer_note = ""
+
+    # ── Attempt 1: Stage4 template (anneal_lr=False) ──────────────
+    # Works for checkpoints saved by this launcher.
+    stage4_ts = build_stage4_train_state(
+        network, init_network_params(network, obs_dim, cfg, init_rng), cfg)
+    try:
+        restored_ts = ckpt_manager.restore(ckpt_step, items=stage4_ts)
+        restored_params = restored_ts.params
+        saved_opt_step = int(jax.tree_util.tree_leaves(restored_ts.opt_state)[0])
+        print(f"  Orbax restore OK (Stage4 template, anneal_lr=False)  |"
+              f"  param_leaves={len(jax.tree_util.tree_leaves(restored_params))}"
+              f"  saved_opt_step={saved_opt_step}")
+        # Optimizer structure matches — we can use the restored TrainState
+        # directly (no rebuild needed).  But we still call build_stage4_train_state
+        # for consistency — it's a no-op in structure terms.
+        ts_stage4 = restored_ts
+    except (ValueError, TypeError, AssertionError) as e:
+        print(f"  Stage4 template restore skipped (structure mismatch, expected"
+              f" for legacy checkpoints): {str(e)[:120]}")
+
+        # ── Attempt 2: Legacy matching template (anneal_lr=True) ──
+        print("  Building matching template (anneal_lr=True) for legacy ckpt ...")
+        match_ts = build_matching_template(network, obs_dim, init_rng)
+        try:
+            restored_ts = ckpt_manager.restore(ckpt_step, items=match_ts)
+            restored_params = restored_ts.params
+            saved_opt_step = int(jax.tree_util.tree_leaves(restored_ts.opt_state)[0])
+            print(f"  Orbax restore OK (legacy template, anneal_lr=True)  |"
+                  f"  param_leaves={len(jax.tree_util.tree_leaves(restored_params))}"
+                  f"  saved_opt_step={saved_opt_step}")
+            # Rebuild with Stage4 optimizer (optimizer RESTART)
+            ts_stage4 = build_stage4_train_state(network, restored_params, cfg)
+            optimizer_restarted = True
+            optimizer_note = (
+                "Optimizer RESTARTED: legacy ckpt uses anneal_lr=True "
+                "(schedule-based Adam, incompatible optax structure with "
+                "anneal_lr=False).  Params restored; fresh Adam(lr="
+                f"{cfg.lr}) created."
+            )
+        except Exception as e2:
+            raise RuntimeError(
+                f"Failed to restore checkpoint {ckpt_parent}/{ckpt_step} "
+                f"with either template. Stage4 error: {e}; "
+                f"Legacy error: {e2}"
+            ) from e2
+
+    assert restored_params is not None, "Failed to restore params"
+
+    if not optimizer_restarted:
+        # Already matched — still note it in the return
+        optimizer_note = (
+            f"Optimizer CONTINUED: ckpt already uses anneal_lr=False "
+            f"(Stage4-compatible structure).  Optimizer state preserved."
+        )
+    print(f"  TrainState ready: anneal_lr=False"
+          f"{' (optimizer RESTARTED from legacy ckpt)' if optimizer_restarted else ''}")
+
+    # ── Restore replay buffer + RNG + global_step from pickle ─────
+    replay_meta_path = os.path.join(ckpt_parent, str(ckpt_step), "replay_meta.pkl")
+    with open(replay_meta_path, "rb") as f:
+        replay_meta = pickle.load(f)
+    replay = TrajectoryReplayBuffer.from_state_dict(replay_meta["replay_state"])
+    rng = replay_meta["rng_key"]
+    gs = replay_meta["global_step"]
+
+    # ── Load manifest ─────────────────────────────────────────────
+    manifest_path = os.path.join(ckpt_parent, str(ckpt_step), "manifest.json")
+    manifest = {}
+    if os.path.exists(manifest_path):
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+    print(f"  replay_buffer: {len(replay)} trajectories (RESTORED)")
+    print(f"  rng:           {rng}")
+    print(f"  global_step:   {gs}")
+
+    # Verify continuity
+    assert gs == ckpt_step, \
+        f"Global step mismatch: expected {ckpt_step}, got {gs}"
+    assert replay is not None and len(replay) > 0, \
+        "Replay buffer is empty — cannot continue training"
+
+    return {
+        "train_state": ts_stage4,
+        "replay_buffer": replay,
+        "rng": rng,
+        "global_step": gs,
+        "step": ckpt_step,
+        "manifest": manifest,
+        "optimizer_restarted": optimizer_restarted,
+        "optimizer_note": optimizer_note,
+    }
+
+
+def restore_p2_v1_checkpoint(
+    ckpt_parent: str,
+    ckpt_step: int,
+    network: ActorCriticTransformer,
+    cfg: type,
+    obs_dim: int,
+) -> dict:
+    """Restore a P2-v1 self-checkpoint for exact resume (方案B).
+
+    P2-v1 checkpoints are ALWAYS saved by this launcher with anneal_lr=False, so
+    no legacy-template fallback is needed.  Unlike ``restore_from_checkpoint``
+    (legacy D059 continuation, which requires a non-empty replay buffer), an
+    exact-resume checkpoint may legitimately hold an EMPTY replay buffer: the
+    in-progress episodes live in the cross-rollout pending buffers, not in
+    completed replay.  So this restore does NOT fail on empty replay.
+
+    Returns everything needed to continue bit-exactly:
+      train_state (params+optimizer), replay_buffer, rng, action_rng_state,
+      global_step, update_count, pending_state, collector_state
+      (obsv/env_state/memories/mem_mask/mem_idx), step, manifest.
+    """
+    print(f"\n[resume-p2v1] Restoring P2-v1 self-checkpoint: "
+          f"{ckpt_parent}  step={ckpt_step}")
+
+    init_rng = jax.random.PRNGKey(0)
+    root = Path(ckpt_parent)
+    checkpointer = ocp.PyTreeCheckpointer()
+    options = ocp.CheckpointManagerOptions(create=False)
+    ckpt_manager = ocp.CheckpointManager(str(root), checkpointer, options=options)
+
+    stage4_ts = build_stage4_train_state(
+        network, init_network_params(network, obs_dim, cfg, init_rng), cfg)
+    restored_ts = ckpt_manager.restore(ckpt_step, items=stage4_ts)
+    saved_opt_step = int(jax.tree_util.tree_leaves(restored_ts.opt_state)[0])
+    print(f"  Orbax restore OK (anneal_lr=False)  |"
+          f"  param_leaves={len(jax.tree_util.tree_leaves(restored_ts.params))}"
+          f"  saved_opt_step={saved_opt_step}")
+
+    replay_meta_path = os.path.join(ckpt_parent, str(ckpt_step), "replay_meta.pkl")
+    with open(replay_meta_path, "rb") as f:
+        replay_meta = pickle.load(f)
+
+    replay = TrajectoryReplayBuffer.from_state_dict(replay_meta["replay_state"])
+    rng = replay_meta["rng_key"]
+    gs = replay_meta["global_step"]
+    action_rng_state_ = replay_meta.get("action_rng_state", None)
+    update_count = int(replay_meta.get("update_count", 0))
+    pending_state = replay_meta.get("pending_state", None)
+    collector_state = replay_meta.get("collector_state", None)
+
+    manifest_path = os.path.join(ckpt_parent, str(ckpt_step), "manifest.json")
+    manifest = {}
+    if os.path.exists(manifest_path):
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+    assert gs == ckpt_step, f"Global step mismatch: expected {ckpt_step}, got {gs}"
+    # Empty replay is ALLOWED for 方案B resume (in-progress episodes are in the
+    # pending buffers).  We only require the resume state itself to be present.
+    if pending_state is None or collector_state is None:
+        raise RuntimeError(
+            f"REFUSED: checkpoint {ckpt_parent}/{ckpt_step} lacks pending_state "
+            f"and/or collector_state — cannot claim exact resume. Fail closed.")
+    print(f"  replay={len(replay)} (may be 0 — pending buffers carry in-progress "
+          f"episodes)  update_count={update_count}  "
+          f"pending_transitions={sum(len(s['obs']) for s in pending_state['slots'])}")
+
+    return {
+        "train_state": restored_ts,
+        "replay_buffer": replay,
+        "rng": rng,
+        "action_rng_state": action_rng_state_,
+        "global_step": gs,
+        "update_count": update_count,
+        "pending_state": pending_state,
+        "collector_state": collector_state,
+        "step": ckpt_step,
+        "manifest": manifest,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Per-session training
+# ═══════════════════════════════════════════════════════════════════════
+
+def run_session(
+    ts: TrainState,
+    replay: TrajectoryReplayBuffer,
+    rng: jax.random.PRNGKey,
+    action_rng: np.random.Generator,
+    update_count: int,
+    global_step: int,
+    session_index: int,
+    cfg: type,
+    network: ActorCriticTransformer,
+    learner: LongContextLearner,
+    env,
+    env_params,
+    ach_table: jnp.ndarray,
+    out_dir: str,
+    num_updates: int = NUM_UPDATES_PER_SESSION,
+    session_target_steps: int = SESSION_ENV_STEPS,
+    pending: Optional[PendingEpisodeBuffers] = None,
+    r_env_state=None,
+    r_obsv=None,
+    r_memories=None,
+    r_mem_mask=None,
+    r_mem_idx=None,
+) -> dict:
+    """Run ONE session of ``num_updates`` PPO updates and return updated state.
+
+    Each update = NUM_ENVS*ROLLOUT_STEPS = 2048 env steps.  A full Stage4
+    session is num_updates=12 (24,576 steps); the GPU smoke ladder uses
+    num_updates=1 (Level 1/2, 2048 steps) and num_updates=12 (Level 3).
+
+    P2-v1 corrected loop:
+      - aligned transitions (obs/action/reward/value/log_prob/next_obs)
+      - pre-action Transformer memory
+      - checkpointable action RNG
+      - native on-policy PPO main update every rollout
+      - optional replay auxiliary update
+
+    方案B exact resume: pass the restored collector state (``r_env_state`` /
+    ``r_obsv`` / ``r_memories`` / ``r_mem_mask`` / ``r_mem_idx``) together with
+    the restored ``pending`` buffers to CONTINUE an in-progress collection
+    bit-exactly — in that case the env is NOT re-reset (no reset RNG is
+    consumed).  Leaving them None performs a true fresh start with ``env.reset``.
+    """
+    session_t0 = time.time()
+    total_env_steps = 0
+    crash_info = None
+    all_logs = []
+
+    pass_trajs_long = 0
+    pass_samples_long = 0
+    pass_grad_updates = 0
+    pass_relabel_evidence = []
+
+    # 方案B exact resume: a checkpointed run restores the collector env/memory
+    # state and continues WITHOUT an env.reset (which would splice reset
+    # transitions onto the in-progress pending episodes).  A fresh start leaves
+    # r_env_state None and resets below.
+    resuming = r_env_state is not None
+    obsv_j = r_obsv
+    env_state = r_env_state
+    if resuming:
+        memories_j = r_memories
+        mem_mask_j = r_mem_mask
+        mem_idx_j = r_mem_idx
+    else:
+        memories_j = jnp.zeros((NUM_ENVS, cfg.window_mem, cfg.num_layers, cfg.embed_size))
+        mem_mask_j = jnp.zeros((NUM_ENVS, cfg.num_heads, 1, cfg.window_mem + 1), dtype=jnp.bool_)
+        mem_idx_j = jnp.full((NUM_ENVS,), cfg.window_mem + 1, dtype=jnp.int32)
+
+    # Cross-rollout persistent episode buffers (方案B).  Restored from checkpoint
+    # on resume; freshly created at a true fresh start.
+    if pending is None:
+        pending = PendingEpisodeBuffers(
+            NUM_ENVS, first_policy_version=int(update_count))
+
+    class _EnvAdapter:
+        """Adapt Stage4 env.step(env_params) to p2_v1_core's env interface."""
+
+        def step(self, step_rng, env_state, actions):
+            return env.step(step_rng, env_state, actions, env_params)
+
+    env_adapter = _EnvAdapter()
+
+    def relabel_callback(sample):
+        nonlocal pass_samples_long, pass_grad_updates
+        pass_samples_long += 1
+        info = {}
+        ach_any = sample.achievements.max(axis=0)
+        if ach_any.any():
+            old_target = int(np.argmax(sample.target_achievements))
+            sample = relabel_sample(sample)
+            new_target = int(np.argmax(sample.target_achievements))
+            replay.counters.relabelled_samples += 1
+            pass_relabel_evidence.append({
+                "from_goal_idx": old_target,
+                "to_goal_idx": new_target,
+            })
+            info["hindsight_from_goal_idx"] = old_target
+            info["hindsight_to_goal_idx"] = new_target
+            info["hindsight_relabelled"] = True
+        else:
+            info["hindsight_relabelled"] = False
+        return sample, info
+
+    print(f"\n── Session {session_index} "
+          f"(global_step={global_step}) "
+          f"target={session_target_steps} steps ({num_updates} updates) ──")
+
+    try:
+        if not resuming:
+            # True fresh start: reset the env.  On resume the restored env_state
+            # /obsv are used directly and NO reset RNG is consumed, so the action
+            # /env RNG stream stays bit-identical to an uninterrupted run.
+            rng, reset_rng = jax.random.split(rng)
+            obsv_j, env_state = env.reset(reset_rng, env_params)
+
+        for up in range(num_updates):
+            roll = collect_rollout(
+                ts=ts,
+                network=network,
+                env=env_adapter,
+                env_state=env_state,
+                obsv=obsv_j,
+                memories=memories_j,
+                mem_mask=mem_mask_j,
+                mem_idx=mem_idx_j,
+                rng=rng,
+                action_rng=action_rng,
+                num_envs=NUM_ENVS,
+                rollout_steps=ROLLOUT_STEPS,
+                window_mem=cfg.window_mem,
+                num_heads=cfg.num_heads,
+                target_achievement=np.asarray(ach_table[0]),
+                collected_update_count=update_count,
+                pending=pending,
+            )
+
+            total_env_steps += NUM_ENVS * ROLLOUT_STEPS
+            batch = roll["batch"]
+            obsv_j = roll["obsv"]
+            env_state = roll["env_state"]
+            memories_j = roll["memories"]
+            mem_mask_j = roll["mem_mask"]
+            mem_idx_j = roll["mem_idx"]
+            rng = roll["rng"]
+            pending = roll["pending"]
+
+            for traj in roll["trajectories"]:
+                replay.insert(traj)
+                replay.counters.trajectories_collected += 1
+                if traj.length > 128:
+                    pass_trajs_long += 1
+
+            ts, metrics = p2_v1_update(
+                ts=ts,
+                learner=learner,
+                batch=batch,
+                replay=replay,
+                update_count=update_count,
+                replay_aux=True,
+                relabel_callback=relabel_callback,
+            )
+            update_count = int(metrics["update_count"])
+            replay.counters.gradient_updates += 1
+            if metrics.get("ppo_grad_norm", 0.0) > 1e-12 and np.isfinite(
+                metrics.get("ppo_grad_norm", 0.0)
+            ):
+                pass_grad_updates += 1
+
+            if not np.isfinite(metrics.get("ppo_total_loss", np.nan)):
+                raise RuntimeError(
+                    f"NaN/Inf PPO loss: {metrics.get('ppo_total_loss')}")
+            if not np.isfinite(metrics.get("ppo_grad_norm", np.nan)):
+                raise RuntimeError(
+                    f"NaN/Inf PPO grad_norm: {metrics.get('ppo_grad_norm')}")
+
+            cs = replay.counters.snapshot()
+            log = {
+                "session": session_index,
+                "update": up,
+                "session_env_steps": total_env_steps,
+                "global_env_steps": global_step + total_env_steps,
+                "elapsed_s": round(time.time() - session_t0, 1),
+                "update_count": update_count,
+                "replay_size": len(replay),
+                "replay_max_len": replay.longest_trajectory_length,
+                **cs,
+                **{k: v for k, v in metrics.items() if isinstance(v, (int, float, bool, str))},
+            }
+            all_logs.append(log)
+
+            print(f"  up {up:3d}/{num_updates}  "
+                  f"steps {total_env_steps:6d}/{session_target_steps}  "
+                  f"ppo_loss {metrics.get('ppo_total_loss', float('nan')):.4f}  "
+                  f"aux {int(metrics.get('replay_aux_update', False))}  "
+                  f"replay {len(replay):3d}  "
+                  f"relab {cs['relabelled_samples']:3d}  "
+                  f"max_len={replay.longest_trajectory_length}")
+
+    except Exception as e:
+        print(f"\nSESSION STOP: {e}")
+        traceback.print_exc()
+        crash_info = {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "session_env_steps": total_env_steps,
+            "session": session_index,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    session_elapsed = round(time.time() - session_t0, 1)
+    new_global_step = global_step + total_env_steps
+
+    return {
+        "ts": ts,
+        "replay": replay,
+        "rng": rng,
+        "action_rng": action_rng,
+        "update_count": update_count,
+        "global_step": new_global_step,
+        "session_env_steps": total_env_steps,
+        "session_elapsed_s": session_elapsed,
+        "session_log": all_logs,
+        "pass_trajs_long": pass_trajs_long,
+        "pass_samples_long": pass_samples_long,
+        "pass_grad_updates": pass_grad_updates,
+        "pass_relabel_evidence": pass_relabel_evidence,
+        "crash_info": crash_info,
+        "pending": pending,
+        "env_state": env_state,
+        "obsv": obsv_j,
+        "memories": memories_j,
+        "mem_mask": mem_mask_j,
+        "mem_idx": mem_idx_j,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Checkpoint saving
+# ═══════════════════════════════════════════════════════════════════════
+
+def save_stage4_checkpoint(
+    ts: TrainState,
+    replay: TrajectoryReplayBuffer,
+    rng: jax.random.PRNGKey,
+    global_step: int,
+    cfg: type,
+    session_index: int,
+    out_dir: str,
+    start_step: int,
+    action_rng_state: Optional[dict] = None,
+    update_count: int = 0,
+    source_checkpoint: str = "",
+    source_checkpoint_sha256: str = "",
+    pending_state: Optional[dict] = None,
+    collector_state: Optional[dict] = None,
+) -> str:
+    """Save a full Stage4 checkpoint with resolved config and provenance.
+
+    P2-v1: also persists the checkpointable action RNG state and the update
+    count so a resumed run reproduces the exact action sequence and policy
+    version.  方案B: also persists the cross-rollout pending episode buffers and
+    the collector env/memory state so an interrupted run resumes the in-progress
+    episodes exactly.
+    """
+    ckpt_path = save_full_checkpoint(
+        ts, replay, rng, global_step, CKPT_ROOT, step=global_step,
+        action_rng_state=action_rng_state, update_count=update_count,
+        pending_state=pending_state, collector_state=collector_state)
+
+    # Compute source hashes (same as D059 convention)
+    src_hashes = {}
+    for fn in sorted(os.listdir(_AMAGO_SRC)):
+        if fn.endswith(".py"):
+            with open(os.path.join(_AMAGO_SRC, fn), "rb") as fh:
+                src_hashes[fn] = hashlib.sha256(fh.read()).hexdigest()
+
+    # Extended manifest with Stage4 identity
+    manifest = {
+        "directive": "D059",
+        "stage": "4",
+        "stage4_session": session_index,
+        "treatment": "AMAGO_STYLE_EXPLORATORY_P2",
+        "experiment": "A",
+        "launcher": "P2-v1-fresh-start-weights-only",
+        "start": "weights_only_from_session175",
+        "source_checkpoint": source_checkpoint,
+        "source_checkpoint_sha256": source_checkpoint_sha256,
+        "p2_v1_start_step": start_step,
+        "resume_from_step": start_step,
+        "checkpoint_step": global_step,
+        "global_step": global_step,
+        "update_count": int(update_count),
+        "action_rng_state_saved": action_rng_state is not None,
+        "pending_buffers_saved": pending_state is not None,
+        "pending_total_transitions": (
+            sum(len(s["obs"]) for s in pending_state["slots"])
+            if pending_state is not None else 0),
+        "collector_state_saved": collector_state is not None,
+        "gamma": GAMMA,
+        "gae_lambda": GAE_LAMBDA,
+        "anneal_lr": False,
+        "optimizer_fresh_at_start": True,
+        "optimizer_note": (
+            "P2-v1 weights-only init: model params loaded from healthy "
+            "session175 (base 17500); optimizer/replay/RNG/global_step/"
+            "update_count all created FRESH at p2_v1_global_step=0. "
+            "Nothing from P2-v0 98304/122880 is loaded."
+        ),
+        "gpu_uuid": EXPECTED_GPU_UUID,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "counters": replay.counters.snapshot(),
+        "replay_buffer_size": len(replay),
+        "replay_longest_trajectory": replay.longest_trajectory_length,
+        "resolved_config": _cfg_resolved_dict(cfg),
+        "source_hashes": src_hashes,
+        "checkpoint_path": ckpt_path,
+        "session_output_dir": out_dir,
+    }
+
+    manifest_path = os.path.join(
+        CKPT_ROOT, str(global_step), "stage4_manifest.json")
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+
+    print(f"  [checkpoint] saved at step={global_step}  →  {ckpt_path}")
+    print(f"  [checkpoint] manifest  →  {manifest_path}")
+    return ckpt_path
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Smoke test: verify restore + forward pass + checkpoint round-trip
+# ═══════════════════════════════════════════════════════════════════════
+
+def smoke_test():
+    """P2-v1 weights-only fresh-start verification (第五节 regression).
+
+    Runs on GPU0 (load_weights_only requires GPU).  Checks, with NO training:
+      1. Dummy env gives obs_dim/action_dim (expect 8335 / 43).
+      2. Network builds with the BIG P2-v1 config.
+      3. Fresh RANDOM init (kept as a comparison baseline).
+      4. Build the real Stage4 env, then weights-only init from session175:
+         params loaded; encoder kernel == (8335,256) (fail closed otherwise);
+         optimizer FRESH (step==0); replay EMPTY (size 0); global_step==0;
+         update_count==0; loaded params differ from fresh random init.
+      5. Forward pass finite (batch_size=16).
+      6. RNG independence: same master seed -> identical action stream;
+         different seed -> different stream.
+      7. Checkpoint round-trip: save_full_checkpoint -> restore_full_checkpoint
+         preserves params/optimizer/replay/rng/action_rng/global_step/update_count.
+      8. Cleanup of the smoke checkpoint.
+    """
+    print("=" * 60)
+    print("SMOKE TEST: P2-v1 weights-only fresh-start from session175")
+    print("=" * 60)
+
+    cfg = Cfg()
+
+    # 1. Build dummy env for network init
+    print("\n[smoke 1/8] Building dummy env ...")
+    ach_table = jnp.array(
+        [get_achievement_multi_hot([Achievement.DEFEAT_KOBOLD])], dtype=jnp.float32)
+    EMB = int(ach_table.shape[1])
+    dummy = CraftaxAugObsTrain(
+        condition_on_task=True, conditioning_type="embedding",
+        embedding_size=EMB, task_embeddings=jnp.zeros((1, EMB)))
+    obs_dim = dummy.observation_space(dummy.default_params).shape[0]
+    action_dim = dummy.action_space(dummy.default_params).n
+    print(f"  obs_dim={obs_dim}  action_dim={action_dim}  embedding_dim={EMB}")
+    assert obs_dim == 8335, f"FAIL: expected obs_dim 8335, got {obs_dim}"
+    assert action_dim == 43, f"FAIL: expected action_dim 43, got {action_dim}"
+
+    # 2. Build network
+    print("\n[smoke 2/8] Building network ...")
+    network = ActorCriticTransformer(
+        action_dim=action_dim,
+        activation=cfg.activation,
+        hidden_layers=cfg.hidden_layers,
+        encoder_size=cfg.embed_size,
+        num_heads=cfg.num_heads,
+        qkv_features=cfg.qkv_features,
+        num_layers=cfg.num_layers,
+        gating=cfg.gating,
+        gating_bias=cfg.gating_bias)
+
+    # 3. Fresh RANDOM init (comparison baseline to prove weights were loaded)
+    print("\n[smoke 3/8] Fresh random init (baseline) ...")
+    init_rng = jax.random.PRNGKey(0)
+    fresh_params = init_network_params(network, obs_dim, cfg, init_rng)
+    n_leaves = len(jax.tree_util.tree_leaves(fresh_params))
+    n_params = sum(
+        int(np.prod(x.shape)) for x in jax.tree_util.tree_leaves(fresh_params)
+        if hasattr(x, 'shape'))
+    print(f"  Network init OK  param_leaves={n_leaves}  total_params={n_params:,}")
+
+    # 4. Build the real Stage4 env, then weights-only init from session175
+    print("\n[smoke 4/8] Building Stage4 env + weights-only init from session175 ...")
+    static_env_params = StaticEnvParams()
+    env_params = EnvParams(max_timesteps=4096)
+    with open(S4_TASK_PATH) as f:
+        s4_code = f.read()
+    ns = {}
+    exec(s4_code, ns)
+    Task = ns["Env"]
+    base_env = MultiTaskMiniCraftaxEnv(
+        [Task], static_env_params, env_params, cfg.condition_on_task,
+        conditioning_type="embedding", embedding_size=EMB,
+        completion_bonus_scale=cfg.completion_bonus_scale,
+        completion_bonus_min=cfg.completion_bonus_min,
+        bonus_type=cfg.bonus_type, dynamic_bonus_k=cfg.dynamic_bonus_k)
+
+    fresh = init_fresh_from_session175(network, base_env, env_params, cfg, obs_dim)
+    ts = fresh["train_state"]
+    replay = fresh["replay_buffer"]
+    rng = fresh["rng"]
+    action_rng = fresh["action_rng"]
+    gs = fresh["global_step"]
+    update_count = fresh["update_count"]
+
+    # Fail-closed assertions on the fresh-start contract
+    assert fresh["encoder_kernel"] == [8335, 256], \
+        f"FAIL: encoder kernel {fresh['encoder_kernel']} != [8335, 256]"
+    assert fresh["optimizer_step"] == 0, \
+        f"FAIL: fresh optimizer step {fresh['optimizer_step']} != 0"
+    assert len(replay) == 0, f"FAIL: replay not empty (len={len(replay)})"
+    assert gs == 0, f"FAIL: p2_v1_global_step {gs} != 0"
+    assert update_count == 0, f"FAIL: p2_v1_update_count {update_count} != 0"
+    print("  weights-only init OK: kernel (8335,256), optimizer step 0, "
+          "replay 0, global_step 0, update_count 0")
+
+    # Loaded params must differ from fresh RANDOM init (proves weights loaded)
+    params_differ = not all(
+        bool(jnp.all(l1 == l2))
+        for l1, l2 in zip(
+            jax.tree_util.tree_leaves(fresh_params),
+            jax.tree_util.tree_leaves(ts.params)))
+    assert params_differ, "FAIL: session175 params identical to fresh random init!"
+    print("  params differ from fresh random init (weights load VERIFIED)")
+
+    # 5. Forward pass (batch_size=16, matches training — batch_size=1 breaks
+    #    the transformer's memory concatenation, known limitation)
+    print("\n[smoke 5/8] Forward pass (batch_size=16) ...")
+    test_mem = jnp.zeros((16, cfg.window_mem, cfg.num_layers, cfg.embed_size))
+    test_obs = jnp.zeros((16, obs_dim))
+    test_mask = jnp.zeros((16, cfg.num_heads, 1, cfg.window_mem + 1), dtype=jnp.bool_)
+    pi, value, mem_out = network.apply(
+        ts.params, test_mem, test_obs, test_mask,
+        method=network.model_forward_eval)
+    fwd_finite = bool(np.all(np.isfinite(np.asarray(pi.logits)))
+                      and np.all(np.isfinite(np.asarray(value))))
+    assert fwd_finite, "FAIL: forward produced NaN/Inf"
+    print(f"  Forward OK  logits={pi.logits.shape}  value={value.shape}  "
+          f"mem_out={mem_out.shape}  finite={fwd_finite}")
+
+    # 6. RNG independence + determinism (action RNG from the documented seed)
+    print("\n[smoke 6/8] RNG independence + determinism ...")
+    from rng_utils import sample_actions
+    logits_np = np.asarray(pi.logits)
+    softmax = np.exp(logits_np - logits_np.max(axis=-1, keepdims=True))
+    probs = softmax / softmax.sum(axis=-1, keepdims=True)
+    g_same_a = make_action_rng(P2_V1_MASTER_SEED)
+    g_same_b = make_action_rng(P2_V1_MASTER_SEED)
+    g_diff = make_action_rng(P2_V1_MASTER_SEED + 1)
+    seq_a = [int(sample_actions(g_same_a, probs)[0]) for _ in range(8)]
+    seq_b = [int(sample_actions(g_same_b, probs)[0]) for _ in range(8)]
+    seq_c = [int(sample_actions(g_diff, probs)[0]) for _ in range(8)]
+    assert seq_a == seq_b, "FAIL: same seed produced different action streams"
+    assert seq_a != seq_c, "FAIL: different seeds produced identical action streams"
+    print(f"  same-seed identical={seq_a == seq_b}  diff-seed differs={seq_a != seq_c}")
+
+    # 7. Checkpoint round-trip (P2-v1 self-checkpoint format, save -> restore)
+    print("\n[smoke 7/8] Checkpoint round-trip (save -> restore) ...")
+    smoke_ckpt_dir = os.path.join(CKPT_ROOT, "_smoke_test_roundtrip")
+    # Idempotent: clear any leftover smoke checkpoint from a prior aborted run.
+    shutil.rmtree(smoke_ckpt_dir, ignore_errors=True)
+    save_full_checkpoint(
+        ts, replay, rng, gs, smoke_ckpt_dir, step=gs,
+        action_rng_state=action_rng_state(action_rng), update_count=update_count)
+    dummy_ts = build_stage4_train_state(
+        network, init_network_params(network, obs_dim, cfg, init_rng), cfg)
+    restored2 = restore_full_checkpoint(smoke_ckpt_dir, dummy_ts, step=gs)
+    ts2 = restored2["train_state"]
+    replay2 = restored2["replay_buffer"]
+    rng2 = restored2["rng"]
+    gs2 = restored2["global_step"]
+    uc2 = restored2["update_count"]
+    arng2 = restored2["action_rng_state"]
+
+    assert gs2 == gs, f"Round-trip global_step mismatch: {gs2} != {gs}"
+    assert uc2 == update_count, \
+        f"Round-trip update_count mismatch: {uc2} != {update_count}"
+    assert len(replay2) == len(replay), \
+        f"Round-trip replay size mismatch: {len(replay2)} != {len(replay)}"
+    assert bool(jnp.all(rng2 == rng)), "Round-trip JAX rng mismatch"
+    params_equal = all(
+        bool(jnp.all(l1 == l2))
+        for l1, l2 in zip(
+            jax.tree_util.tree_leaves(ts.params),
+            jax.tree_util.tree_leaves(ts2.params)))
+    assert params_equal, "Round-trip params mismatch!"
+    opt_equal = all(
+        bool(jnp.all(jnp.asarray(l1) == jnp.asarray(l2)))
+        for l1, l2 in zip(
+            jax.tree_util.tree_leaves(ts.opt_state),
+            jax.tree_util.tree_leaves(ts2.opt_state)))
+    assert opt_equal, "Round-trip optimizer state mismatch!"
+    assert arng2 is not None, "Round-trip action_rng_state missing"
+    # Restored action RNG state must reproduce the same future stream.
+    g_resume = restore_action_rng(arng2, seed=P2_V1_MASTER_SEED)
+    g_cont = action_rng  # current generator already advanced equally
+    seq_resume = [int(sample_actions(g_resume, probs)[0]) for _ in range(8)]
+    seq_cont = [int(sample_actions(g_cont, probs)[0]) for _ in range(8)]
+    assert seq_resume == seq_cont, "FAIL: restored action RNG diverges from live RNG"
+    print(f"  round-trip OK: params+optimizer bit-exact, global_step={gs2}, "
+          f"update_count={uc2}, replay={len(replay2)}, rng match, action_rng resumes")
+
+    # 8. Cleanup
+    print("\n[smoke 8/8] Cleanup ...")
+    shutil.rmtree(smoke_ckpt_dir, ignore_errors=True)
+    print(f"  Smoke checkpoint cleaned up")
+
+    # Summary
+    print(f"\n{'='*60}")
+    print("SMOKE TEST: P2-v1 WEIGHTS-ONLY FRESH-START — ALL CHECKS PASSED")
+    print(f"  source_checkpoint:        {fresh['source_checkpoint']}")
+    print(f"  source_checkpoint_sha256: {fresh['source_checkpoint_sha256']}")
+    print(f"  encoder_kernel:           {fresh['encoder_kernel']}")
+    print(f"  param_leaves:             {fresh['param_leaves']}")
+    print(f"  optimizer:                FRESH (step {fresh['optimizer_step']})")
+    print(f"  replay_size:              {len(replay)}")
+    print(f"  p2_v1_global_step:        {gs}")
+    print(f"  p2_v1_update_count:       {update_count}")
+    print(f"  master_seed:              {fresh['master_seed']}")
+    print(f"  gamma / lambda:           {GAMMA} / {GAE_LAMBDA}")
+    print(f"  GPU:                      {EXPECTED_GPU_UUID}")
+    print(f"{'='*60}")
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-v0 freeze guard
+# ═══════════════════════════════════════════════════════════════════════
+
+def v0_freeze_guard() -> None:
+    """Refuse formal chained continuation from v0 checkpoints 98304/122880.
+
+    The v0 P2 implementation is frozen and labeled
+    ``P2-v0-exploratory-invalid-for-attribution`` (2026-07-22).  Those
+    checkpoints are historical exploratory results only and MUST NOT be used to
+    attribute P2 mechanism efficacy.  P2-v1 training starts fresh from Henry
+    session175 (base 17500) under the P2-v1 launcher/output namespace, NOT via
+    this v0 continuation path.
+
+    Set ``P2_V0_CONTINUATION_ALLOWED=1`` to override for DEBUGGING ONLY.
+    """
+    if os.environ.get("P2_V0_CONTINUATION_ALLOWED", "0") == "1":
+        print("[freeze] WARNING: P2_V0_CONTINUATION_ALLOWED=1 — freeze OVERRIDE "
+              "active (DEBUG ONLY). v0 continuation is NOT valid P2-v1 evidence.")
+        return
+    print("=" * 64)
+    print("FROZEN: P2-v0-exploratory-invalid-for-attribution (2026-07-22)")
+    print("  Formal chained continuation from v0 checkpoints 98304/122880 is")
+    print("  STOPPED.  Those checkpoints are historical exploratory results only")
+    print("  and MUST NOT be used to attribute P2 mechanism efficacy.")
+    print("  P2-v1 training must start fresh from Henry session175 (base 17500)")
+    print("  under the P2-v1 launcher / output namespace — not this v0 path.")
+    print("  Set P2_V0_CONTINUATION_ALLOWED=1 to override for DEBUGGING ONLY.")
+    print("=" * 64)
+    sys.exit(2)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Main: multi-session training loop
+# ═══════════════════════════════════════════════════════════════════════
+
+def main(max_sessions: Optional[int] = None,
+         num_updates: int = NUM_UPDATES_PER_SESSION,
+         resume_from: Optional[int] = None):
+    # P2-v1 fresh start: weights-only init from healthy session175.  This path
+    # never touches the frozen P2-v0 checkpoints (verify_not_v0_source enforces).
+    verify_not_v0_source(SESSION175_CKPT)
+
+    session_target_steps = NUM_ENVS * ROLLOUT_STEPS * num_updates
+    print("=" * 60)
+    print("P2-v1 Stage4 Training — Experiment A (weights-only from session175)")
+    print(f"  Start:         weights-only from {SESSION175_CKPT}")
+    print(f"  p2_v1 start:   global_step=0, update_count=0, replay_size=0")
+    print(f"  Session size:  {session_target_steps} env steps "
+          f"({NUM_ENVS}x{ROLLOUT_STEPS}x{num_updates} updates)")
+    print(f"  GPU:           {EXPECTED_GPU_UUID}")
+    print(f"  gamma:         {GAMMA}  lambda: {GAE_LAMBDA}")
+    print(f"  anneal_lr:     False (Stage4 — NO auto-annealing)")
+    print(f"  master_seed:   {P2_V1_MASTER_SEED}")
+    print(f"  max_sessions:  {max_sessions if max_sessions else 'unlimited (Ctrl+C to stop)'}")
+    print("=" * 60)
+
+    # ── Guards ────────────────────────────────────────────────────
+    verify_gpu()
+    session_dir = guard_output_collision(
+        os.path.join(OUTPUT_ROOT, "stage4_continue"))
+    print(f"\n[output] Session directory: {session_dir}")
+
+    cfg = Cfg()
+
+    # ── [1/6] Build dummy env for obs_dim/action_dim ───────────────
+    print("\n[1/6] Building dummy env for network init ...")
+    ach_table = jnp.array(
+        [get_achievement_multi_hot([Achievement.DEFEAT_KOBOLD])], dtype=jnp.float32)
+    EMB = int(ach_table.shape[1])
+    dummy = CraftaxAugObsTrain(
+        condition_on_task=True, conditioning_type="embedding",
+        embedding_size=EMB, task_embeddings=jnp.zeros((1, EMB)))
+    obs_dim = dummy.observation_space(dummy.default_params).shape[0]
+    action_dim = dummy.action_space(dummy.default_params).n
+    print(f"  obs_dim={obs_dim}  action_dim={action_dim}")
+
+    # ── [2/6] Build network ────────────────────────────────────────
+    print("\n[2/6] Building network ...")
+    network = ActorCriticTransformer(
+        action_dim=action_dim,
+        activation=cfg.activation,
+        hidden_layers=cfg.hidden_layers,
+        encoder_size=cfg.embed_size,
+        num_heads=cfg.num_heads,
+        qkv_features=cfg.qkv_features,
+        num_layers=cfg.num_layers,
+        gating=cfg.gating,
+        gating_bias=cfg.gating_bias)
+
+    # ── [3/6] Build the real Stage4 base env (needed for weights load) ──
+    print("\n[3/6] Building Stage4 base env ...")
+    with open(S4_TASK_PATH) as f:
+        s4_code = f.read()
+    ns = {}
+    exec(s4_code, ns)
+    Task = ns["Env"]
+    static_env_params = StaticEnvParams()
+    env_params = EnvParams(max_timesteps=4096)
+    base_env = MultiTaskMiniCraftaxEnv(
+        [Task], static_env_params, env_params, cfg.condition_on_task,
+        conditioning_type="embedding", embedding_size=EMB,
+        completion_bonus_scale=cfg.completion_bonus_scale,
+        completion_bonus_min=cfg.completion_bonus_min,
+        bonus_type=cfg.bonus_type, dynamic_bonus_k=cfg.dynamic_bonus_k)
+    print("  base env built (Stage4: floor2, 8/8 kills pre-credited, DEFEAT_KOBOLD)")
+
+    # ── [4/6] Weights-only init from session175 + fresh everything ──
+    print("\n[4/6] Weights-only init from healthy session175 (fresh start) ...")
+    fresh = init_fresh_from_session175(network, base_env, env_params, cfg, obs_dim)
+    ts = fresh["train_state"]
+    replay = fresh["replay_buffer"]
+    rng = fresh["rng"]
+    action_rng = fresh["action_rng"]
+    global_step = fresh["global_step"]      # == 0
+    update_count = fresh["update_count"]    # == 0
+    source_checkpoint = fresh["source_checkpoint"]
+    source_checkpoint_sha256 = fresh["source_checkpoint_sha256"]
+
+    # ── [4b/6] 方案B exact-resume override (optional --resume-from) ──
+    # When resume_from is given, replace the fresh-start state with the state
+    # restored from P2-v1's OWN checkpoint (CKPT_ROOT/<resume_from>) so this run
+    # CONTINUES bit-exactly instead of restarting.  The fresh init in [4/6] is
+    # still run to recover the session175 source provenance for the manifest.
+    resuming = resume_from is not None
+    if resuming:
+        print(f"\n[4b/6] 方案B exact-resume from P2-v1 checkpoint "
+              f"step={resume_from} ...")
+        rr = restore_p2_v1_checkpoint(
+            CKPT_ROOT, resume_from, network, cfg, obs_dim)
+        ts = rr["train_state"]
+        replay = rr["replay_buffer"]
+        rng = rr["rng"]
+        action_rng = restore_action_rng(
+            rr["action_rng_state"], seed=P2_V1_MASTER_SEED)
+        global_step = int(rr["global_step"])
+        update_count = int(rr["update_count"])
+        pending = PendingEpisodeBuffers.from_state_dict(rr["pending_state"])
+        _cs = rr["collector_state"]
+        c_env_state = _cs["env_state"]
+        c_obsv = _cs["obsv"]
+        c_memories = _cs["memories"]
+        c_mem_mask = _cs["mem_mask"]
+        c_mem_idx = _cs["mem_idx"]
+        print(f"  resumed: global_step={global_step} "
+              f"update_count={update_count} replay={len(replay)} "
+              f"pending={pending.total_pending_transitions()} "
+              f"(continues WITHOUT env.reset)")
+    else:
+        # True fresh start: first session resets the env (collector state None).
+        pending = None
+        c_env_state = None
+        c_obsv = None
+        c_memories = None
+        c_mem_mask = None
+        c_mem_idx = None
+
+    # ── [5/6] Wrap env for distributed rollout ─────────────────────
+    print("\n[5/6] Wrapping env for distributed rollout ...")
+    env = DistributedMultiTaskOptimisticLogWrapper(
+        base_env, jax.random.PRNGKey(P2_V1_MASTER_SEED), NUM_ENVS, 1,
+        cfg.optimistic_reset_ratio, jnp.array([1.0]), ach_table)
+    print("  env wrapped")
+
+    # ── [6/6] Build learner ────────────────────────────────────────
+    print("\n[6/6] Building learner ...")
+    learner = LongContextLearner(network, cfg, rng)
+    print("  learner ready")
+
+    # ── Source hashes (baseline) ──────────────────────────────────
+    src_hashes = {}
+    for fn in sorted(os.listdir(_AMAGO_SRC)):
+        if fn.endswith(".py"):
+            with open(os.path.join(_AMAGO_SRC, fn), "rb") as fh:
+                src_hashes[fn] = hashlib.sha256(fh.read()).hexdigest()
+
+    # ── Training loop ─────────────────────────────────────────────
+    session_index = 0
+    all_session_manifests = []
+    t0 = time.time()
+
+    # 方案B: persistent cross-rollout/cross-session collector state.  Initialized
+    # in the [4b/6] block above: None for a true fresh start (first session resets
+    # the env), or restored from the P2-v1 checkpoint when --resume-from is given.
+    # Carried across sessions and checkpointed so a resumed run continues bit-exactly.
+
+    try:
+        session_failed = False
+        while max_sessions is None or session_index < max_sessions:
+            session_index += 1
+
+            result = run_session(
+                ts=ts,
+                replay=replay,
+                rng=rng,
+                action_rng=action_rng,
+                update_count=update_count,
+                global_step=global_step,
+                session_index=session_index,
+                cfg=cfg,
+                network=network,
+                learner=learner,
+                env=env,
+                env_params=env_params,
+                ach_table=ach_table,
+                out_dir=session_dir,
+                num_updates=num_updates,
+                session_target_steps=session_target_steps,
+                pending=pending,
+                r_env_state=c_env_state,
+                r_obsv=c_obsv,
+                r_memories=c_memories,
+                r_mem_mask=c_mem_mask,
+                r_mem_idx=c_mem_idx,
+            )
+
+            # Unpack result
+            ts = result["ts"]
+            replay = result["replay"]
+            rng = result["rng"]
+            action_rng = result["action_rng"]
+            update_count = result["update_count"]
+            global_step = result["global_step"]
+            session_env_steps = result["session_env_steps"]
+            session_elapsed = result["session_elapsed_s"]
+            crash_info = result["crash_info"]
+            pending = result["pending"]
+            c_env_state = result["env_state"]
+            c_obsv = result["obsv"]
+            c_memories = result["memories"]
+            c_mem_mask = result["mem_mask"]
+            c_mem_idx = result["mem_idx"]
+
+            # Save full checkpoint after every SUCCESSFUL session.  A session
+            # that crashed mid-update has an INCONSISTENT state (global_step
+            # advanced past the last applied update), so we FAIL CLOSED: do
+            # NOT write a corrupt checkpoint, and propagate a non-zero exit so
+            # the orchestrator's hard gates catch it.  The manifest/log/crash
+            # json are still written below (checkpoint_path=null) as evidence.
+            if crash_info is None:
+                ckpt_path = save_stage4_checkpoint(
+                    ts, replay, rng, global_step, cfg,
+                    session_index, session_dir, P2_V1_GLOBAL_STEP_START,
+                    action_rng_state=action_rng_state(action_rng),
+                    update_count=update_count,
+                    source_checkpoint=source_checkpoint,
+                    source_checkpoint_sha256=source_checkpoint_sha256,
+                    pending_state=pending.state_dict(),
+                    collector_state={
+                        "env_state": c_env_state,
+                        "obsv": c_obsv,
+                        "memories": c_memories,
+                        "mem_mask": c_mem_mask,
+                        "mem_idx": c_mem_idx,
+                    })
+            else:
+                ckpt_path = None
+                session_failed = True
+                print(f"\n!! SESSION {session_index} CRASHED — "
+                      f"{crash_info['error']}")
+                print("!! FAIL CLOSED: NOT saving checkpoint (state "
+                      "inconsistent: global_step advanced past last applied "
+                      "update). Will exit non-zero.")
+
+            # Session manifest
+            session_manifest = {
+                "directive": "D059",
+                "stage": "4",
+                "experiment": "A",
+                "treatment": "AMAGO_STYLE_EXPLORATORY_P2",
+                "launcher": "P2-v1-fresh-start-weights-only",
+                "start": (("resume_from_p2v1_step_%d" % resume_from)
+                          if resuming else "weights_only_from_session175"),
+                "source_checkpoint": source_checkpoint,
+                "source_checkpoint_sha256": source_checkpoint_sha256,
+                "p2_v1_start_step": P2_V1_GLOBAL_STEP_START,
+                "resume_from_step": (resume_from if resuming
+                                     else P2_V1_GLOBAL_STEP_START),
+                "num_updates": num_updates,
+                "session_index": session_index,
+                "global_step": global_step,
+                "session_env_steps": session_env_steps,
+                "session_elapsed_s": session_elapsed,
+                "total_elapsed_s": round(time.time() - t0, 1),
+                "gamma": GAMMA,
+                "gae_lambda": GAE_LAMBDA,
+                "anneal_lr": False,
+                "optimizer_fresh_at_start": (not resuming),
+                "gpu_uuid": EXPECTED_GPU_UUID,
+                "checkpoint_path": ckpt_path,
+                "counters": replay.counters.snapshot(),
+                "replay_buffer_size": len(replay),
+                "replay_longest_trajectory": replay.longest_trajectory_length,
+                "pass_trajs_long": result["pass_trajs_long"],
+                "pass_samples_long": result["pass_samples_long"],
+                "pass_grad_updates": result["pass_grad_updates"],
+                "pass_relabel_count": len(result["pass_relabel_evidence"]),
+                "crash_info": crash_info,
+                "resolved_config": _cfg_resolved_dict(cfg),
+                "source_hashes": src_hashes,
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            all_session_manifests.append(session_manifest)
+
+            # Write cumulative manifest
+            with open(os.path.join(session_dir, "stage4_manifest.json"), "w") as f:
+                json.dump(all_session_manifests, f, indent=2, sort_keys=True)
+
+            # Write session log
+            with open(os.path.join(session_dir, "training_log.jsonl"), "a") as f:
+                for entry in result["session_log"]:
+                    f.write(json.dumps(entry) + "\n")
+
+            # Write source hashes
+            with open(os.path.join(session_dir, "source_hashes.json"), "w") as f:
+                json.dump(src_hashes, f, indent=2, sort_keys=True)
+
+            print(f"\n── Session {session_index} complete: "
+                  f"{session_env_steps} steps in {session_elapsed}s, "
+                  f"ckpt at step {global_step}")
+
+            if crash_info:
+                print(f"  WARNING: session crashed — {crash_info['error']}")
+                with open(os.path.join(
+                        session_dir,
+                        f"crash_session_{session_index}.json"), "w") as f:
+                    json.dump(crash_info, f, indent=2)
+
+    except KeyboardInterrupt:
+        print(f"\n\nInterrupted after session {session_index - 1}.  "
+              f"Final checkpoint at step {global_step}.")
+        # Save emergency checkpoint
+        try:
+            save_stage4_checkpoint(
+                ts, replay, rng, global_step, cfg,
+                session_index, session_dir, P2_V1_GLOBAL_STEP_START,
+                action_rng_state=action_rng_state(action_rng),
+                update_count=update_count,
+                source_checkpoint=source_checkpoint,
+                source_checkpoint_sha256=source_checkpoint_sha256,
+                pending_state=(
+                    pending.state_dict() if pending is not None else None),
+                collector_state=(
+                    {"env_state": c_env_state, "obsv": c_obsv,
+                     "memories": c_memories, "mem_mask": c_mem_mask,
+                     "mem_idx": c_mem_idx}
+                    if c_env_state is not None else None))
+        except Exception:
+            pass
+
+    total_elapsed = round(time.time() - t0, 1)
+    print(f"\n{'='*60}")
+    print(f"Stage4 Continuation: {session_index} sessions completed")
+    print(f"  Final global_step: {global_step}")
+    print(f"  Total env steps:   {global_step - P2_V1_GLOBAL_STEP_START}")
+    print(f"  Total elapsed:     {total_elapsed}s")
+    print(f"  Output:            {session_dir}")
+    print(f"{'='*60}")
+
+    if session_failed:
+        print("\nEXIT 1: at least one session crashed — NO valid checkpoint "
+              "was saved for it. See crash_session_*.json and the "
+              "orchestrator log.")
+        sys.exit(1)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Entry point
+# ═══════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="P2-v1 Stage4 Launcher (weights-only from session175)")
+    parser.add_argument(
+        "--max-sessions", type=int, default=None,
+        help="Maximum number of sessions (default: unlimited)")
+    parser.add_argument(
+        "--num-updates", type=int, default=NUM_UPDATES_PER_SESSION,
+        help="On-policy PPO updates per session (1 update = 2048 env steps; "
+             "default 12 = a full 24576-step session). Level 1/2 smoke = 1.")
+    parser.add_argument(
+        "--resume-from", type=int, default=None,
+        help="P2-v1 self-checkpoint step to resume from (方案B exact resume; "
+             "continues bit-exactly WITHOUT env.reset). Default None = fresh "
+             "weights-only start from session175.")
+    parser.add_argument(
+        "--smoke-test", action="store_true",
+        help="Run weights-only fresh-start verification only (no training)")
+    args = parser.parse_args()
+
+    if args.smoke_test:
+        success = smoke_test()
+        sys.exit(0 if success else 1)
+    else:
+        main(max_sessions=args.max_sessions, num_updates=args.num_updates,
+             resume_from=args.resume_from)

@@ -1,0 +1,18 @@
+{
+  "cell": "original_x_lpac",
+  "round": 4,
+  "root": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_lpac/seed0_1784453656",
+  "current_snapshot_hash": "7b850fa47a6bef6c",
+  "prev_snapshot_hash": "721e0bdc52a70bdc",
+  "pool_hash": "c9ca0b0dade1de98",
+  "selection_hash": "64ac626669641a33",
+  "candidate_count": 32,
+  "judgment_count": 0,
+  "llm_judgments": false,
+  "steps_resolved": 24576,
+  "param_leaves": 47,
+  "nan": false,
+  "inf": false,
+  "cache_influence": 0.0,
+  "protocol": "PURE_DYNAMIC_D052"
+}

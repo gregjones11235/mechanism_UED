@@ -1,0 +1,402 @@
+{
+  "manifest": "W512_PHASE4A_ARTIFACT_MANIFEST",
+  "timestamp_utc": "2026-07-26T01:46:52Z",
+  "total_artifacts": 44,
+  "artifacts": [
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/reports/cc1_corrected_eval/a_side_unified_eval.json",
+      "type": "evaluation_result",
+      "description": "Part A 五臂统一评估结果",
+      "sha256": "2be1c5583382a5093529fc342e62b78978a4798b94d551b40225e35f8513c29c",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/reports/w512_p2replay_eval.json",
+      "type": "evaluation_result",
+      "description": "P2Replay两臂评估结果",
+      "sha256": "9e7c882e14fc3522f48b4e849e9bb27d3252b6441bb9d14f9245644acea67793",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/reports/w512_p2replay_causal.json",
+      "type": "evaluation_result",
+      "description": "P2Replay因果量计算结果",
+      "sha256": "8e7eacf5fa69c136184e7c2cfe25573d3b42426fb590a1176c3af54b1ea1c522",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/reports/w512_memory_replay_interaction.json",
+      "type": "evaluation_result",
+      "description": "六臂交互报告(JSON)",
+      "sha256": "f38184d2f36441139f4572430397861187295447ed0119a3dcce7a85366762e3",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/reports/w512_memory_replay_interaction.md",
+      "type": "evaluation_result",
+      "description": "六臂交互报告(MD)",
+      "sha256": "edc5490002400715cacd011654b261c8005f70d3a33d516373d964d57bf7d39c",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/eval_a_side_unified.py",
+      "type": "evaluator_code",
+      "description": "Part A统一评估器",
+      "sha256": "dcf7fe207bb485c47b2669e6c0eb187556d1a4724dd3417a81a83fc88abe5828",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/eval_w512_p2replay.py",
+      "type": "evaluator_code",
+      "description": "P2Replay评估器",
+      "sha256": "f76bb53ca20f3f133b781fac6351b91a6624675143c307ae8e779c683303d6d7",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/compute_causal_p2replay.py",
+      "type": "evaluator_code",
+      "description": "因果量计算脚本",
+      "sha256": "085eb4a8ff50fb265583a19b83088c441a190b4c8d96bef43c5da55d87a74969",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/w512_pending_episodes.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: w512_pending_episodes.py",
+      "sha256": "0b6268105760376175e43a753dc26e6eedb04a664c467ea3040f2cba5fc702bd",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/w512_compat_init.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: w512_compat_init.py",
+      "sha256": "48d9523527c0e9ba683f9e1bcc6d848d14f132d3e5f9300b7ddd3f6448bada80",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/launcher_w512_p2.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: launcher_w512_p2.py",
+      "sha256": "7668200ccaf0f85886ebaa998ab659d2ee2c24c0948997cf8ed74f6e9abea8f4",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/w512_p2_core.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: w512_p2_core.py",
+      "sha256": "52a35c2104777e46ae795a7c73eab8640d086767c7d795931afa16ca6f965cdc",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/w512_p2_learner.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: w512_p2_learner.py",
+      "sha256": "612d41462aff592089f28885f01eead1e06e53b59329471522c9d4b715e96c1c",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/run_w512_p2_levelB.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: run_w512_p2_levelB.py",
+      "sha256": "016ccb598d9638d492b56b2e7c1c41c3985fce0680611b5a6315b42a088683c5",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/src/w512_replay_buffer.py",
+      "type": "training_code",
+      "description": "W512 P2Replay源码: w512_replay_buffer.py",
+      "sha256": "552a929d95a0e406bd52c651dfb0307f0c6a1b9deb392fc46e22f16062ef6cc1",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/src/ppo_tr_w512.py",
+      "type": "training_code",
+      "description": "W512 PPO源码: ppo_tr_w512.py",
+      "sha256": "b8590c48a8e3f5d0778c023f1693c53fbe9b0976d8919f446f7a537d8aca8f95",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/src/network_w512.py",
+      "type": "training_code",
+      "description": "W512 PPO源码: network_w512.py",
+      "sha256": "8d1824d2e37e387e91e4e03e440b804952f33d0ef0886f93db59bd7ecdddc4b7",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/src/w512_memory.py",
+      "type": "training_code",
+      "description": "W512 PPO源码: w512_memory.py",
+      "sha256": "ee89fd0b3dd4bb795333202278ffbc09ff0accdf3856621f005980718b5a38b4",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/train_24576/checkpoints/0",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_PPO",
+      "step": "0",
+      "manifest_sha256": "1597c74010dce8b17c4326bdcd48008961a37aa3536707251899d59a7016ea9c",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/train_24576/checkpoints/24576",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_PPO",
+      "step": "24576",
+      "manifest_sha256": "2d89713e783d8a8870d7289d519b67b65dbfe623d3f8b0aa2869ce5792d6da98",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/train_24576/checkpoints/4096",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_PPO",
+      "step": "4096",
+      "manifest_sha256": "6ea82552744323e4c60d7fbf9e159a1a3f8b9a7f1ea2dc1744a27240ad23d1e1",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512_reset128_training/train_24576/checkpoints/0",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_PPO",
+      "step": "0",
+      "manifest_sha256": "846e48e628af99351e2597fc18f386d4bf04fd6349b17f1122a98f5ee074cfe4",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512_reset128_training/train_24576/checkpoints/24576",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_PPO",
+      "step": "24576",
+      "manifest_sha256": "a43c0c16858164db48b4b57cadbe22fe2e359f053e4bfe111383975817720659",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512_reset128_training/train_24576/checkpoints/4096",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_PPO",
+      "step": "4096",
+      "manifest_sha256": "156718cc85f70543caeecb3b8e01b9de793ebbcdb77a682e8d304541a550071c",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/0",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "0",
+      "manifest_sha256": "c69c6c1ae012148144f9796f231e99709e8cc9e4a25acba7c103b61f8a754ecc",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/12288",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "12288",
+      "manifest_sha256": "6b76cb06c38d512977c9789a46bebe13c9994158342c607281fc100c1f9cd971",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/16384",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "16384",
+      "manifest_sha256": "7388a7376bae07184a36aa54574f5d2b1a7ddc71c25c4d17d33aad1cd6f09182",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/20480",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "20480",
+      "manifest_sha256": "a61aceb09568b023635255993c55921f4cddaa1e5ed59c1153eea386e3940611",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/24576",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "24576",
+      "manifest_sha256": "60ed1cf9c7319da28fd5d21e0abbf67ea556689f931e28893271aa028d580e02",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/4096",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "4096",
+      "manifest_sha256": "3f6cb18bbd65aa909b0768314b34a6bfe71d359aa032a060be589809bc531e9e",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/checkpoints/8192",
+      "type": "checkpoint",
+      "arm": "W512_Persistent_P2Replay",
+      "step": "8192",
+      "manifest_sha256": "958284374b69d4f970e845afa12b406e3bd0dc2f497bbd2d014680295aabea9d",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/0",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "0",
+      "manifest_sha256": "07a70363b888e7f221f40405aed78bfd3945890963e3b0d77e54c5282ce35884",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/12288",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "12288",
+      "manifest_sha256": "832a8f1e44a643688d05a2a1e8b91e19d9b18ff6b72b057f120f691d241d7721",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/16384",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "16384",
+      "manifest_sha256": "5de194141ab65398ffd11e809803c6806808fc4f8969a5e171d02bfccf6937fb",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/20480",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "20480",
+      "manifest_sha256": "be904e9967e7f4ca57f073fa2067b267332abafe319e5b607499130c79a8c94e",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/24576",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "24576",
+      "manifest_sha256": "4f2a154d11a02635406b69266b8793cc0794f4b14a4ea5c0d821e2c62dc688ca",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/4096",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "4096",
+      "manifest_sha256": "ed001821c3c75a64eaaa123c173949d6033c94d43b22dbfa57db46ecdfd66f2b",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/checkpoints/8192",
+      "type": "checkpoint",
+      "arm": "W512_Reset128_P2Replay",
+      "step": "8192",
+      "manifest_sha256": "b7a184ec4a03293aaa5f31eb8c03103fa982b82cd73047b4b0e02192c56283f2",
+      "params_exists": true,
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512/train_24576/logs/training_log.jsonl",
+      "type": "training_log",
+      "arm": "W512_Persistent_PPO",
+      "sha256": "259c43cf0698a894c355a33264b31e199c8b034266c7d6b2eb9c1d4d502dd93a",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/gpu0_w512_reset128_training/train_24576/logs/training_log.jsonl",
+      "type": "training_log",
+      "arm": "W512_Reset128_PPO",
+      "sha256": "3b7583d19315ca4fecfdeb1e102616627e2de264dede6e3143b7d463bdefbb18",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_persistent_p2replay_24576/run/training_log.jsonl",
+      "type": "training_log",
+      "arm": "W512_Persistent_P2Replay",
+      "sha256": "f99a902cc5dc59c9e44f04998905d1465f4d8c4b4a31d08e1959f51fd1e07517",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/experiments/bakeoff_phase1/w512_p2_replay/w512_reset128_p2replay_24576/run/training_log.jsonl",
+      "type": "training_log",
+      "arm": "W512_Reset128_P2Replay",
+      "sha256": "3c5be6d4fa514aedb94d8c1448574b622641b133cc4e3adfac6285f2efaa671a",
+      "read_only": true
+    },
+    {
+      "path": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+      "type": "source_checkpoint",
+      "description": "Henry基座ckpt17500(只读参考)",
+      "read_only": true,
+      "note": "外部目录，不修改"
+    },
+    {
+      "path": "/home/oseasy/experiments/p2_full_20260723/src/full_p2_learner.py",
+      "type": "reference_code",
+      "description": "P2-Full-A FullP2Config定义源",
+      "sha256": "c374f0aa3ce4ad284a2ed7d7f0f96ce0c4db754f21babcca47b3d0d80e6d83b4",
+      "read_only": true
+    }
+  ],
+  "frozen_labels": {
+    "W512_PPO_TRAINING_HEALTH": "FAILED",
+    "W512_REPLAY_STABILIZATION_SIGNAL": true,
+    "W512_LONG_MEMORY_CAUSAL_CANDIDATE": false,
+    "W512_PERFORMANCE_UPGRADE": false,
+    "W512_PHASE4A_VERDICT": "REPLAY_ELIMINATES_CARRY"
+  },
+  "frozen_causal_quantities": {
+    "CARRY_NO_REPLAY": "+8.20pp (p=6.3e-05)",
+    "CARRY_WITH_REPLAY": "-1.95pp (p=0.42)",
+    "REPLAY_EFFECT_PERSISTENT": "+24.22pp (p<1e-6)",
+    "REPLAY_EFFECT_RESET": "+34.38pp (p<1e-6)",
+    "MEMORY_REPLAY_INTERACTION": "-10.16pp"
+  },
+  "frozen_6arm_results": {
+    "Baseline": {
+      "dk_sr": "39.45%",
+      "n": 101
+    },
+    "Control": {
+      "dk_sr": "36.33%",
+      "n": 93
+    },
+    "W512_Persistent_PPO": {
+      "dk_sr": "10.94%",
+      "n": 28
+    },
+    "W512_Reset128_PPO": {
+      "dk_sr": "2.73%",
+      "n": 7
+    },
+    "W512_Persistent_P2Replay": {
+      "dk_sr": "35.16%",
+      "n": 90
+    },
+    "W512_Reset128_P2Replay": {
+      "dk_sr": "37.11%",
+      "n": 95
+    }
+  },
+  "authorizations": {
+    "TRAINING_TO_98304_AUTHORIZED": false,
+    "W512_SECOND_SEED_AUTHORIZED": false,
+    "UPDATE_HORIZON_ON_W512_AUTHORIZED": false,
+    "P2_FULL_B_AUTHORIZED": false
+  },
+  "provenance_note": "所有SHA256在manifest生成时计算。服务器非git repo，SHA256为权威provenance。"
+}

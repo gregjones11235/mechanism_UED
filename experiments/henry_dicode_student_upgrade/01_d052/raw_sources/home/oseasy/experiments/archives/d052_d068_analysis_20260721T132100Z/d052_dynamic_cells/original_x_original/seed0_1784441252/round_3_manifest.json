@@ -1,0 +1,18 @@
+{
+  "cell": "original_x_original",
+  "round": 3,
+  "root": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_original/seed0_1784441252",
+  "current_snapshot_hash": "721e0bdc52a70bdc",
+  "prev_snapshot_hash": "1826b9e3e82d218a",
+  "pool_hash": "8c281bcb8d8c52f7",
+  "selection_hash": "69bb3522837eb7f9",
+  "candidate_count": 32,
+  "judgment_count": 0,
+  "llm_judgments": false,
+  "steps_resolved": 24576,
+  "param_leaves": 47,
+  "nan": false,
+  "inf": false,
+  "cache_influence": 0.0,
+  "protocol": "PURE_DYNAMIC_D052"
+}

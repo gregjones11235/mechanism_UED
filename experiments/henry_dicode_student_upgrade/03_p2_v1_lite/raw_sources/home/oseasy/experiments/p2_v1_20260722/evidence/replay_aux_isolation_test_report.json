@@ -1,0 +1,53 @@
+{
+  "all_pass": true,
+  "cfg": {
+    "embed_size": 256,
+    "lr": 0.0002,
+    "max_grad_norm": 1.0,
+    "num_heads": 8,
+    "num_layers": 2,
+    "window_grad": 64,
+    "window_mem": 128
+  },
+  "directive": "P2-v1 \u65b9\u68482 replay-aux parameter isolation (#57/#61)",
+  "emb": 67,
+  "jax_devices": "[CpuDevice(id=0)]",
+  "obs_dim": 128,
+  "param_groups": {
+    "actor_head": {
+      "changed": 0,
+      "total": 6
+    },
+    "critic_head": {
+      "changed": 6,
+      "total": 6
+    },
+    "shared_trunk": {
+      "changed": 0,
+      "total": 68
+    }
+  },
+  "replay_aux_updatable_substrings": [
+    "critic"
+  ],
+  "results": {
+    "A_actor_head_0_changed": true,
+    "A_aux_specific_substrings": [
+      "critic"
+    ],
+    "A_critic_head_nonzero": true,
+    "A_shared_trunk_0_changed": true,
+    "B_entropy_bit_exact": true,
+    "B_logits_bit_exact": true,
+    "B_probs_bit_exact": true,
+    "C_critic_grad_finite": true,
+    "C_critic_grad_nonzero": true,
+    "C_critic_grad_norm": 0.9774763584136963,
+    "C_value_finite": true,
+    "C_value_prediction_changes": true,
+    "E_main_opt_state_untouched": true,
+    "F_aux_state_pickle_roundtrip": true,
+    "F_aux_state_present": true
+  },
+  "timestamp_utc": "2026-07-23T04:15:07.232027+00:00"
+}

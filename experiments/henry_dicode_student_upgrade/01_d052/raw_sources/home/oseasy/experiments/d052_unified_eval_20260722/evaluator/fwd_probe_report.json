@@ -1,0 +1,26 @@
+{
+  "original": {
+    "obs_dim": 8335,
+    "apply": {
+      "ts.params": "ERR ScopeParamShapeError: Initializer expected to generate shape (8300, 32) but got shape (8335, 32) instead for parameter \"kernel\" in \"/transformer/encoder\". (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.ht",
+      "ts.params['params']": "ERR ScopeCollectionNotFound: Tried to access \"kernel\" from collection \"params\" in \"/transformer/encoder\" but the collection is empty. (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html#flax.errors.ScopeCollecti"
+    },
+    "total_leaves": 47
+  },
+  "tser_ppo": {
+    "obs_dim": 8335,
+    "apply": {
+      "ts.params": "ERR ScopeParamShapeError: Initializer expected to generate shape (8300, 32) but got shape (8335, 32) instead for parameter \"kernel\" in \"/transformer/encoder\". (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.ht",
+      "ts.params['params']": "ERR ScopeCollectionNotFound: Tried to access \"kernel\" from collection \"params\" in \"/transformer/encoder\" but the collection is empty. (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html#flax.errors.ScopeCollecti"
+    },
+    "total_leaves": 53
+  },
+  "lpg_hrl": {
+    "obs_dim": 8335,
+    "apply": {
+      "ts.params": "ERR ScopeParamShapeError: Initializer expected to generate shape (8300, 32) but got shape (8335, 32) instead for parameter \"kernel\" in \"/transformer/encoder\". (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.ht",
+      "ts.params['params']": "ERR ScopeCollectionNotFound: Tried to access \"kernel\" from collection \"params\" in \"/transformer/encoder\" but the collection is empty. (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html#flax.errors.ScopeCollecti"
+    },
+    "total_leaves": 57
+  }
+}

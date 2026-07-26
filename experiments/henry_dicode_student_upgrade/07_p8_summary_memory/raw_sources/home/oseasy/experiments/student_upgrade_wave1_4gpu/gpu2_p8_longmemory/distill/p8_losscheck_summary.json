@@ -1,0 +1,10 @@
+{
+  "init_health_p8on_vs_teacher_meanKL": 0.00018918530258815736,
+  "init_health_p8on_value_maxdiff": 0.0,
+  "init_health_p8on_logit_maxdiff_info": 0.7780265808105469,
+  "featureoff_logit_maxdiff": 0.0,
+  "featureoff_value_maxdiff": 0.0,
+  "info_train_vs_eval_logits": 0.094024658203125,
+  "info_train_vs_eval_logp": 0.04801177978515625,
+  "true_dones_in_rollout": 3
+}

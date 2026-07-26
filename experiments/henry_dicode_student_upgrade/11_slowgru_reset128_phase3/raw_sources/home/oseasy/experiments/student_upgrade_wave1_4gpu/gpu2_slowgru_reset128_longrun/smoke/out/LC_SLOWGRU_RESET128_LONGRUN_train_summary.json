@@ -1,0 +1,141 @@
+{
+  "arm": "LC_SLOWGRU_RESET128_LONGRUN",
+  "chunks": [
+    {
+      "checkpoint": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/smoke/ckpt/24576/full_state.pkl",
+      "checkpoint_sha256": "104f25f95510eb043ea2f730b2880867d34f4dc9a682131132e5e66caafbe453",
+      "chunk": -1,
+      "global_step": 24576,
+      "note": "LONGRUN_RESUME_START_POINT_24576",
+      "params_sha256": "2ffdd269b94e1e6b37877d55ed315232867f2adc78d5518ac43fd346ead07a70",
+      "roundtrip_ok": true,
+      "update_count": 12
+    },
+    {
+      "checkpoint": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/smoke/ckpt/28672/full_state.pkl",
+      "checkpoint_sha256": "3fd35dab41c03e8c7857041dfebca064ba4046899b475ac3ceeb9568503fea83",
+      "chunk": 0,
+      "elapsed_s": 137.8,
+      "entropy": 1.366330862045288,
+      "global_step": 28672,
+      "opt_finite": true,
+      "opt_step": 28,
+      "params_finite": true,
+      "params_sha256": "8965761fcc2a460065da260608b68765cc67ef6e7ad11b52432d64d51af55bba",
+      "roundtrip_ok": true,
+      "update_count": 14
+    }
+  ],
+  "code_sha256": {
+    "launcher": "ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a",
+    "network": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "s4_task": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d"
+  },
+  "config": {
+    "activation": "relu",
+    "anneal_lr": false,
+    "bonus_type": "none",
+    "clip_eps": 0.2,
+    "completion_bonus_min": 0.0,
+    "completion_bonus_scale": 0.0,
+    "condition_on_task": true,
+    "dynamic_bonus_k": 0.0,
+    "embed_size": 256,
+    "ent_coef": 0.002,
+    "gae_lambda": 0.8,
+    "gamma": 0.999,
+    "gating": true,
+    "gating_bias": 2.0,
+    "hidden_layers": 256,
+    "lr": 2e-05,
+    "max_grad_norm": 1.0,
+    "mode": "score",
+    "num_envs": 16,
+    "num_heads": 8,
+    "num_layers": 2,
+    "num_minibatches": 2,
+    "num_steps": 128,
+    "optimistic_reset_ratio": 16,
+    "qkv_features": 256,
+    "update_epochs": 1,
+    "value_target_clip_max": 300.0,
+    "value_target_clip_min": -50.0,
+    "vf_coef": 0.5,
+    "window_grad": 64,
+    "window_mem": 128
+  },
+  "elapsed_total_s": 140.5,
+  "init_params_sha256": "5ae94ed0257f50fabfba6a928169acf0eb8e05aa34705c3763bc342eed3218ab",
+  "label": "LC_SLOWGRU_RESET128_LONGRUN",
+  "per_update_metrics": [
+    {
+      "actor_loss": -0.0002894792705774307,
+      "entropy": 1.3521873950958252,
+      "grad_norm_max": 14.572663307189941,
+      "grad_norm_mean": 10.197515487670898,
+      "total_loss": 0.9790974855422974,
+      "update_step": 12,
+      "value_loss": 1.9641828536987305
+    },
+    {
+      "actor_loss": 0.00037909019738435745,
+      "entropy": 1.366330862045288,
+      "grad_norm_max": 10.282001495361328,
+      "grad_norm_mean": 7.438194751739502,
+      "total_loss": 0.6357418298721313,
+      "update_step": 13,
+      "value_loss": 1.2761908769607544
+    }
+  ],
+  "protocol": {
+    "adam_eps": 1e-05,
+    "algorithm": "Original GTrXL-PPO + SlowGRU long-term channel",
+    "anneal_lr": false,
+    "clip_eps": 0.2,
+    "egomap": "OFF",
+    "ent_coef": 0.002,
+    "gae_lambda": 0.8,
+    "gamma": 0.999,
+    "goal": "DEFEAT_KOBOLD",
+    "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "hindsight": "OFF",
+    "lr": 2e-05,
+    "max_grad_norm": 1.0,
+    "mode": "score",
+    "nav_aux": "OFF",
+    "novelty": "OFF",
+    "num_envs": 16,
+    "num_minibatches": 2,
+    "optimistic_reset_ratio": 16,
+    "replay": "OFF",
+    "rollout_steps": 128,
+    "seed": 42,
+    "slow_dim": 256,
+    "slow_interval": 32,
+    "stage": "S4_dark native",
+    "start": "teacher ckpt17500 (inherited bit-for-bit) + fresh slow-GRU (zero-init gate)",
+    "total_env_steps": 98304,
+    "update_epochs": 1,
+    "vf_coef": 0.5,
+    "vtrace": "OFF",
+    "xla_flags": "--xla_gpu_deterministic_ops=true"
+  },
+  "reset128_gates": {
+    "boundary_clear_pass": true,
+    "carry_mode": "RESET128",
+    "clear_nontrivial_pass": true,
+    "init_ls_hash": "229bcd099658fc1b63df1bca464d3e0f88617671d32a509c8e308049d737bf56",
+    "n_rollouts": 2,
+    "rollout_carried_hashes": [
+      "2201eca6475c40a657047d48ec2334b662e37f9dbd0b6603b69a583066d574f1",
+      "7e27395d25a2caa07ce5876f0f19f4ec7d089a3bc4a2fde33c9550cab6bcd209"
+    ],
+    "rollout_prev_hashes": [
+      "229bcd099658fc1b63df1bca464d3e0f88617671d32a509c8e308049d737bf56",
+      "229bcd099658fc1b63df1bca464d3e0f88617671d32a509c8e308049d737bf56"
+    ]
+  },
+  "status": "LC_SLOWGRU_RESET128_LONGRUN_TRAIN_OK",
+  "teacher_init_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "timestamp_utc": "2026-07-25T03:54:34Z"
+}

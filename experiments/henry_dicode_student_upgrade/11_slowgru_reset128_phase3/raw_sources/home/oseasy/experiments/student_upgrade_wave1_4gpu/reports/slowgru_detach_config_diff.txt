@@ -1,0 +1,103 @@
+==========================================================================
+ SLOWGRU_RESET128_DETACH (Phase3 ATTRIBUTION experiment A) — config diff
+ Verifies the ONLY change vs the FROZEN SlowGRU-Reset128 arm is the ablation
+ point (stop_gradient on the GTrXL hidden feeding the slow branch).
+==========================================================================
+
+### NETWORK diff: frozen slowgru_network.py  vs  slowgru_detach_network.py
+### (expect: docstring header + class rename + 2x stop_gradient; GRU/zero-gate/pooling UNCHANGED)
+--------------------------------------------------------------------------
+--- /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru/src/slowgru_network.py	2026-07-25 02:34:50.954217744 +0800
++++ /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_slowgru_reset128_attribution/src/slowgru_detach_network.py	2026-07-25 11:23:23.147688446 +0800
+@@ -1,4 +1,14 @@
+-"""LC-SLOWGRU-PPO network (GPU2 bakeoff candidate B). FROZEN design.
++"""LC-SLOWGRU-RESET128-DETACH network (Phase3 ATTRIBUTION experiment A).
++DERIVED VERBATIM from the FROZEN SlowGRU network (gpu2_lc_slowgru/src/slowgru_network.py); the ONLY
++change is `jax.lax.stop_gradient(x)` applied to the GTrXL hidden BEFORE it enters the slow branch
++(_slow_update), in BOTH forward_eval and model_forward_train_longmem. This blocks gradient from the
++slow branch (pool/slow_in/GRU/slow_read/slow_to_actor) flowing back into the shared CNN/GTrXL, while
++the slow branch's OWN parameters still receive normal gradient and the main x->actor path is untouched.
++Param structure is UNCHANGED => init is bit-identical to Full (init_sha 5ae94ed0).
++Core comparison: BACKBONE_GRADIENT_SHAPING_EFFECT = Full - Detach.
++
++--- ORIGINAL FROZEN HEADER BELOW ---
++LC-SLOWGRU-PPO network (GPU2 bakeoff candidate B). FROZEN design.
+ 
+ Keeps the original GTrXL (encoder + 128-step windowed FAST state + actor/value heads) EXACTLY,
+ inheriting ckpt17500 weights bit-for-bit (param paths identical to ActorCriticTransformer), and
+@@ -34,7 +44,7 @@
+     }
+ 
+ 
+-class ActorCriticSlowGRU(nn.Module):
++class ActorCriticSlowGRUDetach(nn.Module):
+     action_dim: int
+     activation: str
+     hidden_layers: int
+@@ -101,7 +111,9 @@
+ 
+     def forward_eval(self, memories, obs, mask, longstate, reset):
+         x, memory_out = self.transformer.forward_eval(memories, obs, mask)
+-        ls_new = self._slow_update(longstate, x, reset)
++        # DETACH (Phase3): stop_gradient on the GTrXL hidden before the slow branch -> the slow
++        # branch trains on stopped-gradient input and contributes NO gradient back to CNN/GTrXL.
++        ls_new = self._slow_update(longstate, jax.lax.stop_gradient(x), reset)
+         if self.use_longmem:
+             context = self.slow_read(ls_new["h"])
+             actor_in = x + self.slow_to_actor(context)         # zero at init
+@@ -131,7 +143,7 @@
+ 
+         def slow_step(ls, inp):
+             x_t, td_t = inp
+-            ls = self._slow_update(ls, x_t, td_t)
++            ls = self._slow_update(ls, jax.lax.stop_gradient(x_t), td_t)  # DETACH (Phase3)
+             ctx = self.slow_read(ls["h"])
+             return ls, ctx
+ 
+
+### TRAINER diff: frozen run_slowgru_reset128_24576.py  vs  run_slowgru_detach_24576.py
+### (expect: ARM / SRC / GPU3 / network-import(alias) / network-sha-file ONLY)
+--------------------------------------------------------------------------
+--- /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru_reset128/src/run_slowgru_reset128_24576.py	2026-07-25 09:14:47.415572844 +0800
++++ /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_slowgru_reset128_attribution/src/run_slowgru_detach_24576.py	2026-07-25 11:23:23.147688446 +0800
+@@ -25,15 +25,15 @@
+ Original PPO ONLY. NO Replay / V-trace / hindsight / novelty / NavAux / EgoMap.
+ """
+ import os
+-GPU_UUID = "GPU-8df11537-ab79-722d-606f-411966196c4c"   # GPU2 ONLY
++GPU_UUID = "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"   # GPU3 ONLY (Phase3 attribution)
+ os.environ["CUDA_VISIBLE_DEVICES"] = GPU_UUID
+ os.environ["XLA_FLAGS"] = "--xla_gpu_deterministic_ops=true"
+ os.environ["WANDB_MODE"] = "disabled"
+ os.environ["WANDB_SILENT"] = "true"
+ import sys, json, argparse, hashlib, time, pickle, shutil
+ 
+-ARM = "LC_SLOWGRU_RESET128"
+-SRC = "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru_reset128/src"
++ARM = "LC_SLOWGRU_RESET128_DETACH"
++SRC = "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_slowgru_reset128_attribution/src"
+ V7_SRC = "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src"
+ V7 = "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB"
+ for p in (SRC, V7_SRC, V7):
+@@ -56,7 +56,7 @@
+ from dicode.utils.general.train_state_utils import load_weights_only
+ from dicode.wrappers_cl import DistributedMultiTaskOptimisticLogWrapper
+ from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+-from slowgru_network import ActorCriticSlowGRU, init_longstate, SLOW_INTERVAL, SLOW_DIM
++from slowgru_detach_network import ActorCriticSlowGRUDetach as ActorCriticSlowGRU, init_longstate, SLOW_INTERVAL, SLOW_DIM
+ 
+ METRICS_LOG = []
+ ROLLOUT_LS_PREV_HASH = []      # gate5: hash of longstate at each rollout START (post-clear); must == init every rollout
+@@ -169,7 +169,7 @@
+ 
+     cfg = Cfg(); cfg.training = cfg
+     code_sha = {"launcher": _sha_file(os.path.abspath(__file__)),
+-                "network": _sha_file(os.path.join(SRC, "slowgru_network.py")),
++                "network": _sha_file(os.path.join(SRC, "slowgru_detach_network.py")),
+                 "s4_task": _sha_file(S4_TASK_PATH)}
+ 
+     # ---- S4_dark env (EXACT control construction) ----
+
+### frozen network sha256: b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b
+### detach network sha256: d7aba85c971e2d9c7d43b3b93e57588d0c92505bf982da95a610210ec0500ffe
+### ATTR_SRC Full-ref slowgru_network.py sha256 (must == frozen): b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b

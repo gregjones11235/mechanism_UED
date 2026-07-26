@@ -1,0 +1,137 @@
+# ======================================================
+# PART 1: EXACT CONFIGURATION FROM SCRIPT B (Priority)
+# ======================================================
+env_name: Craftax-Symbolic-v1
+lr: 2e-4
+min_lr: 2e-6
+num_envs: 1024    
+num_steps: 128   
+total_timesteps: 2_005_401_600
+update_epochs: 4
+num_minibatches: 8
+gamma: 0.999     
+gae_lambda: 0.8
+clip_eps: 0.2
+ent_coef: 0.002   
+vf_coef: 0.5
+max_grad_norm: 1.0
+activation: relu  
+anneal_lr: true   
+# --- Transformer Architecture (From Script B) ---
+qkv_features: 256
+embed_size: 256       
+num_heads: 8
+num_layers: 2
+hidden_layers: 256   
+window_mem: 128
+window_grad: 64
+gating: true
+gating_bias: 2.0
+
+# --- System & Logging ---
+optimistic_reset_ratio: 16
+use_wandb: true
+wandb_project: SIACE
+wandb_entity: airl-lab
+debug: true
+num_repeats: 1
+
+# --- Checkpointing ---
+checkpoint_dir: "rl_checkpoints/"
+checkpoint_interval_updates: 100
+checkpoint_keep_period: 300
+max_checkpoints_to_keep: 10
+load_checkpoint: False
+
+# ======================================================
+# PART 2: ORCHESTRATOR PARAMS FROM SCRIPT A
+# (Added because they don't exist in Script B)
+# ======================================================
+
+# --- Training Extras ---
+jit: true
+save_policy: false
+anneal_method: linear # Required key for A's validator, even if B uses linear in code
+lr_decay_rate: 0.99        # Required key for A's validator
+
+# --- Environment & Tasks ---
+condition_on_task: true
+conditioning_type: "one_hot"  # or "embedding"
+use_optimistic_resets: true
+
+# --- v7fix4.8 guardrail layer (collapse protection; strict no-op on healthy training) ---
+# GAE-target clip: Craftax return is physically bounded (~226 human max, observed best ~46);
+# clipping targets removes the bootstrap-runaway channel that killed the fast arm at s191.
+value_target_clip_min: -50.0
+value_target_clip_max: 300.0
+# Session watchdog (calibrated 2026-07-14 across ALL arms' SELF-RECOVERING value flare-ups
+# — fast arm 4 flares vmean 42-86, BASELINE 2 flares vmean 171/196 (entropy >= 0.28/0.54)
+# must NOT trip — vs the fatal runaway: first-session v_loss mean 13976, entropy 0.16 -> 0.001.
+# 1000 sits 5x above the worst benign flare and 14x below the fatal block):
+guard_session_vloss_max: 1000.0
+guard_session_entropy_min: 0.10  # RECALIBRATED 2026-07-19 (was 0.15). The gamma=0.99 INSERT-era
+                                 # regime's BENIGN entropy band dips to 0.1287-0.1477 (ctrl2, NO
+                                 # SIL: 3 reverts in 15 sessions = pure session tax), and the
+                                 # 0.15 line false-killed sil010 (4109744) via two ADJACENT
+                                 # benign dips (0.1492/0.1462 -> consecutive-revert stop) — the
+                                 # 0.20 SIL-floor mistake repeated one layer down: a fix48-era
+                                 # envelope ("healthy >= 0.28") threshold sitting INSIDE the
+                                 # current regime's benign band. 0.10 keeps ~0.03 margin under
+                                 # the deepest observed benign dip, while true collapse
+                                 # (0.16 -> 0.001 within ONE session) still crosses it
+                                 # same-session, so collapse protection is intact.
+guard_max_consecutive_reverts: 2  # two reverted sessions in a row -> stop the job (human needed)
+
+# --- v7fix56 P1' SIL (self-imitation; design doc §2.2). sil=false = strict no-op (the
+# whole layer never traces — S4 discipline). Device-side per-wall ring buffers of full
+# rollout windows; admission = episode achieved the wall's achievement bit in-window;
+# SIL loss = -(log pi)(R-V)+ (self-annealing) + sil_vf_coef * 0.5(R-V)+^2, applied as ONE
+# extra gradient step per update AFTER the PPO epochs, scaled by a host-scheduled beta
+# (warmup -> ramp -> beta_max; session entropy min < sil_entropy_floor kills beta for the
+# rest of the run — SPEAR entropy-collapse guard; the 0.10 hard watchdog stays in charge
+# of catastrophic collapse). ---
+sil: false
+sil_pools: []               # wall achievement names, e.g. [defeat_kobold] — one pool each
+sil_beta_max: 0.1           # smoke-scan axis (v7fix56 §2.2: {0.05, 0.1, 0.2})
+sil_vf_coef: 0.01           # weight of the SIL value term inside the SIL loss
+sil_pool_slots: 48          # windows per pool (48 x 128 steps ≈ 6k transitions ≥ spec 2048)
+sil_windows_per_update: 8   # windows sampled per pool per update (~1k transitions)
+sil_writes_per_update: 4    # max admitted windows written per update (ring overwrite)
+sil_staleness_sessions: 5   # slots older than this many sessions stop being sampled
+sil_warmup_sessions: 2      # beta=0, pool fills
+sil_ramp_sessions: 2        # linear ramp to beta_max after warmup
+sil_entropy_floor: 0.12     # session entropy min below this -> beta=0 permanently.
+                            # CALIBRATED 2026-07-19 (round-1 lesson): the gamma=0.99 INSERT-era
+                            # regime runs benign entropy minimums at 0.13-0.16 WITHOUT SIL
+                            # (ctrl2 grazed 0.1287-0.1477 four times, all self-healing), so the
+                            # original 0.20 floor (fix48-era "healthy >= 0.28" calibration) killed
+                            # beta on its FIRST ignition in both round-1 arms. With the hard line
+                            # recalibrated to 0.10 (2026-07-19), 0.12 now sits ABOVE it — the
+                            # intended ordering: on an entropy slide SIL is killed first (beta=0
+                            # at 0.12, SPEAR guard) BEFORE the session-revert layer (0.10)
+                            # engages; the hard guard still reverts the session INCLUDING the
+                            # SIL pool and stops the job on 2 consecutive trips.
+sil_prioritized: true       # sample slots ∝ stored mean (R-V)+ instead of uniformly
+
+# --- v7fix4.9 second anneal leg (post-horizon re-anneal; lr_restart=0 disables, the default) ---
+# min_lr=2e-6 (1% of base) proved too small to absorb level-pool rotations: the s195 relay-level
+# influx ignited a session-long value flare (v_loss 0.2->107, gnorm 2->737) that monopolized the
+# clipped gradient and starved actor learning. lr_restart is evidence-anchored, NOT a % of base:
+# 3e-5 sits inside BOTH the documented climb band (s117-151 ran at 4.8e-5->5.9e-6) and the
+# flare-self-heal band (four flares healed in-session at ~2.3-3.6e-5). Set the three run-specific
+# values via CLI overrides (lr_restart_at = the resume ckpt step); keep them 0 here so fresh runs
+# keep the plain fix4.8 clamped schedule.
+lr_restart: 0.0
+lr_restart_at: 0        # global update where the leg starts (set to the resume ckpt step)
+lr_restart_horizon: 0   # global update where the leg has decayed back to min_lr
+lr_restart_warmup: 50   # updates to ramp min_lr -> lr_restart (softens the 15x step)
+
+scoring_window_updates: 40
+mode: ${dicode_manager.mode}
+bonus_type: ${dicode_manager.bonus_type}
+dynamic_bonus_k: ${dicode_manager.dynamic_bonus_k}
+
+completion_bonus_scale: ${dicode_manager.completion_bonus_scale}
+completion_bonus_min: ${dicode_manager.completion_bonus_min}
+max_updates_per_session: ${dicode_manager.max_updates_per_session}
+

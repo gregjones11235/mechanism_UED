@@ -1,0 +1,42 @@
+# P2-v0 archive — source provenance map
+# Archive root: /home/oseasy/experiments/P2-v0-exploratory-invalid-for-attribution
+# Original workdir (UNTOUCHED): /home/oseasy/experiments/henry_student_p2_amago_20260721
+
+## Checkpoints
+checkpoints/98304/default/        <- cp -a (true copy, independent inode) of workdir checkpoints/98304/default/
+checkpoints/98304/manifest.json   <- cp -a of workdir checkpoints/98304/manifest.json
+checkpoints/98304/replay_meta.pkl <- HARDLINK (ln) to workdir checkpoints/98304/replay_meta.pkl
+                                     inode 11407285, 26580919296 bytes, link count 2
+                                     NOT chmod'd (protects original inode perms); integrity via SHA256
+checkpoints/122880/default/       <- cp -a of workdir checkpoints/122880/default/
+checkpoints/122880/manifest.json  <- cp -a of workdir checkpoints/122880/manifest.json
+checkpoints/122880/stage4_manifest.json <- cp -a of workdir checkpoints/122880/stage4_manifest.json
+checkpoints/122880/MISSING_replay_meta.txt <- new note (workdir 122880 has NO replay_meta.pkl -> NOT_FULLY_RESUMABLE)
+
+## Training logs / metadata
+outputs/stage_A/                 <- cp -a of workdir outputs/stage_A/
+outputs/stage_B/                 <- cp -a of workdir outputs/stage_B/
+outputs/stage4_continue/session_20260722T032514Z/ <- cp -a of workdir outputs/stage4_continue/session_20260722T032514Z/
+
+## Source + tests + evidence (archived AS-IS, current on-disk bytes)
+src/    <- cp -a of workdir src/ ( __pycache__ removed from archive)
+tests/  <- cp -a of workdir tests/
+evidence/ <- cp -a of workdir evidence/
+
+## Git status
+git_repo: false  (workdir is NOT a git repository)
+provenance_authority: source-file SHA256 (see SHA256SUMS) + run-time source_hashes.json
+
+## SOURCE-HASH DISCREPANCY (provenance caveat)
+Current on-disk src/stage4_continue_launcher.py SHA256 = 55058e06565963b95d217580dce0818a66473efdc42508833f378fc2d5915abd
+Run-time hash recorded in outputs/stage4_continue/session_20260722T032514Z/source_hashes.json
+  (the run that PRODUCED the 122880 checkpoint) = 2c13d267867147da2d2435dee8a7f558e269e8aa77dddfc2ef2ba9b48191862b
+=> stage4_continue_launcher.py was modified AFTER the 122880 checkpoint was produced.
+   The exact producing bytes of that one file are NOT recoverable (no git).
+   The other 6 src files match their run-time hashes:
+     checkpointing.py      25dd3006... == run-time 25dd3006...  MATCH
+     hindsight.py          6cf0c114... == run-time 6cf0c114...  MATCH
+     long_context_learner.py 9c1ac31f... == run-time 9c1ac31f...  MATCH
+     stage_a_launcher.py   2872dcf3... == run-time 2872dcf3...  MATCH
+     stage_b_launcher.py   fd39c1ce... == run-time fd39c1ce...  MATCH
+     trajectory_replay.py  9cf75a73... == run-time 9cf75a73...  MATCH

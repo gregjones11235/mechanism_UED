@@ -1,0 +1,48 @@
+# P2-v0 archive — launch commands & recovered run parameters
+
+## Canonical launch command (from src/stage4_continue_launcher.py docstring)
+python src/stage4_continue_launcher.py [--max-sessions N] [--smoke-test]
+
+## Run model (from docstring)
+Sessions of EXACTLY 24,576 env steps each = 16 envs x 128 rollout x 12 updates.
+gamma = 0.999   gae_lambda = 0.8   (unchanged from base checkpoint)
+
+## Constants recovered from launcher / manifest / training_log
+SESSION_ENV_STEPS        = 24576
+NUM_ENVS                 = 16
+ROLLOUT_STEPS            = 128
+NUM_UPDATES_PER_SESSION  = 12
+GAMMA                    = 0.999
+GAE_LAMBDA               = 0.8
+EXPECTED_GPU_UUID        = GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6   (GPU0)
+DIRECTIVE                = D059
+EXPERIMENT               = A
+TREATMENT                = AMAGO_STYLE_EXPLORATORY_P2
+
+## 122880 checkpoint run (from checkpoints/122880/stage4_manifest.json)
+checkpoint_step          = 122880
+gradient_updates         = 59
+resume_from_step         = 98304
+optimizer_restarted_at_resume = true   ("Fresh Adam(lr=2e-4, eps=1e-5) ... Adam moments restarted")
+replay_buffer_size       = 150
+gpu_uuid                 = GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6
+
+## 98304 checkpoint (from checkpoints/98304/manifest.json)
+checkpoint_step          = 98304
+gradient_updates         = 47
+replay_buffer_size       = 112
+trajectories_collected   = 112
+trajectories_inserted    = 112
+replay_longest_trajectory = 4096
+
+## training_log signature (outputs/stage4_continue/session_20260722T032514Z/training_log.jsonl)
+Per-update fields include: off_loss, off_grad_norm, replay_size, replay_samples_drawn,
+relabelled_samples, target_achievement_coverage.
+NOTE: ONLY off_loss is logged — there is NO on-policy PPO main-update loss term,
+confirming the "missing native on-policy PPO main update" defect (KNOWN_ISSUES #3).
+off_grad_norm ~ 190 -> 158 in the first two updates (abnormally large).
+
+## Provenance caveat
+actual_cli for the 122880 run is recovered only to the canonical form above; the
+exact producing bytes of stage4_continue_launcher.py are NOT recoverable (see
+SOURCE_PATHS.txt source-hash discrepancy).

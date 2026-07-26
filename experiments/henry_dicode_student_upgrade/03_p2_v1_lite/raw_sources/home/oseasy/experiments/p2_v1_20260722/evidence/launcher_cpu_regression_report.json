@@ -1,0 +1,21 @@
+{
+  "directive": "P2-v1 \u7b2c\u4e94\u8282 launcher regression (CPU part)",
+  "failed": 0,
+  "note": "weights-only LOAD check runs separately on GPU0 via --smoke-test",
+  "passed": 8,
+  "results": {
+    "action RNG determinism": "PASS",
+    "checkpoint round-trip CPU": "PASS",
+    "encoder-kernel finder": "PASS",
+    "fresh optimizer step==0": "PASS",
+    "fresh replay empty": "PASS",
+    "py_compile": "PASS",
+    "start constants": "PASS",
+    "v0 source guard": "PASS"
+  },
+  "source_hashes": {
+    "stage4_continue_launcher.py": "733a21931bcd560f92ce46fb624d3e6b80189cd539698da22bdc1c6a0a6f632c"
+  },
+  "timestamp": "2026-07-22T15:12:43.950335+00:00",
+  "total": 8
+}

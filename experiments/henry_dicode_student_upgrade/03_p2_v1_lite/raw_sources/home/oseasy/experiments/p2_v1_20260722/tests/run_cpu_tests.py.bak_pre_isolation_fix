@@ -1,0 +1,54 @@
+"""Run all P2-v1 CPU deterministic test files and aggregate results.
+
+Usage (on the server, CPU only, no new dependencies):
+
+    cd <p2_v1_dir>
+    JAX_PLATFORM_NAME=cpu python tests/run_cpu_tests.py
+
+Each test file is run as a subprocess so one failing file does not abort the
+rest.  Exit code is nonzero if any file fails.
+"""
+
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+TEST_FILES = [
+    "test_replay_hindsight.py",   # Gates 1/3/4/5/6 (replay + hindsight)
+    "test_learner.py",            # Gates 2/7 (replay value/goal aux update)
+    "test_checkpoint.py",         # checkpoint RNG/replay/params round-trip
+    "test_p2_v1.py",              # the 8 required tests + PPO equivalence
+    "test_plan_b.py",            # 方案B hard tests 1-8 (cross-rollout buffers)
+    "test_replay_aux_bootstrap.py",  # Level2 Stage A nonterminal bootstrap fix (real net)
+]
+
+
+def main():
+    env = dict(os.environ)
+    env["JAX_PLATFORM_NAME"] = "cpu"
+    env["CPU_VISIBLE_DEVICES"] = ""
+
+    results = {}
+    for fname in TEST_FILES:
+        path = os.path.join(HERE, fname)
+        print(f"\n{'#' * 70}\n# {fname}\n{'#' * 70}")
+        proc = subprocess.run(
+            [sys.executable, path], cwd=HERE, env=env
+        )
+        results[fname] = "PASS" if proc.returncode == 0 else f"FAIL(rc={proc.returncode})"
+
+    print(f"\n{'=' * 70}\nP2-v1 CPU test suite summary\n{'=' * 70}")
+    failed = 0
+    for fname, res in results.items():
+        print(f"  [{'OK' if res == 'PASS' else 'XX'}] {fname}: {res}")
+        if res != "PASS":
+            failed += 1
+
+    print(f"\n{len(results) - failed}/{len(results)} test files PASS")
+    sys.exit(1 if failed else 0)
+
+
+if __name__ == "__main__":
+    main()

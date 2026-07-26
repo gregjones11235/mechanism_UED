@@ -1,0 +1,20 @@
+provider: deepseek
+base_url: https://api.deepseek.com/v1
+# v7fix4 cost-saving (v7模型省钱策略.md §9, 拍板 2026-07-10): env_generator moved
+# dashscope Qwen3-235B-Thinking (¥16.88/M out, no cache, model id下线 2026-10-10)
+#   -> DeepSeek-V4-Pro OFFICIAL (¥6.22/M out = 2.7x cheaper, thinking kept).
+# The env_generator is the reflection-retry code-compilation role that re-sends the whole
+# Craftax+minicraftax mechanics system prompt every attempt — DeepSeek official's AUTOMATIC
+# CONTEXT CACHING makes those repeated giant inputs near-free (cache-hit input ¥0.026/M),
+# which dashscope cannot do. Same model id as proposer[0] but a DIFFERENT ROLE (write code
+# vs propose levels, serial not competing); heterogeneity lives between the two proposers.
+# A/B fairness: method arm and baseline arm MUST share this same env_generator model.
+model: deepseek-v4-pro
+llm_type: generation
+max_tokens: 32768
+temperature: 0.6
+top_p: 0.95
+# think=true: keep reasoning ON for code quality (this replaces a Thinking model).
+# llm.py provider=='deepseek' sends reasoning_effort:"high" for think=true (verified 2026-07-04;
+# v4-pro defaults thinking ON anyway). Do NOT copy proposer[0]'s think:false here.
+think: true

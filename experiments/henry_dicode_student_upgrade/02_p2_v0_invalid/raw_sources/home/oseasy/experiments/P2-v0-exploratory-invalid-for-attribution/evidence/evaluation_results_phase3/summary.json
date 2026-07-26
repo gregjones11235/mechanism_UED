@@ -1,0 +1,45 @@
+{
+  "phase": "3",
+  "timestamp": "2026-07-22T04:37:02.620159+00:00",
+  "comparison": [
+    {
+      "cell": "auction_budgeted_x_lpac",
+      "training": "auction_budgeted",
+      "aggregation": "lpac",
+      "mean_return": 1.2796876430511475,
+      "mean_performance": 0.5662334561347961,
+      "avg_episode_length": 274.8828125,
+      "finished": "128/128",
+      "cond_dim": 8,
+      "nan_free": true,
+      "error": null,
+      "rank": 1
+    },
+    {
+      "cell": "auction_budgeted_x_lpg_hrl",
+      "training": "auction_budgeted",
+      "aggregation": "lpg_hrl",
+      "mean_return": 1.2640626430511475,
+      "mean_performance": 0.5593197345733643,
+      "avg_episode_length": 273.6015625,
+      "finished": "128/128",
+      "cond_dim": 8,
+      "nan_free": true,
+      "error": null,
+      "rank": 2
+    },
+    {
+      "cell": "auction_budgeted_x_clpa",
+      "training": "auction_budgeted",
+      "aggregation": "clpa",
+      "mean_return": 1.2640626430511475,
+      "mean_performance": 0.5593197345733643,
+      "avg_episode_length": 275.7421875,
+      "finished": "128/128",
+      "cond_dim": 8,
+      "nan_free": true,
+      "error": null,
+      "rank": 3
+    }
+  ]
+}

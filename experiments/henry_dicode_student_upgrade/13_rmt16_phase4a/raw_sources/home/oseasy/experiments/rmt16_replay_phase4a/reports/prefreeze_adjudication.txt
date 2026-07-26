@@ -1,0 +1,41 @@
+RMT16 Phase4A — Prefreeze Adjudication (independent ruling)
+===========================================================
+ADJUDICATION=SEMANTIC_EQUIVALENCE_ACCEPTED
+
+# Frozen gate fields (formally adjudicated from semantic equivalents)
+PREFREEZE_STATUS=PASS
+STEP0_PARAMS_BIT_IDENTICAL=true
+PARAM_SCHEMA_IDENTICAL=true
+PARAM_COUNT_IDENTICAL=true
+CONFIG_DIFF_ONLY_CARRY_MODE=true
+
+# Frozen invariants
+STEP0_PARAMS_SHA=2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b
+PARAM_ELEMENTS=5433389
+PARAM_LEAVES=101
+
+# Phase state
+RMT16_PHASE4A_SMOKE_READY=true
+RMT16_PHASE4A_SMOKE=AUTHORIZED_4096_ONLY
+FORMAL_24576_AUTHORIZED=false
+
+# Provenance
+SOURCE_STATUS=VALID_MATCHED_SMOKE
+SOURCE_REPORT=rmt16_smoke_prefreeze.md
+SOURCE_CONFIG_DIFF=rmt16_persistent_vs_reset128_config_diff.txt
+
+# Report location correction (reports live in parent reports/, NOT src/reports/)
+REPORT_DIRECTORY_CORRECTED=true
+REPORT_DIRECTORY=/home/oseasy/experiments/rmt16_replay_phase4a/reports
+
+# Basis of semantic equivalence accepted by adjudication:
+#  - PREFREEZE_PROCESS_EXIT=0
+#  - VALID_MATCHED_SMOKE (not INVALID_MATCHED_SMOKE); no FAIL
+#  - two independent builds bit-identical (build#1 sha == build#2 sha == STEP0_PARAMS_SHA)
+#  - step0 common params bitwise identical across both arms
+#  - param schema identical (single treedef)
+#  - param element count identical (n=5433389, leaves=101)
+#  - config diff sole difference = carry_mode (RMT token carry/reset lifecycle)
+#  - Orbax "Item default could not be restored" / "Sharding info not provided"
+#    treated as NON-FATAL for prefreeze only (params built, two SHAs match, exit 0);
+#    must still be fully validated at 4096 smoke (full train-state roundtrip).

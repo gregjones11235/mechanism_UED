@@ -1,0 +1,32 @@
+{
+  "cache_influence": 0.0,
+  "candidate_count": 32,
+  "cell": "budgeted_soft_copeland_x_lpg_hrl",
+  "gen_new": 32,
+  "gen_resumed": 0,
+  "inf": false,
+  "jud_new": 97,
+  "jud_resumed": 0,
+  "judgment_count": 96,
+  "mechanism": "budgeted_soft_copeland",
+  "nan": false,
+  "param_leaves": 57,
+  "pool_hash": "545d8387cdbf7ae0",
+  "prev_snapshot_hash": "0000000000000000",
+  "protocol": "PURE_DYNAMIC_D052",
+  "round": 1,
+  "selected_ids": [
+    "d052_r0_0019",
+    "d052_r0_0029",
+    "d052_r0_0027",
+    "d052_r0_0011",
+    "d052_r0_0018",
+    "d052_r0_0009",
+    "d052_r0_0020",
+    "d052_r0_0028"
+  ],
+  "selection_hash": "94e5facf1d11b18f",
+  "snapshot_hash": "ab50972bb9b45e4e",
+  "steps_resolved": 24576,
+  "training": "lpg_hrl"
+}

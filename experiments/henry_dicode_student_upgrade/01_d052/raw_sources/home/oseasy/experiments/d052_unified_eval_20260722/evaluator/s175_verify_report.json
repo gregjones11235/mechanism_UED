@@ -1,0 +1,27 @@
+{
+  "embedding_size": 67,
+  "DK_idx": 41,
+  "stage4_obs_dim": 8335,
+  "stage4_action_dim": 43,
+  "full_obs_dim": 8335,
+  "full_at_reset": {
+    "player_level_counts": {
+      "0": 64
+    },
+    "DK_preset_count": 0
+  },
+  "session175_load": {
+    "ok": true,
+    "param_leaves": 80,
+    "encoder_kernel": {
+      "/params/transformer/encoder/kernel": [
+        8335,
+        256
+      ]
+    }
+  },
+  "session175_forward": {
+    "ts.params": "OK logits=(2, 43) v=(2,)",
+    "ts.params['params']": "ERR ScopeCollectionNotFound: Tried to access \"kernel\" from collection \"params\" in \"/transformer/encoder\" but the collection is empty. (https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html#flax.errors.ScopeCollecti"
+  }
+}

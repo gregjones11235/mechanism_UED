@@ -1,0 +1,111 @@
+{
+  "audit": "W512_PHASE4A_REPLAY_DIAGNOSTICS",
+  "timestamp_utc": "2026-07-26T01:46:52Z",
+  "checks": [
+    {
+      "id": 1,
+      "desc": "online PPO更新次数",
+      "detail": "0。P2Replay训练器无PPO主更新（与P2-Full-A一致，纯replay训练）。"
+    },
+    {
+      "id": 2,
+      "desc": "Replay更新次数",
+      "detail": "两臂均11次（12 rollouts中第0次无足够样本）。"
+    },
+    {
+      "id": 3,
+      "desc": "为什么只有11次Replay更新",
+      "detail": "12 rollouts。Rollout 0完成后replay有2条trajectory但can_sample()要求length>=129，短episode不满足。Rollout 1后replay有4条，首次满足条件。此后每rollout 1次更新。"
+    },
+    {
+      "id": 4,
+      "desc": "warmup何时结束",
+      "detail": "无显式warmup参数。隐式warmup=1 rollout（rollout 0无更新）。Rollout 1开始更新。"
+    },
+    {
+      "id": 5,
+      "desc": "每次Replay实际样本量",
+      "detail": "K_BATCH=4次采样尝试。两臂hindsight_eligible=44/44(100%)。每次更新使用>=2个有效样本对（original+relabeled）。"
+    },
+    {
+      "id": 6,
+      "desc": "stored episode和transition数量",
+      "detail": "Persistent: 21 episodes in replay (24576 total env steps / 16 envs ≈ 1536 steps per env, ~21 completed episodes)。Reset128: 23 episodes。"
+    },
+    {
+      "id": 7,
+      "desc": "Replay是否跨episode",
+      "detail": "否。ReplayBuffer存储complete episodes（dones[-1]=True硬门）。采样窗口在单个trajectory内。"
+    },
+    {
+      "id": 8,
+      "desc": "Persistent/Reset128是否使用相同采样索引",
+      "detail": "两臂使用相同W512ReplayBuffer(seed=42)和相同采样逻辑。但因buffer中trajectory不同（不同carry模式→不同episode长度/数量），实际采样到不同trajectory。RandomState(42)序列相同但eligible pool不同。"
+    },
+    {
+      "id": 9,
+      "desc": "policy lag分布",
+      "detail": "awr_valid_frac=1.0 throughout（所有样本lag<=max_policy_lag=16）。因仅11次更新，最大lag=11<16。"
+    },
+    {
+      "id": 10,
+      "desc": "importance ratio分布",
+      "detail": "ratio_max从1.009逐步升至26.6（rollout 9），最后降至1.88（rollout 11）。ESS从1.0降至0.39再回升至0.96。"
+    },
+    {
+      "id": 11,
+      "desc": "ESS",
+      "detail": "Persistent ESS序列: 1.0, 0.91, 0.83, 0.65, 0.53, 0.87, 0.67, 0.44, 0.39, 0.71, 0.96。Reset128类似。ESS在中期下降后恢复。"
+    },
+    {
+      "id": 12,
+      "desc": "commit KL",
+      "detail": "从0.025逐步降至0.001。所有更新在scale=1.0即通过KL门（kl<=0.05）。"
+    },
+    {
+      "id": 13,
+      "desc": "rejected更新是否为0",
+      "detail": "是。两臂均0次KL拒绝。所有11次更新在首个scale(1.0)即通过。"
+    },
+    {
+      "id": 14,
+      "desc": "rejected状态回滚机制是否实际执行过测试",
+      "detail": "未执行（因0次拒绝）。回滚逻辑存在于代码中（critic-only update）但未被触发。"
+    },
+    {
+      "id": 15,
+      "desc": "EMA更新次数",
+      "detail": "11次（每次accepted update后执行ema_update(tau=0.995)）。"
+    },
+    {
+      "id": 16,
+      "desc": "hindsight有效样本数",
+      "detail": "两臂: 44 attempts, 44 eligible (100%)。每次更新4个采样全部有效。"
+    },
+    {
+      "id": 17,
+      "desc": "buffer中的DK/floor3/death/timeout构成",
+      "detail": "日志未记录per-episode outcome构成。21/23 episodes的DK/floor3分布需从replay buffer内容推断，但buffer未持久化到checkpoint。"
+    },
+    {
+      "id": 18,
+      "desc": "单个episode最大重复采样占比",
+      "detail": "日志未记录per-trajectory采样频率。capacity=64, 实际buffer size=21/23, 44次采样。理论上单条trajectory最多被采样44次（若总是选中同一条），但RandomState(42)的均匀采样使分布较均匀。"
+    },
+    {
+      "id": 19,
+      "desc": "是否存在少量episode支配训练",
+      "detail": "无法从日志确定。buffer size 21-23，44次采样（每次4个），平均每条约被采样8.4/7.6次。无明显支配证据，但也无法排除。"
+    },
+    {
+      "id": 20,
+      "desc": "Replay作用更像数据复用、稳定化，还是长程信用",
+      "detail": "稳定化。证据：(a)PPO训练W512 catastrophic degradation; (b)Replay恢复到Control水平; (c)carry效应消失; (d)KL/ESS指标显示训练稳定性改善。Replay修复的是训练健康，不是长程信用分配。"
+    }
+  ],
+  "recommended_characterization": "Replay stabilized W512 training and recovered control-level performance, but did not produce positive cross-rollout carry value.",
+  "not_supported": [
+    "Replay解决了长期信用分配",
+    "Replay增强了跨rollout记忆能力"
+  ]
+}

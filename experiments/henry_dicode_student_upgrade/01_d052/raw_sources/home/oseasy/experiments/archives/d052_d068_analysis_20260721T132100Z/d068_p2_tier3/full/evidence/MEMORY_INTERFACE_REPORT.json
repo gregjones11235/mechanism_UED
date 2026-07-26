@@ -1,0 +1,25 @@
+{
+  "batch_requirement": ">=2 (forward_eval squeeze(0) bug for batch=1)",
+  "done_reset": "jnp.where(done, zeros, memories)",
+  "forward_method": "network.model_forward_eval",
+  "forward_returns": "pi.logits, value, mem_out",
+  "input_mask_shape": [
+    16,
+    8,
+    1,
+    129
+  ],
+  "input_memory_shape": [
+    16,
+    128,
+    2,
+    256
+  ],
+  "memory_update": "roll(memories, -1, axis=1).at[:, -1].set(mem_out)",
+  "output_memory_shape": [
+    16,
+    2,
+    256
+  ],
+  "source": "stage_b_launcher.py lines 208-210, model_forward_eval network.py line 171"
+}

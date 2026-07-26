@@ -1,0 +1,63 @@
+{
+  "platform": [
+    "TFRT_CPU_0"
+  ],
+  "dicode_file": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src/dicode/__init__.py",
+  "dicode_network_file": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src/dicode/network.py",
+  "DK_idx": 41,
+  "embedding_size": 67,
+  "dk_embedding_vector_sum": 1.0,
+  "dk_embedding_nonzero_idx": [
+    41
+  ],
+  "obs_dim_embedding67": 8335,
+  "action_dim": 43,
+  "base_symbolic_obs_dim": 8268,
+  "conditioning_block_dim": 67,
+  "reset_obs_shape_A": [
+    16,
+    8335
+  ],
+  "empirical_goal_conditioning_dims": [
+    8268,
+    8309
+  ],
+  "empirical_goal_slice_count": 2,
+  "empirical_goal_slice_min": 8268,
+  "empirical_goal_slice_max": 8309,
+  "empirical_goal_slice_is_last_block": false,
+  "empirical_goal_slice_contiguous": false,
+  "memory_api": {
+    "memory_shape": [
+      "B",
+      128,
+      2,
+      256
+    ],
+    "mask_shape": [
+      "B",
+      8,
+      1,
+      129
+    ],
+    "obs_shape": [
+      "B",
+      8335
+    ],
+    "window_mem": 128,
+    "num_layers": 2,
+    "embed_size": 256,
+    "num_heads": 8
+  },
+  "network_init": {
+    "ok": true,
+    "encoder_kernel": {
+      "/transformer/encoder/kernel": [
+        8335,
+        256
+      ]
+    }
+  },
+  "network_forward": "OK logits=(2, 43) value=(2,) mem_out=(2, 2, 256)",
+  "param_leaves": 80
+}

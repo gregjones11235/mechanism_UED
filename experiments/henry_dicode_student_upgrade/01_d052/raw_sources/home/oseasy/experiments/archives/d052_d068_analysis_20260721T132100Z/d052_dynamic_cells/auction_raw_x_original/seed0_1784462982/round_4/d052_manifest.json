@@ -1,0 +1,32 @@
+{
+  "cache_influence": 0.0,
+  "candidate_count": 32,
+  "cell": "auction_raw_x_original",
+  "gen_new": 32,
+  "gen_resumed": 0,
+  "inf": false,
+  "jud_new": 105,
+  "jud_resumed": 0,
+  "judgment_count": 96,
+  "mechanism": "auction_raw",
+  "nan": false,
+  "param_leaves": 47,
+  "pool_hash": "6979966ad419dc4a",
+  "prev_snapshot_hash": "1dc2bee1c8e17260",
+  "protocol": "PURE_DYNAMIC_D052",
+  "round": 4,
+  "selected_ids": [
+    "d052_r3_0024",
+    "d052_r3_0006",
+    "d052_r3_0020",
+    "d052_r3_0022",
+    "d052_r3_0027",
+    "d052_r3_0023",
+    "d052_r3_0002",
+    "d052_r3_0016"
+  ],
+  "selection_hash": "7cd50985763153ac",
+  "snapshot_hash": "457e48831f1ba87e",
+  "steps_resolved": 24576,
+  "training": "original"
+}

@@ -1,0 +1,2 @@
+{"total_loss": 0.6726747155189514, "value_loss": 1.3496898412704468, "actor_loss": -0.0005286186933517456, "entropy": 0.8208010196685791, "grad_norm_mean": 8.10773754119873, "grad_norm_max": 9.42446231842041, "update_step": 2}
+{"total_loss": 0.8485468626022339, "value_loss": 1.6997416019439697, "actor_loss": 0.0002379799261689186, "entropy": 0.780989408493042, "grad_norm_mean": 9.749092102050781, "grad_norm_max": 11.507948875427246, "update_step": 3}

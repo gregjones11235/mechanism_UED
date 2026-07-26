@@ -1,0 +1,115 @@
+P7-EGOMAP-WAVE1 Launcher
+  total_steps=98304  num_envs=16  rollout=128
+  lr=2e-05  gamma=0.999  gae_lambda=0.8
+  ckpt_nodes=[0, 4096, 24576, 49152, 73728, 98304]
+[guard] GPU1 OK | UUID=GPU-3c7a2864-755b-7045-b293-6f80e748283f index=1
+
+============================================================
+  ARM: control  (egomap_enabled=False)
+============================================================
+[1/5] Loading ckpt17500 base params ...
+WARNING:absl:Configured `CheckpointManager` using deprecated legacy API. Please follow the instructions at https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html to migrate.
+/home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/orbax/checkpoint/_src/serialization/jax_array_handlers.py:736: UserWarning: Sharding info not provided when restoring. Populating sharding info from sharding file. Please note restoration time will be slightly increased due to reading from file. Note also that this option is unsafe when restoring on a different topology than the checkpoint was saved with.
+  warnings.warn(
+  [load] ckpt17500 restored | param_leaves=80
+[2/5] Initializing EgoMap network ...
+  param_leaves=87
+[3/5] Building env ...
+/home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/jax/_src/ops/scatter.py:93: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=float32 to dtype=int32 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+[4/5] Saving step-0 checkpoint ...
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/params_0.pkl
+[5/5] Training 48 updates in segments ...
+
+  Segment 1/5: updates 0→2 (4096 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 188.9s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/params_4096.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/carry_4096.pkl
+
+  Segment 2/5: updates 2→12 (20480 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 139.7s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/params_24576.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/carry_24576.pkl
+
+  Segment 3/5: updates 12→24 (24576 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 141.9s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/params_49152.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/carry_49152.pkl
+
+  Segment 4/5: updates 24→36 (24576 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 143.2s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/params_73728.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/carry_73728.pkl
+
+  Segment 5/5: updates 36→48 (24576 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 144.3s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/params_98304.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/control/carry_98304.pkl
+
+  ARM control COMPLETE | final_step=98304
+
+============================================================
+  ARM: egomap  (egomap_enabled=True)
+============================================================
+[1/5] Loading ckpt17500 base params ...
+WARNING:absl:Configured `CheckpointManager` using deprecated legacy API. Please follow the instructions at https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html to migrate.
+  [load] ckpt17500 restored | param_leaves=80
+[2/5] Initializing EgoMap network ...
+  param_leaves=87
+[3/5] Building env ...
+[4/5] Saving step-0 checkpoint ...
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/params_0.pkl
+[5/5] Training 48 updates in segments ...
+
+  Segment 1/5: updates 0→2 (4096 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 184.6s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/params_4096.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/carry_4096.pkl
+
+  Segment 2/5: updates 2→12 (20480 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 149.8s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/params_24576.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/carry_24576.pkl
+
+  Segment 3/5: updates 12→24 (24576 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 150.0s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/params_49152.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/carry_49152.pkl
+
+  Segment 4/5: updates 24→36 (24576 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 152.4s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/params_73728.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/carry_73728.pkl
+
+  Segment 5/5: updates 36→48 (24576 env steps)
+Using embedding size: 67
+Generated full 9-level base world (ores included via smoothgen configs).
+    done in 148.0s
+  [ckpt] params saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/params_98304.pkl
+  [ckpt] carry saved → /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/checkpoints/egomap/carry_98304.pkl
+
+  ARM egomap COMPLETE | final_step=98304
+
+============================================================
+ALL ARMS COMPLETE
+============================================================

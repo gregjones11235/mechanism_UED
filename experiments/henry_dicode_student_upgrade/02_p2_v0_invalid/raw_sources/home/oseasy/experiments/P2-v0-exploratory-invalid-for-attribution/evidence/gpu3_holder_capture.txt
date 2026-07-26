@@ -1,0 +1,21 @@
+# GPU3 HOLDER CAPTURE - D059 Pre-release Evidence
+# Timestamp: 2026-07-21T11:05 UTC
+# Directive: 059
+
+GPU_UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd
+GPU_NAME: NVIDIA RTX A6000
+GPU_MEMORY: 2554 MiB / 46068 MiB
+GPU_INDEX: 3 (00000000:00:0E.0)
+
+HOLDER_PID: 3330939
+HOLDER_PPID: 1 (init)
+HOLDER_EXECUTABLE: /home/oseasy/miniconda3/envs/dicode310/bin/python3.10
+HOLDER_ARGV: /home/oseasy/miniconda3/envs/dicode310/bin/python3 /tmp/hold_gpu3.py
+HOLDER_CMDLINE: /home/oseasy/miniconda3/envs/dicode310/bin/python3 /tmp/hold_gpu3.py
+
+# Other GPU processes (NOT TO BE TOUCHED):
+GPU0: PID 3290346 auction_budgeted x tser_ppo (D052 active training)
+GPU1: PID 2243991 soft_copeland x clpa (D052 active training)
+GPU2: PID 3294798 auction_raw x clpa (D052 active training)
+
+ACTION: Stopping holder PID 3330939 via cc_gpu3 pane

@@ -1,0 +1,224 @@
+{
+  "schema": "unified_director_control_v1",
+  "created": "2026-07-22T20:38+08:00",
+  "director": "single-CC (no sub-CC delegation)",
+  "gpu": {
+    "gpu0": {
+      "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+      "task": null,
+      "pid": null,
+      "status": "IDLE"
+    },
+    "gpu1": {
+      "uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+      "task": null,
+      "pid": null,
+      "status": "IDLE"
+    },
+    "gpu2": {
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "task": null,
+      "pid": null,
+      "status": "IDLE"
+    },
+    "gpu3": {
+      "uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+      "task": null,
+      "pid": null,
+      "status": "IDLE"
+    }
+  },
+  "d052_cells": {
+    "auction_budgeted_x_clpa": {
+      "seed": "seed0_1784543391",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_clpa/seed0_1784543391/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_budgeted_x_lpac": {
+      "seed": "seed0_1784565782",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_lpac/seed0_1784565782/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_budgeted_x_lpg_hrl": {
+      "seed": "seed0_1784566018",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_lpg_hrl/seed0_1784566018/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_budgeted_x_original": {
+      "seed": "seed0_1784548257",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_original/seed0_1784548257/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_budgeted_x_tser_ppo": {
+      "seed": "seed0_1784629279",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_tser_ppo/seed0_1784629279/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_raw_x_clpa": {
+      "seed": "seed0_1784601734",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_clpa/seed0_1784601734/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_raw_x_lpac": {
+      "seed": "seed0_1784524793",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_lpac/seed0_1784524793/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_raw_x_lpg_hrl": {
+      "seed": "seed0_1784708136",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_lpg_hrl/seed0_1784708136/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_raw_x_original": {
+      "seed": "seed0_1784462982",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_original/seed0_1784462982/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "auction_raw_x_tser_ppo": {
+      "seed": "seed0_1784708136",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_raw_x_tser_ppo/seed0_1784708136/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "budgeted_soft_copeland_x_clpa": {
+      "seed": "seed0_1784526008",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_clpa/seed0_1784526008/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "budgeted_soft_copeland_x_lpac": {
+      "seed": "seed0_1784572014",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_lpac/seed0_1784572014/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "budgeted_soft_copeland_x_lpg_hrl": {
+      "seed": "seed0_1784524657",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_lpg_hrl/seed0_1784524657/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "budgeted_soft_copeland_x_original": {
+      "seed": "seed0_1784462982",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_original/seed0_1784462982/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "budgeted_soft_copeland_x_tser_ppo": {
+      "seed": "seed0_1784572014",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/budgeted_soft_copeland_x_tser_ppo/seed0_1784572014/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "original_x_clpa": {
+      "seed": "seed0_1784455651",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_clpa/seed0_1784455651/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "original_x_lpac": {
+      "seed": "seed0_1784453656",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_lpac/seed0_1784453656/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "original_x_lpg_hrl": {
+      "seed": "seed0_1784448381",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_lpg_hrl/seed0_1784448381/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "original_x_original": {
+      "seed": "seed0_1784441252",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_original/seed0_1784441252/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "original_x_tser_ppo": {
+      "seed": "seed0_1784451914",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/original_x_tser_ppo/seed0_1784451914/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "soft_copeland_x_clpa": {
+      "seed": "seed0_1784607410",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_clpa/seed0_1784607410/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "soft_copeland_x_lpac": {
+      "seed": "seed0_1784708136",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_lpac/seed0_1784708136/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "soft_copeland_x_lpg_hrl": {
+      "seed": "seed0_1784457576",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_lpg_hrl/seed0_1784457576/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "soft_copeland_x_original": {
+      "seed": "seed0_1784462982",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_original/seed0_1784462982/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    },
+    "soft_copeland_x_tser_ppo": {
+      "seed": "seed0_1784711061",
+      "checkpoint_98304": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/soft_copeland_x_tser_ppo/seed0_1784711061/checkpoints/98304",
+      "gate": "PASS",
+      "training": "DONE_98304",
+      "eval": "PENDING"
+    }
+  },
+  "d052_eval": {
+    "pilot_cells": [],
+    "pilot_status": "BLOCKED_CONDITIONING_MISMATCH",
+    "full_queue_status": "NOT_STARTED",
+    "evaluator_sha256": null,
+    "conditioning_finding": "D052=onehot-32-candidate(obs8300,embed32),NOT goal-embedding-67;NOT Stage4-evaluable as directive assumed;BLOCKED pending user decision A/B/C"
+  },
+  "p2": {
+    "v0_archive": "PENDING",
+    "v1_code": "LOCAL_PATCHES_NOT_UPLOADED",
+    "v1_cpu_tests": "NOT_RUN",
+    "session175_pilot": "DONE_STAGE4_NATIVE_39.06pct_OFFICIAL_FULL_0pct",
+    "v1_gpu_smoke": "NOT_STARTED",
+    "session175_pilot_sha": "06221187ac06d7da59dac64e6273abfc865b3baafdc75615e0808fc5065d26e2",
+    "session175_pilot_results": "/home/oseasy/experiments/session175_dual_caliber_pilot_20260722/results"
+  }
+}

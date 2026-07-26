@@ -1,0 +1,62 @@
+{
+  "checkpoint_source": "ckpt 17500 (v7fix55_armA_s0)",
+  "directive": "D059",
+  "gae_lambda": 0.8,
+  "gamma": 0.999,
+  "gpu_holder_released": {
+    "action": "TERMINATED via cc_gpu3",
+    "cmd": "/home/oseasy/miniconda3/envs/dicode310/bin/python3 /tmp/hold_gpu3.py",
+    "evidence": "evidence/gpu3_holder_capture.txt",
+    "pid": 3330939,
+    "ppid": 1
+  },
+  "gpu_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+  "implementation_gates": {
+    "gate_1_compile_import": "PASS",
+    "gate_2_long_context_learner": "PASS",
+    "gate_3_replay_exceeds_128": "PASS",
+    "gate_4_reject_truncated_fresh": "PASS",
+    "gate_5_hindsight_achieved_goals": "PASS",
+    "gate_6_reject_fabricated_goals": "PASS",
+    "gate_7_finite_nonzero_gradients": "PASS",
+    "gate_8_save_restore": "PASS",
+    "gate_9_manifest_hashes_uuid": "PASS"
+  },
+  "namespace": "/home/oseasy/experiments/henry_student_p2_amago_20260721",
+  "source_modules": {
+    "checkpointing.py": "25dd3006a028d786",
+    "hindsight.py": "6cf0c114754b8fdd",
+    "long_context_learner.py": "9c1ac31fd4144448",
+    "stage_a_launcher.py": "2872dcf3c9a8ebb0",
+    "stage_b_launcher.py": "fd39c1cef873673b",
+    "trajectory_replay.py": "9cf75a737793bb19"
+  },
+  "stages": {
+    "stage_A": {
+      "config": "16 envs x 128 rollout x 12 updates = 24576",
+      "env_steps": 24576,
+      "gradient_updates": 11,
+      "max_len": 1467,
+      "output": "outputs/stage_A",
+      "relabels": 11,
+      "replay_samples": 11,
+      "status": "PASS",
+      "trajectories": 37,
+      "trajs_gt_128": 31
+    },
+    "stage_B": {
+      "config": "16 envs x 128 rollout x 48 updates = 98304",
+      "env_steps": 98304,
+      "gradient_updates": 47,
+      "max_len": 4096,
+      "output": "outputs/stage_B",
+      "relabels": 47,
+      "replay_samples": 47,
+      "status": "PASS",
+      "trajectories": 112,
+      "trajs_gt_128": 103
+    }
+  },
+  "timestamp_utc": "2026-07-21T05:02:43.885447+00:00",
+  "treatment": "AMAGO_STYLE_EXPLORATORY_P2"
+}

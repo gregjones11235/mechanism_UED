@@ -1,0 +1,23 @@
+{
+  "all_pass": true,
+  "cfg": {
+    "embed_size": 256,
+    "num_heads": 8,
+    "num_layers": 2,
+    "window_grad": 64,
+    "window_mem": 128
+  },
+  "directive": "P2-v1 Level2 Stage A bootstrap fix regression (#57 \u4e09)",
+  "emb": 67,
+  "jax_devices": "[CpuDevice(id=0)]",
+  "obs_dim": 128,
+  "results": {
+    "T0_batch1_raises_informational": true,
+    "T1_aux_loss_finite": true,
+    "T1_value_loss_finite": true,
+    "T2_memory_batch_independent": true,
+    "T2_value_batch_independent": true,
+    "T3_tiled_eval_finite": true
+  },
+  "timestamp_utc": "2026-07-23T04:14:27.653314+00:00"
+}

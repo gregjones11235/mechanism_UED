@@ -1,0 +1,835 @@
+{
+  "candidates": [
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 163
+      },
+      "chash": "398f9df6a065e1a7",
+      "description": "Collect wood and craft planks while dealing with slightly stronger hostile mobs and fewer passive animals.",
+      "difficulty_tier": "medium",
+      "label": "d052_d052_r3_0000",
+      "short_reason": "Encourage wood collection skill under moderate hostile mob pressure.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "craft_planks"
+      ],
+      "task_id": "d052_r3_0000",
+      "task_params": {
+        "mob_damage_multiplier": 1.2,
+        "mob_health_multiplier": 1.2,
+        "passive_spawn_multiplier": 0.8
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 181
+      },
+      "chash": "d07cbb4444c0238d",
+      "description": "Craft a wooden pickaxe by collecting wood and using a crafting table. Enemy spawns, health, and damage are reduced.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0001",
+      "short_reason": "Very low transition reward indicates struggle; easing enemy difficulty.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "craft_wooden_pickaxe"
+      ],
+      "task_id": "d052_r3_0001",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 197
+      },
+      "chash": "fc131232a693f009",
+      "description": "Easy combat task with low zombie spawn rate and weakened zombies to help the student practice the 'defeat_zombie' skill.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0002",
+      "short_reason": "Student performance is near zero, indicating early learning stage; reducing difficulty to build foundational combat skills.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "defeat_zombie",
+        "survive_combat"
+      ],
+      "task_id": "d052_r3_0002",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 160
+      },
+      "chash": "3c978950c8969fd1",
+      "description": "Explore the cave, collect coal and defeat a skeleton.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0003",
+      "short_reason": "Student performance low; easy cave navigation task with reduced enemy stats.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_coal",
+        "defeat_skeleton"
+      ],
+      "task_id": "d052_r3_0003",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 231,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 144
+      },
+      "chash": "155e3368d11f0025",
+      "description": "Place a crafting table.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0004",
+      "short_reason": "Low transition reward mean suggests agent is struggling; setting easy multipliers.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "place_table"
+      ],
+      "task_id": "d052_r3_0004",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 197
+      },
+      "chash": "dd9259ea4bc6aabd",
+      "description": "Survive by managing hunger. Hunt passive mobs for food. Adjusted multipliers to help the student improve hunger management skills.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0005",
+      "short_reason": "Student reward low (0.0045), struggling with hunger. Increase passive spawns and reduce mob threats to enable focus on hunger management.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0005",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 3.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 194
+      },
+      "chash": "ea4ec8cab2311c54",
+      "description": "Learn the enchant weapon magic skill by enchanting a basic weapon. Enemies are sparse and weak to allow safe practice.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0006",
+      "short_reason": "Low student mean reward (0.0046), easy task to build enchant_weapon skill with minimal enemy threat.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "learn_enchant_weapon",
+        "enchant_weapon_once"
+      ],
+      "task_id": "d052_r3_0006",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 191
+      },
+      "chash": "eba8a6ee6c33fa99",
+      "description": "Gather wood from trees. Learn to punch trees to get wood, and collect at least 5 wood. Survive by eating food from animals.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0007",
+      "short_reason": "Easy task: abundant food and weak enemies allow the agent to practice collecting wood without pressure.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "collect_wood_5"
+      ],
+      "task_id": "d052_r3_0007",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 2.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 177
+      },
+      "chash": "5abc499136047b6a",
+      "description": "Craft a wooden pickaxe, then upgrade to a stone pickaxe while avoiding hostile mobs.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0008",
+      "short_reason": "Low transition reward suggests difficulty; easing mob parameters to aid tool crafting.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "craft_wooden_pickaxe",
+        "craft_stone_pickaxe"
+      ],
+      "task_id": "d052_r3_0008",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 162
+      },
+      "chash": "5825398ea0976abd",
+      "description": "Defeat zombies that spawn periodically in a combat arena.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0009",
+      "short_reason": "Reduced zombie stats and spawn rate to ease training for struggling agent.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "defeat_zombie",
+        "survive_zombie_wave"
+      ],
+      "task_id": "d052_r3_0009",
+      "task_params": {
+        "mob_damage_multiplier": 0.7,
+        "mob_health_multiplier": 0.8,
+        "passive_spawn_multiplier": 0.75
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 179
+      },
+      "chash": "f9ae363a7337425b",
+      "description": "Explore the cave system, navigating through dark passages to collect basic resources while avoiding threats.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0010",
+      "short_reason": "Lower mob difficulty to aid navigation exploration given the agent's low transition reward.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "enter_cave",
+        "find_ore"
+      ],
+      "task_id": "d052_r3_0010",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 231,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 213
+      },
+      "chash": "2584c8173d1d1e03",
+      "description": "Craft a table from wood and place it in the world. Focus on the basic build skill: place_table.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0011",
+      "short_reason": "Snapshot shows low transition reward (0.0045) and high variance, indicating agent struggles with build tasks. Reducing hostile mob difficulty to allow safe practice of crafting and placing a table.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "craft_table",
+        "place_table"
+      ],
+      "task_id": "d052_r3_0011",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 207
+      },
+      "chash": "d9290295cfe7d6a6",
+      "description": "A survival task focusing on hunger management. The world has plentiful passive animals for easy food gathering, and hostile mobs are weaker to reduce survival pressure. The agent must learn to eat and cook food to maintain hunger.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0012",
+      "short_reason": "Low transition reward (mean 0.0046) suggests the student needs an easy task to practice hunger management.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "eat_food",
+        "cook_food"
+      ],
+      "task_id": "d052_r3_0012",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 4.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 229
+      },
+      "chash": "3e7ae9e4342e13aa",
+      "description": "Collect magic essence and enchant your weapon. First, gather 3 Magic Essence from mystical shrines (Achievement A). Then, use an Enchanting Table to imbue your weapon with power (Achievement B).",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0013",
+      "short_reason": "Low transition_reward (0.0046) suggests struggle; provide easy task with reduced mobs and weak enemies to enable enchantment completion.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_magic_essence",
+        "enchant_weapon"
+      ],
+      "task_id": "d052_r3_0013",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 182
+      },
+      "chash": "5bf37f1d62b77384",
+      "description": "Collect wood by chopping trees. Environment has plentiful trees and weak monsters to allow safe wood gathering.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0014",
+      "short_reason": "Student performance is low (mean transition reward 0.00455); easy task with abundant wood and weak mobs.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood"
+      ],
+      "task_id": "d052_r3_0014",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 2.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 175
+      },
+      "chash": "e2e0d932bd405368",
+      "description": "Craft a wooden pickaxe in a relatively safe environment.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0015",
+      "short_reason": "Student transition reward is low; providing easy conditions with reduced mob stats to facilitate crafting a pickaxe.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_log",
+        "craft_wooden_pickaxe"
+      ],
+      "task_id": "d052_r3_0015",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 189
+      },
+      "chash": "284c4c174ffcb26d",
+      "description": "Learner policy fails to defeat zombies effectively. Reduce difficulty to allow skill acquisition.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0016",
+      "short_reason": "Very low transition reward (0.0045) suggests policy cannot currently defeat zombies; reducing mob stats and spawn rate for easier learning.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "d052_r3_0016",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 189
+      },
+      "chash": "ef415cf5ca8c887b",
+      "description": "Navigate the cave system to discover hidden chambers and reach target achievements A and B. Focus on exploration and safe traversal.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0017",
+      "short_reason": "Reduced mob threat to simplify navigation and help the agent gather more frequent rewards during exploration.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0017",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 231,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 179
+      },
+      "chash": "5ca84132f8022b13",
+      "description": "Craft a table from wood and place it in the world.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0018",
+      "short_reason": "Student's low transition reward (~0.0046) after 73728 steps indicates struggle; easy tier with minimal mob threats allows focus on building.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "craft_table",
+        "place_table"
+      ],
+      "task_id": "d052_r3_0018",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 179
+      },
+      "chash": "a3d794fdf8e5aa45",
+      "description": "Practice managing hunger by hunting passive mobs and avoiding combat. Enemies are weak, and animals are plentiful.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0019",
+      "short_reason": "Low reward mean 0.0045; provide easy task for hunger management with abundant food and weak mobs.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0019",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 3.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 167
+      },
+      "chash": "a94043b1e476153b",
+      "description": "Craft an enchanting table and enchant a weapon.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0020",
+      "short_reason": "Low transition reward mean and early training step (73k) suggest easy difficulty multipliers.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "craft_enchanting_table",
+        "enchant_weapon"
+      ],
+      "task_id": "d052_r3_0020",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 213
+      },
+      "chash": "8895b8be3bea4a32",
+      "description": "Collect wood from trees in a very easy environment. Focus on learning the basic collect_wood skill with minimal threats and low mob difficulty.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0021",
+      "short_reason": "Student's very low transition reward mean (0.00455) warrants an easy task with minimal threats to allow focused training on the collect_wood skill.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "collect_wood_5"
+      ],
+      "task_id": "d052_r3_0021",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 188
+      },
+      "chash": "27cfdf7b1c5519d5",
+      "description": "Gather wood to craft a wooden pickaxe. Learn the basics of tool crafting.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0022",
+      "short_reason": "Low reward mean indicates early exploration stage. Reducing mob threats to facilitate learning of wood collection and pickaxe crafting.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "craft_wooden_pickaxe"
+      ],
+      "task_id": "d052_r3_0022",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 151
+      },
+      "chash": "badf428aa508dd6c",
+      "description": "Defeat zombies.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0023",
+      "short_reason": "Easier combat task with reduced zombie spawn, health, and damage to help agent improve defeat_zombie skill.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "d052_r3_0023",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 166
+      },
+      "chash": "e0f31763aa8cf389",
+      "description": "Navigate through a cave system to collect iron and defeat skeletons while handling increased mob presence and toughness.",
+      "difficulty_tier": "medium",
+      "label": "d052_d052_r3_0024",
+      "short_reason": "Moderate cave challenge with balanced multipliers to refine navigation and combat.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_iron",
+        "defeat_skeleton"
+      ],
+      "task_id": "d052_r3_0024",
+      "task_params": {
+        "mob_damage_multiplier": 1.5,
+        "mob_health_multiplier": 1.5,
+        "passive_spawn_multiplier": 2.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 231,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 162
+      },
+      "chash": "de75d7bb891984eb",
+      "description": "Collect wood, craft planks, and place a crafting table.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0025",
+      "short_reason": "Low mean reward 0.0046, making environment easier with weak mobs to allow learning placement skill.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "place_table"
+      ],
+      "task_id": "d052_r3_0025",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 1.0
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 193
+      },
+      "chash": "db543f24e5b4a30f",
+      "description": "Survive as long as possible while managing hunger. Passive animal spawns are slightly increased to help you find food. Hostile mobs remain at normal strength.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0026",
+      "short_reason": "Low transition reward indicates hunger management struggles; easy task with more passive animals.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0026",
+      "task_params": {
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 217
+      },
+      "chash": "6185dc1817ce5684",
+      "description": "Learn to enchant a basic wooden sword and then an iron blade. Low threat environment to focus on gathering enchantment materials and applying them.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0027",
+      "short_reason": "Student's low transition reward (0.0045) suggests they need an easy task to build foundational enchanting skill without mob pressure.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "enchant_wooden_sword",
+        "enchant_iron_sword"
+      ],
+      "task_id": "d052_r3_0027",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 188
+      },
+      "chash": "397ac580528d4381",
+      "description": "Collect wood in a low-threat environment to build foundational resource gathering skills.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0028",
+      "short_reason": "Student's low average reward (0.0045) suggests difficulty in collecting wood; reducing mob threats to scaffold wood collection.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "collect_wood_5"
+      ],
+      "task_id": "d052_r3_0028",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 179
+      },
+      "chash": "731f66a62740b8ff",
+      "description": "Gather resources and craft a pickaxe while evading weakened hostile mobs.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0029",
+      "short_reason": "Student's low transition reward mean (0.00455) suggests struggle; minimal mob threats allow focus on tool crafting.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "collect_wood",
+        "craft_pickaxe"
+      ],
+      "task_id": "d052_r3_0029",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 232,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 178
+      },
+      "chash": "061badf08cb06442",
+      "description": "Defeat zombies with heavily reduced stats: slow spawn rate, low health, and low damage.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0030",
+      "short_reason": "Student's combat performance is very low (reward ~0.0045); easy task with weak zombies helps learning.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "defeat_zombie",
+        "survive"
+      ],
+      "task_id": "d052_r3_0030",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 233,
+        "mrq": "deepseek-v4-pro",
+        "mrt": "deepseek-v4-pro",
+        "otok": 195
+      },
+      "chash": "1ed39eff751d17c5",
+      "description": "Explore the cave system to locate and mine iron ore. Practice moving through dark tunnels while avoiding hazards.",
+      "difficulty_tier": "easy",
+      "label": "d052_d052_r3_0031",
+      "short_reason": "Student's low transition reward (0.0046) indicates struggle; easing spawns and mob strength to scaffold basic cave navigation.",
+      "snapshot_hash": "85774401130528ed",
+      "source": "d052_gen",
+      "target_achievements": [
+        "enter_a_cave",
+        "mine_iron_ore"
+      ],
+      "task_id": "d052_r3_0031",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    }
+  ],
+  "hash": "dca8e40de96e4220",
+  "pool": [
+    "d052_r3_0000",
+    "d052_r3_0001",
+    "d052_r3_0002",
+    "d052_r3_0003",
+    "d052_r3_0004",
+    "d052_r3_0005",
+    "d052_r3_0006",
+    "d052_r3_0007",
+    "d052_r3_0008",
+    "d052_r3_0009",
+    "d052_r3_0010",
+    "d052_r3_0011",
+    "d052_r3_0012",
+    "d052_r3_0013",
+    "d052_r3_0014",
+    "d052_r3_0015",
+    "d052_r3_0016",
+    "d052_r3_0017",
+    "d052_r3_0018",
+    "d052_r3_0019",
+    "d052_r3_0020",
+    "d052_r3_0021",
+    "d052_r3_0022",
+    "d052_r3_0023",
+    "d052_r3_0024",
+    "d052_r3_0025",
+    "d052_r3_0026",
+    "d052_r3_0027",
+    "d052_r3_0028",
+    "d052_r3_0029",
+    "d052_r3_0030",
+    "d052_r3_0031"
+  ],
+  "round": 3
+}

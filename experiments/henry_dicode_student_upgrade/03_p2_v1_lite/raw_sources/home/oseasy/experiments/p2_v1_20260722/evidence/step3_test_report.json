@@ -1,0 +1,23 @@
+{
+  "all_gates_pass": true,
+  "description": "checkpoint save/restore + manifest tests",
+  "directive": "D059",
+  "failed": 0,
+  "gates": {
+    "Gate 8 (save/restore)": true,
+    "Gate 9 (manifest/hashes/inventory)": true
+  },
+  "passed": 7,
+  "results": {
+    "Gate 8: empty replay round-trip": "PASS",
+    "Gate 8: model params round-trip": "PASS",
+    "Gate 8: optimizer round-trip": "PASS",
+    "Gate 8: replay+counters+RNG round-trip": "PASS",
+    "Gate 9: manifest + inventory": "PASS",
+    "Gate 9: source hashes + manifest": "PASS",
+    "Gate 9: weight restore report": "PASS"
+  },
+  "step": 3,
+  "timestamp": "2026-07-23T04:13:26.285535+00:00",
+  "total": 7
+}

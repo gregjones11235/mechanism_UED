@@ -1,0 +1,137 @@
+{
+  "audit": "W512_PHASE4A_TRAINING_MATCH_AUDIT",
+  "timestamp_utc": "2026-07-26T01:46:52Z",
+  "arms": [
+    "W512-Persistent-PPO",
+    "W512-Reset128-PPO",
+    "W512-Persistent-P2Replay",
+    "W512-Reset128-P2Replay"
+  ],
+  "checks": [
+    {
+      "id": 1,
+      "desc": "Persistent/Reset128在同Replay条件下step0参数一致",
+      "status": "PASS",
+      "detail": "P2Replay两臂step0 SHA均为5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd。manifest确认。"
+    },
+    {
+      "id": 2,
+      "desc": "网络schema一致",
+      "status": "PASS",
+      "detail": "四臂均使用ActorCriticTransformerW512(action_dim=43, activation=relu, hidden_layers=256, encoder_size=256, num_heads=8, qkv_features=256, num_layers=2, gating=True, gating_bias=2.0, long_size=384)。"
+    },
+    {
+      "id": 3,
+      "desc": "参数数量一致",
+      "status": "PASS",
+      "detail": "P2Replay两臂: param_count=5268013。PPO两臂使用相同网络，参数数量相同。"
+    },
+    {
+      "id": 4,
+      "desc": "初始化方式一致",
+      "status": "PASS",
+      "detail": "四臂均从ckpt17500加载base GTrXL params，W512 additions (cross-attn, gate, posenc)使用network.init零初始化。w512_gate零初始化确保init时z_t==h_t。"
+    },
+    {
+      "id": 5,
+      "desc": "PPO超参数一致",
+      "status": "PASS",
+      "detail": "PPO两臂: lr=2e-5, seed=42, update_epochs=1, num_minibatches=2, gamma=0.999, gae_lambda=0.8, clip_eps=0.2, ent_coef=0.002, vf_coef=0.5, max_grad_norm=1.0。manifest确认。"
+    },
+    {
+      "id": 6,
+      "desc": "optimizer一致",
+      "status": "PASS",
+      "detail": "PPO两臂: Adam(lr=2e-5, eps=1e-5)。P2Replay两臂: build_optimizer(lr=2e-5, cfg)使用FullP2Config(adam_eps=1e-5)。"
+    },
+    {
+      "id": 7,
+      "desc": "seed和RNG协议一致",
+      "status": "PASS",
+      "detail": "四臂: MASTER_SEED=42。P2Replay: action_rng=make_action_rng(42)。PPO: rng=PRNGKey(42)。"
+    },
+    {
+      "id": 8,
+      "desc": "collector配置一致",
+      "status": "PASS",
+      "detail": "四臂: num_envs=16, rollout_steps=128, steps_per_rollout=2048, optimistic_reset_ratio=16。"
+    },
+    {
+      "id": 9,
+      "desc": "环境与goal一致",
+      "status": "PASS",
+      "detail": "四臂: S4_dark native start, goal=DEFEAT_KOBOLD, MultiTaskMiniCraftaxEnv + DistributedMultiTaskOptimisticLogWrapper。"
+    },
+    {
+      "id": 10,
+      "desc": "唯一结构差异是long_buf/long_mask的carry/reset生命周期",
+      "status": "PASS",
+      "detail": "PPO: ppo_tr_w512.py(persistent) vs ppo_tr_w512_reset128.py(reset128, 在rollout边界清零long_buf/long_mask)。P2Replay: collect_rollout_w512(carry_mode参数控制, reset128在rollout开始清零)。delay_buf/seg_buf在所有臂中保留。"
+    },
+    {
+      "id": 11,
+      "desc": "Replay两臂Replay package完全一致",
+      "status": "PASS",
+      "detail": "两臂使用相同W512ReplayBuffer(capacity=64, seed=42), 相同relabel_sample_w512, 相同full_p2_update_w512。FullP2Config从P2-Full-A直接导入。"
+    },
+    {
+      "id": 12,
+      "desc": "buffer容量一致",
+      "status": "PASS",
+      "detail": "两臂: capacity=64。"
+    },
+    {
+      "id": 13,
+      "desc": "replay sequence length一致",
+      "status": "PASS",
+      "detail": "两臂: L_SEQ=129, MIN_SEQUENCE_LENGTH=129。"
+    },
+    {
+      "id": 14,
+      "desc": "replay更新频率一致",
+      "status": "PASS",
+      "detail": "两臂: 每rollout尝试K_BATCH=4次采样，若>=2个有效样本则执行1次更新。12 rollouts中11次更新（第0次无足够样本）。"
+    },
+    {
+      "id": 15,
+      "desc": "V-trace/AWR/EMA/KL gate配置一致",
+      "status": "PASS",
+      "detail": "两臂使用同一FullP2Config: gamma=0.999, rho_bar=1.0, c_bar=1.0, beta=1.0, w_max=20.0, lambda_kl=0.01, ema_tau=0.995, kl_replay_max=0.05, w_vtrace=0.5, w_awr=0.5。"
+    },
+    {
+      "id": 16,
+      "desc": "accepted/rejected update策略一致",
+      "status": "PASS",
+      "detail": "两臂: actor_step_scales=(1.0,0.5,0.25,0.125)逐级尝试，首个kl<=0.05的scale被接受。若全部拒绝，仅更新critic。两臂均0次拒绝。"
+    },
+    {
+      "id": 17,
+      "desc": "Persistent与Reset128使用相同Replay采样规则",
+      "status": "PASS",
+      "detail": "两臂: W512ReplayBuffer.sample()使用相同逻辑（RandomState(seed=42)采样eligible trajectory, random start_step）。唯一差异是buffer中的trajectory内容（因carry模式不同导致不同episode长度/数量）。"
+    },
+    {
+      "id": 18,
+      "desc": "无从不同checkpoint或不同初始化启动",
+      "status": "PASS",
+      "detail": "P2Replay两臂: 同一compatible_init_w512(), 同一ckpt17500路径, step0 SHA相同(5942526301c66766...)。PPO两臂: 同一ckpt17500, 同一load_weights_only。"
+    },
+    {
+      "id": 19,
+      "desc": "24576 checkpoint真实来自对应训练",
+      "status": "PASS",
+      "detail": "P2Replay Persistent@24576 SHA=7f23a9cba37882fe... (manifest+summary一致)。Reset128@24576 SHA=c6271247b73fc1c9... (manifest+summary一致)。PPO Persistent@24576 SHA=8c84287c4bff2032...。PPO Reset128@24576 SHA=51388e219719d52e...。"
+    },
+    {
+      "id": 20,
+      "desc": "checkpoint SHA和报告中SHA匹配",
+      "status": "PASS",
+      "detail": "所有SHA与w512_memory_replay_interaction.json和w512_p2replay_eval.json中记录一致。"
+    }
+  ],
+  "cosmetic_differences": [
+    "SAVE_STEPS: P2Replay=(0,4096,8192,12288,16384,20480,24576) vs P2-Full-A=(0,4096,8192,12288,24576)。P2Replay多了16384和20480中间checkpoint。不影响训练行为。",
+    "P2Replay在GPU0(persistent)+GPU1(reset128)上并行运行。PPO两臂均在GPU0上顺序运行。GPU差异不影响数值结果（deterministic ops enabled）。"
+  ],
+  "verdict": "PASS"
+}

@@ -1,0 +1,27 @@
+{
+  "dependency_versions": {
+    "jax": "0.6.0",
+    "numpy": "2.2.6"
+  },
+  "directive": "D059",
+  "output_root": "/home/oseasy/experiments/henry_student_p2_amago_20260721",
+  "physical_gpu_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+  "source_hashes": {
+    "checkpointing.py": "25dd3006a028d786bc00db4d09549f2b820dbd3edad480392921dc9abe5c36a4",
+    "hindsight.py": "86f3963edfb13df175584f7540f3795c687862260bfe24b3935c54583991f084",
+    "long_context_learner.py": "c0061418e44c7623ebcad124d5e4a1112b9df5ee7ea346e0e2148c99d0a02103",
+    "trajectory_replay.py": "a5b90621cbacfb458dcb6b4d523f416e128224da64fc999a6e3bddbfc5c25413"
+  },
+  "stop_rules": [
+    "NaN/Inf in loss or gradient",
+    "Traceback in training loop",
+    "Wrong GPU UUID detected",
+    "CPU fallback",
+    "Empty replay buffer when sampling required",
+    "Sequence-length gate failure (<=128)",
+    "Missing manifest or checkpoint",
+    "Output collision"
+  ],
+  "timestamp_utc": "2026-07-21T03:20:12.906127+00:00",
+  "treatment": "AMAGO_STYLE_EXPLORATORY_P2"
+}

@@ -1,0 +1,19 @@
+{
+  "teacher_sha": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "traj_sha": "16349b4341adf6b2a147af8dd6323bd96315619ac297793efe674f54fe76ce96",
+  "seed": 42,
+  "T_ROLL": 1280,
+  "T_WARM": 256,
+  "distill_lr": 0.0002,
+  "epochs": 12,
+  "held_out_kl": 0.0004537119239103049,
+  "held_out_vmse": 7.161092412388825e-07,
+  "final_train_kl": 0.0023037781938910484,
+  "final_train_vmse": 7.934543191367993e-07,
+  "inherited_unchanged": true,
+  "n_params_total": 5300780,
+  "n_params_longmem": 394752,
+  "K": 64,
+  "N": 16,
+  "coverage_steps": 1024
+}

@@ -1,0 +1,816 @@
+{
+  "candidates": [
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 202
+      },
+      "chash": "e556f8927f349012",
+      "description": "Collect wood efficiently in a resource-focused environment with slightly increased passive spawns and reduced mob threat.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0000",
+      "short_reason": "Low mean reward and high negative reward spikes suggest early resource gathering under minimal threat; wood collection is the natural first skill.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "collect_wood"
+      ],
+      "task_id": "candidate_0000",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 180
+      },
+      "chash": "d5a62f649ad3273a",
+      "description": "Craft a pickaxe in a tools-themed environment with moderate passive spawns and low mob threat.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0001",
+      "short_reason": "Low damage and health multipliers reduce risk, passive spawns slightly increased for resource availability.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "craft_pickaxe"
+      ],
+      "task_id": "candidate_0001",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 188
+      },
+      "chash": "56ca97e98a56f3aa",
+      "description": "Defeat a zombie in a combat-focused environment with moderate passive spawns and slightly increased mob durability.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0002",
+      "short_reason": "Low damage multiplier and moderate health increase keep the task accessible for early-stage combat practice.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "candidate_0002",
+      "task_params": {
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.2,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 207
+      },
+      "chash": "55b0c8bc322fdf41",
+      "description": "Navigate the cave system efficiently, avoiding hazards and collecting rewards. Focus on exploration and cave navigation skills.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0003",
+      "short_reason": "Low mean reward and high negative spikes suggest early-stage cave navigation; reduced mob stats and passive spawns support safe exploration.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "explore_cave",
+        "reach_exit"
+      ],
+      "task_id": "candidate_0003",
+      "task_params": {
+        "mob_damage_multiplier": 0.4,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.75
+      }
+    },
+    {
+      "_prov": {
+        "itok": 220,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 202
+      },
+      "chash": "dda2d201a06e1965",
+      "description": "Place a table in a safe area while managing minimal mob interference. Focus on gathering wood and crafting a table with reduced passive spawns and slightly tougher mobs.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0004",
+      "short_reason": "Low passive spawns reduce distractions; moderate mob scaling keeps challenge low for a build task.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "place_table"
+      ],
+      "task_id": "candidate_0004",
+      "task_params": {
+        "mob_damage_multiplier": 1.5,
+        "mob_health_multiplier": 1.5,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 222,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 202
+      },
+      "chash": "b6855b0be44f97f2",
+      "description": "Survive by managing hunger in a world with scarce food and dangerous mobs. Player must maintain health and food levels while avoiding lethal encounters.",
+      "difficulty_tier": "hard",
+      "label": "d049_candidate_0005",
+      "short_reason": "Low passive spawns force hunger management; increased mob threat raises survival pressure.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "survive_10_minutes",
+        "eat_5_food_items"
+      ],
+      "task_id": "candidate_0005",
+      "task_params": {
+        "mob_damage_multiplier": 1.25,
+        "mob_health_multiplier": 1.5,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 215
+      },
+      "chash": "fff53fcd75396e2d",
+      "description": "Master the magic of weapon enchanting. Survive and thrive by enchanting a weapon to overcome moderately stronger mobs in a magical world.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0006",
+      "short_reason": "Student shows moderate progress (24k steps) with low mean reward; magic theme and enchant_weapon skill suggest a focused challenge with slightly boosted mobs.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "enchant_weapon"
+      ],
+      "task_id": "candidate_0006",
+      "task_params": {
+        "mob_damage_multiplier": 1.8,
+        "mob_health_multiplier": 1.8,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 191
+      },
+      "chash": "2142d00139383272",
+      "description": "Collect wood efficiently in a resource-focused environment with slightly increased passive spawns and reduced mob threat.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0007",
+      "short_reason": "Low mean reward and high negative reward indicate early struggle; wood collection is safe with reduced mob danger.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "collect_wood"
+      ],
+      "task_id": "candidate_0007",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 200
+      },
+      "chash": "549fabada81d9f09",
+      "description": "Craft a pickaxe while managing passive mob spawns and combat difficulty at moderate levels.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0008",
+      "short_reason": "Student shows moderate progress (24k steps) with low mean reward; pickaxe crafting is a core tool skill; multipliers set to provide mild challenge without overwhelming.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "craft_pickaxe"
+      ],
+      "task_id": "candidate_0008",
+      "task_params": {
+        "mob_damage_multiplier": 1.25,
+        "mob_health_multiplier": 1.25,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 161
+      },
+      "chash": "88cb5332c1d19e5c",
+      "description": "Defeat a zombie in a combat-focused environment with moderate enemy scaling.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0009",
+      "short_reason": "Low damage and health scaling, suitable for early combat practice.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "candidate_0009",
+      "task_params": {
+        "mob_damage_multiplier": 1.1,
+        "mob_health_multiplier": 1.2,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 210
+      },
+      "chash": "1aed45f6fef188e8",
+      "description": "Navigate the cave system efficiently, avoiding hazards and collecting rewards. Focus on exploration and cave navigation skills.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0010",
+      "short_reason": "Low mean reward and high negative reward spikes suggest early exploration with minimal combat pressure; easy cave navigation task.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "explore_cave_entrance",
+        "explore_cave_depth_1"
+      ],
+      "task_id": "candidate_0010",
+      "task_params": {
+        "mob_damage_multiplier": 0.6,
+        "mob_health_multiplier": 0.75,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 220,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 181
+      },
+      "chash": "412830e270368823",
+      "description": "Place a table in a safe area while managing minimal passive mob interference. Build skill focus.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0011",
+      "short_reason": "Low step count and low reward variance indicate early learning; minimal mob challenge supports build practice.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "place_table"
+      ],
+      "task_id": "candidate_0011",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 222,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 188
+      },
+      "chash": "1e0f386eb5843430",
+      "description": "Survive by managing hunger in a resource-scarce environment with slightly tougher mobs.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0012",
+      "short_reason": "Low passive spawns force active food gathering; moderate mob scaling adds pressure without overwhelming.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "survive_until_day_5",
+        "hunger_never_below_10"
+      ],
+      "task_id": "candidate_0012",
+      "task_params": {
+        "mob_damage_multiplier": 1.1,
+        "mob_health_multiplier": 1.25,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 228
+      },
+      "chash": "de68d4c1a91f66ec",
+      "description": "Master the magic of weapon enchanting. Survive and thrive by enchanting a weapon to overcome moderately stronger mobs in a world with fewer passive resources.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0013",
+      "short_reason": "Student shows moderate progress (24k steps) with low mean reward; magic theme and enchant_weapon skill selected; multipliers tuned to encourage enchanting without being overwhelming.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "enchant_weapon"
+      ],
+      "task_id": "candidate_0013",
+      "task_params": {
+        "mob_damage_multiplier": 1.5,
+        "mob_health_multiplier": 1.5,
+        "passive_spawn_multiplier": 0.75
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 191
+      },
+      "chash": "e58940f787d0087c",
+      "description": "Collect wood efficiently in a resource-focused environment with slightly increased passive spawns and reduced mob threat.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0014",
+      "short_reason": "Low mean reward and high negative reward indicate early struggle; wood collection is safe with reduced mob danger.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "collect_wood"
+      ],
+      "task_id": "candidate_0014",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 189
+      },
+      "chash": "1bd6bede59ec1f64",
+      "description": "Craft a pickaxe while managing passive mob spawns and combat difficulty at moderate levels.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0015",
+      "short_reason": "Student shows moderate progress (24k steps) with low mean reward; pickaxe crafting is achievable with slightly increased mob challenge.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "craft_pickaxe"
+      ],
+      "task_id": "candidate_0015",
+      "task_params": {
+        "mob_damage_multiplier": 1.25,
+        "mob_health_multiplier": 1.25,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 161
+      },
+      "chash": "1e9dd3798a4b6b85",
+      "description": "Defeat a zombie in a combat-focused environment with moderate enemy scaling.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0016",
+      "short_reason": "Low damage and health scaling, suitable for early combat practice.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "candidate_0016",
+      "task_params": {
+        "mob_damage_multiplier": 1.1,
+        "mob_health_multiplier": 1.2,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 206
+      },
+      "chash": "3aca95e97e5010bc",
+      "description": "Explore the cave network, navigate safely, and gather resources while avoiding hazards. Focus on movement and discovery.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0017",
+      "short_reason": "Low mean reward and high variance suggest early exploration; cave navigation skill matches theme; multipliers set to encourage safe traversal.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "explore_cave",
+        "navigate_cave"
+      ],
+      "task_id": "candidate_0017",
+      "task_params": {
+        "mob_damage_multiplier": 0.6,
+        "mob_health_multiplier": 0.75,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 220,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 189
+      },
+      "chash": "753a27d63a65c315",
+      "description": "Place a table in a safe area. Manage passive mob spawns and mob difficulty to allow safe building.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0018",
+      "short_reason": "Low step count and low mean reward indicate early learning; reduced mob threat and passive spawns support focused building practice.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "place_table"
+      ],
+      "task_id": "candidate_0018",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 222,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 192
+      },
+      "chash": "a96249e494c614cd",
+      "description": "Survive by managing hunger in a resource-scarce environment with slightly tougher mobs.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0019",
+      "short_reason": "Low passive spawns force active food gathering; moderate mob scaling adds pressure while keeping hunger management central.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "survive_10_minutes",
+        "eat_5_food_items"
+      ],
+      "task_id": "candidate_0019",
+      "task_params": {
+        "mob_damage_multiplier": 1.2,
+        "mob_health_multiplier": 1.5,
+        "passive_spawn_multiplier": 0.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 216
+      },
+      "chash": "a09d1e80b03c073b",
+      "description": "Enchant a weapon using the magic theme. Survive and gather resources to craft an enchantment table and apply an enchantment to a weapon.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0020",
+      "short_reason": "Student shows moderate progress with low mean reward and some negative spikes; magic enchantment task with slightly increased mob difficulty to encourage strategic play.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "enchant_weapon"
+      ],
+      "task_id": "candidate_0020",
+      "task_params": {
+        "mob_damage_multiplier": 1.1,
+        "mob_health_multiplier": 1.2,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 197
+      },
+      "chash": "60d30072a6ca9f4e",
+      "description": "Collect wood efficiently in a resource-focused environment with slightly increased passive spawns and reduced mob threat.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0021",
+      "short_reason": "Low mean reward and high negative reward indicate early struggle; wood collection is safe with reduced mobs and boosted resources.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "collect_wood"
+      ],
+      "task_id": "candidate_0021",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 223
+      },
+      "chash": "657309d850eb18e4",
+      "description": "Craft a pickaxe while managing passive mob spawns and slightly increased mob difficulty. Focus on tool progression with moderate threat.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0022",
+      "short_reason": "Student has moderate experience (24k steps) with low mean reward; pickaxe crafting is a core tool skill, so medium difficulty with slightly boosted mobs tests resilience without overwhelming.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "craft_pickaxe"
+      ],
+      "task_id": "candidate_0022",
+      "task_params": {
+        "mob_damage_multiplier": 1.25,
+        "mob_health_multiplier": 1.5,
+        "passive_spawn_multiplier": 0.75
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 195
+      },
+      "chash": "e5841f0a08d07fbd",
+      "description": "Defeat a zombie in combat. The environment is tuned to provide a moderate challenge with slightly increased passive spawns and standard mob stats.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0023",
+      "short_reason": "Low mean reward and high variance suggest early learning; minimal multipliers keep task accessible.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "candidate_0023",
+      "task_params": {
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 211
+      },
+      "chash": "281c2871b815ad73",
+      "description": "Explore the cave network, navigate safely, and collect at least 2 unique cave resources. Avoid excessive damage from mobs.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0024",
+      "short_reason": "Low mean reward and high negative reward spikes suggest early-stage exploration with some danger; reduced mob damage and health keep it accessible.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "explore_cave",
+        "collect_cave_resources"
+      ],
+      "task_id": "candidate_0024",
+      "task_params": {
+        "mob_damage_multiplier": 0.6,
+        "mob_health_multiplier": 0.75,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 220,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 179
+      },
+      "chash": "4f489328fa3cf0a8",
+      "description": "Place a table in a safe area while managing minimal passive mob interference.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0025",
+      "short_reason": "Low step count and low reward variance indicate early learning; minimal multipliers reduce distractions for building task.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "place_table"
+      ],
+      "task_id": "candidate_0025",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 222,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 206
+      },
+      "chash": "8a92a14e52502db8",
+      "description": "Survive by managing hunger in a world with scarce food and passive mobs. Avoid starvation while gathering resources.",
+      "difficulty_tier": "hard",
+      "label": "d049_candidate_0026",
+      "short_reason": "Low passive spawn rate forces hunger management; student shows low mean reward and high negative reward spikes, indicating starvation risk.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "survive_10_minutes",
+        "eat_5_food_items"
+      ],
+      "task_id": "candidate_0026",
+      "task_params": {
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 0.25
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 198
+      },
+      "chash": "b0d3eb41884985f7",
+      "description": "Master the magic of weapon enchanting. Survive and thrive in a world where mobs are tougher and more numerous, requiring enchanted gear to overcome.",
+      "difficulty_tier": "medium",
+      "label": "d049_candidate_0027",
+      "short_reason": "Moderate challenge to force enchanting; increased spawns and mob stats push player to use magic.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "enchant_weapon"
+      ],
+      "task_id": "candidate_0027",
+      "task_params": {
+        "mob_damage_multiplier": 1.5,
+        "mob_health_multiplier": 1.75,
+        "passive_spawn_multiplier": 2.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 198
+      },
+      "chash": "de3b40c48bbaac3c",
+      "description": "Collect wood efficiently in a resource-focused environment with slightly increased passive spawns and moderate mob difficulty.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0028",
+      "short_reason": "Low step count and positive mean reward suggest early-stage wood collection; resource theme and skill align with easy difficulty.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "collect_wood"
+      ],
+      "task_id": "candidate_0028",
+      "task_params": {
+        "mob_damage_multiplier": 1.25,
+        "mob_health_multiplier": 1.25,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 203
+      },
+      "chash": "7f8ba21cef491eb9",
+      "description": "Craft a pickaxe while managing passive mob spawns and reduced mob damage. Focus on tool progression with moderate passive interference.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0029",
+      "short_reason": "Low mean reward and high variance suggest early exploration; pickaxe is a basic tool goal; low mob multipliers keep focus on gathering.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "craft_pickaxe"
+      ],
+      "task_id": "candidate_0029",
+      "task_params": {
+        "mob_damage_multiplier": 0.5,
+        "mob_health_multiplier": 0.5,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 184
+      },
+      "chash": "6767ca379b2afe11",
+      "description": "Defeat a zombie in combat. Adjust spawn rate and enemy stats to provide a moderate challenge.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0030",
+      "short_reason": "Low damage and health scaling with slightly increased spawns to ensure zombie encounter without overwhelming the player.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "defeat_zombie"
+      ],
+      "task_id": "candidate_0030",
+      "task_params": {
+        "mob_damage_multiplier": 1.1,
+        "mob_health_multiplier": 1.2,
+        "passive_spawn_multiplier": 1.5
+      }
+    },
+    {
+      "_prov": {
+        "itok": 221,
+        "mrq": "deepseek-chat",
+        "mrt": "deepseek-v4-flash",
+        "otok": 208
+      },
+      "chash": "fd62205a5e12be46",
+      "description": "Navigate the cave system efficiently, focusing on exploration and avoiding unnecessary combat. The environment is tuned for safe movement with reduced enemy threat.",
+      "difficulty_tier": "easy",
+      "label": "d049_candidate_0031",
+      "short_reason": "Low step count and low mean reward suggest early exploration; reduced multipliers support safe cave navigation practice.",
+      "snapshot_hash": "1a99fdbea9c4e0fa",
+      "source": "gen_dsv4pro",
+      "target_achievements": [
+        "navigate_cave"
+      ],
+      "task_id": "candidate_0031",
+      "task_params": {
+        "mob_damage_multiplier": 0.25,
+        "mob_health_multiplier": 0.25,
+        "passive_spawn_multiplier": 0.25
+      }
+    }
+  ],
+  "hash": "4f2f1a98e6ac98f2",
+  "pool": [
+    "candidate_0000",
+    "candidate_0001",
+    "candidate_0002",
+    "candidate_0003",
+    "candidate_0004",
+    "candidate_0005",
+    "candidate_0006",
+    "candidate_0007",
+    "candidate_0008",
+    "candidate_0009",
+    "candidate_0010",
+    "candidate_0011",
+    "candidate_0012",
+    "candidate_0013",
+    "candidate_0014",
+    "candidate_0015",
+    "candidate_0016",
+    "candidate_0017",
+    "candidate_0018",
+    "candidate_0019",
+    "candidate_0020",
+    "candidate_0021",
+    "candidate_0022",
+    "candidate_0023",
+    "candidate_0024",
+    "candidate_0025",
+    "candidate_0026",
+    "candidate_0027",
+    "candidate_0028",
+    "candidate_0029",
+    "candidate_0030",
+    "candidate_0031"
+  ],
+  "round": 2
+}

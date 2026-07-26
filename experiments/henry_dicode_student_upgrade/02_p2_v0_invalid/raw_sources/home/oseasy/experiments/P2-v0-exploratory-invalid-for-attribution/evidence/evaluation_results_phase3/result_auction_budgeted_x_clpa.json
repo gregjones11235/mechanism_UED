@@ -1,0 +1,288 @@
+{
+  "cell": "auction_budgeted_x_clpa",
+  "training": "auction_budgeted",
+  "aggregation": "clpa",
+  "seed_dir": "seed0_1784543391",
+  "checkpoint_path": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/shared_r0/runs/d052_dynamic/auction_budgeted_x_clpa/seed0_1784543391/checkpoints/98304",
+  "cond_dim": 8,
+  "param_leaves": 47,
+  "metrics": {
+    "mean_return": 1.2640626430511475,
+    "mean_performance": 0.5593197345733643,
+    "average_episode_length": 275.7421875,
+    "finished_episodes": 128,
+    "total_episodes": 128
+  },
+  "achievements": {
+    "cast_fireball": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "cast_iceball": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_coal": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_diamond": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_drink": {
+      "success_count": 10,
+      "success_rate_pct": 7.81
+    },
+    "collect_iron": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_ruby": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_sapling": {
+      "success_count": 42,
+      "success_rate_pct": 32.81
+    },
+    "collect_sapphire": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_stone": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "collect_wood": {
+      "success_count": 55,
+      "success_rate_pct": 42.97
+    },
+    "damage_necromancer": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_archer": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_deep_thing": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_fire_elemental": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_frost_troll": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_gnome_archer": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_gnome_warrior": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_ice_elemental": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_knight": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_kobold": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_lizard": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_necromancer": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_orc_mage": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_orc_solider": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_pigman": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_skeleton": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_troll": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "defeat_zombie": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "drink_potion": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "eat_bat": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "eat_cow": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "eat_plant": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "eat_snail": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enchant_armour": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enchant_sword": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_dungeon": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_fire_realm": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_gnomish_mines": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_graveyard": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_ice_realm": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_sewers": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_troll_mines": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "enter_vault": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "find_bow": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "fire_bow": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "learn_fireball": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "learn_iceball": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_arrow": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_diamond_armour": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_diamond_pickaxe": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_diamond_sword": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_iron_armour": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_iron_pickaxe": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_iron_sword": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_stone_pickaxe": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_stone_sword": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_torch": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_wood_pickaxe": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "make_wood_sword": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "open_chest": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "place_furnace": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "place_plant": {
+      "success_count": 35,
+      "success_rate_pct": 27.34
+    },
+    "place_stone": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "place_table": {
+      "success_count": 12,
+      "success_rate_pct": 9.38
+    },
+    "place_torch": {
+      "success_count": 0,
+      "success_rate_pct": 0.0
+    },
+    "wake_up": {
+      "success_count": 123,
+      "success_rate_pct": 96.09
+    }
+  },
+  "nan_free": true,
+  "n_episodes_with_achievements": 124
+}

@@ -1,0 +1,127 @@
+{
+  "title": "W512 Memory x Replay Interaction Report",
+  "verdict": "REPLAY_ELIMINATES_CARRY",
+  "results_6arm": {
+    "BASELINE": {
+      "dk_sr": 0.3945,
+      "n": 101,
+      "floor3": 0.4336,
+      "death": 147,
+      "eplen": 986
+    },
+    "Control": {
+      "dk_sr": 0.3633,
+      "n": 93,
+      "floor3": 0.4336,
+      "death": 156,
+      "eplen": 862
+    },
+    "W512_Persistent_PPO": {
+      "dk_sr": 0.1094,
+      "n": 28,
+      "floor3": 0.1758,
+      "death": 226,
+      "eplen": 622
+    },
+    "W512_Reset128_PPO": {
+      "dk_sr": 0.0273,
+      "n": 7,
+      "floor3": 0.0664,
+      "death": 249,
+      "eplen": 575
+    },
+    "W512_Persistent_P2Replay": {
+      "dk_sr": 0.3516,
+      "n": 90,
+      "floor3": 0.4102,
+      "death": 162,
+      "eplen": 954
+    },
+    "W512_Reset128_P2Replay": {
+      "dk_sr": 0.3711,
+      "n": 95,
+      "floor3": 0.4492,
+      "death": 152,
+      "eplen": 1025
+    }
+  },
+  "causal_quantities": {
+    "CARRY_NO_REPLAY": {
+      "delta_pp": 8.2,
+      "p": 6.3e-05,
+      "ci95": [
+        4.69,
+        12.11
+      ]
+    },
+    "CARRY_WITH_REPLAY": {
+      "delta_pp": -1.95,
+      "p": 0.423711,
+      "ci95": [
+        -5.86,
+        1.95
+      ]
+    },
+    "REPLAY_EFFECT_PERSISTENT": {
+      "delta_pp": 24.22,
+      "p": 0.0,
+      "ci95": [
+        18.75,
+        29.69
+      ]
+    },
+    "REPLAY_EFFECT_RESET": {
+      "delta_pp": 34.38,
+      "p": 0.0,
+      "ci95": [
+        28.52,
+        40.23
+      ]
+    },
+    "MEMORY_REPLAY_INTERACTION": {
+      "delta_pp": -10.16
+    },
+    "P2REPLAY_PERS_vs_CONTROL": {
+      "delta_pp": -1.17,
+      "p": 0.832107
+    },
+    "P2REPLAY_RST_vs_CONTROL": {
+      "delta_pp": 0.78,
+      "p": 0.920344
+    },
+    "P2REPLAY_PERS_vs_BASELINE": {
+      "delta_pp": -4.3,
+      "p": 0.254451
+    },
+    "P2REPLAY_RST_vs_BASELINE": {
+      "delta_pp": -2.34,
+      "p": 0.56628
+    }
+  },
+  "training_diagnostics": {
+    "persistent_p2replay": {
+      "updates": 11,
+      "accepted": 11,
+      "kl_rejected": 0,
+      "episodes": 21,
+      "nan": false,
+      "time_s": 938.7,
+      "params_sha256": "7f23a9cba37882fe1664068996b63782cfde4f84d8fb1672f9c3c5cf1d50b4b8"
+    },
+    "reset128_p2replay": {
+      "updates": 11,
+      "accepted": 11,
+      "kl_rejected": 0,
+      "episodes": 23,
+      "nan": false,
+      "time_s": 955.8,
+      "params_sha256": "c6271247b73fc1c9c121efa705c5336269e860ed324a51e55367cf7348185864"
+    },
+    "common_init_sha256": "5942526301c66766edadae3bbd28ad680d2c323b97acca41265aa16e8bfdcbdd"
+  },
+  "authorizations": {
+    "TRAINING_TO_98304_AUTHORIZED": false,
+    "P2_FULL_B_FINAL_AUTHORIZED": false,
+    "UPDATE_HORIZON_PHASE_AUTHORIZED": false
+  }
+}

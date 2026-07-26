@@ -1,0 +1,4 @@
+{"total_loss": 0.9117465019226074, "value_loss": 1.822999358177185, "actor_loss": 0.0011519286781549454, "entropy": 0.4525719881057739, "grad_norm_mean": 9.209166526794434, "grad_norm_max": 11.535444259643555, "update_step": 0}
+{"total_loss": 1.9894686937332153, "value_loss": 3.983142852783203, "actor_loss": -0.000662616454064846, "entropy": 0.7201308012008667, "grad_norm_mean": 20.40481185913086, "grad_norm_max": 30.436697006225586, "update_step": 1}
+{"total_loss": 0.44106778502464294, "value_loss": 0.8865604400634766, "actor_loss": 2.954527735710144e-05, "entropy": 1.1209969520568848, "grad_norm_mean": 8.810317993164062, "grad_norm_max": 11.059175491333008, "update_step": 2}
+{"total_loss": 0.5749926567077637, "value_loss": 1.1546679735183716, "actor_loss": -0.0008526893798261881, "entropy": 0.7443317770957947, "grad_norm_mean": 9.030704498291016, "grad_norm_max": 10.390551567077637, "update_step": 3}
