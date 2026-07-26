@@ -1,0 +1,98 @@
+{
+  "note": "small artifacts hashed; checkpoint/OCDBT dirs referenced by path only (NOT committed)",
+  "launch_marker": "PROBE_LAUNCH_START 2026-07-26T11:26:35Z\nPROBE_SOURCE_COMMIT=0b405dd85224a368d4029ff6f7818c3855d9487b\nPROBE_BRANCH=henry/rmt16-l512-reachability-probe\nPROBE_REMOTE=https://github.com/gregjones11235/mechanism_UED.git\nPERSISTENT_PID=1754053\nRESET128_PID=1754054\nPROBE_LAUNCH_ISSUED 2026-07-26T11:26:35Z\n",
+  "pid_files": {
+    "PERSISTENT": "1754053",
+    "RESET128": "1754054"
+  },
+  "arms": {
+    "PERSISTENT": {
+      "run_dir": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384",
+      "log_path": "/home/oseasy/experiments/rmt16_replay_phase4a/logs/RMT16-PERSISTENT-PROBE-L512-16384.log",
+      "log_sha256": "576697fcbf617748f727f24db8e214d30fe63efe8f07010e806056cc6e9722a3",
+      "log_size": 5990,
+      "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "carry_mode": "persistent",
+      "arm_name": "RMT16-Persistent-PPO",
+      "files": [
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/out/RMT16-Persistent-PPO_probe_episodes.jsonl",
+          "sha256": "23d00d2ec313c0d624d1b7984a3e7b8f8895de9ee7a683189b7b40bf10b0d276",
+          "size": 20668
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/out/RMT16-Persistent-PPO_probe_summary.json",
+          "sha256": "2dbc537801480b6865c12573520bf30fa6150558d16e5c161b23829c448c7e1b",
+          "size": 1158
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/out/RMT16-Persistent-PPO_probe_updates.jsonl",
+          "sha256": "33e456d3a658fc2f6df08bb9ea5fb5edbdeaf6306dd5c1a1e4ed0f5f2efbcf05",
+          "size": 4301
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/out/RMT16-Persistent-PPO_train.jsonl",
+          "sha256": "9b0a4e52cfea274e967fab0b85aca399966a8d7e4ae940a3962a82b6a0e1a81c",
+          "size": 3696
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/out/RMT_PHASE4A_MONITOR.jsonl",
+          "sha256": "3d969d8395872112f1ed4381e8d7a3807aac7de8095ed7d3024bd96fa66efe3e",
+          "size": 10542
+        }
+      ],
+      "ckpt_dirs_referenced": [
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/ckpt/0",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/ckpt/12288",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/ckpt/16384",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/ckpt/4096",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384/ckpt/8192"
+      ],
+      "final_params_sha256": "38b080142bbf92b1b6aee29ca8906045a06de94def383a7b207dfd74961dbf9a"
+    },
+    "RESET128": {
+      "run_dir": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384",
+      "log_path": "/home/oseasy/experiments/rmt16_replay_phase4a/logs/RMT16-RESET128-PROBE-L512-16384.log",
+      "log_sha256": "4a0a8b5d42d220d3600c535db7ad4efcaa0a837775185a4547a9cc95404e4cc9",
+      "log_size": 6003,
+      "gpu_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+      "carry_mode": "reset128",
+      "arm_name": "RMT16-Reset128-PPO",
+      "files": [
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/out/RMT16-Reset128-PPO_probe_episodes.jsonl",
+          "sha256": "644d4ccce3e89470aae00c173d222f2c2f55ba4c461d6a34aabeded642c6effa",
+          "size": 21630
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/out/RMT16-Reset128-PPO_probe_summary.json",
+          "sha256": "da30cb50a40109f970ac22740a01c9434dc19e89017ce7d3bb202d12d8485a43",
+          "size": 1179
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/out/RMT16-Reset128-PPO_probe_updates.jsonl",
+          "sha256": "c765e366da0728be8824c5e8e4fdccf575b6e614c7b56cf90b03da637f49fd70",
+          "size": 4346
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/out/RMT16-Reset128-PPO_train.jsonl",
+          "sha256": "e831237c14c6464b73e87046c709df649ddfee0ae04769eec5a2a9eb76737777",
+          "size": 3722
+        },
+        {
+          "path": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/out/RMT_PHASE4A_MONITOR.jsonl",
+          "sha256": "f36b0a976d0e3f68eee77dc0ae44abb265e87d9cbcf004d274e8d79b858a3cfa",
+          "size": 9685
+        }
+      ],
+      "ckpt_dirs_referenced": [
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/ckpt/0",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/ckpt/12288",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/ckpt/16384",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/ckpt/4096",
+        "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384/ckpt/8192"
+      ],
+      "final_params_sha256": "6ccfe16aa4f6f1d1cff8e9f59a770467575d0edbf1497eff3a25bba860c56f14"
+    }
+  }
+}
