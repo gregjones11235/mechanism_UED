@@ -44,6 +44,17 @@ class RMTTrajectory(Trajectory):
     rmt_anchor_segbuf: np.ndarray = field(default_factory=lambda: np.array([]))
     rmt_anchor_segcount: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.int64))
 
+    # ---- Phase4A-v2 (CC2 directive §三): split provenance (additive, default 0) ----
+    # outer_update_index          : OUTER rollout+PPO loop index at episode completion
+    #                               (== inherited collected_update_count for legacy compat).
+    # policy_version_at_collection: ACCEPTED policy version when this episode's transitions
+    #                               were collected — the authoritative replay policy-lag
+    #                               reference (policy_version_at_collection advances only on
+    #                               committed, policy-changing updates; a KL-rolled-back replay
+    #                               update never advances it).
+    outer_update_index: int = 0
+    policy_version_at_collection: int = 0
+
     def validate_anchors(self):
         """P2 conservation PLUS RMT anchor count/steps == GTrXL anchor count/steps."""
         super().validate_anchors()
@@ -86,6 +97,37 @@ class RMTReplaySample(ReplaySample):
     pre_anchor_rmt_tokens: np.ndarray = field(default_factory=lambda: np.array([]))   # [num_tokens, D]
     pre_anchor_rmt_segbuf: np.ndarray = field(default_factory=lambda: np.array([]))   # [segment_len, D]
     pre_anchor_rmt_segcount: int = 0
+    # Phase4A-v2 (CC2 directive §三): authoritative replay policy-lag reference (accepted
+    # policy version when the source episode was collected). Additive, default 0.
+    policy_version_at_collection: int = 0
+
+
+@dataclass
+class EligibleSampleBatch:
+    """Result of RMTReplayBuffer.sample_eligible (Phase4A-v2, CC2 directive §七).
+
+    status:
+      "OK"        -> exactly `batch_size` samples were drawn, all from trajectories with
+                     length >= sequence_length.
+      "NOT_READY" -> the eligible set (length >= sequence_length) is EMPTY; zero samples
+                     returned. This is an EXPLICIT, non-exceptional signal: the caller must
+                     NOT redraw, NOT silently substitute shorter trajectories, and NOT treat
+                     it as a successful replay update. It simply means no replay update
+                     happens this outer iteration.
+
+    Provenance arrays (parallel, length == len(samples)):
+      sample_ids       : source trajectory_id of each drawn sample
+      start_offsets    : start_step of each drawn contiguous window
+      sequence_lengths : sequence_length of each drawn window (== requested sequence_length)
+    eligible_count : number of buffer trajectories with length >= sequence_length at call time.
+    """
+    status: str
+    samples: list = field(default_factory=list)
+    sample_ids: list = field(default_factory=list)
+    start_offsets: list = field(default_factory=list)
+    sequence_lengths: list = field(default_factory=list)
+    eligible_count: int = 0
+    batch_size: int = 0
 
 
 class RMTReplayBuffer(ReplayBuffer):
@@ -175,6 +217,7 @@ class RMTReplayBuffer(ReplayBuffer):
             next_value=next_value,
             episode_done=slice_done,
             collected_update_count=int(getattr(traj, "collected_update_count", 0)),
+            policy_version_at_collection=int(getattr(traj, "policy_version_at_collection", 0)),
             pre_anchor_rmt_tokens=rmt_tok,
             pre_anchor_rmt_segbuf=rmt_segbuf,
             pre_anchor_rmt_segcount=int(rmt_segcount),
@@ -182,3 +225,57 @@ class RMTReplayBuffer(ReplayBuffer):
 
     def sample_batch(self, n: int, **kw) -> list:
         return [self.sample(**kw) for _ in range(n)]
+
+    def sample_eligible(self, sequence_length, rng, batch_size) -> EligibleSampleBatch:
+        """Eligible-ONLY, fixed-size, deterministic replay sampling (CC2 directive §七).
+
+        Replaces the legacy K_BATCH try/except loop in the launcher, which drew from ANY
+        trajectory length>=129 and then RAISED+`continue`d when a chosen trajectory was
+        shorter than the requested sequence_length — so different arms silently got
+        different replay success counts depending on which short trajectories they happened
+        to hit. Here:
+
+          * the eligible set is PRE-filtered to trajectories with length >= sequence_length;
+          * a draw NEVER selects a too-short trajectory and NEVER retries on a short one;
+          * if the eligible set is EMPTY -> explicit status="NOT_READY", zero samples, no
+            exception, no silent redraw, no shorter-substitute;
+          * when OK, EXACTLY batch_size samples are returned every time;
+          * all randomness comes from the supplied `rng` (a np.random.RandomState); given the
+            SAME buffer state and the SAME rng state the produced sample_ids / start_offsets /
+            sequence_lengths are BIT-identical (no hidden self._rng consumption, because every
+            self.sample() call below is given explicit trajectory_id + start_step).
+
+        sequence_length must be >= MIN_SEQUENCE_LENGTH (129). batch_size must be >= 1.
+        """
+        sequence_length = int(sequence_length)
+        batch_size = int(batch_size)
+        if sequence_length < MIN_SEQUENCE_LENGTH:
+            raise ValueError(
+                f"sample_eligible: sequence_length {sequence_length} < {MIN_SEQUENCE_LENGTH} REJECTED.")
+        if batch_size < 1:
+            raise ValueError(f"sample_eligible: batch_size {batch_size} < 1 REJECTED.")
+
+        eligible = [(i, t) for i, t in enumerate(self._buffer) if t.length >= sequence_length]
+        eligible_count = len(eligible)
+        if eligible_count == 0:
+            # EXPLICIT not-ready: caller must skip the replay update (no redraw / no retry).
+            return EligibleSampleBatch(status="NOT_READY", samples=[], sample_ids=[],
+                                       start_offsets=[], sequence_lengths=[],
+                                       eligible_count=0, batch_size=batch_size)
+
+        samples, sample_ids, start_offsets, sequence_lengths = [], [], [], []
+        for _ in range(batch_size):
+            _, traj = eligible[rng.randint(eligible_count)]
+            max_start = traj.length - sequence_length
+            start_step = int(rng.randint(0, max_start + 1)) if max_start > 0 else 0
+            s = self.sample(trajectory_id=traj.trajectory_id, start_step=start_step,
+                            sequence_length=sequence_length)
+            samples.append(s)
+            sample_ids.append(int(traj.trajectory_id))
+            start_offsets.append(int(start_step))
+            sequence_lengths.append(int(sequence_length))
+
+        return EligibleSampleBatch(status="OK", samples=samples, sample_ids=sample_ids,
+                                   start_offsets=start_offsets,
+                                   sequence_lengths=sequence_lengths,
+                                   eligible_count=eligible_count, batch_size=batch_size)
