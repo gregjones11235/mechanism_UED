@@ -1,0 +1,13 @@
+{
+  "schema": "d052.achievements.explicit_aliases/v1",
+  "policy": "Aliases are an explicit, audited allow-list. ANY name not in official_achievements.json AND not a key here is an ERROR (unknown_target_policy=error). No fuzzy / case / substring matching. Each alias records WHY it exists and resolves to exactly one canonical name (hence one canonical_id).",
+  "match_rule": "exact, case-sensitive on the alias key",
+  "aliases": [
+    {
+      "alias": "defeat_orc_soldier",
+      "canonical_name": "defeat_orc_solider",
+      "canonical_id": 38,
+      "reason": "Upstream craftax enum member is misspelled 'solider' and is kept verbatim as the canonical name. The correctly-spelled 'soldier' is accepted ONLY via this explicit alias so a well-intentioned correct spelling does not become a silent unknown-target error or, worse, a silent drop."
+    }
+  ]
+}

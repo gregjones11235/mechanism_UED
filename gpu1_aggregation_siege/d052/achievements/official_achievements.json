@@ -1,0 +1,491 @@
+{
+  "schema": "d052.achievements.official_achievements/v1",
+  "achievement_schema": "craftax_67_v1",
+  "num_achievements": 67,
+  "max_value": 66,
+  "source": {
+    "path": "dicode_src/auction/craftax_achievements.py",
+    "git_blob_sha1": "5bb881a60a36f457f5f76bff7df24038137298bf",
+    "single_source_of_truth": true,
+    "zero_external_dependencies": true,
+    "environment_version": {
+      "craftax": "1.4.5"
+    },
+    "environment_note": "craftax==1.4.5 pinned at dicode_src/uv.lock; craftax NOT installed in this build env. The in-repo guarded list (assert ==67) is the offline authority.",
+    "verified_against": "craftax main + tag v1.4.5 of MichaelTMatthews/Craftax: 67 members, value 0..66, identical names (per source docstring, 2026-06-30)."
+  },
+  "id_semantics": "canonical_id == goal_vector_index == craftax Achievement enum .value (0..66). CONFIRMED identical via task_utils.py embedding[ach.value]=1.0; NO separate index.",
+  "eval_mapping": "online_evaluation.py:229 Achievement[skill_name_raw.upper()].value; wandb skill_<name> <-> enum NAME (uppercase). Canonical storage is lowercase; matching at the schema boundary is case-sensitive (NO_SILENT_SCHEMA_COERCION); case/spelling variants go through explicit_aliases.json only.",
+  "design_layer_metadata_note": "depth_tier (1..4) and family (COMBAT/GATHER/CRAFT/EXPLORE) are hand-curated DESIGN annotations from the source module, NOT authoritative craftax constants. They are signals for ambition/depth and breadth/coverage only.",
+  "achievements": [
+    {
+      "canonical_id": 0,
+      "name": "collect_wood",
+      "goal_vector_index": 0,
+      "depth_tier": 1,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 1,
+      "name": "place_table",
+      "goal_vector_index": 1,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 2,
+      "name": "eat_cow",
+      "goal_vector_index": 2,
+      "depth_tier": 1,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 3,
+      "name": "collect_sapling",
+      "goal_vector_index": 3,
+      "depth_tier": 1,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 4,
+      "name": "collect_drink",
+      "goal_vector_index": 4,
+      "depth_tier": 1,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 5,
+      "name": "make_wood_pickaxe",
+      "goal_vector_index": 5,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 6,
+      "name": "make_wood_sword",
+      "goal_vector_index": 6,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 7,
+      "name": "place_plant",
+      "goal_vector_index": 7,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 8,
+      "name": "defeat_zombie",
+      "goal_vector_index": 8,
+      "depth_tier": 1,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 9,
+      "name": "collect_stone",
+      "goal_vector_index": 9,
+      "depth_tier": 1,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 10,
+      "name": "place_stone",
+      "goal_vector_index": 10,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 11,
+      "name": "eat_plant",
+      "goal_vector_index": 11,
+      "depth_tier": 1,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 12,
+      "name": "defeat_skeleton",
+      "goal_vector_index": 12,
+      "depth_tier": 1,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 13,
+      "name": "make_stone_pickaxe",
+      "goal_vector_index": 13,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 14,
+      "name": "make_stone_sword",
+      "goal_vector_index": 14,
+      "depth_tier": 1,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 15,
+      "name": "wake_up",
+      "goal_vector_index": 15,
+      "depth_tier": 1,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 16,
+      "name": "place_furnace",
+      "goal_vector_index": 16,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 17,
+      "name": "collect_coal",
+      "goal_vector_index": 17,
+      "depth_tier": 2,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 18,
+      "name": "collect_iron",
+      "goal_vector_index": 18,
+      "depth_tier": 2,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 19,
+      "name": "collect_diamond",
+      "goal_vector_index": 19,
+      "depth_tier": 3,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 20,
+      "name": "make_iron_pickaxe",
+      "goal_vector_index": 20,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 21,
+      "name": "make_iron_sword",
+      "goal_vector_index": 21,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 22,
+      "name": "make_arrow",
+      "goal_vector_index": 22,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 23,
+      "name": "make_torch",
+      "goal_vector_index": 23,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 24,
+      "name": "place_torch",
+      "goal_vector_index": 24,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 25,
+      "name": "make_diamond_sword",
+      "goal_vector_index": 25,
+      "depth_tier": 3,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 26,
+      "name": "make_iron_armour",
+      "goal_vector_index": 26,
+      "depth_tier": 2,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 27,
+      "name": "make_diamond_armour",
+      "goal_vector_index": 27,
+      "depth_tier": 3,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 28,
+      "name": "enter_gnomish_mines",
+      "goal_vector_index": 28,
+      "depth_tier": 2,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 29,
+      "name": "enter_dungeon",
+      "goal_vector_index": 29,
+      "depth_tier": 2,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 30,
+      "name": "enter_sewers",
+      "goal_vector_index": 30,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 31,
+      "name": "enter_vault",
+      "goal_vector_index": 31,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 32,
+      "name": "enter_troll_mines",
+      "goal_vector_index": 32,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 33,
+      "name": "enter_fire_realm",
+      "goal_vector_index": 33,
+      "depth_tier": 4,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 34,
+      "name": "enter_ice_realm",
+      "goal_vector_index": 34,
+      "depth_tier": 4,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 35,
+      "name": "enter_graveyard",
+      "goal_vector_index": 35,
+      "depth_tier": 4,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 36,
+      "name": "defeat_gnome_warrior",
+      "goal_vector_index": 36,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 37,
+      "name": "defeat_gnome_archer",
+      "goal_vector_index": 37,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 38,
+      "name": "defeat_orc_solider",
+      "goal_vector_index": 38,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 39,
+      "name": "defeat_orc_mage",
+      "goal_vector_index": 39,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 40,
+      "name": "defeat_lizard",
+      "goal_vector_index": 40,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 41,
+      "name": "defeat_kobold",
+      "goal_vector_index": 41,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 42,
+      "name": "defeat_troll",
+      "goal_vector_index": 42,
+      "depth_tier": 3,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 43,
+      "name": "defeat_deep_thing",
+      "goal_vector_index": 43,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 44,
+      "name": "defeat_pigman",
+      "goal_vector_index": 44,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 45,
+      "name": "defeat_fire_elemental",
+      "goal_vector_index": 45,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 46,
+      "name": "defeat_frost_troll",
+      "goal_vector_index": 46,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 47,
+      "name": "defeat_ice_elemental",
+      "goal_vector_index": 47,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 48,
+      "name": "damage_necromancer",
+      "goal_vector_index": 48,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 49,
+      "name": "defeat_necromancer",
+      "goal_vector_index": 49,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 50,
+      "name": "eat_bat",
+      "goal_vector_index": 50,
+      "depth_tier": 2,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 51,
+      "name": "eat_snail",
+      "goal_vector_index": 51,
+      "depth_tier": 2,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 52,
+      "name": "find_bow",
+      "goal_vector_index": 52,
+      "depth_tier": 2,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 53,
+      "name": "fire_bow",
+      "goal_vector_index": 53,
+      "depth_tier": 2,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 54,
+      "name": "collect_sapphire",
+      "goal_vector_index": 54,
+      "depth_tier": 3,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 55,
+      "name": "learn_fireball",
+      "goal_vector_index": 55,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 56,
+      "name": "cast_fireball",
+      "goal_vector_index": 56,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 57,
+      "name": "learn_iceball",
+      "goal_vector_index": 57,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 58,
+      "name": "cast_iceball",
+      "goal_vector_index": 58,
+      "depth_tier": 3,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 59,
+      "name": "collect_ruby",
+      "goal_vector_index": 59,
+      "depth_tier": 3,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 60,
+      "name": "make_diamond_pickaxe",
+      "goal_vector_index": 60,
+      "depth_tier": 3,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 61,
+      "name": "open_chest",
+      "goal_vector_index": 61,
+      "depth_tier": 2,
+      "family": "EXPLORE"
+    },
+    {
+      "canonical_id": 62,
+      "name": "drink_potion",
+      "goal_vector_index": 62,
+      "depth_tier": 3,
+      "family": "GATHER"
+    },
+    {
+      "canonical_id": 63,
+      "name": "enchant_sword",
+      "goal_vector_index": 63,
+      "depth_tier": 3,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 64,
+      "name": "enchant_armour",
+      "goal_vector_index": 64,
+      "depth_tier": 3,
+      "family": "CRAFT"
+    },
+    {
+      "canonical_id": 65,
+      "name": "defeat_knight",
+      "goal_vector_index": 65,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    },
+    {
+      "canonical_id": 66,
+      "name": "defeat_archer",
+      "goal_vector_index": 66,
+      "depth_tier": 4,
+      "family": "COMBAT"
+    }
+  ]
+}
