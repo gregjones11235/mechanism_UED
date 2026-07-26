@@ -1,0 +1,71 @@
+# base_gtrxl_matched_replay_config.yaml
+# CANONICAL matched control: Base GTrXL + the P2 Replay bundle, NO architecture change.
+# Purpose: isolate the P2 Replay effect from architecture/training-bundle effects (fills MISS-1 /
+# BASE_GTRXL_MATCHED_REPLAY_CONTROL). Status: READY_NOT_AUTHORIZED -- DO NOT launch training.
+# Every field MUST match the P2-Full-A arm it controls for; the ONLY allowed difference is `network`.
+
+experiment_id: BASE_GTRXL_MATCHED_REPLAY
+status: READY_NOT_AUTHORIZED
+authorization: "training NOT authorized this round; launching is forbidden until explicit re-authorization"
+
+# ---- THE SINGLE DIFFERENCE ----
+network:
+  class: ActorCriticTransformer        # Base GTrXL window-attention trunk
+  long_memory_module: NONE             # explicitly NOT W512 / RMT / SlowGRU / EventMemory
+  note: "This is the only field that differs from P2-Full-A. Everything below is identical to P2."
+
+# ---- initialization (identical to P2) ----
+init:
+  checkpoint: teacher17500
+  params_sha256: d4e85af58b7f87d6
+  method: "base trunk inherited bit-exact; no fresh long-memory leaves (there are none)"
+
+# ---- P2 Replay bundle (identical to P2-Full-A) ----
+replay:
+  enabled: true
+  capacity: 64                          # ReplayBuffer(capacity=64) per P2 requirement matrix
+  L_SEQ: 512                            # MUST equal the P2 arm controlled for. CONFLICT NOTE: W512 repro
+                                        # used 129 (run_p2_full_smoke.py:66 'formal run uses 512'); RMT16 /
+                                        # P2-Full-A v2.1 frozen config specify 512. FREEZE canonical L_SEQ on
+                                        # the server BEFORE running, and record it in provenance (MISS-6).
+  k_batch: 4
+  vtrace: true
+  awr_hindsight: true
+  ema:
+    enabled: true
+    tau: 0.995
+  policy_lag_gate:
+    enabled: true
+    max_lag: 16
+  transactional_kl_gate:
+    enabled: true
+  anchor_interval: 128
+
+# ---- PPO / optimizer (identical to P2) ----
+ppo:
+  optimizer: Adam
+  learning_rate: 2.0e-5
+  adam_eps: 1.0e-5
+  gamma: 0.999
+  grad_clip_global_norm: 1.0
+  num_envs: 16
+  rollout_steps: 128
+  transitions_per_update: 2048          # online (+2048 replay when replay on)
+  total_environment_steps: 24576        # screen; longrun variant = 98304 (separate authorization)
+
+# ---- evaluation (CANONICAL) ----
+evaluation:
+  protocol: CANONICAL_EVALUATOR_V1
+  evaluator_sha256: "REQUIRED (canonical evaluator file SHA at run time)"
+  worlds: 256
+  evaluation_seed: 42                   # seed42 line; paired with CONTROL24576_BASELINE / TEACHER17500_BASELINE
+  world_manifest: canonical_worlds_256_seed42.json
+  world_set_hash: "REQUIRED (materialized on JAX host before run; GATE2/3)"
+  action_mode: stochastic
+  max_timesteps: 4096
+  target_achievement: DEFEAT_KOBOLD
+
+# ---- controls this arm enables ----
+enables_comparisons:
+  - "BASE_GTRXL_MATCHED_REPLAY vs P2-Full-A  => isolates ARCHITECTURE (network) effect under identical Replay"
+  - "BASE_GTRXL_MATCHED_REPLAY vs CONTROL24576_BASELINE => isolates REPLAY-bundle effect under identical Base GTrXL"

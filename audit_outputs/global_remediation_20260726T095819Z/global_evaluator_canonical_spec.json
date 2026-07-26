@@ -1,0 +1,141 @@
+{
+  "protocol_id": "CANONICAL_EVALUATOR_V1",
+  "status": "FROZEN_SPEC (reference implementation requires JAX/Craftax; runtime BLOCKED in this env: JAX ABSENT)",
+  "anchor_reference": "student_upgrade_wave1_4gpu/eval_phase2_unified.py",
+  "anchor_sha256": "224514026aefd273a6647e055fc2e1a434760dc5f4b6b9acd0624bbba57035a1",
+  "derivation_note": "Fields transcribed from the bit-identity-verified Phase2 anchor evaluator; NOT a blind copy. Each field has a source line citation.",
+  "frozen_fields": {
+    "evaluator_source_sha": {
+      "value": "MUST equal the running evaluator file SHA256; recorded at startup and written to output",
+      "source": "eval_phase2_unified.py:80 EVAL_SHA256=sha256(self); :417 written to output",
+      "required": true
+    },
+    "environment_task_definition": {
+      "value": "Craftax Stage4 / S4_dark native start, target DEFEAT_KOBOLD",
+      "source": "docstring :2-5; wrapper :104",
+      "required": true
+    },
+    "EnvParams": {
+      "value": "EnvParams(max_timesteps=4096)",
+      "source": ":82 ctor=EnvParams(max_timesteps=NUM_STEPS)",
+      "required": true
+    },
+    "StaticEnvParams": {
+      "value": "Craftax default StaticEnvParams for S4_dark unless explicitly overridden; MUST be recorded if overridden",
+      "source": "not overridden in anchor",
+      "required": true
+    },
+    "goal_conditioning": {
+      "value": "condition_on_task=True",
+      "source": ":104",
+      "required": true
+    },
+    "max_timesteps": {
+      "value": 4096,
+      "source": ":82 NUM_STEPS",
+      "required": true
+    },
+    "optimistic_reset": {
+      "value": "optimistic_reset_ratio=16, mode='score', bonus_type='none'",
+      "source": ":104",
+      "required": true
+    },
+    "spawn_floor": {
+      "value": 2,
+      "source": ":200 spawn_floor=2",
+      "required": true
+    },
+    "action_mode": {
+      "value": "stochastic",
+      "allowed": [
+        "stochastic",
+        "argmax"
+      ],
+      "source": ":146 action=pi.sample(seed=a_rng); :200 policy_mode='stochastic'",
+      "rule": "MUST be explicit; printed at startup AND written to output. NEVER inferred from a dead branch or default. The argmax used at :277 is a MEMORY-OFF DIAGNOSTIC PROBE on logits, NOT the policy action_mode, and MUST NOT be reported as the policy mode.",
+      "required": true
+    },
+    "action_rng": {
+      "value": "per-step a_rng derived deterministically from the eval RNG stream; stochastic pi.sample(seed=a_rng)",
+      "source": ":146",
+      "required": true
+    },
+    "evaluation_seed": {
+      "value": 42,
+      "allowed_note": "seed=100000 (P7/LC line) is a DIFFERENT world set and MUST be flagged separately, never paired with seed42",
+      "source": ":77 EVAL_SEED=42; :169 rng=PRNGKey(EVAL_SEED)",
+      "required": true
+    },
+    "world_generator": {
+      "value": "DistributedMultiTaskOptimisticLogWrapper(s4_base, PRNGKey(0), ...) with NUM_ENVS=256 parallel envs, paired by world index",
+      "source": ":121; :104",
+      "required": true
+    },
+    "world_manifest": {
+      "value": "MUST reference canonical_worlds_256_seed42.json and record world_set_hash",
+      "required": true
+    },
+    "world_hash": {
+      "value": "MUST be written per-run; identical hash required for any paired comparison",
+      "required": true
+    },
+    "memory_init": {
+      "value": "zero-initialized short-term GTrXL memory + per-network long state at reset",
+      "source": ":264 reset0=zeros bool; forward_eval",
+      "required": true
+    },
+    "memory_reset_on_done": {
+      "value": "short-term mem reset on done; long state reset on true_done",
+      "source": "anchor memory machinery (verified in prior audit)",
+      "required": true
+    },
+    "memory_env_isolation": {
+      "value": "per-world memory rows must not cross-contaminate in the batched wrapper; verified by GATE5",
+      "required": true
+    },
+    "success_definition": {
+      "value": "success = seen_target OR (info_accuracy > 0), ever-set across episode (once True stays True); denominator = num worlds",
+      "source": ":190 success_np = seen_np | (info_acc_np>0)",
+      "required": true
+    },
+    "death_definition": {
+      "value": "died = finished AND NOT success AND NOT timeout",
+      "source": ":192",
+      "required": true
+    },
+    "timeout_definition": {
+      "value": "timeout = finished AND (ep_len>=max_timesteps) AND NOT success; if any not_finished, fold not_finished into timeout",
+      "source": ":191,194",
+      "required": true
+    },
+    "floor_reach_definition": {
+      "value": "floor3_reach = (max_floor >= 3) per world",
+      "source": ":196",
+      "required": true
+    },
+    "achievement_statistics": {
+      "value": "official Craftax 67-achievement registry, 4 official tiers (BASIC1/INTERMEDIATE3/ADVANCED5/VERY_ADVANCED8); see official_achievement_tiers.json. Custom design tiers MUST be labelled CUSTOM_DEPTH_TIER and never mixed.",
+      "required": true
+    },
+    "output_schema": {
+      "value": "per-world bool arrays (success_per_world, floor3_per_world, died_per_world) + aggregates (SR, n_success, floor3_reach_rate, n_floor3, conditional_kill_rate, n_died, n_timeout, n_not_finished, death_rate, timeout_rate) + provenance (evaluator_sha256, world_set_hash, action_mode, evaluation_seed, spawn_floor, policy_mode)",
+      "source": ":199-208,416-417",
+      "required": true
+    }
+  },
+  "mandatory_runtime_assertions": [
+    "A1 print actual action_mode at startup",
+    "A2 write action_mode into output JSON",
+    "A3 test that actual sampling behavior matches declared action_mode (stochastic => >1 distinct action over repeated draws at fixed state; argmax => identical)",
+    "A4 checkpoint param set mismatch (missing OR extra leaves) => HARD-FAIL; no silent partial restore; no compat fallback",
+    "A5 batched-env memory cross-contamination probe => must be zero (GATE5)",
+    "A6 after episode done, memory returns to zero on next episode start (GATE6)"
+  ],
+  "action_mode_test_logic": "stochastic: sample K times at fixed (params,state,rng-stream-with-distinct-keys) => expect >1 unique action with high prob; argmax: sample K times => expect exactly 1 unique action. Test implemented in tools/action_mode_consistency_test.py (pure-logic, JAX-optional).",
+  "partial_restore_policy": "DEFAULT HARD-FAIL. Restore compares leaf-set(ckpt) vs leaf-set(model). If ckpt ⊋ model or ckpt ⊊ model => raise RestoreShapeMismatch/RestoreLeafMismatch. Compat fallback is FORBIDDEN unless an explicit, SHA-recorded migration map is supplied and audited.",
+  "disciplines": [
+    "action_mode never guessed from dead code/default",
+    "seed100000 results flagged separate from seed42",
+    "no cross-evaluator/world-set paired comparison without identical world_set_hash + evaluator SHA"
+  ]
+}

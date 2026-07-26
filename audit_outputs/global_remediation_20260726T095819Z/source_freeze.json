@@ -1,0 +1,82 @@
+{
+  "task": "GLOBAL_EVALUATION_REMEDIATION",
+  "repo": "gregjones11235/mechanism_UED",
+  "base_branch": "Henry-branch",
+  "remediation_branch_requested": "henry/global-evaluation-remediation",
+  "remediation_branch_status": "BLOCKED - no usable local git repository for mechanism_UED (top-level .git is an EMPTY directory; git rev-parse => 'not a git repository'). Local mirrors (dicode-dspro-review, dicode-aggregation-review) point to a DIFFERENT repo (dreaming-in-code-coop @117.50.183.232). Network to GitHub unreachable => cannot fetch Henry-branch. Branch creation deferred to an environment with the repo + network.",
+  "freeze_timestamp_utc": "2026-07-26T09:58:22.042215+00:00",
+  "output_dir": "audit_outputs/global_remediation_20260726T095819Z",
+  "reports_dir": "reports/global_remediation",
+  "old_audit_dir_readonly": "audit_outputs/global_readonly_audit_20260726T050340Z (NOT modified)",
+  "git_state": {
+    "is_inside_work_tree": "fatal: not a git repository (or any of the parent directories): .git",
+    "HEAD": "fatal: not a git repository (or any of the parent directories): .git",
+    "remote": "fatal: not a git repository (or any of the parent directories): .git",
+    "current_branch": "fatal: not a git repository (or any of the parent directories): .git",
+    "interpretation": "no mechanism_UED repo locally; HEAD=UNVERIFIED/none"
+  },
+  "environment": {
+    "python": "Python 3.12.4",
+    "packages": {
+      "jax": "ABSENT",
+      "jaxlib": "ABSENT",
+      "craftax": "ABSENT",
+      "chex": "ABSENT",
+      "optax": "ABSENT",
+      "flax": "ABSENT",
+      "numpy": "1.26.4",
+      "scipy": "1.13.1"
+    },
+    "jax_available": false,
+    "craftax_available": false,
+    "implication": "JAX/Craftax ABSENT => cannot generate bit-exact world manifest, cannot run evaluator/resume harness, cannot introspect installed craftax Achievement enum. Tooling+specs built; runtime artifacts marked BLOCKED/JAX_ABSENT."
+  },
+  "gpu_map": {
+    "csv": "index, uuid, name, memory.used [MiB], memory.total [MiB], utilization.gpu [%]\n0, GPU-63493c36-721b-a8de-1a35-43c5b623964f, NVIDIA GeForce RTX 5070 Laptop GPU, 0 MiB, 8151 MiB, 0 %",
+    "compute_apps": "gpu_uuid, pid, process_name, used_gpu_memory [MiB]",
+    "interpretation": "single RTX 5070 Laptop GPU, 0 MiB used, 0% util, NO compute processes => GPU idle. JAX absent so GPU not usable this round regardless. No GPU used."
+  },
+  "cc2_cc3_processes_local": {
+    "found": "none (no python processes; only claude.exe/codex.exe hosts)",
+    "interpretation": "no CC2/CC3 worker processes running locally to avoid; CC2 RMT16 / CC3 D052 domains not touched"
+  },
+  "files_to_modify_or_reference_sha256": {
+    "student_upgrade_wave1_4gpu/eval_phase2_unified.py": "224514026aefd273a6647e055fc2e1a434760dc5f4b6b9acd0624bbba57035a1",
+    "student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_p7.py": "dc300fd5232936c60b02d72d1f34da81ea95c0beeb449e14982dad0281fb346d",
+    "student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_p7_egomap_paired_256.py": "c082db8b82e86b971d8943bd9275ba8b709ffdc0da198fb236c52ccd56c08325",
+    "student_upgrade_wave1_4gpu/gpu2_p8_longmemory/src/eval_p8_final.py": "da0baba39200e5102c4f546d20b616a17546bd648c42263e247ce09026dfd6c8",
+    "student_upgrade_wave1_4gpu/gpu2_p8_longmemory/src/eval_p8_migration.py": "e5b2aa56587e8ef52320f236cdbd51a647ad3f9f3dbbbfb4dd491f3031d57eb2",
+    "student_upgrade_wave1_4gpu/gpu3_p9_authentic_reset/src/eval_p9_final.py": "eff1d77cae6d229a89c2580009076d909f86e7f636244b909cfbc3cb41abd627",
+    "bakeoff_phase1/shared/eval_a_side_unified.py": "7adb91e3fa3a71550c5acd2dfa3889c6e6b28f5870d4b41bd4e5370d3f18f1d6",
+    "bakeoff_phase1/eval_w512_p2replay.py": "f76bb53ca20f3f133b781fac6351b91a6624675143c307ae8e779c683303d6d7",
+    ".local/p2_full_audit/henry/task_utils.py": "006a1b47bf123147ba4a3ce3f887047ec4587aff126198ff131cb715bb341b24",
+    ".local/p2_full_audit/henry/wrappers.py": "9f14ab2e4df8c9b221d9b4fb75260a53919e78c0cb2d4e52f1d8412a65428871",
+    ".local/p2_full_audit/henry/network.py": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    ".local/p2_full_audit/henry/ppo_tr.py": "faa561c0a78c7d7ea733cfb5ee61f2ca745dfd177c2cd6bca9681bb2a9077584",
+    ".local/p2_full_audit/src/eval_paired_256.py": "51c37c2759fe6a0ebc990c916c29b59f01126f4d2ef6c2ae1ac1bf4c1d99f88b",
+    ".local/p2_full_audit/src/full_p2_learner.py": "186a7aa5b38233637861eeb99537f1ae44531c051b9a90f9db9102cbcc4af5fe",
+    ".local/p2_full_audit/src/replay_buffer.py": "c36c95b406031c0267d0458bb21745485e5803855f13d10c9417a37f69f06216",
+    ".local/p2_full_audit/src_fullp2/run_p2_full_levelB.py": "4c2fbb273dfbab6abddc2d7618a9cf3fbbbb00e9e20088b5d2e01dfc4f731449",
+    ".local/p2_full_audit/posthoc_attribution/posthoc_attribution.py": "9663d70a8d5b4aabd49df9bd69d42271693f5b90743058e6019851cbf2718b45",
+    "audit_outputs/global_readonly_audit_20260726T050340Z/reports/global_evaluation_causal_audit.json": "a4a8f5a70b5f7b26711fef3fad83dbed5f55fdae73542220cd6bf5c33af1267b"
+  },
+  "disciplines": [
+    "NO_RAW_DATA_NO_STRONG_CLAIM",
+    "NO_SUMMARY_AS_PRIMARY_EVIDENCE",
+    "NO_SILENT_ASSUMPTION",
+    "MISSING/UNVERIFIED never written as FAIL",
+    "no training",
+    "no old-experiment rerun",
+    "no background agents",
+    "no high-freq polling",
+    "no git reset/clean/force",
+    "no silent change of old results",
+    "no cross-evaluator/world-set direct comparison",
+    "do not modify existing audit outputs",
+    "CC2 RMT16 untouched",
+    "CC3 D052 untouched"
+  ],
+  "new_training_runs": 0,
+  "cc2_files_touched": false,
+  "cc3_files_touched": false
+}

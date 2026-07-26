@@ -1,0 +1,16 @@
+{
+  "cell_id": "BASE_GTRXL_MATCHED_REPLAY",
+  "status": "READY_NOT_AUTHORIZED",
+  "config_file": "base_gtrxl_matched_replay_config.yaml",
+  "config_sha256": "c9edbf0791b369fb52d5c08a4280f16a82e58fbc42f633f5f2412e7b1562e24f",
+  "purpose": "isolate P2 Replay effect from architecture (fills MISS-1)",
+  "single_difference": "network = Base GTrXL (no long-memory module); all other fields identical to P2-Full-A",
+  "blocked_on": [
+    "canonical L_SEQ freeze (MISS-6)",
+    "world_set_hash materialization (JAX host)",
+    "explicit training authorization"
+  ],
+  "training_launched": false,
+  "new_training_runs": 0,
+  "gate": "GATE15 (config matches P2 bundle except network) in tools/regression_gates.py"
+}

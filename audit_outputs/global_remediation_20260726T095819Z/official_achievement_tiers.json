@@ -1,0 +1,585 @@
+{
+  "schema": "mechanism_UED.official_achievement_tiers/v1",
+  "single_source_of_truth": "craftax.craftax.constants.ACHIEVEMENT_REWARD_MAP (craftax==1.4.5)",
+  "import_for_verification": "from craftax.craftax.constants import ACHIEVEMENT_REWARD_MAP, Achievement",
+  "num_achievements": 67,
+  "max_value": 66,
+  "official_tiers": {
+    "BASIC": {
+      "reward_weight": 1,
+      "count": 25
+    },
+    "INTERMEDIATE": {
+      "reward_weight": 3,
+      "count": 18
+    },
+    "ADVANCED": {
+      "reward_weight": 5,
+      "count": 15
+    },
+    "VERY_ADVANCED": {
+      "reward_weight": 8,
+      "count": 9
+    }
+  },
+  "tier_count_check": {
+    "BASIC": 25,
+    "INTERMEDIATE": 18,
+    "ADVANCED": 15,
+    "VERY_ADVANCED": 9,
+    "total": 67
+  },
+  "frozen_facts_verified": {
+    "ADVANCED_has_15_items": true,
+    "make_iron_pickaxe_is_BASIC": true,
+    "make_diamond_sword_armour_pickaxe_are_INTERMEDIATE": true,
+    "learn_cast_fireball_iceball_are_ADVANCED": true,
+    "realm_necromancer_are_VERY_ADVANCED": true
+  },
+  "tier3_semantics_rule": "If a report uses 'tier3' for baseline cross-comparison it MUST equal official ADVANCED (reward 5, the 15 items above). 'tier3' MUST NOT be used for any other set.",
+  "custom_tier_rule": "The design-layer ACHIEVEMENT_DEPTH (dicode_src/auction/craftax_achievements.py) is NOT authoritative; it MUST be renamed CUSTOM_DEPTH_TIER and NEVER mixed into official-tier tables. New reports MUST emit official_tier_name + official_reward_weight + achievement list + mapping source SHA.",
+  "gate7": "registry must equal installed craftax Achievement enum (67, ids 0-66) - auto-checked by tools/tier_registry_test.py in a craftax-present env (BLOCKED here: craftax ABSENT)",
+  "gate8": "official 4 tiers must match ACHIEVEMENT_REWARD_MAP reward weights 1/3/5/8 - auto-checked by tools/tier_registry_test.py",
+  "verification_status_in_this_env": "craftax ABSENT => runtime GATE7/8 BLOCKED; registry built from craftax==1.4.5 reward table (CC3 constants.py TABLE1) cross-referenced to CC3 canonical_craftax_achievements.json IDs; all frozen-fact assertions PASS in pure python",
+  "mapping_source_sha256": {
+    "note": "SHA of this registry recorded in SHA256SUMS; upstream craftax_achievements.py git blob SHA = server-side (NOT_FOUND locally)"
+  },
+  "achievements": [
+    {
+      "canonical_id": 0,
+      "name": "collect_wood",
+      "name_upper": "COLLECT_WOOD",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 0
+    },
+    {
+      "canonical_id": 1,
+      "name": "place_table",
+      "name_upper": "PLACE_TABLE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 1
+    },
+    {
+      "canonical_id": 2,
+      "name": "eat_cow",
+      "name_upper": "EAT_COW",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 2
+    },
+    {
+      "canonical_id": 3,
+      "name": "collect_sapling",
+      "name_upper": "COLLECT_SAPLING",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 3
+    },
+    {
+      "canonical_id": 4,
+      "name": "collect_drink",
+      "name_upper": "COLLECT_DRINK",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 4
+    },
+    {
+      "canonical_id": 5,
+      "name": "make_wood_pickaxe",
+      "name_upper": "MAKE_WOOD_PICKAXE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 5
+    },
+    {
+      "canonical_id": 6,
+      "name": "make_wood_sword",
+      "name_upper": "MAKE_WOOD_SWORD",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 6
+    },
+    {
+      "canonical_id": 7,
+      "name": "place_plant",
+      "name_upper": "PLACE_PLANT",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 7
+    },
+    {
+      "canonical_id": 8,
+      "name": "defeat_zombie",
+      "name_upper": "DEFEAT_ZOMBIE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 8
+    },
+    {
+      "canonical_id": 9,
+      "name": "collect_stone",
+      "name_upper": "COLLECT_STONE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 9
+    },
+    {
+      "canonical_id": 10,
+      "name": "place_stone",
+      "name_upper": "PLACE_STONE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 10
+    },
+    {
+      "canonical_id": 11,
+      "name": "eat_plant",
+      "name_upper": "EAT_PLANT",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 11
+    },
+    {
+      "canonical_id": 12,
+      "name": "defeat_skeleton",
+      "name_upper": "DEFEAT_SKELETON",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 12
+    },
+    {
+      "canonical_id": 13,
+      "name": "make_stone_pickaxe",
+      "name_upper": "MAKE_STONE_PICKAXE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 13
+    },
+    {
+      "canonical_id": 14,
+      "name": "make_stone_sword",
+      "name_upper": "MAKE_STONE_SWORD",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 14
+    },
+    {
+      "canonical_id": 15,
+      "name": "wake_up",
+      "name_upper": "WAKE_UP",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 15
+    },
+    {
+      "canonical_id": 16,
+      "name": "place_furnace",
+      "name_upper": "PLACE_FURNACE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 16
+    },
+    {
+      "canonical_id": 17,
+      "name": "collect_coal",
+      "name_upper": "COLLECT_COAL",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 17
+    },
+    {
+      "canonical_id": 18,
+      "name": "collect_iron",
+      "name_upper": "COLLECT_IRON",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 18
+    },
+    {
+      "canonical_id": 19,
+      "name": "collect_diamond",
+      "name_upper": "COLLECT_DIAMOND",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 19
+    },
+    {
+      "canonical_id": 20,
+      "name": "make_iron_pickaxe",
+      "name_upper": "MAKE_IRON_PICKAXE",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 20
+    },
+    {
+      "canonical_id": 21,
+      "name": "make_iron_sword",
+      "name_upper": "MAKE_IRON_SWORD",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 21
+    },
+    {
+      "canonical_id": 22,
+      "name": "make_arrow",
+      "name_upper": "MAKE_ARROW",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 22
+    },
+    {
+      "canonical_id": 23,
+      "name": "make_torch",
+      "name_upper": "MAKE_TORCH",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 23
+    },
+    {
+      "canonical_id": 24,
+      "name": "place_torch",
+      "name_upper": "PLACE_TORCH",
+      "official_tier_name": "BASIC",
+      "official_reward_weight": 1,
+      "goal_vector_index": 24
+    },
+    {
+      "canonical_id": 25,
+      "name": "make_diamond_sword",
+      "name_upper": "MAKE_DIAMOND_SWORD",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 25
+    },
+    {
+      "canonical_id": 26,
+      "name": "make_iron_armour",
+      "name_upper": "MAKE_IRON_ARMOUR",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 26
+    },
+    {
+      "canonical_id": 27,
+      "name": "make_diamond_armour",
+      "name_upper": "MAKE_DIAMOND_ARMOUR",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 27
+    },
+    {
+      "canonical_id": 28,
+      "name": "enter_gnomish_mines",
+      "name_upper": "ENTER_GNOMISH_MINES",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 28
+    },
+    {
+      "canonical_id": 29,
+      "name": "enter_dungeon",
+      "name_upper": "ENTER_DUNGEON",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 29
+    },
+    {
+      "canonical_id": 30,
+      "name": "enter_sewers",
+      "name_upper": "ENTER_SEWERS",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 30
+    },
+    {
+      "canonical_id": 31,
+      "name": "enter_vault",
+      "name_upper": "ENTER_VAULT",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 31
+    },
+    {
+      "canonical_id": 32,
+      "name": "enter_troll_mines",
+      "name_upper": "ENTER_TROLL_MINES",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 32
+    },
+    {
+      "canonical_id": 33,
+      "name": "enter_fire_realm",
+      "name_upper": "ENTER_FIRE_REALM",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 33
+    },
+    {
+      "canonical_id": 34,
+      "name": "enter_ice_realm",
+      "name_upper": "ENTER_ICE_REALM",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 34
+    },
+    {
+      "canonical_id": 35,
+      "name": "enter_graveyard",
+      "name_upper": "ENTER_GRAVEYARD",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 35
+    },
+    {
+      "canonical_id": 36,
+      "name": "defeat_gnome_warrior",
+      "name_upper": "DEFEAT_GNOME_WARRIOR",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 36
+    },
+    {
+      "canonical_id": 37,
+      "name": "defeat_gnome_archer",
+      "name_upper": "DEFEAT_GNOME_ARCHER",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 37
+    },
+    {
+      "canonical_id": 38,
+      "name": "defeat_orc_solider",
+      "name_upper": "DEFEAT_ORC_SOLIDER",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 38
+    },
+    {
+      "canonical_id": 39,
+      "name": "defeat_orc_mage",
+      "name_upper": "DEFEAT_ORC_MAGE",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 39
+    },
+    {
+      "canonical_id": 40,
+      "name": "defeat_lizard",
+      "name_upper": "DEFEAT_LIZARD",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 40
+    },
+    {
+      "canonical_id": 41,
+      "name": "defeat_kobold",
+      "name_upper": "DEFEAT_KOBOLD",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 41
+    },
+    {
+      "canonical_id": 42,
+      "name": "defeat_troll",
+      "name_upper": "DEFEAT_TROLL",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 42
+    },
+    {
+      "canonical_id": 43,
+      "name": "defeat_deep_thing",
+      "name_upper": "DEFEAT_DEEP_THING",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 43
+    },
+    {
+      "canonical_id": 44,
+      "name": "defeat_pigman",
+      "name_upper": "DEFEAT_PIGMAN",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 44
+    },
+    {
+      "canonical_id": 45,
+      "name": "defeat_fire_elemental",
+      "name_upper": "DEFEAT_FIRE_ELEMENTAL",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 45
+    },
+    {
+      "canonical_id": 46,
+      "name": "defeat_frost_troll",
+      "name_upper": "DEFEAT_FROST_TROLL",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 46
+    },
+    {
+      "canonical_id": 47,
+      "name": "defeat_ice_elemental",
+      "name_upper": "DEFEAT_ICE_ELEMENTAL",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 47
+    },
+    {
+      "canonical_id": 48,
+      "name": "damage_necromancer",
+      "name_upper": "DAMAGE_NECROMANCER",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 48
+    },
+    {
+      "canonical_id": 49,
+      "name": "defeat_necromancer",
+      "name_upper": "DEFEAT_NECROMANCER",
+      "official_tier_name": "VERY_ADVANCED",
+      "official_reward_weight": 8,
+      "goal_vector_index": 49
+    },
+    {
+      "canonical_id": 50,
+      "name": "eat_bat",
+      "name_upper": "EAT_BAT",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 50
+    },
+    {
+      "canonical_id": 51,
+      "name": "eat_snail",
+      "name_upper": "EAT_SNAIL",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 51
+    },
+    {
+      "canonical_id": 52,
+      "name": "find_bow",
+      "name_upper": "FIND_BOW",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 52
+    },
+    {
+      "canonical_id": 53,
+      "name": "fire_bow",
+      "name_upper": "FIRE_BOW",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 53
+    },
+    {
+      "canonical_id": 54,
+      "name": "collect_sapphire",
+      "name_upper": "COLLECT_SAPPHIRE",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 54
+    },
+    {
+      "canonical_id": 55,
+      "name": "learn_fireball",
+      "name_upper": "LEARN_FIREBALL",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 55
+    },
+    {
+      "canonical_id": 56,
+      "name": "cast_fireball",
+      "name_upper": "CAST_FIREBALL",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 56
+    },
+    {
+      "canonical_id": 57,
+      "name": "learn_iceball",
+      "name_upper": "LEARN_ICEBALL",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 57
+    },
+    {
+      "canonical_id": 58,
+      "name": "cast_iceball",
+      "name_upper": "CAST_ICEBALL",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 58
+    },
+    {
+      "canonical_id": 59,
+      "name": "collect_ruby",
+      "name_upper": "COLLECT_RUBY",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 59
+    },
+    {
+      "canonical_id": 60,
+      "name": "make_diamond_pickaxe",
+      "name_upper": "MAKE_DIAMOND_PICKAXE",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 60
+    },
+    {
+      "canonical_id": 61,
+      "name": "open_chest",
+      "name_upper": "OPEN_CHEST",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 61
+    },
+    {
+      "canonical_id": 62,
+      "name": "drink_potion",
+      "name_upper": "DRINK_POTION",
+      "official_tier_name": "INTERMEDIATE",
+      "official_reward_weight": 3,
+      "goal_vector_index": 62
+    },
+    {
+      "canonical_id": 63,
+      "name": "enchant_sword",
+      "name_upper": "ENCHANT_SWORD",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 63
+    },
+    {
+      "canonical_id": 64,
+      "name": "enchant_armour",
+      "name_upper": "ENCHANT_ARMOUR",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 64
+    },
+    {
+      "canonical_id": 65,
+      "name": "defeat_knight",
+      "name_upper": "DEFEAT_KNIGHT",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 65
+    },
+    {
+      "canonical_id": 66,
+      "name": "defeat_archer",
+      "name_upper": "DEFEAT_ARCHER",
+      "official_tier_name": "ADVANCED",
+      "official_reward_weight": 5,
+      "goal_vector_index": 66
+    }
+  ]
+}
