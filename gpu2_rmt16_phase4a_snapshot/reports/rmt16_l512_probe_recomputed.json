@@ -1,0 +1,73 @@
+{
+  "recomputed_by": "tests/recompute_probe_step.py",
+  "method": "offline recompute from frozen raw probe JSONL; NO probe rerun, NO hardcoded values",
+  "num_envs": 16,
+  "rollout_steps": 128,
+  "ge_len": 512,
+  "inputs": {
+    "persistent": "evidence/raw_probe/persistent_probe_episodes.jsonl",
+    "reset128": "evidence/raw_probe/reset128_probe_episodes.jsonl"
+  },
+  "hash_verification": {
+    "sha256sums": "evidence/raw_probe/SHA256SUMS",
+    "files": {
+      "persistent_probe_episodes.jsonl": {
+        "sha256": "23d00d2ec313c0d624d1b7984a3e7b8f8895de9ee7a683189b7b40bf10b0d276",
+        "expected": "23d00d2ec313c0d624d1b7984a3e7b8f8895de9ee7a683189b7b40bf10b0d276",
+        "match": true
+      },
+      "reset128_probe_episodes.jsonl": {
+        "sha256": "644d4ccce3e89470aae00c173d222f2c2f55ba4c461d6a34aabeded642c6effa",
+        "expected": "644d4ccce3e89470aae00c173d222f2c2f55ba4c461d6a34aabeded642c6effa",
+        "match": true
+      }
+    },
+    "all_match": true
+  },
+  "arms": {
+    "persistent": {
+      "num_envs": 16,
+      "rollout_steps": 128,
+      "ge_len": 512,
+      "total_completed_episodes": 20,
+      "count_ge512": 6,
+      "reachable": true,
+      "first_ge512": {
+        "episode_id": 2,
+        "length": 562,
+        "update_index": 4,
+        "rollout_step": 49,
+        "env_id": 2,
+        "first_ge512_resolved_env_step": 8979,
+        "first_ge512_global_step_deprecated": 8241,
+        "step_correction_delta": 738
+      },
+      "source": "evidence/raw_probe/persistent_probe_episodes.jsonl"
+    },
+    "reset128": {
+      "num_envs": 16,
+      "rollout_steps": 128,
+      "ge_len": 512,
+      "total_completed_episodes": 21,
+      "count_ge512": 5,
+      "reachable": true,
+      "first_ge512": {
+        "episode_id": 2,
+        "length": 562,
+        "update_index": 4,
+        "rollout_step": 49,
+        "env_id": 2,
+        "first_ge512_resolved_env_step": 8979,
+        "first_ge512_global_step_deprecated": 8241,
+        "step_correction_delta": 738
+      },
+      "source": "evidence/raw_probe/reset128_probe_episodes.jsonl"
+    }
+  },
+  "first_ge512_resolved_env_step_persistent": 8979,
+  "first_ge512_resolved_env_step_reset128": 8979,
+  "cross_arm_resolved_step_agree": true,
+  "first_ge512_resolved_env_step": 8979,
+  "L512_REACHABILITY": "BOTH",
+  "RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY": "PASS"
+}

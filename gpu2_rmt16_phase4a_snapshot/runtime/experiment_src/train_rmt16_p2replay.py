@@ -92,6 +92,8 @@ from full_p2_learner import FullP2Config, build_optimizer
 from rmt_memory_anchor import make_apply_eval_rmt
 # Phase4A-v2 (CC2 directive §三/§八): split counters + Hindsight/AWR firewall.
 from phase4a_v2_counters import Phase4ACounters
+# Phase4A-v2.1 (CC2 §三/§四/§五): policy-lag gate identity, replay label split, fail-closed gates.
+import phase4a_v2_contract as CONTRACT
 
 REPLAY_ON = (REPLAY_MODE != "off")                       # any active replay channel
 REPLAY_USES_HINDSIGHT = (REPLAY_MODE == "full_p2_legacy")  # ONLY the legacy path touches Hindsight/AWR
@@ -110,6 +112,16 @@ if REPLAY_MODE == "original_vtrace" and SEQUENCE_LENGTH <= SEGMENT_LEN:
 ARM_REPLAY_TAG = {"off": "-PPO", "original_vtrace": "-OrigVtrace",
                   "full_p2_legacy": "-P2ReplayLegacy"}[REPLAY_MODE]
 ARM = f"RMT16-{args.carry_mode.capitalize()}{ARM_REPLAY_TAG}"
+
+# Phase4A-v2.1 (§三.2) FAIL-CLOSED runtime alignment: the policy-lag gate identity is derived
+# SOLELY from REPLAY_MODE, so original_vtrace/off can NEVER carry an active hard lag gate at
+# runtime (only full_p2_legacy does). If this invariant is ever broken, refuse to run rather
+# than silently imply a lag gate that the code does not implement.
+_pl_manifest = CONTRACT.policy_lag_runtime_manifest(REPLAY_MODE)
+if REPLAY_MODE in ("off", "original_vtrace") and _pl_manifest["policy_lag_gate_active"]:
+    raise SystemExit("ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT: runtime policy-lag gate active "
+                     f"under replay_mode={REPLAY_MODE} (must be inactive; V-trace importance "
+                     "sampling is the only off-policy correction).")
 
 # ----------------------- config (bakeoff frozen + P2 frozen) -----------------------
 class Cfg:
@@ -294,6 +306,20 @@ counters = Phase4ACounters()
 # sample_ids/start_offsets/sequence_lengths. Seeded from args.seed so it is reproducible and
 # independent of the JAX rollout/action RNG streams.
 replay_sample_rng = np.random.RandomState(args.seed + 7)
+# ---- Phase4A-v2.1 (CC2 §五): per-arm MATCHED_REPLAY_EXPOSURE certificate accumulation ----
+# These per-outer-update lists are the raw exposure record the two-arm validator compares at
+# level 2 (EXPOSURE_COUNT_MATCH). sample_ids_by_outer_update / start_offsets_by_outer_update are
+# per-arm INTERNAL provenance ONLY — endogenous buffers have no shared trajectory identity, so
+# those two are NEVER compared across arms (compare_exposure excludes them).
+replay_attempt_mask = []                 # bool per outer update: True if a replay update was ATTEMPTED
+replay_attempt_outer_updates = []        # outer update indices where a replay update was attempted
+replay_not_ready_outer_updates = []      # outer update indices where buffer was NOT eligible -> skip
+replay_update_outer_updates = []         # outer update indices where a replay update actually RAN
+replay_batch_sizes = []                  # per executed replay update: batch size (== K_BATCH)
+replay_sequence_lengths = []             # per executed replay update: list of sampled seq lengths
+eligible_count_by_outer_update = []      # eligible trajectory count at each attempt
+sample_ids_by_outer_update = []          # INTERNAL: sampled trajectory ids (not compared cross-arm)
+start_offsets_by_outer_update = []       # INTERNAL: sampled start offsets (not compared cross-arm)
 persistent_carry_nonzero_all = True     # persistent: carried RMT tokens nonzero every rollout
 reset128_boundary_clear_all = True      # reset128: carried RMT tokens strictly zero every rollout
 gtrxl_window_finite_all = True
@@ -372,7 +398,7 @@ def _phase4a_v2_manifest_fields():
     and the structural hindsight/awr flags. For replay_mode in {off, original_vtrace} hindsight
     and awr are STRUCTURALLY False (the path never references them); only full_p2_legacy sets
     them True."""
-    return dict(
+    fields = dict(
         sequence_length=SEQUENCE_LENGTH,
         segment_len=SEGMENT_LEN,
         crosses_boundary=bool(SEQUENCE_LENGTH > SEGMENT_LEN),
@@ -381,6 +407,15 @@ def _phase4a_v2_manifest_fields():
         awr=bool(REPLAY_USES_HINDSIGHT),
         w_original_vtrace=float(RL.W_ORIGINAL_VTRACE),
         allow_full_p2_legacy=bool(args.allow_full_p2_legacy))
+    # Phase4A-v2.1 (§三.2): policy-lag GATE identity. For original_vtrace this records
+    # policy_lag_gate_active=false / max_policy_lag=null / off_policy_correction=vtrace; the
+    # V-trace importance correction stays active, only an ADDITIONAL hard lag gate is absent.
+    fields.update(CONTRACT.policy_lag_runtime_manifest(REPLAY_MODE))
+    # Phase4A-v2.1 (§四): the four-way replay label split — SAME_REPLAY_PROTOCOL=READY does NOT
+    # imply MATCHED_REPLAY_EXPOSURE (NOT_RUN) nor MATCHED_REPLAY_CONTENT (NOT_CLAIMED).
+    fields["replay_labels"] = CONTRACT.replay_protocol_labels(
+        REPLAY_MODE, SEQUENCE_LENGTH, K_BATCH)
+    return fields
 
 
 def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag):
@@ -541,18 +576,34 @@ for u in range(args.total_updates):
     if _rstats["replay_eligible_count_512"] > 0:
         ever_eligible_512 = True
     did_replay_update = False
+    # ---- Phase4A-v2.1 (§五): per-outer-update exposure scratch (recorded after dispatch) ----
+    _replay_attempted_this_update = False
+    _replay_not_ready_this_update = False
+    _eligible_count_this_update = int(_rstats.get("replay_eligible_count_512", 0))
+    _replay_batch_size_this_update = 0
+    _replay_seq_lengths_this_update = []
+    _sample_ids_this_update = []
+    _start_offsets_this_update = []
     if REPLAY_ON and REPLAY_MODE == "original_vtrace":
         # ============ ORIGINAL-GOAL V-TRACE ONLY (no relabel, no AWR; firewall §八) ============
         # Eligible-ONLY deterministic sampling (§七): pre-filters length>=SEQUENCE_LENGTH, fixed
         # batch size, explicit NOT_READY (no random-short-then-retry, no silent redraw).
         _batch = replay.sample_eligible(SEQUENCE_LENGTH, replay_sample_rng, K_BATCH)
+        _replay_attempted_this_update = True          # §五: sampling was attempted this update
+        _eligible_count_this_update = int(_batch.eligible_count)
         if _batch.status == "NOT_READY":
+            _replay_not_ready_this_update = True      # §五: attempted but buffer not eligible
             replay_not_ready_skip_count += 1
             print(f"REPLAY_NOT_READY requested_sequence_length={SEQUENCE_LENGTH} "
                   f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
                   f"eligible_count={_batch.eligible_count}", flush=True)
         else:
             so = _batch.samples
+            # §五 exposure scratch: the drawn sample identity / geometry for this update.
+            _replay_batch_size_this_update = int(len(so))
+            _replay_seq_lengths_this_update = [int(x) for x in _batch.sequence_lengths]
+            _sample_ids_this_update = [int(x) for x in _batch.sample_ids]
+            _start_offsets_this_update = [int(x) for x in _batch.start_offsets]
             counters.on_replay_attempt(len(so))
             replay_sample_success_count += len(so)
             replay_last_sampled_seq_len = SEQUENCE_LENGTH
@@ -593,8 +644,10 @@ for u in range(args.total_updates):
         # Preserves the original K_BATCH relabel path for audit/legacy comparison. This is the
         # ONLY path that touches Hindsight/AWR; it is default-forbidden for formal science.
         if replay.can_sample():
+            _replay_attempted_this_update = True      # §五: sampling was attempted this update
             so, sr = [], []
             if _rstats["replay_eligible_count_512"] == 0:
+                _replay_not_ready_this_update = True  # §五: attempted but buffer not eligible
                 replay_not_ready_skip_count += 1
                 print(f"REPLAY_NOT_READY requested_sequence_length={L_SEQ} "
                       f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
@@ -654,6 +707,28 @@ for u in range(args.total_updates):
                 replay_sequences_consumed += len(so)
                 if replay_first_success_update is None:
                     replay_first_success_update = update_count
+                # §五 exposure scratch (legacy path): fixed L_SEQ windows from the relabel path.
+                _replay_batch_size_this_update = int(len(so))
+                _replay_seq_lengths_this_update = [int(getattr(s, "length", L_SEQ)) for s in so]
+                _sample_ids_this_update = [int(getattr(s, "source_trajectory_id", -1)) for s in so]
+                _start_offsets_this_update = [int(getattr(s, "start_offset", 0)) for s in so]
+    # ---- Phase4A-v2.1 (§五): record this outer update's exposure certificate row ----
+    # One row per outer update, in outer-update order. replay_attempt_mask[k] is True iff outer
+    # update k attempted a replay sample. sample_ids_by_outer_update / start_offsets_by_outer_update
+    # are per-arm INTERNAL provenance (endogenous buffers => never compared cross-arm).
+    replay_attempt_mask.append(bool(_replay_attempted_this_update))
+    if _replay_attempted_this_update:
+        replay_attempt_outer_updates.append(int(u))
+    if _replay_not_ready_this_update:
+        replay_not_ready_outer_updates.append(int(u))
+    if did_replay_update:
+        replay_update_outer_updates.append(int(u))
+    eligible_count_by_outer_update.append(int(_eligible_count_this_update))
+    if did_replay_update:
+        replay_batch_sizes.append(int(_replay_batch_size_this_update))
+        replay_sequence_lengths.append(list(_replay_seq_lengths_this_update))
+        sample_ids_by_outer_update.append(list(_sample_ids_this_update))
+        start_offsets_by_outer_update.append(list(_start_offsets_this_update))
     # ---- EMA target tracking on PPO-only outer iterations (no replay update this iteration) ----
     # Identical to legacy off-path (GATE 13): replay_mode=off EMAs every iteration; a replay
     # update performs its own EMA internally, so we skip the PPO-only EMA on those iterations.
@@ -833,12 +908,15 @@ print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
 # a HARD STOP. full_p2_legacy is the only mode permitted to make them nonzero.
 if REPLAY_MODE in ("off", "original_vtrace"):
     counters.assert_hindsight_awr_disabled()
-# Phase4A-v2 (§七): MATCHED_REPLAY_EXPOSURE readiness. A formal two-arm Carry causal
+# Phase4A-v2.1 (§五): MATCHED_REPLAY_EXPOSURE readiness. A formal two-arm Carry causal
 # conclusion requires the Persistent and Reset128 arms to have consumed IDENTICAL replay
-# exposure: persistent_replay_update_count == reset128_replay_update_count AND
-# persistent_replay_sequences_consumed == reset128_replay_sequences_consumed. Each arm records
-# its own (replay_update_success_count, replay_sequences_consumed); the cross-arm equality is
-# adjudicated host-side from the two summaries. This arm reports its values + the protocol flag.
+# exposure across the full EXPOSURE_MATCH_FIELDS set (replay_attempt_mask,
+# replay_update_outer_updates, replay_update_count, replay_sequences_consumed,
+# replay_batch_sizes, replay_sequence_lengths). Each arm records its own exposure_certificate
+# below; the cross-arm equality is adjudicated host-side by
+# tests/phase4a_v2_exposure_validator.py from the two summaries. This arm reports its
+# certificate + the four-way label split (phase4a_v2.replay_labels); it does NOT self-declare
+# MATCHED_REPLAY_EXPOSURE=PASS (no two-arm run this round -> NOT_RUN).
 summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
                total_updates=args.total_updates, global_step=args.total_updates * STEPS_PER_UPDATE,
                final_params_sha256=_params_sha(params), base_sha256=base_sha,
@@ -856,7 +934,30 @@ summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
                policy_version=counters.policy_version,
                outer_update_index=counters.outer_update_index,
                global_env_steps=counters.global_env_steps,
-               matched_replay_protocol_ready=bool(REPLAY_MODE == "original_vtrace"),
+               # Phase4A-v2.1 (§四): the single conflated MATCHED_REPLAY_PROTOCOL_READY flag is
+               # REMOVED. The four distinct labels live in phase4a_v2.replay_labels
+               # (SAME_REPLAY_PROTOCOL=READY / MATCHED_REPLAY_EXPOSURE=NOT_RUN /
+               #  MATCHED_REPLAY_CONTENT=NOT_CLAIMED / ENDOGENOUS_REPLAY_SCREENING=READY_AFTER_SMOKE).
+               # Phase4A-v2.1 (§五): the per-arm MATCHED_REPLAY_EXPOSURE certificate — the raw
+               # exposure record the two-arm validator (tests/phase4a_v2_exposure_validator.py)
+               # compares. One row per outer update, in order. sample_ids_*/start_offsets_* are
+               # per-arm INTERNAL provenance ONLY (endogenous buffers: NOT compared cross-arm).
+               exposure_certificate=dict(
+                   outer_update_count=int(counters.outer_update_index),
+                   replay_attempt_mask=[bool(x) for x in replay_attempt_mask],
+                   replay_attempt_outer_updates=list(replay_attempt_outer_updates),
+                   replay_not_ready_outer_updates=list(replay_not_ready_outer_updates),
+                   replay_update_outer_updates=list(replay_update_outer_updates),
+                   replay_update_count=int(counters.replay_update_count),
+                   accepted_replay_policy_update_count=int(
+                       counters.accepted_replay_policy_update_count),
+                   kl_rejected_replay_update_count=int(counters.kl_rejected_replay_update_count),
+                   replay_sequences_consumed=int(replay_sequences_consumed),
+                   replay_batch_sizes=list(replay_batch_sizes),
+                   replay_sequence_lengths=[list(x) for x in replay_sequence_lengths],
+                   eligible_count_by_outer_update=list(eligible_count_by_outer_update),
+                   sample_ids_by_outer_update=[list(x) for x in sample_ids_by_outer_update],
+                   start_offsets_by_outer_update=[list(x) for x in start_offsets_by_outer_update]),
                p2_frozen=dict(rho_bar=fp_cfg.rho_bar, c_bar=fp_cfg.c_bar, beta=fp_cfg.beta,
                               w_max=fp_cfg.w_max, w_vtrace=fp_cfg.w_vtrace, w_awr=fp_cfg.w_awr,
                               kl_replay_max=fp_cfg.kl_replay_max, ema_tau=fp_cfg.ema_tau,

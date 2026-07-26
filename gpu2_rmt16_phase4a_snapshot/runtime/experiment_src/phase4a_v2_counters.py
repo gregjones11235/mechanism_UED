@@ -79,6 +79,11 @@ class Phase4ACounters:
     replay_attempt_count: int = 0
     # Number of individual Replay sequence SAMPLE attempts (formerly conflated with
     # hindsight_attempts). Independent of relabelability.
+    kl_rejected_replay_update_count: int = 0
+    # Phase4A-v2.1 (§五): number of executed Replay gradient updates that were KL-rolled-back
+    # by the transactional KL gate. Complement of accepted_replay_policy_update_count within
+    # replay_update_count (executed = accepted + kl_rejected, absent hard stops). Part of the
+    # per-arm exposure certificate; does NOT advance policy_version.
 
     # --- policy version ---
     policy_version: int = 0
@@ -121,9 +126,11 @@ class Phase4ACounters:
         """Replay update ran but was KL-rolled-back: policy-affecting side reverted.
 
         policy_version does NOT advance; accepted count does NOT advance. The executed
-        count was already bumped by on_replay_update_executed.
+        count was already bumped by on_replay_update_executed. Phase4A-v2.1 (§五): the
+        rejection is now COUNTED (kl_rejected_replay_update_count) for the exposure
+        certificate; counting a rollback does not change any policy-affecting state.
         """
-        return None
+        self.kl_rejected_replay_update_count += 1
 
     # ----- full_p2_legacy-only firewall increments (never called by original_vtrace) -----
     def on_hindsight_attempt(self, n: int = 1) -> None:

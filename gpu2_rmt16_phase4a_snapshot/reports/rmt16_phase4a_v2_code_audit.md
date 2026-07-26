@@ -107,3 +107,24 @@
 - off-path 加性 → GATE 13 预期逐位不变（#22 服务器 CPU 实测确认）。
 - original_vtrace 结构隔离 → GATE 4/5/6 预期通过（#22 实测 + monkeypatch 确认）。
 - config 单变量契约 → GATE 14 本地已 PASS（仅 `carry_mode` 差异）。
+
+---
+
+## E. Phase4A-v2.1 加固审计增补
+
+- `rmt_collect.collect_rollout_rmt`：start 版本读取点位于 `pending.reset_slot(e, ...)` **之前**
+  （GATE16 静态索引序检查）；end=当前 policy_version；两条断言在构造 `RMTTrajectory` 前。
+- `rmt_replay_buffer.sample()`：`policy_version_start/end/span` 逐字传播，别名绑定 start
+  （GATE18 行为验证）。
+- `phase4a_v2_contract.py`（新增，纯 Python）：policy-lag 身份 + fail-closed 配置校验 +
+  四标签 + exposure 证书规格/比较/门禁；被 launcher、gates、validator 共用。
+- `train_rmt16_p2replay.py`：manifest 合入 `policy_lag_runtime_manifest(REPLAY_MODE)` +
+  `replay_protocol_labels(...)`；summary 删除 `matched_replay_protocol_ready=`，改输出
+  `exposure_certificate`（14 字段）+ 运行时 fail-closed lag 一致性守卫；新增每 outer-update
+  exposure 记录（attempt mask / update indices / batch sizes / seq lengths / eligible counts /
+  内部 sample_ids & start_offsets）。
+- `phase4a_v2_counters.py`：新增 `kl_rejected_replay_update_count`（计数不改 policy 状态；
+  off-path 计数等价不变，GATE13 仍 PASS）。
+- configs：活动 `max_policy_lag:16` 移除；`policy_lag`/`exposure_contract`/`legacy_full_p2_only`
+  两臂逐字相同（GATE14 复验仅 carry_mode 差异；runtime_assignment 仅 gpu_uuid/out_dir 差异）。
+- 全部 v2.1 新增/修改 `.py` 通过 `py_compile` 与 `compileall`（本地 + 服务器 CPU）。

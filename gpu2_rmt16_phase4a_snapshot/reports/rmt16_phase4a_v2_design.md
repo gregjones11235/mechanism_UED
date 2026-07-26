@@ -205,3 +205,39 @@ GATE12 checkpoint 含 params/PPO opt/Replay opt/EMA/RNG/action RNG/buffer/pendin
 RMT state/全部计数器；GATE13 旧探针 off-path 逐位不变；GATE14 Persistent/Reset config diff 仅
 carry_mode；GATE15 full_p2_legacy 需显式授权。**任一门禁失败立即停止汇报，不自动修码重跑。**
 实现与结果见 `tests/test_phase4a_v2_gates.py` 与 `rmt16_phase4a_v2_test_report.md`。
+
+---
+
+## Phase4A-v2.1 加固增补（PROVENANCE_AND_EXPOSURE_HARDENING）
+
+1. **Episode policy-version 区间出处（§二）**：`RMTTrajectory` / `RMTReplaySample` 新增
+   `policy_version_start/end/span`。完成 episode 时，start 取自 `pending.policy_version[e]`
+   （**reset_slot 覆写之前**读取），end = 当前已接受 `policy_version`，span = end−start，
+   断言 `end>=start`、`span>=0`。`policy_version_at_collection` 降级为
+   **DEPRECATED_ALIAS_OF_POLICY_VERSION_START**（不再是 end/当前版本——那正是被修的 bug）。
+   科学边界：`PER_TRANSITION_POLICY_VERSION=NOT_RECORDED`，
+   `EPISODE_POLICY_VERSION_RANGE=RECORDED`；V-trace 用每 transition 存储的 behavior log_probs，
+   不需要逐 transition 策略版本。`reset_slot(e, policy_version=current)` 语义保留（新 episode
+   余下步仍由当前 rollout 策略生成，PPO 更新在 rollout 之后）。
+2. **policy-lag 门禁身份（§三）**：original_vtrace 的 policy-lag gate = **NOT_APPLICABLE**。
+   config 的活动 `max_policy_lag:16` 替换为
+   `policy_lag:{active:false, mode:not_applicable_original_vtrace, max_policy_lag:null,
+   correction:{method:vtrace_importance_sampling, rho_bar:1.0, c_bar:1.0}}`；
+   `original_vtrace + active=true`（或顶层残留 max_policy_lag）fail-closed
+   `ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT`（config 校验器 + launcher 运行时守卫）。
+   遗留 lag 仅存于 `legacy_full_p2_only.max_policy_lag:16`。manifest 记录
+   `policy_lag_gate_active=false / max_policy_lag=null / off_policy_correction=vtrace_importance_sampling`。
+3. **四标签拆分（§四/§五）**：删除单一 `matched_replay_protocol_ready`。四标签：
+   `SAME_REPLAY_PROTOCOL=READY`、`MATCHED_REPLAY_EXPOSURE=NOT_RUN`、
+   `MATCHED_REPLAY_CONTENT=NOT_CLAIMED`、`ENDOGENOUS_REPLAY_SCREENING=READY_AFTER_SMOKE`。
+   每臂 summary 输出 14 字段 `exposure_certificate`；两级跨臂比较 + fail-closed 门禁见
+   `rmt16_phase4a_v2_exposure_contract.md` 与 `tests/phase4a_v2_exposure_validator.py`。
+4. **原始 probe JSONL 入 Git（§六）**：`evidence/raw_probe/`（6 证据文件 + SHA256SUMS + README），
+   服务器源 SHA 先对清单校验再拷贝；`tests/recompute_probe_step.py --persistent/--reset128/--out`
+   全量重算（无硬编码）→ `rmt16_l512_probe_recomputed.json`（8979/BOTH）。
+5. **GATE13 统一（§七）**：两个标签——`GATE13_STRUCTURAL_OFF_PATH_EQUIVALENCE=PASS`
+   （加性 + 计数等价 + 静态守卫）与 `GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN=NOT_RUN`
+   （本轮无参数更新训练；合成 CPU 单测不作为真实 rollout 复跑声明）。
+6. **新增门禁 16–26（§十）**：provenance（16–18）、policy-lag（19–21）、标签拆分（22）、
+   exposure fail-closed（23–24）、冻结证据（25–26）。本地 25 PASS/1 SKIP(JAX)；服务器 CPU
+   26 PASS/0 SKIP。

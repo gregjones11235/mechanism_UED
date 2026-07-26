@@ -1,0 +1,52 @@
+{
+  "arm": "RMT16-Reset128-PPO",
+  "carry_mode": "reset128",
+  "probe": "REACHABILITY_ONLY",
+  "not_for_formal_science": true,
+  "replay": "off",
+  "replay_note": "replay learner + hindsight OFF; buffer collection of complete done episodes ON",
+  "total_updates": 8,
+  "total_env_steps": 16384,
+  "online_ppo_update_count": 8,
+  "completed_episode_count": 21,
+  "all_episode_lengths_sorted": [
+    49,
+    70,
+    85,
+    127,
+    128,
+    147,
+    155,
+    192,
+    251,
+    255,
+    273,
+    376,
+    383,
+    397,
+    428,
+    466,
+    562,
+    570,
+    586,
+    726,
+    792
+  ],
+  "count_ge_512": 5,
+  "fraction_ge_512": 0.23809523809523808,
+  "first_ge512": {
+    "first_ge512_update": 4,
+    "first_ge512_global_step": 8241,
+    "first_ge512_episode_id": 2,
+    "first_ge512_length": 562
+  },
+  "termination_reason_counts": {
+    "player_death": 17,
+    "task_success": 4
+  },
+  "final_params_sha256": "6ccfe16aa4f6f1d1cff8e9f59a770467575d0edbf1497eff3a25bba860c56f14",
+  "base_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "step0_params_in": "ckpt/0/full_state.pkl",
+  "early_stop_used": false,
+  "timestamp_utc": "2026-07-26T11:40:31Z"
+}

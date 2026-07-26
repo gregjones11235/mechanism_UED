@@ -80,7 +80,28 @@ scientific_config:
   kl_replay_max: 0.05
   kl_run_max: 0.1
   actor_step_scales: [1.0, 0.5, 0.25, 0.125]
-  max_policy_lag: 16
+  # ---- Phase4A-v2.1 (§三): policy-lag GATE identity. For original_vtrace there is NO active
+  # hard lag gate; V-trace importance sampling (rho_bar/c_bar) is the only off-policy correction.
+  # A stray top-level max_policy_lag under original_vtrace is a fail-closed config conflict. ----
+  policy_lag:
+    active: false
+    mode: not_applicable_original_vtrace
+    max_policy_lag: null
+    correction:
+      method: vtrace_importance_sampling
+      rho_bar: 1.0
+      c_bar: 1.0
+  # ---- Phase4A-v2.1 (§四/§五): replay protocol/exposure/content contract (label split) ----
+  exposure_contract:
+    same_replay_protocol: READY
+    matched_replay_exposure: NOT_RUN
+    matched_replay_content: NOT_CLAIMED
+    endogenous_replay_screening: READY_AFTER_SMOKE
+    buffer_kind: endogenous
+  # ---- Phase4A-v2.1 (§三): legacy lag gate, scoped ONLY to full_p2_legacy (default-forbidden,
+  # requires --allow-full-p2-legacy). NOT part of the active original_vtrace config. ----
+  legacy_full_p2_only:
+    max_policy_lag: 16
   ema_tau: 0.995
   ent_floor: 0.05
   grad_clip: 1.0

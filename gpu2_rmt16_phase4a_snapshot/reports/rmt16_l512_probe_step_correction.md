@@ -57,3 +57,20 @@ delta = 8979 - 8241 = 738  (= rollout_step*15 + env_id + 1 = 49*15 + 2 + 1)
 - 本修正**仅**改变 step 的"出处/数值标注"，**不**触及任何训练数值、探针重跑、Carry/performance 断言。
 - GATE 1（"旧 L512 可达性可由原始 episode 记录重算且结论仍 BOTH"）：方法自检（合成记录）本地 PASS；
   两臂真实 jsonl 重算服务器 PASS（即上表）。
+
+---
+
+## 5. Phase4A-v2.1 增补：原始证据入 Git，远端可复算（§六）
+
+- 六个原始 probe 产物（两臂 `_probe_episodes.jsonl` / `_probe_updates.jsonl` /
+  `_probe_summary.json`）已**先对 SHA 清单校验**（`RAW_PROBE_SOURCE_HASH_VERIFIED=true`），
+  安全扫描（无私钥/token/绝对 home 路径/主机名/用户名/GPU UUID）后字节一致冻结入
+  `gpu2_rmt16_phase4a_snapshot/evidence/raw_probe/`（含 `SHA256SUMS` + `README.md`）。
+- `tests/recompute_probe_step.py` 新增 `--persistent <jsonl> --reset128 <jsonl>
+  [--sha256sums <file>] --out <report>`：先按 SHA256SUMS 校验输入（不符 →
+  `RAW_PROBE_SOURCE_HASH_MISMATCH=BLOCKED`；源缺失 →
+  `RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY=BLOCKED_SOURCE_UNAVAILABLE`），再**全量重算**
+  （报告无任何硬编码数值）。
+- `reports/rmt16_l512_probe_recomputed.json`：persistent 20 completed / 6 ≥512；reset128 21 / 5；
+  first_ge512（episode 2, len 562, update 4, rollout_step 49, env 2）→ resolved **8979** 两臂
+  一致（Δ=738 vs 弃用 8241）；`L512_REACHABILITY=BOTH`；门禁 GATE25/26 覆盖。

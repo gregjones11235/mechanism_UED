@@ -17,9 +17,21 @@ only CORRECTS the step provenance, it does NOT change the verdict.
 Usage:
     python recompute_probe_step.py <episodes.jsonl> [label]
     python recompute_probe_step.py --selftest          # synthetic method self-test (no data needed)
-Prints a JSON report; exit 0 on success.
+
+Phase4A-v2.1 (§六) two-arm remote-recomputability mode (from the FROZEN in-repo raw probe JSONL):
+    python recompute_probe_step.py \
+        --persistent evidence/raw_probe/persistent_probe_episodes.jsonl \
+        --reset128   evidence/raw_probe/reset128_probe_episodes.jsonl \
+        [--sha256sums evidence/raw_probe/SHA256SUMS] \
+        --out reports/rmt16_l512_probe_recomputed.json
+
+The --out report is RECOMPUTED from the input records at run time — NOTHING is hardcoded; if the
+frozen evidence is unavailable the mode must be reported as BLOCKED_SOURCE_UNAVAILABLE, never
+faked. Prints a JSON report; exit 0 on success, 1 on fail-closed (hash mismatch / missing source).
 """
+import hashlib
 import json
+import os
 import sys
 
 NUM_ENVS = 16
@@ -87,24 +99,138 @@ def _selftest():
     return rep
 
 
-def main(argv):
-    if len(argv) > 1 and argv[1] == "--selftest":
-        rep = _selftest()
-        print("RECOMPUTE_SELFTEST=PASS")
-        print(json.dumps(rep, indent=2))
-        return 0
-    if len(argv) < 2:
-        print("usage: recompute_probe_step.py <episodes.jsonl> [label] | --selftest", file=sys.stderr)
-        return 2
-    path = argv[1]
-    label = argv[2] if len(argv) > 2 else path
+def _load_jsonl(path):
     records = []
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 records.append(json.loads(line))
-    rep = recompute_from_records(records)
+    return records
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _verify_sha256sums(files, sums_path):
+    """files: {basename: path}. Fail closed: any missing manifest entry / mismatch => BLOCKED."""
+    manifest = {}
+    with open(sums_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            digest, name = line.split(None, 1)
+            manifest[name.strip().lstrip("*")] = digest.lower()
+    results = {}
+    ok_all = True
+    for name, path in files.items():
+        actual = _sha256_file(path)
+        expected = manifest.get(os.path.basename(path))
+        ok = bool(expected is not None and actual == expected)
+        ok_all = ok_all and ok
+        results[os.path.basename(path)] = dict(sha256=actual, expected=expected, match=ok)
+    return ok_all, results
+
+
+def two_arm_recompute(persistent_path, reset128_path, sha256sums_path=None, out_path=None):
+    """§六 remote-recomputability recompute from the FROZEN raw probe JSONL (no rerun).
+
+    Everything in the report is DERIVED from the input records at run time. Fail-closed:
+    missing source file -> RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY=BLOCKED_SOURCE_UNAVAILABLE;
+    hash mismatch -> RAW_PROBE_SOURCE_HASH_MISMATCH=BLOCKED."""
+    report = dict(
+        recomputed_by="tests/recompute_probe_step.py",
+        method="offline recompute from frozen raw probe JSONL; NO probe rerun, NO hardcoded values",
+        num_envs=NUM_ENVS, rollout_steps=ROLLOUT_STEPS, ge_len=GE_LEN,
+        inputs=dict(persistent=persistent_path, reset128=reset128_path))
+
+    for arm, path in (("persistent", persistent_path), ("reset128", reset128_path)):
+        if not (path and os.path.isfile(path)):
+            report["RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY"] = "BLOCKED_SOURCE_UNAVAILABLE"
+            report["blocked_arm"] = arm
+            report["blocked_path"] = path
+            return report
+
+    if sha256sums_path:
+        if not os.path.isfile(sha256sums_path):
+            report["RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY"] = "BLOCKED_SOURCE_UNAVAILABLE"
+            report["blocked_path"] = sha256sums_path
+            return report
+        ok, results = _verify_sha256sums(
+            {"persistent": persistent_path, "reset128": reset128_path}, sha256sums_path)
+        report["hash_verification"] = dict(sha256sums=sha256sums_path, files=results, all_match=ok)
+        if not ok:
+            report["RAW_PROBE_SOURCE_HASH_MISMATCH"] = "BLOCKED"
+            return report
+
+    rep_p = recompute_from_records(_load_jsonl(persistent_path)); rep_p["source"] = persistent_path
+    rep_r = recompute_from_records(_load_jsonl(reset128_path)); rep_r["source"] = reset128_path
+    report["arms"] = dict(persistent=rep_p, reset128=rep_r)
+
+    step_p = (rep_p["first_ge512"] or {}).get("first_ge512_resolved_env_step")
+    step_r = (rep_r["first_ge512"] or {}).get("first_ge512_resolved_env_step")
+    report["first_ge512_resolved_env_step_persistent"] = step_p
+    report["first_ge512_resolved_env_step_reset128"] = step_r
+    report["cross_arm_resolved_step_agree"] = bool(
+        step_p is not None and step_p == step_r)
+    if report["cross_arm_resolved_step_agree"]:
+        report["first_ge512_resolved_env_step"] = step_p
+
+    if rep_p["reachable"] and rep_r["reachable"]:
+        verdict = "BOTH"
+    elif rep_p["reachable"]:
+        verdict = "PERSISTENT_ONLY"
+    elif rep_r["reachable"]:
+        verdict = "RESET128_ONLY"
+    else:
+        verdict = "NEITHER"
+    report["L512_REACHABILITY"] = verdict
+    report["RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY"] = "PASS"
+
+    if out_path:
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        report["report_written"] = out_path
+    return report
+
+
+def main(argv):
+    # ---- legacy / self-test CLIs (unchanged) ----
+    if len(argv) > 1 and argv[1] == "--selftest":
+        rep = _selftest()
+        print("RECOMPUTE_SELFTEST=PASS")
+        print(json.dumps(rep, indent=2))
+        return 0
+    # ---- §六 two-arm remote-recomputability CLI ----
+    if any(a in argv for a in ("--persistent", "--reset128", "--out")):
+        import argparse
+        ap = argparse.ArgumentParser()
+        ap.add_argument("--persistent", required=True)
+        ap.add_argument("--reset128", required=True)
+        ap.add_argument("--sha256sums", default=None)
+        ap.add_argument("--out", default=None)
+        a = ap.parse_args(argv[1:])
+        report = two_arm_recompute(a.persistent, a.reset128, a.sha256sums, a.out)
+        print(json.dumps(report, indent=2))
+        blocked = ("RAW_PROBE_SOURCE_HASH_MISMATCH" in report
+                   or report.get("RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY",
+                                  "").startswith("BLOCKED"))
+        return 1 if blocked else 0
+    if len(argv) < 2:
+        print("usage: recompute_probe_step.py <episodes.jsonl> [label] | --selftest\n"
+              "       recompute_probe_step.py --persistent <jsonl> --reset128 <jsonl> "
+              "[--sha256sums <SHA256SUMS>] [--out <report.json>]", file=sys.stderr)
+        return 2
+    path = argv[1]
+    label = argv[2] if len(argv) > 2 else path
+    rep = recompute_from_records(_load_jsonl(path))
     rep["source"] = label
     print(json.dumps(rep, indent=2))
     return 0

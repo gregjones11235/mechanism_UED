@@ -44,15 +44,32 @@ class RMTTrajectory(Trajectory):
     rmt_anchor_segbuf: np.ndarray = field(default_factory=lambda: np.array([]))
     rmt_anchor_segcount: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.int64))
 
-    # ---- Phase4A-v2 (CC2 directive §三): split provenance (additive, default 0) ----
-    # outer_update_index          : OUTER rollout+PPO loop index at episode completion
-    #                               (== inherited collected_update_count for legacy compat).
-    # policy_version_at_collection: ACCEPTED policy version when this episode's transitions
-    #                               were collected — the authoritative replay policy-lag
-    #                               reference (policy_version_at_collection advances only on
-    #                               committed, policy-changing updates; a KL-rolled-back replay
-    #                               update never advances it).
+    # ---- Phase4A-v2 / v2.1 (CC2 §二/§三): split provenance (additive, default 0) ----
+    # outer_update_index : OUTER rollout+PPO loop index at episode completion
+    #                      (== inherited collected_update_count for legacy compat).
+    #
+    # Phase4A-v2.1 (§二) EPISODE policy-version RANGE. An episode (trajectory) can span
+    # MULTIPLE outer rollouts, therefore MULTIPLE policy versions. These three fields record
+    # that RANGE — they are NOT per-transition provenance:
+    #   policy_version_start : policy version in force when the episode BEGAN
+    #                          (pending.policy_version[e] at completion, captured BEFORE the
+    #                          completing reset_slot overwrites it).
+    #   policy_version_end   : policy version of the rollout that COMPLETED the episode
+    #                          (the current accepted policy_version at completion).
+    #   policy_version_span  : policy_version_end - policy_version_start (>= 0).
+    # Labels: PER_TRANSITION_POLICY_VERSION=NOT_RECORDED, EPISODE_POLICY_VERSION_RANGE=RECORDED.
+    # original_vtrace does V-trace off-policy correction with each transition's STORED behavior
+    # log_prob, so a per-step policy-version array is neither recorded nor required this round.
+    #
+    # policy_version_at_collection : DEPRECATED alias of policy_version_start.
+    #   POLICY_VERSION_AT_COLLECTION = DEPRECATED_ALIAS_OF_POLICY_VERSION_START.
+    #   Kept ONLY for schema/back-compat; it MUST equal policy_version_start and is NO LONGER
+    #   the authoritative "single version of the whole trajectory" (that notion was wrong for
+    #   multi-rollout episodes).
     outer_update_index: int = 0
+    policy_version_start: int = 0
+    policy_version_end: int = 0
+    policy_version_span: int = 0
     policy_version_at_collection: int = 0
 
     def validate_anchors(self):
@@ -97,8 +114,14 @@ class RMTReplaySample(ReplaySample):
     pre_anchor_rmt_tokens: np.ndarray = field(default_factory=lambda: np.array([]))   # [num_tokens, D]
     pre_anchor_rmt_segbuf: np.ndarray = field(default_factory=lambda: np.array([]))   # [segment_len, D]
     pre_anchor_rmt_segcount: int = 0
-    # Phase4A-v2 (CC2 directive §三): authoritative replay policy-lag reference (accepted
-    # policy version when the source episode was collected). Additive, default 0.
+    # Phase4A-v2.1 (CC2 §二): source-episode policy-version RANGE, propagated verbatim from the
+    # source trajectory by sample(). Additive, default 0. policy_version_at_collection is the
+    # DEPRECATED alias of policy_version_start (MUST equal start). A sampled WINDOW inherits the
+    # episode's version range; its individual transitions are NOT each stamped with a version
+    # (PER_TRANSITION_POLICY_VERSION=NOT_RECORDED) — V-trace uses the stored behavior log_probs.
+    policy_version_start: int = 0
+    policy_version_end: int = 0
+    policy_version_span: int = 0
     policy_version_at_collection: int = 0
 
 
@@ -217,7 +240,12 @@ class RMTReplayBuffer(ReplayBuffer):
             next_value=next_value,
             episode_done=slice_done,
             collected_update_count=int(getattr(traj, "collected_update_count", 0)),
-            policy_version_at_collection=int(getattr(traj, "policy_version_at_collection", 0)),
+            # Phase4A-v2.1 (§二): propagate the source-episode policy-version RANGE verbatim.
+            # policy_version_at_collection is the DEPRECATED alias and MUST equal start.
+            policy_version_start=int(getattr(traj, "policy_version_start", 0)),
+            policy_version_end=int(getattr(traj, "policy_version_end", 0)),
+            policy_version_span=int(getattr(traj, "policy_version_span", 0)),
+            policy_version_at_collection=int(getattr(traj, "policy_version_start", 0)),
             pre_anchor_rmt_tokens=rmt_tok,
             pre_anchor_rmt_segbuf=rmt_segbuf,
             pre_anchor_rmt_segcount=int(rmt_segcount),

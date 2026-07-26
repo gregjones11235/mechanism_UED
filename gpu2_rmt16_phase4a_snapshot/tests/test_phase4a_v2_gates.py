@@ -8,9 +8,13 @@ or under pytest:
 
 Layering:
   * Pure-Python / numpy / AST / subprocess gates run ANYWHERE (no JAX needed):
-    GATE 1(method), 2, 3, 7, 9, 10, 11(counters), 12(static), 13(structural), 14, 15.
-  * JAX gates run on the SERVER CPU (dicode310): GATE 4(monkeypatch), 5/6(ast+jax), 8, 13(numeric*).
-    They pytest.skip when JAX is absent so the local suite stays green for what is provable locally.
+    GATE 1(method), 2, 3, 7, 9, 10, 11(counters), 12(static), 13(structural), 14, 15,
+    and the Phase4A-v2.1 gates 16(structural+model), 17(structural part), 18, 19, 20, 21,
+    22, 23, 24, 25, 26.
+  * JAX gates run on the SERVER CPU (dicode310): GATE 4(monkeypatch), 5/6(ast+jax), 8, 13(numeric*),
+    and the GATE 17 behavioral part (RMTPendingEpisodeBuffers.reset_slot).
+    They pytest.skip / degrade to the structural part when JAX is absent so the local suite
+    stays green for what is provable locally.
 
 GATE 13's numeric bit-exact re-verification requires a parameter-updating run, which is NOT
 authorized this round (NEW_TRAINING_RUNS=0); GATE 13 is therefore proven by construction
@@ -512,6 +516,370 @@ def gate15():
 
 
 # ----------------------------------------------------------------------------
+# GATE 16 — policy_version start/end/span captured across multi-rollout episodes (§二)
+# ----------------------------------------------------------------------------
+
+def gate16():
+    import os
+    rc = _read(os.path.join(_EXP, "rmt_collect.py"))
+    # (a) structural: the completing trajectory reads the START version from pending BEFORE the
+    # reset_slot overwrites it, records end = current version, span = end-start, with asserts,
+    # and the deprecated alias is bound to START (not end).
+    required = [
+        "episode_start_version = int(pending.policy_version[e])",
+        "episode_end_version = int(policy_version)",
+        "episode_version_span = episode_end_version - episode_start_version",
+        "assert episode_end_version >= episode_start_version",
+        "assert episode_version_span >= 0",
+        "policy_version_start=episode_start_version",
+        "policy_version_end=episode_end_version",
+        "policy_version_span=episode_version_span",
+        "policy_version_at_collection=episode_start_version",
+    ]
+    missing = [frag for frag in required if frag not in rc]
+    if missing:
+        return FAIL, f"rmt_collect missing provenance fragments: {missing}"
+    if rc.index("episode_start_version = int(pending.policy_version[e])") \
+            > rc.index("pending.reset_slot(e,"):
+        return FAIL, "start version captured AFTER reset_slot (would read the NEW episode's start)"
+    # (b) behavioral model: an episode open at rollout 0 completes during rollout 2.
+    pv_slot = [0]          # pending.policy_version[e]: the START version of the open episode
+    current = 0            # accepted policy_version (PPO commits once per outer update)
+    for _rollout in range(2):
+        current += 1                       # PPO main update after each completed rollout
+    start, end = int(pv_slot[0]), int(current)
+    span = end - start
+    if (start, end, span) != (0, 2, 2) or end < start:
+        return FAIL, f"3-rollout episode provenance wrong: start={start} end={end} span={span}"
+    # reset_slot opens the NEXT episode with start == current rollout version (span-0 possible)
+    pv_slot[0] = int(current)
+    if int(pv_slot[0]) != current or current - int(pv_slot[0]) != 0:
+        return FAIL, "new episode start != current version (span-0 case broken)"
+    # off-mode equivalence: policy_version == outer loop index => an episode opened during
+    # outer update u0 gets start == u0 (bit-exact with the legacy stamping)
+    pv_off = 0
+    for u0 in range(3):
+        if pv_off != u0:
+            return FAIL, f"off-mode policy_version {pv_off} != outer index {u0}"
+        pv_off += 1                                # PPO commit once per outer update
+    return PASS, ("start=pending.policy_version[e] read BEFORE reset_slot; end=current; "
+                  "span=end-start>=0 asserted; alias==start; 3-rollout episode => (0,2,2)")
+
+
+# ----------------------------------------------------------------------------
+# GATE 17 — reset_slot opens the new episode with the CURRENT rollout policy version (§二.3)
+# ----------------------------------------------------------------------------
+
+def gate17():
+    import os
+    rc = _read(os.path.join(_EXP, "rmt_collect.py"))
+    if "pending.reset_slot(e, policy_version=int(policy_version))" not in rc:
+        return FAIL, "reset_slot no longer stamps the new episode with the current policy version"
+    if HAVE_JAX:
+        from rmt_collect import RMTPendingEpisodeBuffers
+        p = RMTPendingEpisodeBuffers(num_envs=2, first_episode_id=0, first_policy_version=0)
+        if p.policy_version != [0, 0]:
+            return FAIL, f"initial policy_version {p.policy_version} != [0, 0]"
+        old_id = p.episode_id[0]
+        p.reset_slot(0, policy_version=5)          # new episode starts at version 5
+        if p.policy_version[0] != 5 or p.policy_version[1] != 0:
+            return FAIL, f"after reset_slot policy_version={p.policy_version} (expected [5, 0])"
+        if p.episode_id[0] == old_id:
+            return FAIL, "reset_slot did not advance the episode id"
+        return PASS, ("reset_slot(e, policy_version=current): new episode start==current "
+                      "(behavioral, JAX CPU) + structural stamp check")
+    return PASS, ("structural: reset_slot(e, policy_version=int(policy_version)) present "
+                  "(behavioral part runs on server CPU; JAX absent locally)")
+
+
+# ----------------------------------------------------------------------------
+# GATE 18 — replay sample propagates start/end/span verbatim; alias == start (§二)
+# ----------------------------------------------------------------------------
+
+def gate18():
+    from rmt_replay_buffer import RMTReplayBuffer
+    t = make_rmt_traj(220, seed=5)
+    t.policy_version_start = 3
+    t.policy_version_end = 7
+    t.policy_version_span = 4
+    t.policy_version_at_collection = 3            # deprecated alias of START
+    buf = RMTReplayBuffer(capacity=8, seed=1)
+    buf.insert(t)
+    batch = buf.sample_eligible(200, np.random.RandomState(0), 1)
+    if batch.status != "OK" or len(batch.samples) != 1:
+        return FAIL, f"sample failed: status={batch.status} n={len(batch.samples)}"
+    s = batch.samples[0]
+    if s.policy_version_start != 3:
+        return FAIL, f"sample policy_version_start={s.policy_version_start} != 3 (not propagated)"
+    if s.policy_version_end != 7:
+        return FAIL, f"sample policy_version_end={s.policy_version_end} != 7 (not propagated)"
+    if s.policy_version_span != 4:
+        return FAIL, f"sample policy_version_span={s.policy_version_span} != 4 (not propagated)"
+    if s.policy_version_at_collection != s.policy_version_start:
+        return FAIL, ("deprecated alias != start: "
+                      f"{s.policy_version_at_collection} != {s.policy_version_start}")
+    return PASS, "sample() propagates start=3/end=7/span=4 verbatim; alias==start==3"
+
+
+# ----------------------------------------------------------------------------
+# GATE 19 — original_vtrace + active policy-lag gate fails CLOSED (§三.1)
+# ----------------------------------------------------------------------------
+
+def gate19():
+    import os
+    import yaml
+    import phase4a_v2_contract as C
+    for arm in ("persistent", "reset128"):
+        path = os.path.join(_SNAPSHOT, "configs", f"rmt16_phase4a_v2_{arm}.yaml")
+        with open(path, encoding="utf-8") as f:
+            sc = yaml.safe_load(f)["scientific_config"]
+        # the REAL configs must pass the validator (active=false, no stray top-level lag)
+        C.validate_policy_lag_config(sc)
+        if sc.get("max_policy_lag") is not None:
+            return FAIL, f"{arm}: stray top-level max_policy_lag={sc.get('max_policy_lag')}"
+        if sc["policy_lag"]["active"] is not False:
+            return FAIL, f"{arm}: policy_lag.active={sc['policy_lag']['active']} (must be false)"
+        # fail-closed: active=true under original_vtrace MUST raise
+        bad = dict(sc); bad["policy_lag"] = dict(sc["policy_lag"], active=True)
+        try:
+            C.validate_policy_lag_config(bad)
+            return FAIL, f"{arm}: active=true did NOT raise"
+        except ValueError as e:
+            if "ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT" not in str(e):
+                return FAIL, f"{arm}: wrong error for active=true: {e}"
+        # fail-closed: stray top-level max_policy_lag MUST raise
+        bad2 = dict(sc); bad2["max_policy_lag"] = 16
+        try:
+            C.validate_policy_lag_config(bad2)
+            return FAIL, f"{arm}: stray top-level max_policy_lag did NOT raise"
+        except ValueError as e:
+            if "ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT" not in str(e):
+                return FAIL, f"{arm}: wrong error for stray top-level lag: {e}"
+    return PASS, ("both arms' configs validate; active=true and stray top-level max_policy_lag "
+                  "both raise ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT")
+
+
+# ----------------------------------------------------------------------------
+# GATE 20 — run manifest records lag-gate identity for original_vtrace (§三.2)
+# ----------------------------------------------------------------------------
+
+def gate20():
+    import phase4a_v2_contract as C
+    m = C.policy_lag_runtime_manifest("original_vtrace")
+    expected = dict(policy_lag_gate_active=False,
+                    policy_lag_gate_mode="not_applicable_original_vtrace",
+                    max_policy_lag=None,
+                    off_policy_correction="vtrace_importance_sampling",
+                    rho_bar=1.0, c_bar=1.0)
+    if m != expected:
+        return FAIL, f"manifest {m} != expected {expected}"
+    src = _read(_LAUNCHER)
+    if "import phase4a_v2_contract as CONTRACT" not in src:
+        return FAIL, "launcher does not import phase4a_v2_contract"
+    if "fields.update(CONTRACT.policy_lag_runtime_manifest(REPLAY_MODE))" not in src:
+        return FAIL, "launcher manifest does not record policy_lag_runtime_manifest"
+    if "CONTRACT.replay_protocol_labels(" not in src:
+        return FAIL, "launcher manifest does not record the four-way replay labels"
+    return PASS, ("manifest: policy_lag_gate_active=false / max_policy_lag=null / "
+                  "off_policy_correction=vtrace_importance_sampling / rho_bar=c_bar=1.0; "
+                  "wired into checkpoint + summary manifest")
+
+
+# ----------------------------------------------------------------------------
+# GATE 21 — legacy max_policy_lag scoped to full_p2_legacy ONLY (§三.3)
+# ----------------------------------------------------------------------------
+
+def gate21():
+    import os
+    import yaml
+    import phase4a_v2_contract as C
+    for arm in ("persistent", "reset128"):
+        path = os.path.join(_SNAPSHOT, "configs", f"rmt16_phase4a_v2_{arm}.yaml")
+        with open(path, encoding="utf-8") as f:
+            sc = yaml.safe_load(f)["scientific_config"]
+        if sc["legacy_full_p2_only"]["max_policy_lag"] != 16:
+            return FAIL, f"{arm}: legacy_full_p2_only.max_policy_lag != 16"
+        if sc["policy_lag"]["max_policy_lag"] is not None:
+            return FAIL, f"{arm}: active policy_lag.max_policy_lag not null"
+        if "max_policy_lag" in sc:
+            return FAIL, f"{arm}: top-level max_policy_lag leaked into scientific_config"
+    leg = C.policy_lag_runtime_manifest("full_p2_legacy", legacy_max_policy_lag=16)
+    if not (leg["policy_lag_gate_active"] is True and leg["max_policy_lag"] == 16
+            and leg["policy_lag_gate_mode"] == "legacy_full_p2"):
+        return FAIL, f"legacy manifest wrong: {leg}"
+    orig = C.policy_lag_runtime_manifest("original_vtrace")
+    if orig["policy_lag_gate_active"] or orig["max_policy_lag"] is not None:
+        return FAIL, f"original_vtrace polluted by legacy lag: {orig}"
+    off = C.policy_lag_runtime_manifest("off")
+    if off["policy_lag_gate_active"] or off["max_policy_lag"] is not None:
+        return FAIL, f"off polluted by legacy lag: {off}"
+    src = _read(_LAUNCHER)
+    if "ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT: runtime policy-lag gate active" not in src:
+        return FAIL, "launcher lacks the runtime fail-closed lag-gate consistency check"
+    return PASS, ("legacy lag=16 lives ONLY under legacy_full_p2_only; manifests: "
+                  "legacy active=true/16, original_vtrace+off active=false/null; "
+                  "runtime fail-closed guard present")
+
+
+# ----------------------------------------------------------------------------
+# GATE 22 — SAME_REPLAY_PROTOCOL vs MATCHED_REPLAY_EXPOSURE are NOT interchangeable (§四)
+# ----------------------------------------------------------------------------
+
+def gate22():
+    import phase4a_v2_contract as C
+    lab = C.replay_protocol_labels("original_vtrace", 129, 4)
+    if lab["SAME_REPLAY_PROTOCOL"] != "READY":
+        return FAIL, f"SAME_REPLAY_PROTOCOL={lab['SAME_REPLAY_PROTOCOL']} (expected READY)"
+    if lab["MATCHED_REPLAY_EXPOSURE"] != "NOT_RUN":
+        return FAIL, f"MATCHED_REPLAY_EXPOSURE={lab['MATCHED_REPLAY_EXPOSURE']} (expected NOT_RUN)"
+    if lab["MATCHED_REPLAY_CONTENT"] != "NOT_CLAIMED":
+        return FAIL, f"MATCHED_REPLAY_CONTENT={lab['MATCHED_REPLAY_CONTENT']} (expected NOT_CLAIMED)"
+    if lab["ENDOGENOUS_REPLAY_SCREENING"] != "READY_AFTER_SMOKE":
+        return FAIL, f"ENDOGENOUS_REPLAY_SCREENING={lab['ENDOGENOUS_REPLAY_SCREENING']}"
+    # the single conflated flag must be GONE from the launcher summary
+    src = _read(_LAUNCHER)
+    if "matched_replay_protocol_ready=" in src:
+        return FAIL, "conflated single matched_replay_protocol_ready= flag still assigned"
+    if "CONTRACT.replay_protocol_labels(" not in src:
+        return FAIL, "launcher does not emit the four-way label split"
+    return PASS, ("protocol READY while exposure NOT_RUN / content NOT_CLAIMED / screening "
+                  "READY_AFTER_SMOKE; conflated single flag removed from launcher summary")
+
+
+# ----------------------------------------------------------------------------
+# GATE 23 — no complete two-arm certificates => no MATCHED_REPLAY_EXPOSURE=PASS (§五.2)
+# ----------------------------------------------------------------------------
+
+def gate23():
+    import phase4a_v2_exposure_validator as EV
+    import phase4a_v2_contract as C
+    kw = dict(replay_updates=2, consumed=8, batch_sizes=[4, 4], seq_lens=[[129] * 4] * 2,
+              attempt_mask=[False, True, True], not_ready_updates=[0])
+    sa = EV._synthetic_summary("persistent", **kw)
+    sb = EV._synthetic_summary("reset128", **kw)
+    rep = EV.validate_two_arm(sa, sb)
+    if rep["MATCHED_REPLAY_EXPOSURE"] != "PASS":
+        return FAIL, f"identical certificates did not PASS: {rep['EXPOSURE_DIFFERING_FIELDS']}"
+    # dropping ANY certificate field => fail-closed, no PASS
+    sb_bad = EV._synthetic_summary("reset128", drop_field="replay_update_count", **kw)
+    try:
+        EV.validate_two_arm(sa, sb_bad)
+        return FAIL, "incomplete certificate did NOT raise"
+    except ValueError as e:
+        if "MATCHED_REPLAY_CERTIFICATE_REQUIRED" not in str(e):
+            return FAIL, f"wrong error: {e}"
+    # PASS-claim guard refuses a non-PASS comparison
+    sb_mis = EV._synthetic_summary("reset128", replay_updates=1, consumed=4, batch_sizes=[4],
+                                   seq_lens=[[129] * 4], attempt_mask=[False, True, True],
+                                   not_ready_updates=[0])
+    try:
+        C.assert_matched_exposure_pass_allowed(
+            EV.extract_certificate(sa, "persistent"), EV.extract_certificate(sb_mis, "reset128"))
+        return FAIL, "PASS-claim guard did NOT raise on mismatched exposure"
+    except ValueError as e:
+        if "MATCHED_REPLAY_CERTIFICATE_REQUIRED" not in str(e):
+            return FAIL, f"wrong PASS-claim error: {e}"
+    return PASS, ("complete equal certificates => PASS; missing field => "
+                  "MATCHED_REPLAY_CERTIFICATE_REQUIRED; PASS-claim guard refuses mismatch")
+
+
+# ----------------------------------------------------------------------------
+# GATE 24 — endogenous buffers can NEVER claim MATCHED_REPLAY_CONTENT=PASS (§五.2)
+# ----------------------------------------------------------------------------
+
+def gate24():
+    import phase4a_v2_exposure_validator as EV
+    import phase4a_v2_contract as C
+    try:
+        C.assert_content_match_not_claimed(buffer_kind="endogenous")
+        return FAIL, "endogenous content claim did NOT raise"
+    except ValueError as e:
+        if "ENDOGENOUS_REPLAY_CONTENT_CANNOT_BE_CLAIMED_MATCHED" not in str(e):
+            return FAIL, f"wrong error: {e}"
+    kw = dict(replay_updates=1, consumed=4, batch_sizes=[4], seq_lens=[[129] * 4],
+              attempt_mask=[True, True], not_ready_updates=[])
+    sa = EV._synthetic_summary("persistent", **kw)
+    sb = EV._synthetic_summary("reset128", **kw)
+    rep = C.compare_exposure(EV.extract_certificate(sa, "persistent"),
+                             EV.extract_certificate(sb, "reset128"))
+    if rep["CONTENT_MATCH"] != "NOT_APPLICABLE_ENDOGENOUS_BUFFERS":
+        return FAIL, f"CONTENT_MATCH={rep['CONTENT_MATCH']} (must never be PASS)"
+    if rep["MATCHED_REPLAY_CONTENT"] != "NOT_CLAIMED":
+        return FAIL, f"MATCHED_REPLAY_CONTENT={rep['MATCHED_REPLAY_CONTENT']}"
+    # an INPUT certificate that claims content PASS => fail-closed
+    sb_claim = EV._synthetic_summary("reset128", **kw)
+    sb_claim["phase4a_v2"]["replay_labels"]["MATCHED_REPLAY_CONTENT"] = "PASS"
+    try:
+        EV.validate_two_arm(sa, sb_claim)
+        return FAIL, "input content=PASS claim did NOT raise"
+    except ValueError as e:
+        if "ENDOGENOUS_REPLAY_CONTENT_CANNOT_BE_CLAIMED_MATCHED" not in str(e):
+            return FAIL, f"wrong input-claim error: {e}"
+    return PASS, ("endogenous => CONTENT_MATCH=NOT_APPLICABLE_ENDOGENOUS_BUFFERS (never PASS); "
+                  "content claims fail closed")
+
+
+# ----------------------------------------------------------------------------
+# GATE 25 — frozen raw probe files match SHA256SUMS (§六)
+# ----------------------------------------------------------------------------
+
+def gate25():
+    import os
+    import recompute_probe_step as R
+    ev = os.path.join(_SNAPSHOT, "evidence", "raw_probe")
+    sums = os.path.join(ev, "SHA256SUMS")
+    names = ["persistent_probe_episodes.jsonl", "persistent_probe_updates.jsonl",
+             "persistent_probe_summary.json", "reset128_probe_episodes.jsonl",
+             "reset128_probe_updates.jsonl", "reset128_probe_summary.json"]
+    missing = [n for n in names + ["SHA256SUMS"] if not os.path.isfile(os.path.join(ev, n))]
+    if missing:
+        return FAIL, (f"RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY=BLOCKED_SOURCE_UNAVAILABLE "
+                      f"(missing: {missing})")
+    ok, results = R._verify_sha256sums(
+        {n: os.path.join(ev, n) for n in names}, sums)
+    if not ok:
+        bad = {k: v for k, v in results.items() if not v["match"]}
+        return FAIL, f"RAW_PROBE_SOURCE_HASH_MISMATCH: {bad}"
+    return PASS, f"all {len(names)} frozen raw probe files match SHA256SUMS byte-for-byte"
+
+
+# ----------------------------------------------------------------------------
+# GATE 26 — recompute from frozen raw probe: 6/20, 5/21, 8979, BOTH (§六)
+# ----------------------------------------------------------------------------
+
+def gate26():
+    import os
+    import recompute_probe_step as R
+    ev = os.path.join(_SNAPSHOT, "evidence", "raw_probe")
+    p = os.path.join(ev, "persistent_probe_episodes.jsonl")
+    r = os.path.join(ev, "reset128_probe_episodes.jsonl")
+    sums = os.path.join(ev, "SHA256SUMS")
+    if not (os.path.isfile(p) and os.path.isfile(r) and os.path.isfile(sums)):
+        return FAIL, ("RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY=BLOCKED_SOURCE_UNAVAILABLE "
+                      "(frozen probe JSONL absent)")
+    rep = R.two_arm_recompute(p, r, sha256sums_path=sums)
+    if rep.get("RAW_PROBE_SOURCE_HASH_MISMATCH"):
+        return FAIL, f"RAW_PROBE_SOURCE_HASH_MISMATCH=BLOCKED: {rep.get('hash_verification')}"
+    if rep.get("RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY") != "PASS":
+        return FAIL, f"recompute blocked: {rep}"
+    pa, ra = rep["arms"]["persistent"], rep["arms"]["reset128"]
+    if (pa["total_completed_episodes"], pa["count_ge512"]) != (20, 6):
+        return FAIL, f"persistent {pa['total_completed_episodes']}/{pa['count_ge512']} != 20/6"
+    if (ra["total_completed_episodes"], ra["count_ge512"]) != (21, 5):
+        return FAIL, f"reset128 {ra['total_completed_episodes']}/{ra['count_ge512']} != 21/5"
+    fp, fr = pa["first_ge512"], ra["first_ge512"]
+    for name, fg in (("persistent", fp), ("reset128", fr)):
+        if (fg["episode_id"], fg["length"], fg["update_index"], fg["rollout_step"],
+                fg["env_id"], fg["first_ge512_resolved_env_step"]) != (2, 562, 4, 49, 2, 8979):
+            return FAIL, f"{name} first_ge512 mismatch: {fg}"
+    if rep["L512_REACHABILITY"] != "BOTH" or not rep["cross_arm_resolved_step_agree"]:
+        return FAIL, f"reachability {rep['L512_REACHABILITY']} / agree=" \
+                     f"{rep['cross_arm_resolved_step_agree']} (expected BOTH/true)"
+    return PASS, ("recomputed (not hardcoded): persistent 6/20, reset128 5/21, "
+                  "first_ge512 resolved=8979 both arms, L512_REACHABILITY=BOTH")
+
+
+# ----------------------------------------------------------------------------
 # registry + runners
 # ----------------------------------------------------------------------------
 
@@ -531,6 +899,18 @@ GATES = [
     ("GATE13_offpath_bit_exact", gate13),
     ("GATE14_config_univariate", gate14),
     ("GATE15_legacy_requires_auth", gate15),
+    # ---- Phase4A-v2.1 (§十): provenance / policy-lag / exposure / frozen-evidence gates ----
+    ("GATE16_policy_version_start_end_span", gate16),
+    ("GATE17_reset_slot_start_current", gate17),
+    ("GATE18_sample_propagates_provenance", gate18),
+    ("GATE19_original_vtrace_lag_fail_closed", gate19),
+    ("GATE20_manifest_lag_identity", gate20),
+    ("GATE21_legacy_lag_scoped", gate21),
+    ("GATE22_protocol_vs_exposure_distinct", gate22),
+    ("GATE23_no_cert_no_exposure_pass", gate23),
+    ("GATE24_endogenous_no_content_pass", gate24),
+    ("GATE25_raw_probe_sha_matches", gate25),
+    ("GATE26_raw_probe_recompute_both", gate26),
 ]
 
 

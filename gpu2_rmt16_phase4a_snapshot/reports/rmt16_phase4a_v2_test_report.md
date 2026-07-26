@@ -76,3 +76,28 @@ original_vtrace replay 更新后与 run 终局各调用一次 `assert_hindsight_
 - 15 门禁全绿（服务器 CPU）；failing tests = 0；无阈值篡改；无自动修码重跑。
 - off-path 加性、original_vtrace 结构隔离、eligible-only 确定性、config 单变量、checkpoint 完备、legacy 授权门禁均按 §十 验证。
 - 本轮 `NEW_TRAINING_RUNS=0`、未用 GPU 训练（GATE 8 为 CPU 前向，`CUDA_VISIBLE_DEVICES=""`）、未启动正式两臂。
+
+---
+
+## 6. Phase4A-v2.1 加固轮测试结果（增补）
+
+- **门禁 26/26 PASS（服务器 CPU**，`JAX_PLATFORMS=cpu CUDA_VISIBLE_DEVICES=""`，无 CUDA 初始化，
+  0 SKIP——含 GATE08 与 GATE17 行为部分）；本地 25 PASS / 0 FAIL / 1 SKIP（GATE08 需 JAX）。
+- 新增 GATE16–26：policy_version start/end/span（16–18）、original_vtrace lag fail-closed /
+  manifest 身份 / legacy 隔离（19–21）、协议 vs exposure 不可互换（22）、无证书不 PASS（23）、
+  endogenous 不可 content PASS（24）、原始 probe SHA==SHA256SUMS（25）、重算 6/20、5/21、
+  8979、BOTH（26）。GATE25/26 在证据缺失时 fail 为 `BLOCKED_SOURCE_UNAVAILABLE`（不假 PASS、
+  不静默跳过）。
+- `phase4a_v2_exposure_validator.py --self-test` = **11/11 PASS**；`config_diff_validator.py` =
+  `GATE14_CONFIG_DIFF_UNIVARIATE=PASS`（差异路径仅 `carry_mode`；新增 policy_lag/
+  exposure_contract 块两臂逐字相同）。
+- 原始 probe 重算（`reports/rmt16_l512_probe_recomputed.json`）：persistent 20/6、reset128 21/5、
+  first_ge512 resolved=**8979** 两臂一致、`L512_REACHABILITY=BOTH`、
+  `RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY=PASS`。
+- **GATE13 澄清**：`GATE13_STRUCTURAL_OFF_PATH_EQUIVALENCE=PASS`（加性 + off 计数等价 + 静态
+  守卫）；`GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN=NOT_RUN`（本轮无参数更新训练）。结构 PASS
+  从不被表述为数值逐位复跑 PASS。
+- 上文 §4 旧表述更正：单一 `matched_replay_protocol_ready` 标志**已删除**，由四标签拆分取代
+  （见 `rmt16_phase4a_v2_exposure_contract.md`）；`MATCHED_REPLAY_EXPOSURE=NOT_RUN`。
+- 无阈值篡改；无自动修码重跑。开发期一次门禁代码修正（GATE24/26 误用 helper 名，测试代码
+  笔误；断言严格度未变），按 §十一 记录原因与差异。

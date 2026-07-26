@@ -1,0 +1,87 @@
+{
+  "task": "RMT16_PHASE4A_V2_1_PROVENANCE_AND_EXPOSURE_HARDENING",
+  "branch": "henry/rmt16-phase4a-v2-original-vtrace",
+  "parent_commit": "97bfaa103a84a62aecb3636a14893ce7ee1f3651",
+  "review_baseline": "d3c8c7d6",
+  "labels": {
+    "RMT16_PHASE4A_V2_1_IMPLEMENTATION": "PASS",
+    "ORIGINAL_GOAL_VTRACE_ONLY": true,
+    "HINDSIGHT_STRUCTURALLY_DISABLED": true,
+    "AWR_STRUCTURALLY_DISABLED": true,
+    "POLICY_VERSION_START_END_SPAN": "RECORDED",
+    "POLICY_VERSION_AT_COLLECTION": "DEPRECATED_ALIAS_OF_START",
+    "PER_TRANSITION_POLICY_VERSION": "NOT_RECORDED",
+    "EPISODE_POLICY_VERSION_RANGE": "RECORDED",
+    "ORIGINAL_VTRACE_POLICY_LAG_GATE": "NOT_APPLICABLE",
+    "ORIGINAL_VTRACE_OFF_POLICY_CORRECTION": "VTRACE_IMPORTANCE_SAMPLING",
+    "CONFIG_RUNTIME_POLICY_LAG_ALIGNMENT": "PASS",
+    "SAME_REPLAY_PROTOCOL": "READY",
+    "MATCHED_REPLAY_EXPOSURE": "NOT_RUN",
+    "MATCHED_REPLAY_CONTENT": "NOT_CLAIMED",
+    "ENDOGENOUS_REPLAY_SCREENING": "READY_AFTER_SMOKE",
+    "MATCHED_REPLAY_CERTIFICATE_GATE": "DEFINED_FAIL_CLOSED",
+    "RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY": "PASS",
+    "RAW_PROBE_SOURCE_HASH_VERIFIED": true,
+    "RAW_PROBE_SHA_VERIFIED": true,
+    "FIRST_GE512_RESOLVED_ENV_STEP": 8979,
+    "L512_REACHABILITY": "BOTH",
+    "GATE13_STRUCTURAL_OFF_PATH_EQUIVALENCE": "PASS",
+    "GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN": "NOT_RUN",
+    "FORMAL_TWO_ARM_LAUNCH": "NOT_AUTHORIZED",
+    "NEW_TRAINING_RUNS": 0,
+    "GPU_TRAINING_RUNS": 0,
+    "CC3_FILES_TOUCHED": false,
+    "CC4_FILES_TOUCHED": false,
+    "HENRY_BRANCH_TOUCHED": false,
+    "PUSH_PERFORMED": false
+  },
+  "gates": {
+    "local": "25 PASS / 0 FAIL / 1 SKIP (GATE08 JAX)",
+    "server_cpu": "26 PASS / 0 FAIL / 0 SKIP",
+    "new_gates_this_round": [
+      "GATE16_policy_version_start_end_span",
+      "GATE17_reset_slot_start_current",
+      "GATE18_sample_propagates_provenance",
+      "GATE19_original_vtrace_lag_fail_closed",
+      "GATE20_manifest_lag_identity",
+      "GATE21_legacy_lag_scoped",
+      "GATE22_protocol_vs_exposure_distinct",
+      "GATE23_no_cert_no_exposure_pass",
+      "GATE24_endogenous_no_content_pass",
+      "GATE25_raw_probe_sha_matches",
+      "GATE26_raw_probe_recompute_both"
+    ],
+    "exposure_validator_self_test": "11/11 PASS",
+    "config_diff_validator": "GATE14_CONFIG_DIFF_UNIVARIATE=PASS (differing paths: [carry_mode])"
+  },
+  "raw_probe_evidence": {
+    "path": "gpu2_rmt16_phase4a_snapshot/evidence/raw_probe/",
+    "files_committed": [
+      "persistent_probe_episodes.jsonl",
+      "persistent_probe_updates.jsonl",
+      "persistent_probe_summary.json",
+      "reset128_probe_episodes.jsonl",
+      "reset128_probe_updates.jsonl",
+      "reset128_probe_summary.json",
+      "SHA256SUMS",
+      "README.md"
+    ],
+    "sha256": {
+      "persistent_probe_episodes.jsonl": "23d00d2ec313c0d624d1b7984a3e7b8f8895de9ee7a683189b7b40bf10b0d276",
+      "persistent_probe_updates.jsonl": "33e456d3a658fc2f6df08bb9ea5fb5edbdeaf6306dd5c1a1e4ed0f5f2efbcf05",
+      "persistent_probe_summary.json": "2dbc537801480b6865c12573520bf30fa6150558d16e5c161b23829c448c7e1b",
+      "reset128_probe_episodes.jsonl": "644d4ccce3e89470aae00c173d222f2c2f55ba4c461d6a34aabeded642c6effa",
+      "reset128_probe_updates.jsonl": "c765e366da0728be8824c5e8e4fdccf575b6e614c7b56cf90b03da637f49fd70",
+      "reset128_probe_summary.json": "da30cb50a40109f970ac22740a01c9434dc19e89017ce7d3bb202d12d8485a43"
+    },
+    "recomputed": {
+      "persistent": {"completed_episodes": 20, "count_ge512": 6},
+      "reset128": {"completed_episodes": 21, "count_ge512": 5},
+      "first_ge512": {
+        "episode_id": 2, "length": 562, "update_index": 4, "rollout_step": 49, "env_id": 2,
+        "resolved_env_step": 8979, "deprecated_global_step": 8241, "delta": 738
+      },
+      "cross_arm_agree": true
+    }
+  }
+}

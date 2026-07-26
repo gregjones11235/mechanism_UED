@@ -47,3 +47,20 @@
 ## 8. 未实现/超出本轮范围
 - 正式两臂 run、评估、多 seed、统计检验、Carry 因果裁定：**均不在本轮**，须后续授权。
 - Hindsight / AWR 的正式启用：**本轮结构禁用于 original_vtrace**；仅 full_p2_legacy 保留（禁默认）。
+
+## 9. Phase4A-v2.1 加固轮的限制（本轮新增）
+
+- `PER_TRANSITION_POLICY_VERSION=NOT_RECORDED`：长 episode 仅记录**区间** start/end/span；
+  episode 内逐 transition 策略版本不可得（V-trace 用存储的 behavior log_probs，不需要它）。
+- `policy_version_at_collection` 是弃用别名（= start），仅为 schema 兼容保留；新代码应读
+  `policy_version_start/end/span`。
+- `MATCHED_REPLAY_EXPOSURE=NOT_RUN`：本轮 `NEW_TRAINING_RUNS=0`，无正式两臂 run，exposure
+  证书规格与 validator 已就绪但**未**产生 PASS 裁定；`SAME_REPLAY_PROTOCOL=READY` **不**蕴含
+  exposure 匹配（GATE22）。
+- `MATCHED_REPLAY_CONTENT=NOT_CLAIMED` 且**不可**升级为 PASS：endogenous 按臂 buffer 无共享
+  轨迹身份（fail-closed `ENDOGENOUS_REPLAY_CONTENT_CANNOT_BE_CLAIMED_MATCHED`）。
+- `GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN=NOT_RUN`：结构等价 PASS **不**等于数值逐位复跑
+  PASS；合成 CPU 单测仅为构造证据。
+- 原始 probe 证据冻结于提交时的 SHA256；若后续服务器源文件改变，repo 内副本**不**随之更新
+  （它是历史证据快照）。
+- 本轮仅本地 commit，`PUSH_PERFORMED=false`，等待总控复审。
