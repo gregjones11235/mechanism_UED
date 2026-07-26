@@ -576,5 +576,93 @@
     "54 frozen files unmodified; SHA256SUMS not rewritten",
     "did NOT invent a plausible path -- everything line-anchored + SHA-pinned from real source",
     "evaluator left read-only; strict shared-builder honestly reported BLOCKED with a static-anchor substitute"
-  ]
+  ],
+  "round7_v3_addendum": {
+    "task": "GLOBAL_WORLD_MATERIALIZER_RUNTIME_IDENTITY_HARDENING_V3",
+    "section": "二/三/四 runtime executed-source identity + executed-vs-anchor provenance",
+    "utc": "2026-07-26T16:31:09Z",
+    "runtime_source_identity_binding": {
+      "mechanism": "after the REAL `import dicode.wrappers_cl` / `import minicraftax.envs.multitask`, capture module.__file__ AND inspect.getsourcefile(the class actually called); abspath+realpath; recompute SHA256; REQUIRE equality with the command-line-requested source, else FailClosed(EXECUTED_SOURCE_IDENTITY_MISMATCH). Symlinked requested paths resolve via realpath; a byte-identical-but-different-realpath copy is REJECTED (no reliance on copies being identical).",
+      "task_exec_binding": "_load_canonical_s4_task binds executed realpath + FULL sha (== canonical 45fdd17c...) + class name 'Env' + interface (generate_world/get_task_params); mismatch -> FailClosed(TASK_EXECUTED_SOURCE_IDENTITY_MISMATCH); no silent namespace fallback.",
+      "status": "PASS_STATIC_CODE; the real import/exec binding executes only on a JAX host (REAL_RUNTIME_NOT_RUN here)."
+    },
+    "executed_vs_protocol_anchor_provenance": {
+      "executed_sources": [
+        "wrapper (dicode.wrappers_cl, DistributedMultiTaskOptimisticLogWrapper -- imported+called)",
+        "environment (minicraftax.envs.multitask, MultiTaskMiniCraftaxEnv -- imported+called)",
+        "task (canonical s4_task_code.py -- exec()'d)"
+      ],
+      "protocol_anchor_sources": [
+        {
+          "canonical_evaluator": "eval_phase2_unified.py (sha256 224514026aefd273...): executed_by_materializer=FALSE. The materializer REPRODUCES its env construction + three seed/reset lines and indexes the same batched reset; it does NOT run the evaluator main program. We never write 'evaluator source executed'."
+        }
+      ]
+    },
+    "seed100000_independent_evaluator": {
+      "found": true,
+      "evaluator_id": "P7_PAIRED_256",
+      "path": "experiments/henry_dicode_student_upgrade/06_p7_egomap/raw_sources/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu1_p7_egomap/eval_p7_egomap_paired_256.py",
+      "sha256_raw_on_disk_CRLF": "f9c864359cfffe7726d93870fd17e52e18a7e49aa9a468471abf59088799a1a9",
+      "sha256_lf_normalized": "c082db8b82e86b971d8943bd9275ba8b709ffdc0da198fb236c52ccd56c08325",
+      "seed_mechanism": "--seed_base default 100000 (:36); EVAL_SEED=int(args.seed_base) (:66); rng=jax.random.PRNGKey(EVAL_SEED) (:190); DistributedMultiTaskOptimisticLogWrapper(s4_base, PRNGKey(0), ...) (:136).",
+      "use": "recorded as an INDEPENDENT seed100000 evaluator identity (its own full SHA); the seed100000 world set remains a PARAMETERIZED variant and is NEVER pooled with / claimed as the canonical seed42 exact set."
+    },
+    "seed_free_world_payload_hash": {
+      "function": "serialize_world_payload / state_payload_hash",
+      "definition": "SHA256 of ONLY the canonical serialized initial EnvState payload -- no evaluation_seed, seed_id, source SHA or version in those bytes. This is the honest carrier for the seed-effect question; a header-tagged per_world_hash difference is NOT proof (the header is deliberately seed-tagged).",
+      "status": "IMPLEMENTED (pure Python; exercised by NEG18/NEG19 and self-test)."
+    },
+    "world_field_manifest_persistence": {
+      "outputs": [
+        "world_field_manifests.json (schema mechanism_UED.craftax_world_field_manifests/v1; 256 worlds; each array field path/dtype/shape/nbytes)",
+        "world_field_schema_summary.json (unique paths, dtype, shape, per-world counts, structural inconsistencies recorded not overwritten, totals)",
+        "world_field_manifests_sha256 bound into world_hashes.json"
+      ],
+      "status": "IMPLEMENTED; emitted on a real run (NOT_RUN here). assert_materialized rejects a result lacking it."
+    },
+    "gates_added": [
+      "GATE20_RUNTIME_EXECUTED_SOURCE_IDENTITY",
+      "GATE21_REAL_SEED_WORLD_PAYLOAD_DIFFERENCE",
+      "GATE22_SEED_IDENTITY_CLASSIFICATION",
+      "GATE23_WORLD_FIELD_MANIFEST_PERSISTED"
+    ],
+    "labels": {
+      "CC4_RUNTIME_SOURCE_IDENTITY_CODE": "PASS",
+      "CC4_RUNTIME_SOURCE_IDENTITY_REAL_RUN": "NOT_RUN",
+      "EXECUTED_WRAPPER_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_ENV_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_TASK_SOURCE_BINDING": "PASS_STATIC",
+      "EVALUATOR_SOURCE_ROLE": "STATIC_PROTOCOL_ANCHOR_NOT_EXECUTED",
+      "SEED42_IDENTITY_CLASS": "CANONICAL_EVALUATOR_EXACT_WORLD_SET",
+      "SEED100000_IDENTITY_CLASS": "PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT",
+      "EVALUATION_SEED_STATIC_RNG_BINDING": "PASS",
+      "EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT": "BLOCKED_ENVIRONMENT",
+      "NEG02_FALSE_PASS_REMOVED": "PASS",
+      "WORLD_STATE_PAYLOAD_HASH": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_CODE": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_REAL_OUTPUT": "NOT_RUN",
+      "MATERIALIZER_EVALUATOR_SHARED_BUILDER": "BLOCKED_EVALUATOR_INLINE_READ_ONLY",
+      "STATIC_ANCHOR_EQUIVALENCE": "PASS",
+      "OLD_WORLD_KEY_PROTOTYPE": "DEPRECATED_INVALID_FOR_WORLD_SET_HASH",
+      "CRAFTAX_WORLD_MATERIALIZER_STATIC_TESTS": "PASS",
+      "CRAFTAX_WORLD_MATERIALIZER_REAL_RUN": "NOT_RUN",
+      "TWO_PROCESS_REAL_WORLD_AGREEMENT": "NOT_RUN",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "GLOBAL_EXACT_RESUME_HARNESS": "READY",
+      "REAL_EXACT_RESUME_EXECUTION": "NOT_RUN",
+      "BASE_GTRXL_MATCHED_REPLAY_CONTROL": "READY_NOT_AUTHORIZED",
+      "NEW_TRAINING_RUNS": 0,
+      "FORMAL_EVALUATION_RUNS": 0,
+      "CC2_FILES_TOUCHED": false,
+      "CC3_FILES_TOUCHED": false,
+      "PUSH_PERFORMED": false
+    },
+    "discipline_v3": [
+      "still no training / formal eval / real Exact Resume / matched Replay",
+      "no fabricated world_set_hash; GLOBAL_WORLD_SET_HASH stays BLOCKED_SOURCE_UNVERIFIED",
+      "seed100000 never claimed as the hardcoded-seed42 evaluator's exact world set",
+      "evaluator left read-only; never claimed executed",
+      "54 frozen files unmodified; SHA256SUMS not rewritten; .gitattributes scope unchanged"
+    ]
+  }
 }

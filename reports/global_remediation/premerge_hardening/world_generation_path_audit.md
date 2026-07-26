@@ -130,3 +130,61 @@ obsv, log_state = env.reset(reset_rng, ctor)        eval:171  (wrapper splits in
 - 54 frozen files unmodified; SHA256SUMS not rewritten
 - did NOT invent a plausible path -- everything line-anchored + SHA-pinned from real source
 - evaluator left read-only; strict shared-builder honestly reported BLOCKED with a static-anchor substitute
+
+
+---
+
+## Round 7 (V3) addendum — GLOBAL_WORLD_MATERIALIZER_RUNTIME_IDENTITY_HARDENING_V3
+
+本轮（V3）在 V2 之上补充四点，V2 结论全部保留、未降级：
+
+1. **运行时执行源码身份绑定（§二/三/四）**：物化器在真实 `import dicode.wrappers_cl` /
+   `import minicraftax.envs.multitask` 之后，捕获 `module.__file__` 与
+   `inspect.getsourcefile(实际调用的类)`，做 `abspath`+`realpath`（解析 symlink），重新计算
+   SHA256，并**要求**与命令行传入的 source 相等，否则 `FailClosed(EXECUTED_SOURCE_IDENTITY_MISMATCH)`。
+   字节相同但 realpath 不同的副本会被**拒绝**——不再依赖"多份副本碰巧 byte-identical"。canonical
+   S4 task 的 exec 路径同样绑定（完整 SHA + `Env` 类名 + `generate_world`/`get_task_params` 接口），
+   不一致即 `FailClosed(TASK_EXECUTED_SOURCE_IDENTITY_MISMATCH)`，无静默回退。
+2. **executed vs protocol-anchor 拆分（§三）**：wrapper / environment / task 记入 `executed_sources`
+   （物化器确实 import/exec/call）；`eval_phase2_unified.py` 记入 `protocol_anchor_sources`，
+   `executed_by_materializer = false`（物化器**复现**其构建+reset 逻辑，但**不执行** evaluator 主程序）。
+   绝不写 "evaluator source executed"。
+3. **seed-free world payload hash（§七）**：`serialize_world_payload` / `state_payload_hash` 只对
+   canonical 序列化后的初始 EnvState payload 取 SHA256，**不含** evaluation_seed / seed_id / source SHA /
+   版本。这是"数值 seed 是否真的改变世界"的唯一诚实载体；header-tagged 的 per_world_hash 差异**不是**证据
+   （header 本就带 seed 标签）。
+4. **world field manifest 持久化（§十一/十二）**：真实 run 输出 `world_field_manifests.json`
+   （schema `mechanism_UED.craftax_world_field_manifests/v1`，256 world，每数组字段 path/dtype/shape/nbytes）
+   + `world_field_schema_summary.json`（结构差异被**记录**而非静默覆盖），并把 `world_field_manifests_sha256`
+   绑定进 `world_hashes.json`；`assert_materialized` 拒绝缺少该证据的结果。
+
+**seed100000 独立 evaluator（§九）**：仓库中确有一个真实、冻结、使用 seed100000 的 evaluator ——
+`eval_p7_egomap_paired_256.py`（P7_PAIRED_256，`--seed_base` 默认 100000，`EVAL_SEED=int(args.seed_base)`，
+`rng=PRNGKey(EVAL_SEED)` :190，同样的 `DistributedMultiTaskOptimisticLogWrapper(s4_base, PRNGKey(0), ...)` :136）。
+raw（CRLF）SHA256 = `f9c864359cfffe7726d93870fd17e52e18a7e49aa9a468471abf59088799a1a9`；LF SHA256 =
+`c082db8b82e86b971d8943bd9275ba8b709ffdc0da198fb236c52ccd56c08325`。它以**独立**身份（自己的完整 SHA）记录，
+绝不复用 seed42 evaluator 的身份；seed100000 世界集仍是 PARAMETERIZED variant，**不得**冒充 seed42 精确世界集。
+
+**新增门禁**：GATE20 RUNTIME_EXECUTED_SOURCE_IDENTITY（PASS_STATIC_CODE / REAL_RUNTIME_NOT_RUN）；
+GATE21 REAL_SEED_WORLD_PAYLOAD_DIFFERENCE（BLOCKED_ENVIRONMENT）；GATE22 SEED_IDENTITY_CLASSIFICATION（PASS）；
+GATE23 WORLD_FIELD_MANIFEST_PERSISTED（PASS_STATIC_IMPLEMENTATION，非 PASS_REAL_OUTPUT）。
+
+### V3 冻结标签
+
+- CC4_RUNTIME_SOURCE_IDENTITY_CODE = PASS
+- CC4_RUNTIME_SOURCE_IDENTITY_REAL_RUN = NOT_RUN
+- EXECUTED_WRAPPER_SOURCE_BINDING = PASS_STATIC
+- EXECUTED_ENV_SOURCE_BINDING = PASS_STATIC
+- EXECUTED_TASK_SOURCE_BINDING = PASS_STATIC
+- EVALUATOR_SOURCE_ROLE = STATIC_PROTOCOL_ANCHOR_NOT_EXECUTED
+- SEED42_IDENTITY_CLASS = CANONICAL_EVALUATOR_EXACT_WORLD_SET
+- SEED100000_IDENTITY_CLASS = PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT
+- EVALUATION_SEED_STATIC_RNG_BINDING = PASS
+- EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT = BLOCKED_ENVIRONMENT
+- NEG02_FALSE_PASS_REMOVED = PASS
+- WORLD_STATE_PAYLOAD_HASH = IMPLEMENTED
+- WORLD_FIELD_MANIFEST_CODE = IMPLEMENTED
+- WORLD_FIELD_MANIFEST_REAL_OUTPUT = NOT_RUN
+- MATERIALIZER_EVALUATOR_SHARED_BUILDER = BLOCKED_EVALUATOR_INLINE_READ_ONLY
+- STATIC_ANCHOR_EQUIVALENCE = PASS
+- GLOBAL_WORLD_SET_HASH = BLOCKED_SOURCE_UNVERIFIED (unchanged)

@@ -237,5 +237,82 @@
       "BLOCKED_SOURCE_UNVERIFIED != FAIL",
       "does NOT modify the 54 frozen files; does NOT rewrite any SHA256SUMS"
     ]
+  },
+  "round7_v3_addendum": {
+    "task": "GLOBAL_WORLD_MATERIALIZER_RUNTIME_IDENTITY_HARDENING_V3",
+    "section": "runbook (round-7 V3 addendum; round-5 baseline + round-6 preserved)",
+    "utc": "2026-07-26T16:31:09Z",
+    "status": "IMPLEMENTED_STATIC; REAL_RUN_NOT_EXECUTED; GLOBAL_WORLD_SET_HASH=BLOCKED_SOURCE_UNVERIFIED",
+    "real_run_outputs_NOW_four_files": [
+      "world_hashes.json (per-world hash + seed-free per-world payload hash + total + identity_class/protocol_id + world_field_manifests_sha256)",
+      "world_field_manifests.json (per-world array path/dtype/shape/nbytes)",
+      "world_field_schema_summary.json (cross-world structural summary; inconsistencies recorded)",
+      "runtime_source_identity.json (imported vs requested source paths/realpaths/SHAs, identity match, evaluator anchor status, task exec identity, sys.path head, module versions; NO secrets)"
+    ],
+    "preconditions_addendum_v3": [
+      "9. runtime executed-source identity binding succeeds: imported wrapper/env file == requested source (realpath+SHA); canonical task exec'd == requested task source (full SHA + interface); else fail closed",
+      "10. evaluator recorded ONLY as a static protocol anchor (executed_by_materializer=false)",
+      "11. seed identity classified: seed42=CANONICAL_EVALUATOR_EXACT_WORLD_SET; seed100000=PARAMETERIZED variant (its own P7 evaluator identity; never pooled with seed42)",
+      "12. NEG02/GATE21 reach PASS ONLY via a real seed42-vs-seed100000 state_payload_hash comparison (>=1 world differs); 256/256 identical => FAIL; never PASS-by-installed-environment",
+      "13. field manifests + schema summary written and world_field_manifests_sha256 bound into world_hashes.json"
+    ],
+    "commands_on_a_jax_host_v3": [
+      "python materialize_craftax_world_set_twice.py --self-test            # 36 checks PASS",
+      "python materialize_craftax_world_set_twice.py --anchor-check --eval-source <eval> --wrapper-source <wrappers_cl.py> --task-source <s4>",
+      "CC4_S4_TASK_PATH=<canonical s4> python materialize_craftax_world_set_twice.py --orchestrate --seed seed42 --out <dir> --eval-source <eval> --wrapper-source <wrappers_cl.py> --task-source <s4> --env-source <multitask.py>",
+      "# seed100000 is a PARAMETERIZED variant (robustness/screening only), run separately, NEVER as the canonical exact set:",
+      "CC4_S4_TASK_PATH=<canonical s4> python materialize_craftax_world_set_twice.py --orchestrate --seed seed100000 --out <dir2> --eval-source <eval> --wrapper-source <wrappers_cl.py> --task-source <s4> --env-source <multitask.py>",
+      "python world_materializer_negative_tests.py --eval-source <eval> --wrapper-source <wrappers_cl.py> --task-source <s4> --env-source <multitask.py>   # expect NEG02 -> PASS (real payload diff), NEG09 strict builder stays BLOCKED"
+    ],
+    "two_run_comparison_now_includes": [
+      "world_set_hash",
+      "per_world_hashes",
+      "per_world_state_payload_hashes",
+      "world_field_manifests_sha256",
+      "source_shas",
+      "versions",
+      "numeric_evaluation_seed",
+      "identity_class",
+      "protocol_id",
+      "runtime_source_identity"
+    ],
+    "overclaim_corrections_round7": [
+      "NEG02 PASS because environment installed -> WRONG (removed); PASS requires real seed42-vs-seed100000 payload diff",
+      "per_world_hash / world_set_hash difference proves a real seed RNG effect -> WRONG; those fold in the seed-tagged header; use the seed-free state_payload_hash",
+      "all recorded source SHAs are 'executed' -> WRONG; eval_phase2_unified.py is a protocol anchor, NOT executed",
+      "seed100000 == canonical evaluator exact world set -> WRONG; it is a PARAMETERIZED variant (independent P7 evaluator)",
+      "GATE19 strict shared builder PASS via weak anchor -> WRONG; strict builder stays BLOCKED, static anchor is a SEPARATE PASS (NEG11)"
+    ],
+    "labels": {
+      "CC4_RUNTIME_SOURCE_IDENTITY_CODE": "PASS",
+      "CC4_RUNTIME_SOURCE_IDENTITY_REAL_RUN": "NOT_RUN",
+      "EXECUTED_WRAPPER_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_ENV_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_TASK_SOURCE_BINDING": "PASS_STATIC",
+      "EVALUATOR_SOURCE_ROLE": "STATIC_PROTOCOL_ANCHOR_NOT_EXECUTED",
+      "SEED42_IDENTITY_CLASS": "CANONICAL_EVALUATOR_EXACT_WORLD_SET",
+      "SEED100000_IDENTITY_CLASS": "PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT",
+      "EVALUATION_SEED_STATIC_RNG_BINDING": "PASS",
+      "EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT": "BLOCKED_ENVIRONMENT",
+      "NEG02_FALSE_PASS_REMOVED": "PASS",
+      "WORLD_STATE_PAYLOAD_HASH": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_CODE": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_REAL_OUTPUT": "NOT_RUN",
+      "MATERIALIZER_EVALUATOR_SHARED_BUILDER": "BLOCKED_EVALUATOR_INLINE_READ_ONLY",
+      "STATIC_ANCHOR_EQUIVALENCE": "PASS",
+      "OLD_WORLD_KEY_PROTOTYPE": "DEPRECATED_INVALID_FOR_WORLD_SET_HASH",
+      "CRAFTAX_WORLD_MATERIALIZER_STATIC_TESTS": "PASS",
+      "CRAFTAX_WORLD_MATERIALIZER_REAL_RUN": "NOT_RUN",
+      "TWO_PROCESS_REAL_WORLD_AGREEMENT": "NOT_RUN",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "GLOBAL_EXACT_RESUME_HARNESS": "READY",
+      "REAL_EXACT_RESUME_EXECUTION": "NOT_RUN",
+      "BASE_GTRXL_MATCHED_REPLAY_CONTROL": "READY_NOT_AUTHORIZED",
+      "NEW_TRAINING_RUNS": 0,
+      "FORMAL_EVALUATION_RUNS": 0,
+      "CC2_FILES_TOUCHED": false,
+      "CC3_FILES_TOUCHED": false,
+      "PUSH_PERFORMED": false
+    }
   }
 }

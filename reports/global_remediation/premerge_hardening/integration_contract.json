@@ -167,5 +167,112 @@
       "54 frozen files unmodified; SHA256SUMS not rewritten; no fabricated world_set_hash",
       "recipe/index manifest never called a materialized world"
     ]
+  },
+  "round7_v3": {
+    "task": "GLOBAL_WORLD_MATERIALIZER_RUNTIME_IDENTITY_HARDENING_V3",
+    "section": "integration contract (round-7 V3 addendum; round-5 baseline + round-6 preserved)",
+    "utc": "2026-07-26T16:31:09Z",
+    "scope": "four items only: (1) bind executed Python module to recorded source SHA; (2) remove NEG02 false PASS; (3) split seed42 vs seed100000 protocol identity; (4) persist world field manifest.",
+    "new_files_this_round": [],
+    "modified_files_this_round": [
+      "tools/global_evaluation/materialize_craftax_world_set_twice.py",
+      "tools/global_evaluation/world_materializer_negative_tests.py",
+      "reports/global_remediation/premerge_hardening/world_generation_path_audit.{md,json}",
+      "reports/global_remediation/premerge_hardening/host_run_boundary.{md,json}",
+      "reports/global_remediation/premerge_hardening/integration_contract.{md,json}",
+      "reports/global_remediation/premerge_hardening/pure_logic_gate_report.{md,json}",
+      "reports/global_remediation/world_set_materialization_runbook.{md,json}"
+    ],
+    "allowed_scientific_claims_round7": [
+      "the materializer CODE binds executed wrapper/env/task source identity (realpath+SHA) and fails closed on mismatch",
+      "the canonical evaluator is a static protocol anchor, NOT an executed source",
+      "seed42 is CANONICAL_EVALUATOR_EXACT_WORLD_SET; seed100000 is a PARAMETERIZED variant with an independent P7 evaluator",
+      "a seed-free world payload hash is implemented and is the correct carrier for the seed-effect question",
+      "world field manifests are implemented and persisted on a real run; assert_materialized requires them",
+      "NEG02 no longer passes merely because JAX/craftax are installed"
+    ],
+    "forbidden_scientific_claims_round7": [
+      "claiming the runtime source binding has actually executed (REAL_RUNTIME_NOT_RUN on this host)",
+      "claiming a real seed42-vs-seed100000 world payload difference has been measured (BLOCKED_ENVIRONMENT)",
+      "claiming seed100000 is the canonical hardcoded-seed42 evaluator's exact world set",
+      "claiming GATE20=PASS_REAL_RUNTIME or GATE23=PASS_REAL_OUTPUT before a real authorized run",
+      "emitting/claiming any GLOBAL_WORLD_SET_HASH (stays BLOCKED_SOURCE_UNVERIFIED)",
+      "claiming the strict shared builder exists (BLOCKED_EVALUATOR_INLINE_READ_ONLY)"
+    ],
+    "gates_added": [
+      {
+        "id": "GATE20",
+        "status": "PASS_STATIC_CODE / REAL_RUNTIME_NOT_RUN",
+        "name": "RUNTIME_EXECUTED_SOURCE_IDENTITY",
+        "evidence": "verify_source_identity + bind_executed_source_identity + verify_task_exec_identity implemented (abspath+realpath, recomputed SHA256, FailClosed(EXECUTED_SOURCE_IDENTITY_MISMATCH) / TASK_EXECUTED_SOURCE_IDENTITY_MISMATCH on any mismatch; byte-identical-different-realpath rejected). NEG12/13/14/16/17 PASS (binding logic + real on-disk wrapper/env files == canonical anchors). The real `import dicode.wrappers_cl` / `minicraftax.envs.multitask` binding executes only on a JAX host -> REAL_RUNTIME_NOT_RUN here."
+      },
+      {
+        "id": "GATE21",
+        "status": "BLOCKED_ENVIRONMENT",
+        "name": "REAL_SEED_WORLD_PAYLOAD_DIFFERENCE",
+        "evidence": "NEG02 fixed: it no longer passes because JAX+craftax are merely installed. A PASS requires materializing seed42 AND seed100000 and comparing the SEED-FREE state_payload_hash per world (>=1 differs; 256/256 identical => FAIL). No JAX/craftax on this host -> BLOCKED_ENVIRONMENT (EVALUATION_SEED_STATIC_RNG_BINDING=PASS via PRNGKey(EVAL_SEED) anchor; EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT=BLOCKED_ENVIRONMENT)."
+      },
+      {
+        "id": "GATE22",
+        "status": "PASS",
+        "name": "SEED_IDENTITY_CLASSIFICATION",
+        "evidence": "SEED_IDENTITIES: seed42=CANONICAL_EVALUATOR_EXACT_WORLD_SET (evaluator_exact_match=true, protocol_id=CANONICAL_EVALUATOR_V1_SEED42_EXACT); seed100000=PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT (protocol_id=..._SEED100000, NOT admissible as exact evidence). A real frozen seed100000 evaluator (eval_p7_egomap_paired_256.py / P7_PAIRED_256, raw sha f9c864359cfffe77..., LF sha c082db8b82e86b97...) is recorded as an INDEPENDENT identity, never reusing the seed42 evaluator. assert_exact_world_set_eligible admits only the EXACT class. NEG20 PASS."
+      },
+      {
+        "id": "GATE23",
+        "status": "PASS_STATIC_IMPLEMENTATION",
+        "name": "WORLD_FIELD_MANIFEST_PERSISTED",
+        "evidence": "build_field_manifests_doc / build_field_schema_summary / field_manifests_sha256 implemented; a real run writes world_field_manifests.json + world_field_schema_summary.json and binds world_field_manifests_sha256 into world_hashes.json; assert_materialized REJECTS a result lacking manifest evidence. NEG21/22 PASS. Called PASS_STATIC_IMPLEMENTATION (NOT PASS_REAL_OUTPUT) because no real run has produced the files on this host (WORLD_FIELD_MANIFEST_REAL_OUTPUT=NOT_RUN)."
+      }
+    ],
+    "negative_tests_v3": {
+      "PASS": 20,
+      "BLOCKED": 3,
+      "FAIL": 0,
+      "total": 23,
+      "blocked_ids": [
+        "NEG02 (no JAX/craftax)",
+        "NEG09 (strict shared builder, by design)",
+        "NEG15 (OS would not permit symlink creation)"
+      ]
+    },
+    "labels": {
+      "CC4_RUNTIME_SOURCE_IDENTITY_CODE": "PASS",
+      "CC4_RUNTIME_SOURCE_IDENTITY_REAL_RUN": "NOT_RUN",
+      "EXECUTED_WRAPPER_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_ENV_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_TASK_SOURCE_BINDING": "PASS_STATIC",
+      "EVALUATOR_SOURCE_ROLE": "STATIC_PROTOCOL_ANCHOR_NOT_EXECUTED",
+      "SEED42_IDENTITY_CLASS": "CANONICAL_EVALUATOR_EXACT_WORLD_SET",
+      "SEED100000_IDENTITY_CLASS": "PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT",
+      "EVALUATION_SEED_STATIC_RNG_BINDING": "PASS",
+      "EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT": "BLOCKED_ENVIRONMENT",
+      "NEG02_FALSE_PASS_REMOVED": "PASS",
+      "WORLD_STATE_PAYLOAD_HASH": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_CODE": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_REAL_OUTPUT": "NOT_RUN",
+      "MATERIALIZER_EVALUATOR_SHARED_BUILDER": "BLOCKED_EVALUATOR_INLINE_READ_ONLY",
+      "STATIC_ANCHOR_EQUIVALENCE": "PASS",
+      "OLD_WORLD_KEY_PROTOTYPE": "DEPRECATED_INVALID_FOR_WORLD_SET_HASH",
+      "CRAFTAX_WORLD_MATERIALIZER_STATIC_TESTS": "PASS",
+      "CRAFTAX_WORLD_MATERIALIZER_REAL_RUN": "NOT_RUN",
+      "TWO_PROCESS_REAL_WORLD_AGREEMENT": "NOT_RUN",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "GLOBAL_EXACT_RESUME_HARNESS": "READY",
+      "REAL_EXACT_RESUME_EXECUTION": "NOT_RUN",
+      "BASE_GTRXL_MATCHED_REPLAY_CONTROL": "READY_NOT_AUTHORIZED",
+      "NEW_TRAINING_RUNS": 0,
+      "FORMAL_EVALUATION_RUNS": 0,
+      "CC2_FILES_TOUCHED": false,
+      "CC3_FILES_TOUCHED": false,
+      "PUSH_PERFORMED": false
+    },
+    "discipline": [
+      "no training / formal eval / matched Replay / Exact Resume execution",
+      "no push / merge / rebase / force; no git add .; no git clean; no reset --hard",
+      "54 frozen files unmodified; SHA256SUMS not rewritten; .gitattributes scope unchanged",
+      "CC2_FILES_TOUCHED=false; CC3_FILES_TOUCHED=false; PUSH_PERFORMED=false",
+      "BLOCKED / NOT_RUN never relabeled PASS; FAIL=0 required and met"
+    ]
   }
 }

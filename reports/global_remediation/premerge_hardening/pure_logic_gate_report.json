@@ -63,9 +63,15 @@
   },
   "ALL_FAIL_ZERO": true,
   "negative_tests_summary": {
-    "PASS": 8,
-    "BLOCKED": 2,
-    "FAIL": 0
+    "PASS": 20,
+    "BLOCKED": 3,
+    "FAIL": 0,
+    "total": 23,
+    "blocked_ids": [
+      "NEG02 (no JAX/craftax)",
+      "NEG09 (strict shared builder, by design)",
+      "NEG15 (OS would not permit symlink creation)"
+    ]
   },
   "serializer_self_test": "PASS",
   "anchor_check_vs_real_sources": "PASS",
@@ -212,5 +218,94 @@
       "no gate threshold lowered",
       "FAIL=0 required and met"
     ]
+  },
+  "negative_tests_summary_round6": {
+    "PASS": 8,
+    "BLOCKED": 2,
+    "FAIL": 0
+  },
+  "cc4_addendum_gates_20_23": [
+    {
+      "id": "GATE20",
+      "status": "PASS_STATIC_CODE / REAL_RUNTIME_NOT_RUN",
+      "name": "RUNTIME_EXECUTED_SOURCE_IDENTITY",
+      "evidence": "verify_source_identity + bind_executed_source_identity + verify_task_exec_identity implemented (abspath+realpath, recomputed SHA256, FailClosed(EXECUTED_SOURCE_IDENTITY_MISMATCH) / TASK_EXECUTED_SOURCE_IDENTITY_MISMATCH on any mismatch; byte-identical-different-realpath rejected). NEG12/13/14/16/17 PASS (binding logic + real on-disk wrapper/env files == canonical anchors). The real `import dicode.wrappers_cl` / `minicraftax.envs.multitask` binding executes only on a JAX host -> REAL_RUNTIME_NOT_RUN here."
+    },
+    {
+      "id": "GATE21",
+      "status": "BLOCKED_ENVIRONMENT",
+      "name": "REAL_SEED_WORLD_PAYLOAD_DIFFERENCE",
+      "evidence": "NEG02 fixed: it no longer passes because JAX+craftax are merely installed. A PASS requires materializing seed42 AND seed100000 and comparing the SEED-FREE state_payload_hash per world (>=1 differs; 256/256 identical => FAIL). No JAX/craftax on this host -> BLOCKED_ENVIRONMENT (EVALUATION_SEED_STATIC_RNG_BINDING=PASS via PRNGKey(EVAL_SEED) anchor; EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT=BLOCKED_ENVIRONMENT)."
+    },
+    {
+      "id": "GATE22",
+      "status": "PASS",
+      "name": "SEED_IDENTITY_CLASSIFICATION",
+      "evidence": "SEED_IDENTITIES: seed42=CANONICAL_EVALUATOR_EXACT_WORLD_SET (evaluator_exact_match=true, protocol_id=CANONICAL_EVALUATOR_V1_SEED42_EXACT); seed100000=PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT (protocol_id=..._SEED100000, NOT admissible as exact evidence). A real frozen seed100000 evaluator (eval_p7_egomap_paired_256.py / P7_PAIRED_256, raw sha f9c864359cfffe77..., LF sha c082db8b82e86b97...) is recorded as an INDEPENDENT identity, never reusing the seed42 evaluator. assert_exact_world_set_eligible admits only the EXACT class. NEG20 PASS."
+    },
+    {
+      "id": "GATE23",
+      "status": "PASS_STATIC_IMPLEMENTATION",
+      "name": "WORLD_FIELD_MANIFEST_PERSISTED",
+      "evidence": "build_field_manifests_doc / build_field_schema_summary / field_manifests_sha256 implemented; a real run writes world_field_manifests.json + world_field_schema_summary.json and binds world_field_manifests_sha256 into world_hashes.json; assert_materialized REJECTS a result lacking manifest evidence. NEG21/22 PASS. Called PASS_STATIC_IMPLEMENTATION (NOT PASS_REAL_OUTPUT) because no real run has produced the files on this host (WORLD_FIELD_MANIFEST_REAL_OUTPUT=NOT_RUN)."
+    }
+  ],
+  "round7_v3_addendum": {
+    "task": "GLOBAL_WORLD_MATERIALIZER_RUNTIME_IDENTITY_HARDENING_V3",
+    "section": "十五 gates (round-7 V3 addendum; round-5 baseline + round-6 GATE16-19 preserved)",
+    "utc": "2026-07-26T16:31:09Z",
+    "gates_20_23_summary": {
+      "PASS": 1,
+      "PASS_STATIC_CODE/REAL_RUNTIME_NOT_RUN": 1,
+      "PASS_STATIC_IMPLEMENTATION": 1,
+      "BLOCKED_ENVIRONMENT": 1,
+      "FAIL": 0
+    },
+    "frozen_gates_1_15_unchanged": true,
+    "gate16_19_unchanged": true,
+    "ALL_FAIL_ZERO": true,
+    "negative_tests_v3": {
+      "PASS": 20,
+      "BLOCKED": 3,
+      "FAIL": 0,
+      "total": 23,
+      "blocked_ids": [
+        "NEG02 (no JAX/craftax)",
+        "NEG09 (strict shared builder, by design)",
+        "NEG15 (OS would not permit symlink creation)"
+      ]
+    },
+    "labels": {
+      "CC4_RUNTIME_SOURCE_IDENTITY_CODE": "PASS",
+      "CC4_RUNTIME_SOURCE_IDENTITY_REAL_RUN": "NOT_RUN",
+      "EXECUTED_WRAPPER_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_ENV_SOURCE_BINDING": "PASS_STATIC",
+      "EXECUTED_TASK_SOURCE_BINDING": "PASS_STATIC",
+      "EVALUATOR_SOURCE_ROLE": "STATIC_PROTOCOL_ANCHOR_NOT_EXECUTED",
+      "SEED42_IDENTITY_CLASS": "CANONICAL_EVALUATOR_EXACT_WORLD_SET",
+      "SEED100000_IDENTITY_CLASS": "PARAMETERIZED_WORLD_GENERATION_PROTOCOL_VARIANT",
+      "EVALUATION_SEED_STATIC_RNG_BINDING": "PASS",
+      "EVALUATION_SEED_REAL_WORLD_PAYLOAD_EFFECT": "BLOCKED_ENVIRONMENT",
+      "NEG02_FALSE_PASS_REMOVED": "PASS",
+      "WORLD_STATE_PAYLOAD_HASH": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_CODE": "IMPLEMENTED",
+      "WORLD_FIELD_MANIFEST_REAL_OUTPUT": "NOT_RUN",
+      "MATERIALIZER_EVALUATOR_SHARED_BUILDER": "BLOCKED_EVALUATOR_INLINE_READ_ONLY",
+      "STATIC_ANCHOR_EQUIVALENCE": "PASS",
+      "OLD_WORLD_KEY_PROTOTYPE": "DEPRECATED_INVALID_FOR_WORLD_SET_HASH",
+      "CRAFTAX_WORLD_MATERIALIZER_STATIC_TESTS": "PASS",
+      "CRAFTAX_WORLD_MATERIALIZER_REAL_RUN": "NOT_RUN",
+      "TWO_PROCESS_REAL_WORLD_AGREEMENT": "NOT_RUN",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "GLOBAL_EXACT_RESUME_HARNESS": "READY",
+      "REAL_EXACT_RESUME_EXECUTION": "NOT_RUN",
+      "BASE_GTRXL_MATCHED_REPLAY_CONTROL": "READY_NOT_AUTHORIZED",
+      "NEW_TRAINING_RUNS": 0,
+      "FORMAL_EVALUATION_RUNS": 0,
+      "CC2_FILES_TOUCHED": false,
+      "CC3_FILES_TOUCHED": false,
+      "PUSH_PERFORMED": false
+    },
+    "note": "no gate lowered; FAIL=0 required and met; BLOCKED_ENVIRONMENT / BLOCKED_EVALUATOR_INLINE_READ_ONLY used where blocked, never relabeled PASS. GATE20/23 are PASS_STATIC_* (NOT PASS_REAL_OUTPUT) because the real runtime/outputs require a JAX+craftax==1.4.5 host (NOT_RUN here)."
   }
 }
