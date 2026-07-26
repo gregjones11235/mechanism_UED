@@ -1,8 +1,8 @@
 # D052 Phase 2.5 真实迁移包对账 —— 最终报告
 
-- 任务：D052_PHASE25_REAL_BUNDLE_RECONCILIATION（§1–§13）
-- 日期：2026-07-26 ｜ 分支：`henry/d052-canonical-refactor` @ 968768e（本轮单次本地 commit，**未 push**）
-- 测试：**298 passed**（283 基线防火墙测试全部保留 + 15 项新增对账门，§10 满足）
+- 任务：D052_PHASE25_REAL_BUNDLE_RECONCILIATION（§1–§13），经 **D052_PREMERGE_CORRECTION_V2** 合并前修正（①恢复 Henry 旧 D052 无效归档；②critic_reject policy 改为必须显式指定、fail closed）
+- 日期：2026-07-26 ｜ 分支：`henry/d052-canonical-refactor` @ 968768e → 5f9ab74 → 本轮修正 commit（本地 commit，**未 push**）
+- 测试：**304 passed**（283 基线防火墙测试全部保留 + 15 项对账门 + 6 项 v2 修正门；0 failed / 0 error / 0 skip）
 - 训练：**0 timestep**；新 LLM 调用：**0**；迁移包原件：**只读**
 
 ## 1. 真实包获取与完整性（§2 前置）
@@ -33,13 +33,15 @@ Jaccard = 0.333 ｜ overlap = 4 ｜ 双跑比特一致 ｜ rng_seed = null
 
 新包 `gpu1_aggregation_siege/d052/reconciliation/`（4 模块）：
 - `real_bundle.py`：定位、SHA256SUMS 13/13 复验、judgment 防篡改公式（**192/192** 对 `outputs/` 原始记录复验通过，扁平化分数零漂移）；
-- `judgment_adapter.py`：原始记录逐字入审计信封；glm 角色回声显式归一化记录（raw/canonical/reason/log_hash；18 条归一化，日志哈希确定性）；`critic_reject` 派生显式标注（默认 `decision=='reject'`，可选 `flags.too_hard`）；
+- `judgment_adapter.py`：原始记录逐字入审计信封；glm 角色回声显式归一化记录（raw/canonical/reason/log_hash；18 条归一化，日志哈希确定性）；**`critic_reject` fail-closed（v2）**：`DEFAULT_CRITIC_REJECT_POLICY=NONE`，critic 记录必须收到显式命名的规则（`decision_reject` 或 `flags_too_hard`），否则整臂抛 `CRITIC_POLICY_REQUIRED`；未知字符串抛 `UNKNOWN_RULE`；派生记录标注 `critic_reject_rule`/`critic_reject_value`/`derived=true`/"legacy schema has no raw critic_reject bit"；非 critic 记录绝不产生派生；
 - `prompt_profile_contract.py`：prompt 注册表与冻结 profile 契约离线验证 + 真实 model pin 对 ROLE_REGISTRY 差异记录；
 - `replay.py`：§3 重放纯函数库（脚本与测试共用）。
 
-## 5. §7 R1–R6 自动化测试：298 全绿
+## 5. §7 R1–R6 自动化测试：304 全绿
 
-`d052/tests/test_real_bundle_reconciliation.py`（15 测试）：R1 salted/unknown 目标被防火墙以具体 CODE 拒绝（18/21 名未知；25/32 候选在边界被拒）；R2 B/C matched-field + 协议不变量；R3 96×2 覆盖 + 192/192 防篡改 + canonical 实例化 + 派生规则敏感性钉死（40 vs 38）+ 归一化日志；R4 重放全锚点 + 决定性；R5 canonical 池 `executed_as_intended=True` vs legacy 拒绝；R6 profile 完整性（7/67 测量、null 保持）。
+`d052/tests/test_real_bundle_reconciliation.py`（21 测试）：R1 salted/unknown 目标被防火墙以具体 CODE 拒绝（18/21 名未知；25/32 候选在边界被拒）；R2 B/C matched-field + 协议不变量；R3 96×2 覆盖 + 192/192 防篡改 + canonical 实例化 + 派生规则敏感性钉死（40 vs 38）+ 归一化日志；R4 重放全锚点 + 决定性；R5 canonical 池 `executed_as_intended=True` vs legacy 拒绝；R6 profile 完整性（7/67 测量、null 保持）。
+
+**v2 修正门（6 项新增）**：`CCV2` 缺 policy 整臂 fail-closed（`CRITIC_POLICY_REQUIRED`）、单条 critic 记录 fail-closed、非 critic 无 policy 可转换且零派生、未知 policy 字符串 `UNKNOWN_RULE`（臂级+记录级）、显式双规则完整出处链（`derived=true`/规则/值/无 raw bit 注记）且计数仍钉死 40/38、重放 overlap=4 与 Jaccard=0.3333 及全部锚点不受适配器改动影响、Henry 无效归档保留（01_d052/README.md 的 invalid/code-only 声明 + d052_data_removed_by_request.txt）。模板新增断言 `training_authorized=false`。
 
 ## 6. §8/§9 三层证据与 cell
 
@@ -48,9 +50,14 @@ Jaccard = 0.333 ｜ overlap = 4 ｜ 双跑比特一致 ｜ rng_seed = null
 - **Tier B SYNTHETIC_CANONICAL_FIXTURE**：968768e 工程测试 PASS（1/8）；**不是科学证据**；其 10 个产物原样保留（本轮产物均以 `real_bundle_*` 命名，零覆盖）；
 - **Tier C REAL_CANONICAL_POOL = NOT_RUN**：cell 模板 `CELL_PHASE25_REAL_CANONICAL_B/C` 置于 `gpu1_aggregation_siege/phase25_real_canonical_cell_templates/`，状态 `BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS`，**未注册**任何 CellRegistry，`intended_total_timesteps=0`。
 
+## 6b. v2 合并前修正（D052_PREMERGE_CORRECTION_V2）
+
+1. **归档恢复**：从 `origin/Henry-branch`（a2726e3，本轮 fetch 时网络抖动，采用上一轮 ls-remote 已远端核实的同名引用）路径限定恢复 6 条：`experiments/henry_dicode_student_upgrade/01_d052/`（12 文件）+ `inventory/d052_data_removed_by_request.txt` 共 13 个 A，manifest/inventory 4 个 M 回退为 Henry-branch 版本；恢复内容与 origin/Henry-branch 逐字节一致（diff 0 行）；相对 Henry-branch 的 D 条目归零。旧 D052 仍为 invalid/code-only，**未**作为科学结果恢复任何数据文件。
+2. **critic policy fail-closed**：见 §4 与 §8 冻结标签；历史重放不使用适配器（消费原始 critic_penalty），全部锚点不变。
+
 ## 7. 需总监裁定（不在本轮自动解决）
 
-1. `critic_reject` 派生规则：`decision=='reject'`（40/128）vs `flags.too_hard`（38/128）；
+1. `critic_reject` policy **冻结**：`decision_reject`（B+C=40）vs `flags_too_hard`（B+C=38）——适配器已 fail-closed（`CRITIC_REJECT_POLICY=UNDECIDED`、`DEFAULT=NONE`、缺 policy 即 `CRITIC_POLICY_REQUIRED`），两个候选均**不是**已批准的 canonical 科学定义；冻结前 `REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_POLICY=BLOCKED`；
 2. ROLE_REGISTRY model pin（qwen-turbo/deepseek-chat/glm-4.5-air）vs 真实包型号（qwen-flash-2025-07-28/deepseek-v4-pro/glm-4-flash）——未来 Tier C 调 LLM 前必须决；
 3. canonical 池 `task_params` 必填 `melee_spawn_multiplier` 取值策略。
 
@@ -73,6 +80,14 @@ CANONICAL_SYNTHETIC_FIXTURE_ENGINEERING_TEST    = PASS
 CANONICAL_SYNTHETIC_MODELER_SELECTION_CHANGE    = 1/8
 CANONICAL_SYNTHETIC_RESULT_IS_SCIENTIFIC_EVIDENCE = false
 REAL_CANONICAL_POOL_EXPERIMENT                  = NOT_RUN
+CRITIC_REJECT_POLICY                            = UNDECIDED
+DEFAULT_CRITIC_REJECT_POLICY                    = NONE
+REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_POLICY = BLOCKED
+CC3_ARCHIVE_PRESERVATION                        = PASS
+CC3_CRITIC_POLICY_FAIL_CLOSED                   = PASS
+D052_TRAINING_AUTHORIZED                        = false
+NEW_TRAINING_RUNS                               = 0
+NEW_LLM_CALLS                                   = 0
 ```
 
 ## 9. 交付物清单
@@ -84,6 +99,6 @@ REAL_CANONICAL_POOL_EXPERIMENT                  = NOT_RUN
 - `gpu1_aggregation_siege/phase25_real_canonical_cell_templates/CELL_PHASE25_REAL_CANONICAL_{B,C}.json`
 - `orchestration/experiments/d052_modeler_shadow_v1/`（真实包 14 件 + outputs/ 原始记录 + replay_inputs/ + reconciliation/）
 
-**约束合规**：不训练、不调新 LLM、不 push、不改包原件、不覆盖 968768e 合成品、不以 synthetic 顶替真实、不从总结重生成数据、任一锚点不匹配即停（未触发）。
+**约束合规**：不训练、不调新 LLM、不 push、不改包原件、不覆盖 968768e 合成品、不以 synthetic 顶替真实、不从总结重生成数据、任一锚点不匹配即停（未触发）、critic policy 无隐式默认（fail closed）、Henry 无效归档保留且不升格为科学证据。
 
 **本轮到此停止，等待总监复核。**

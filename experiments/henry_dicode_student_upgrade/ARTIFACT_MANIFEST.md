@@ -18,7 +18,14 @@ Excluded by policy:
 - temporary compiled Python files
 - single files larger than 5MB
 
-Removed archive:
+Additional cleanup:
 
-- On 2026-07-26, the obsolete `01_d052/` experiment archive was removed from this repository in full.
-- The current D052 engineering implementation is maintained separately at `gpu1_aggregation_siege/d052/`.
+- On 2026-07-26, D052 historical data files under `01_d052/` with extensions `.json`, `.jsonl`, `.csv`, and `.log` were removed by request.
+- The retained D052 content is engineering code and lightweight documentation only.
+- Removed D052 paths are listed in `inventory/d052_data_removed_by_request.txt`.
+
+Invalidated experiment archive:
+
+- D052 is marked as an invalid / void experiment-data archive because the experiment had protocol and evidence flaws.
+- D052 data must not be used as scientific evidence, paper evidence, SOTA evidence, model-selection evidence, or downstream comparative conclusions.
+- The repository intentionally retains only D052 engineering code and lightweight explanatory files for implementation reference.

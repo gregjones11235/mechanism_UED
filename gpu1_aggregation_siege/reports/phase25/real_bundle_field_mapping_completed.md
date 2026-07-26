@@ -1,7 +1,7 @@
 # D052 Phase 2.5 真实迁移包 ↔ canonical_v2 字段映射对账（完成版）
 
-- 任务：D052_PHASE25_REAL_BUNDLE_RECONCILIATION §4
-- 日期：2026-07-26 ｜ 分支：henry/d052-canonical-refactor @968768e
+- 任务：D052_PHASE25_REAL_BUNDLE_RECONCILIATION §4（经 D052_PREMERGE_CORRECTION_V2 修订：critic policy fail-closed）
+- 日期：2026-07-26 ｜ 分支：henry/d052-canonical-refactor @968768e + 5f9ab74 + 本轮修正
 - 机器数据：`gpu1_aggregation_siege/reports/phase25/real_bundle_field_mapping_completed.json`
 - canonical 侧来源：本 worktree `gpu1_aggregation_siege/d052/**`（服务器当时不可见，现已在本地）
 - legacy 侧来源：真实包 `orchestration/experiments/d052_modeler_shadow_v1/artifacts/d052_phase25_canonical_migration/`（13/13 SHA 校验通过，原件只读）
@@ -40,13 +40,13 @@
 | `provider` | `provider` | 恒等 | LOSSLESS | PASS |
 | `model_returned` | `exact_model_id` | 恒等（model_requested 留信封） | LOSSLESS | PASS |
 | （registry）`d052_phase25_v1` | `prompt_version` | 取自 prompt_registry | LOSSLESS | PASS |
-| `decision` + `flags`（仅 critic） | `critic_reject: bool` | **派生规则**：`decision=='reject'`（legacy 无此 bit） | LOSSY | 实证 40/64 reject（38 条 too_hard=True，2 条 too_hard=False）；备选规则 `too_hard` 得 38/64。** flagged 待总监裁定**；历史重放不使用该派生（直接用原始 critic_penalty） |
+| `decision` + `flags`（仅 critic） | `critic_reject: bool` | **候选派生规则，无隐式默认**（legacy 无此 raw bit） | LOSSY / **FAIL_CLOSED** | 两个候选：`decision_reject`（B+C True=40）与 `flags_too_hard`（B+C True=38）。**CRITIC_REJECT_POLICY=UNDECIDED**：适配器必须收到显式命名的规则，否则对 critic 记录整体抛 `CRITIC_POLICY_REQUIRED`；未知字符串抛 `UNKNOWN_RULE`。两个候选均不是已批准的 canonical 科学定义；未冻结前不得生成正式 canonical judgments。历史重放不使用任何派生（直接用原始 critic_penalty），任何规则选择都不改变历史锚点 |
 | `decision`（tutor/explorer） | — | — | UNSUPPORTED | 审计信封（selector 不消费） |
 | `flags`/`anon_id`/`arm`/`attempts`/`parse_status`/`source_file`/`model_requested` | — | — | UNSUPPORTED | 审计信封 |
 | `judgment_hash_sha256`（对**原始** judgment 的防篡改哈希） | — | extra="forbid" 不允许内嵌 | UNSUPPORTED | 信封保留；R3 防篡改校验照旧对原始记录做 |
 | `role_label_in_raw` vs `role_label_normalized_to` | — | glm 角色回声归一化 | LOSSY→审计 | 18 条原始标签≠归一化标签；适配器记录 raw_role_label/canonical_role_label/normalization_reason/normalization_log_hash（§6） |
 
-**结论**：192/192 在派生规则下映射为合法 RoleJudgment；headline 分数无损。
+**结论**：192/192 在**显式指定**的派生规则下映射为合法 RoleJudgment；headline 分数无损。派生记录在 `derived` 中标注 `critic_reject_rule` / `critic_reject_value` / `derived=true` / "legacy schema has no raw critic_reject bit"。非 critic 记录不产生任何 critic_reject 派生。
 
 ## C. NormalizedRoleJudgment / NormalizedRoleScores — `MECHANISM_MISMATCH`
 
@@ -118,10 +118,22 @@ legacy cell `soft_copeland_x_original/seed0_1784462982/round_4` 不可表达为 
 
 ---
 
-## 需总监裁定的开放项（不在本轮自动解决）
+## 冻结标签（D052_PREMERGE_CORRECTION_V2）
 
-1. `critic_reject` 派生规则：`decision=='reject'`（40/64）还是 `flags.too_hard`（38/64）？
+```
+CRITIC_REJECT_POLICY                            = UNDECIDED
+DEFAULT_CRITIC_REJECT_POLICY                    = NONE
+REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_POLICY = BLOCKED
+```
+
+- `decision_reject` 与 `flags_too_hard` 都只是**候选**派生规则，均**不是** legacy 原始字段，也**不是**已批准的 canonical scientific definition；
+- historical legacy replay 不依赖这两个规则（消费原始 `critic_penalty`），任何冻结决定都不改变历史锚点；
+- future canonical protocol 必须**显式冻结**一个 policy；未冻结前不得生成正式 canonical judgments，不得授权 D052 training。
+
+## 需总监裁定的开放项
+
+1. `critic_reject` policy 冻结：`decision_reject`（B+C=40）还是 `flags_too_hard`（B+C=38）？——适配器已 fail-closed（无默认，缺 policy 即 `CRITIC_POLICY_REQUIRED`），等待总监冻结其一；冻结前 Tier C 转换整体 BLOCKED。
 2. ROLE_REGISTRY model pin 与真实包 model id 不一致：未来 Tier C 运行用哪套钉扎？
 3. legacy `task_params` 缺 `melee_spawn_multiplier`：未来 canonical 池生成时取值策略（属于 Tier C 生成器，不属于本对账）。
 
-约束合规：未改包原件、无 LLM、无训练、无静默兼容、无 synthetic 顶替、无 push。
+约束合规：未改包原件、无 LLM、无训练、无静默兼容、无 synthetic 顶替、无 push、无隐式 critic policy 默认。

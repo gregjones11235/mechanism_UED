@@ -1,5 +1,6 @@
 {
   "template_status": "BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS",
+  "training_authorized": false,
   "note": "TEMPLATE ONLY. This is NOT a valid canonical CellSpec and is NOT registered in any CellRegistry. It cannot become DRAFT until every blocker below is resolved with NEW real data. intended_total_timesteps=0: this phase executes nothing.",
   "cell_id": "CELL_PHASE25_REAL_CANONICAL_B",
   "arm": "B_NO_MODELER",

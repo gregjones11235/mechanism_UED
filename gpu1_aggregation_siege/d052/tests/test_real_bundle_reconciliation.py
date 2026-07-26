@@ -117,7 +117,9 @@ def test_r3_adapter_instantiates_canonical_role_judgments():
     from d052.reconciliation.judgment_adapter import adapt_arm
     pr = load_bundle_json("prompt_registry.json")
     for arm in ("B", "C"):
+        # critic policy MUST be named explicitly (fail-closed, no default)
         adapted = adapt_arm(load_judgments(arm),
+                            critic_reject_rule="decision_reject",
                             prompt_version=pr["prompt_version"])
         assert len(adapted) == 96
         critics = [a for a in adapted if a.role_judgment.role.value == "critic"]
@@ -156,7 +158,8 @@ def test_r3_glm_role_normalization_log():
     from d052.reconciliation.judgment_adapter import adapt_arm, normalization_log
     adapted = []
     for arm in ("B", "C"):
-        adapted += adapt_arm(load_judgments(arm))
+        adapted += adapt_arm(load_judgments(arm),
+                             critic_reject_rule="decision_reject")
     log = normalization_log(adapted)
     assert len(log["records"]) == 192
     assert log["n_normalized"] == 18          # glm role-echo quirks
@@ -257,5 +260,92 @@ def test_evidence_tiers_and_blocked_templates():
         t = json.loads((tdir / f"CELL_PHASE25_REAL_CANONICAL_{arm}.json")
                        .read_text("utf-8"))
         assert t["template_status"] == "BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS"
+        assert t["training_authorized"] is False
         assert t["fields_PENDING_real_values"]["intended_total_timesteps"] == 0
         assert t["blockers"]
+
+
+# --- D052_PREMERGE_CORRECTION_V2: critic policy fail-closed -------------------
+def test_ccv2_critic_policy_fail_closed_whole_arm():
+    from d052.reconciliation.judgment_adapter import AdapterError, adapt_arm
+    with pytest.raises(AdapterError) as ei:
+        adapt_arm(load_judgments("B"))          # no policy -> fail closed
+    assert ei.value.code == AdapterError.CRITIC_POLICY_REQUIRED
+
+
+def test_ccv2_critic_policy_fail_closed_single_critic_record():
+    from d052.reconciliation.judgment_adapter import AdapterError, adapt_judgment
+    rec = next(r for r in load_judgments("B") if r["role"] == "critic")
+    with pytest.raises(AdapterError) as ei:
+        adapt_judgment(rec)                     # no policy -> fail closed
+    assert ei.value.code == AdapterError.CRITIC_POLICY_REQUIRED
+    # non-critic records adapt fine without any policy, and derive nothing
+    tutor = next(r for r in load_judgments("B") if r["role"] == "tutor")
+    assert adapt_judgment(tutor).derived == {}
+
+
+def test_ccv2_unknown_policy_rejected():
+    from d052.reconciliation.judgment_adapter import (
+        AdapterError, adapt_arm, adapt_judgment,
+    )
+    with pytest.raises(AdapterError) as ei:
+        adapt_arm(load_judgments("B"), critic_reject_rule="invalid_policy")
+    assert ei.value.code == AdapterError.UNKNOWN_RULE
+    rec = next(r for r in load_judgments("B") if r["role"] == "critic")
+    with pytest.raises(AdapterError) as ei2:
+        adapt_judgment(rec, critic_reject_rule="invalid_policy")
+    assert ei2.value.code == AdapterError.UNKNOWN_RULE
+
+
+def test_ccv2_explicit_rules_full_provenance_and_counts():
+    """Both candidate rules are allowed ONLY when named; each derived record
+    carries rule + value + derived=True + the 'no raw bit' note. The two
+    candidate counts stay pinned as FACTS (40 vs 38 over B+C)."""
+    from d052.reconciliation.judgment_adapter import adapt_arm
+    counts = {}
+    for rule in ("decision_reject", "flags_too_hard"):
+        n_true = 0
+        for arm in ("B", "C"):
+            for a in adapt_arm(load_judgments(arm), critic_reject_rule=rule):
+                if a.role_judgment.role.value != "critic":
+                    continue
+                d = a.derived
+                assert d["critic_reject_rule"] == rule
+                assert d["derived"] is True
+                assert "no raw critic_reject bit" in d["note"]
+                assert a.audit_envelope["judgment_hash_sha256"]
+                if d["critic_reject_value"]:
+                    n_true += 1
+        counts[rule] = n_true
+    assert counts == {"decision_reject": 40, "flags_too_hard": 38}
+
+
+def test_ccv2_replay_overlap_jaccard_and_anchors_unchanged():
+    """The fail-closed adapter change must not touch any replay anchor: the
+    replay consumes raw critic_penalty, never a derived critic_reject."""
+    from d052.reconciliation.replay import run_replay
+    r = run_replay()
+    assert r["ALL_ANCHORS_PASS"] is True
+    rec = r["recomputed"]
+    assert rec["B_selection_hash"] == "82571538e5299ea9"
+    assert rec["C_selection_hash"] == "868a57268d66b90b"
+    assert rec["pool_hash"] == "1902b71a5d86fa00"
+    assert rec["change"] == "4/8"
+    assert len(rec["overlap"]) == 4
+    assert abs(rec["jaccard"] - 0.3333) < 1e-4
+    assert r["checks"]["overlap_4"] is True
+    assert r["checks"]["jaccard_match"] is True
+
+
+# --- D052_PREMERGE_CORRECTION_V2: Henry invalid-archive preservation -----------
+def test_ccv2_henry_invalid_archive_preserved():
+    base = REPO_ROOT / "experiments" / "henry_dicode_student_upgrade"
+    readme = base / "01_d052" / "README.md"
+    removed = base / "inventory" / "d052_data_removed_by_request.txt"
+    assert readme.is_file(), "01_d052/README.md must be preserved"
+    assert removed.is_file(), "d052_data_removed_by_request.txt must be preserved"
+    text = readme.read_text(encoding="utf-8")
+    assert ("INVALID_DATA_CODE_ONLY" in text
+            or ("invalid experiment data, code retained only" in text
+                and "must not be used as scientific evidence" in text)), \
+        "README must keep the invalid-data / code-only declaration"
