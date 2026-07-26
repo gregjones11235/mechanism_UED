@@ -1,0 +1,19 @@
+{
+  "cell_id": "TEMPLATE_BLOCKED_001",
+  "protocol_version": "canonical_v2",
+  "title": "Template: registers DRAFT, then validate moves it to BLOCKED",
+  "hypothesis": "Illustrates the NO_LEGACY_ARTIFACT_OVERWRITE output_dir gate",
+  "pool_id": "shared_pool_TEMPLATE",
+  "pool_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "selector": {
+    "selector": "AUCTION_RAW",
+    "critic_policy": "hard_veto",
+    "k": 1,
+    "seed": 7
+  },
+  "candidate_ids": ["cand_a"],
+  "selection_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "intended_total_timesteps": 4096,
+  "output_dir": "audit_outputs/TEMPLATE_BLOCKED_001",
+  "created_by": "TEMPLATE"
+}
