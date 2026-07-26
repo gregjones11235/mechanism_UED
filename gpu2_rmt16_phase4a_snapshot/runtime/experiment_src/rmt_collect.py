@@ -25,6 +25,8 @@ from replay_buffer import ANCHOR_INTERVAL
 from rmt_replay_buffer import RMTTrajectory
 import rmt16_memory as rmtm
 from rmt_memory_anchor import make_apply_eval_rmt, make_update_fn, rmt_advance_tokens
+# Phase4A-v2 (CC2 directive §二): PRECISE resolved-env-step provenance (pure, no JAX).
+from phase4a_v2_counters import completion_resolved_env_step
 
 
 def _fresh_rmt_slot() -> dict:
@@ -86,12 +88,28 @@ def collect_rollout_rmt(
     collected_update_count: int = 0,
     apply_eval_rmt=None,
     env_params=None,  # Craftax EnvParams (NOT network params); driver must pass explicitly
+    # ---- Phase4A-v2 (CC2 directive §三): split the overloaded update count ----
+    # outer_update_index : the OUTER rollout+PPO loop index (authoritative episode update
+    #                      index). Replaces the overloaded `collected_update_count` for
+    #                      episode stamping / logging.
+    # policy_version     : the ACCEPTED policy version (increments only on committed,
+    #                      policy-changing updates). Used to stamp pending-episode
+    #                      policy_version (NOT the outer loop index).
+    # Both default to None -> fall back to `collected_update_count` for strict backward
+    # compatibility with replay_mode=off, where every meaning still coincides (bit-exact).
+    outer_update_index=None,
+    policy_version=None,
 ):
     """Run rollout_steps vectorized env steps; emit completed RMTTrajectories (w/ anchors).
 
     Returns (trajectories, carry, stats). carry holds env/GTrXL/RMT/rng state for the next
     rollout (memory/mask/idx AND rmt_state persist across rollouts for Persistent)."""
     assert env_params is not None, 'collect_rollout_rmt: env_params (Craftax EnvParams) must be passed explicitly'
+    # ---- Phase4A-v2 (CC2 directive §二/§三): resolve the split counters ----
+    if outer_update_index is None:
+        outer_update_index = int(collected_update_count)   # deprecated-compat fallback
+    if policy_version is None:
+        policy_version = int(outer_update_index)           # off-path == old behaviour (bit-exact)
     num_envs = int(np.asarray(obsv).shape[0])
     if apply_eval_rmt is None:
         apply_eval_rmt = make_apply_eval_rmt(network)
@@ -211,7 +229,12 @@ def collect_rollout_rmt(
                         anchor_steps=np.array(buf["anchor_step"], np.int64),
                         anchor_masks=np.stack(buf["anchor_mask"]),
                         anchor_idxs=np.array(buf["anchor_idx"], np.int64),
-                        collected_update_count=int(collected_update_count),
+                        # Phase4A-v2 (§三): collected_update_count kept as the OUTER loop index
+                        # for strict legacy schema compat; the authoritative policy-lag reference
+                        # is the new policy_version_at_collection (accepted-policy version).
+                        collected_update_count=int(outer_update_index),
+                        outer_update_index=int(outer_update_index),
+                        policy_version_at_collection=int(policy_version),
                         rmt_initial_tokens=buf["init_rmt_tokens"],
                         rmt_initial_segbuf=buf["init_rmt_segbuf"],
                         rmt_initial_segcount=int(buf["init_rmt_segcount"]),
@@ -242,9 +265,18 @@ def collect_rollout_rmt(
                                     if float(np.asarray(info[k])[e]) > 0.0]
                     episode_records.append(dict(
                         episode_id=int(pending.episode_id[e]), env_id=int(e), length=int(L),
-                        update_index=int(collected_update_count), rollout_step=int(_rollout_step_i),
-                        completion_global_step=int(collected_update_count) * (num_envs * rollout_steps)
+                        update_index=int(outer_update_index), rollout_step=int(_rollout_step_i),
+                        # Phase4A-v2 (§二): PRECISE resolved env step at completion (authoritative).
+                        completion_resolved_env_step=completion_resolved_env_step(
+                            outer_update_index, num_envs, rollout_steps, _rollout_step_i, e),
+                        outer_update_index=int(outer_update_index),
+                        policy_version=int(policy_version),
+                        # DEPRECATED (§二): NOT a precise resolved step (drops *num_envs on the
+                        # rollout_step term, the per-env env_id offset and the +1). Kept ONLY for
+                        # historical recomparison against pre-v2 records.
+                        completion_global_step=int(outer_update_index) * (num_envs * rollout_steps)
                             + int(_rollout_step_i),
+                        completion_global_step_deprecated=True,
                         terminated=bool(done_np[e] and not _done_steps_e), truncated=_done_steps_e,
                         done_reason=_done_reason, done_reason_ambiguous=bool(len(_cands) > 1),
                         done_reason_candidates=_cands,
@@ -257,7 +289,10 @@ def collect_rollout_rmt(
                         term_is_success=_is_success_e, term_timestep=int(_info_timestep[e]),
                         episode_return=float(np.sum(buf["rew"])),
                         carry_mode=carry_mode, has_term_signals=bool(_has_term)))
-                pending.reset_slot(e, policy_version=int(collected_update_count))
+                # Phase4A-v2 (§三): pending-episode policy_version is the ACCEPTED policy
+                # version, NOT the outer loop index. (In replay_mode=off the two coincide,
+                # so this is bit-exact there.)
+                pending.reset_slot(e, policy_version=int(policy_version))
 
         # ---- advance GTrXL memory (terminal reset AFTER recording; isolation) ----
         post_memories = jnp.roll(memories, -1, axis=1).at[:, -1].set(mem_out_np)
