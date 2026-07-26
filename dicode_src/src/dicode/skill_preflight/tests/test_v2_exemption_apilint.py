@@ -389,3 +389,35 @@ def test_r3_v2_default_off_is_byte_identical():
                                                  r3_v2=False))
     assert (format_scaffold_rules_for_coder(SNAPSHOT)
             == format_scaffold_rules_for_coder(SNAPSHOT, r3_v2=False))
+
+
+# --- v2.2: tier_cap guardrail against r3_v2 overshooting to a downstream tool -------------
+
+def test_tier_cap_alone_is_a_noop():
+    """Without r3_v2 there is no exception clause to cap, so the flag must change nothing."""
+    assert (format_scaffold_rules_for_coder(_IronT.sr_snapshot, tier_cap=True)
+            == format_scaffold_rules_for_coder(_IronT.sr_snapshot))
+    assert (format_target_for_prompt_one_step(_IronT(), tier_cap=True)
+            == format_target_for_prompt_one_step(_IronT()))
+
+
+def test_tier_cap_forbids_downstream_tools_without_killing_r3_v2():
+    on = format_scaffold_rules_for_coder(_IronT.sr_snapshot, mastered_exemption=True,
+                                         r3_v2=True, tier_cap=True)
+    off = format_scaffold_rules_for_coder(_IronT.sr_snapshot, mastered_exemption=True,
+                                          r3_v2=True)
+    assert "WRONG" in on and "WRONG" not in off
+    assert "TOOL TIER" in on, "the cap must not remove r3_v2's permission"
+    d = format_target_for_prompt_one_step(_IronT(), mastered_exemption=True,
+                                          r3_v2=True, tier_cap=True)
+    assert "DOWNSTREAM" in d and "PROVIDING a mastered prerequisite" in d
+
+
+def test_tier_cap_default_off_is_byte_identical():
+    """Branch discipline: a replication arm launched from this HEAD must match the old one."""
+    for kw in ({}, {"mastered_exemption": True},
+               {"mastered_exemption": True, "r3_v2": True}):
+        assert (format_scaffold_rules_for_coder(_IronT.sr_snapshot, **kw)
+                == format_scaffold_rules_for_coder(_IronT.sr_snapshot, tier_cap=False, **kw))
+        assert (format_target_for_prompt_one_step(_IronT(), **kw)
+                == format_target_for_prompt_one_step(_IronT(), tier_cap=False, **kw))

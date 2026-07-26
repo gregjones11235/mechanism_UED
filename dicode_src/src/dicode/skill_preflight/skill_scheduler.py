@@ -188,7 +188,8 @@ def _snapshot_lines(sr: Mapping[str, float]) -> tuple[str, str, str]:
 
 
 def format_target_for_prompt_one_step(
-    target: SchedulerTarget, *, mastered_exemption: bool = False, r3_v2: bool = False
+    target: SchedulerTarget, *, mastered_exemption: bool = False, r3_v2: bool = False,
+    tier_cap: bool = False,
 ) -> str:
     """One-step variant of the [Curriculum focus] block (design/docstring stage).
 
@@ -224,7 +225,12 @@ def format_target_for_prompt_one_step(
            "achievements: the agent performs those itself. PROVIDING a mastered prerequisite "
            "in the starting inventory is permitted by rule 1 above - e.g. if make_stone_pickaxe "
            "is mastered and the focus skill is collect_iron, start the agent with a stone "
-           "pickaxe rather than making it re-craft one.\n"
+           "pickaxe rather than making it re-craft one."
+           + (" Grant NO MORE than the lowest tier that satisfies the target, and never a tool whose "
+              "own crafting achievement is DOWNSTREAM of the focus skill: for collect_iron "
+              "that means a stone pickaxe, never an iron one, since an iron pickaxe "
+              "requires the very iron this task trains." if tier_cap else "")
+           + "\n"
            if r3_v2 else
            "3. Do NOT pre-mark or provision skills the agent already MASTERS (>= 70%): the agent "
            "performs those itself. Granting them adds nothing and corrupts the task's meaning.\n")
@@ -234,7 +240,8 @@ def format_target_for_prompt_one_step(
 
 
 def format_scaffold_rules_for_coder(
-    sr: Mapping[str, float], *, mastered_exemption: bool = False, r3_v2: bool = False
+    sr: Mapping[str, float], *, mastered_exemption: bool = False, r3_v2: bool = False,
+    tier_cap: bool = False,
 ) -> str:
     """Scaffolding constraint block appended to the CODE-generation user prompt.
 
@@ -258,7 +265,11 @@ def format_scaffold_rules_for_coder(
            "— e.g. a starting floor that skips a mastered descent is encouraged."
            + (" A mastered TOOL TIER may likewise be granted directly: if make_stone_pickaxe "
               "is mastered and the task trains collect_iron, giving pickaxe level 2 in "
-              "`set_player_inventory` is CORRECT, not a violation." if r3_v2 else "")
+              "`set_player_inventory` is CORRECT, not a violation."
+              + (" Never exceed the lowest tier the target requires, and never grant a "
+                 "tool whose own crafting achievement is downstream of the target: "
+                 "`{\"pickaxe\": 3}` on a collect_iron task is WRONG." if tier_cap else "")
+              if r3_v2 else "")
            if mastered_exemption else "") + "\n"
         "3. If the code examples above pre-mark achievements or hand out inventory more "
         "liberally, IGNORE that pattern — these constraints take precedence."

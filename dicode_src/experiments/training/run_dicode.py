@@ -204,15 +204,23 @@ def main(config: DictConfig):
                     _r3_v2 = False
                 elif _r3_v2:
                     print("  [r3-v2] ON: rule3 split (pre-mark vs provision) + tool example")
+                _tier_cap = bool(_sp.get("r3_tier_cap", False))
+                if _tier_cap and not _r3_v2:
+                    print("  [r3-cap] IGNORED: requires r3_v2=true")
+                    _tier_cap = False
+                elif _tier_cap:
+                    print("  [r3-cap] ON: lowest sufficient tier, no downstream tools")
                 if _one_step:
                     gen_manager.task_generator.current_skill_target = (
                         format_target_for_prompt_one_step(
-                            _sched, mastered_exemption=_r3_exempt, r3_v2=_r3_v2
+                            _sched, mastered_exemption=_r3_exempt, r3_v2=_r3_v2,
+                            tier_cap=_tier_cap,
                         )
                     )
                     gen_manager.env_generator.scaffold_rules_block = (
                         format_scaffold_rules_for_coder(
-                            _sched.sr_snapshot, mastered_exemption=_r3_exempt, r3_v2=_r3_v2
+                            _sched.sr_snapshot, mastered_exemption=_r3_exempt, r3_v2=_r3_v2,
+                            tier_cap=_tier_cap,
                         )
                     )
                 else:
