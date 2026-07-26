@@ -1,0 +1,719 @@
+{
+  "schema": "d052_canonical_legacy_reuse_map/v1",
+  "generated_from_freeze": "D:/Projects/dicode-codex-director/audit_outputs/d052_legacy_source_freeze_20260726T060626Z\\source_inventory.json",
+  "baseline_commit": "a2726e3ea75feff2b475b1e3408c30ef3f9acd7a",
+  "branch": "henry/d052-canonical-refactor",
+  "freeze_timestamp_utc": "20260726T060626Z",
+  "reuse_legend": {
+    "REUSE_AS_IS": "Import/call unchanged; may be wrapped by an adapter but its behavior is canonical.",
+    "REUSE_WITH_ADAPTER": "Reuse the logic but wrap/strip (e.g. /root paths, prompt/manifest reconciliation) before canonical use.",
+    "REFACTOR": "Substantially rewrite (silent fallbacks, dup paths, hardcoded identity); keep intent, change structure.",
+    "DEPRECATE": "Superseded / duplicated; do not use in canonical_v2, keep for reference only.",
+    "DO_NOT_USE": "Voided legacy experiment code (raw_sources); reference/mine only, never a dependency."
+  },
+  "summary_counts": {
+    "REUSE_AS_IS": 49,
+    "DEPRECATE": 8,
+    "REUSE_WITH_ADAPTER": 20,
+    "REFACTOR": 6,
+    "DO_NOT_USE": 2
+  },
+  "frozen_source_file_count": 48,
+  "extended_catalog_count": 37,
+  "missing_paths_WARNING": [],
+  "frozen_source_files": [
+    {
+      "path": "dicode_src/auction/craftax_achievements.py",
+      "role": "canonical_67_single_source",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "5bb881a60a36f457f5f76bff7df24038137298bf",
+      "sha256": "e43302aeb9095458605b3c10c51c4fa34ceb35ba3ea6ac670feadf0a0decacff",
+      "bytes": 14013,
+      "notes": "Hand-maintained, ZERO external deps; guarded assert NUM_ACHIEVEMENTS==67, max value==66, len(ALL_ACHIEVEMENTS)==67; _ACHIEVEMENTS_ORDERED collect_wood=0..defeat_archer=66; verified vs craftax main+v1.4.5. Identical blob in dicode_v6."
+    },
+    {
+      "path": "dicode_src/auction/modeler.py",
+      "role": "modeler_old",
+      "reuse": "DEPRECATE",
+      "git_blob_sha1": "3d942434d70249ce25c42b71fff3f7054f7abff7",
+      "sha256": "d6fa8f9636344803c769c842eeaaea1477eb93432084f979f71c566487ce8df4",
+      "bytes": 19364,
+      "notes": "372 LOC older v5-only modeler."
+    },
+    {
+      "path": "dicode_src/auction/student_profile_log.py",
+      "role": "student_profile_old",
+      "reuse": "DEPRECATE",
+      "git_blob_sha1": "fbbdc74c2537168b3f847783b95a66a3431b75a6",
+      "sha256": "11ccf0a5ce06c4168cae812a426a7e27dd57b97cd6bb21056524e35ac2aac1f8",
+      "bytes": 6735,
+      "notes": "Older, no combat-family split."
+    },
+    {
+      "path": "dicode_src/src/dicode/evaluation/online_evaluation.py",
+      "role": "eval_mapping",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "cab56b77b00a4b01053f9a1e10e3171fb56efd2f",
+      "sha256": "417e2bf7d843aa101079cb5f3e603fb0796095cc62ba995326e04d0d39a71be5",
+      "bytes": 10304,
+      "notes": ":229 Achievement[skill_name_raw.upper()].value; exact, case-insensitive, no alias. v6 copy carries hardcoded author-home @hydra config_path (unusable as entry; run_session_evaluation is the real API)."
+    },
+    {
+      "path": "dicode_src/src/dicode/task_utils.py",
+      "role": "conditioning_path",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "1df5caf33b27e2fa92ae18dff3bb99bd55c5b823",
+      "sha256": "006a1b47bf123147ba4a3ce3f887047ec4587aff126198ff131cb715bb341b24",
+      "bytes": 8058,
+      "notes": "EMBEDDING_SIZE=67; get_achievement_multi_hot sets embedding[ach.value]=1.0; proves canonical_id==goal_vector_index==enum .value."
+    },
+    {
+      "path": "dicode_src/src/minicraftax/envs/multitask.py",
+      "role": "conditioning_path",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "8c38bc5cb76e3d6acc8288fdc0b348bb88fef7cf",
+      "sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+      "bytes": 20443,
+      "notes": "obs = symbolic_obs + task_vector; obs_dim = parent.shape[0] + task_vector_size; task_vector_size=embedding_size=67. Identical blob in v6."
+    },
+    {
+      "path": "dicode_v6/auction/ambition.py",
+      "role": "gate",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "00b87c1f805160f7d85f667694df05f5df6f7a76",
+      "sha256": "20efcab628001edeab5618b4555b913d985e8180cf386028964a64bf45f02a7b",
+      "bytes": 3962,
+      "notes": "Ability gate; tests 85725fe9."
+    },
+    {
+      "path": "dicode_v6/auction/completed_gate.py",
+      "role": "gate",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "93e65e4b4535b4c28e9c6f2f6fb4ce2b589de7d6",
+      "sha256": "d1b73abc43163bff5fd501088ceb3aefb90a6ed7187046f05a63cdc2081c3ae4",
+      "bytes": 5713,
+      "notes": "_parse_names keep-only-legal filter; completed-achievement gate."
+    },
+    {
+      "path": "dicode_v6/auction/craftax_achievements.py",
+      "role": "canonical_67_single_source_dup",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "5bb881a60a36f457f5f76bff7df24038137298bf",
+      "sha256": "e43302aeb9095458605b3c10c51c4fa34ceb35ba3ea6ac670feadf0a0decacff",
+      "bytes": 14013,
+      "notes": "Byte-identical to dicode_src copy (same blob 5bb881a6)."
+    },
+    {
+      "path": "dicode_v6/auction/level_meta.py",
+      "role": "candidate_schema",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "9cea40bb5eeeb92388bc415a553c5139e1e031c7",
+      "sha256": "c86f4c73ae6803ce71b3a6cd7f44ae4fe8a098bf6ec368cd42f081a41ea3987f",
+      "bytes": 4643,
+      "notes": "<level_meta> JSON {type:DEPTH|BREADTH|CONSOLIDATE, drill_target, siege_wall}; tolerant parser; de-facto difficulty tier (no difficulty_tier field exists anywhere)."
+    },
+    {
+      "path": "dicode_v6/auction/mock_proposals.py",
+      "role": "candidate_generation_fixture",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "0b30b5a28b4d054819d02511bbc89035297affd5",
+      "sha256": "604d0a1e7392a24ddd033689edc2f800724358f802d9660596a1ee240b229da4",
+      "bytes": 1327,
+      "notes": "Offline synthetic Proposal factory; samples only legal names; test fixture."
+    },
+    {
+      "path": "dicode_v6/auction/modeler.py",
+      "role": "modeler",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "07c8cee428a57c3e3b1e9829fd8cc687c8607bc8",
+      "sha256": "8e37f9420666625aa49c68f173e9af561a4602578a6ae318123ff8c90b9a42fb",
+      "bytes": 42436,
+      "notes": "726 LOC single GLM STUDENT MODELER; runs once/session before proposers; classifies NORMAL_EARLY/RISING/STALLED/NOISY/FORGETTING/MASTERED; recommends DEPTH/BREADTH/CONSOLIDATE; _build_state_evidence hands facts not verdicts; evidence_check supported/contradicted/no_evidence."
+    },
+    {
+      "path": "dicode_v6/auction/proposal.py",
+      "role": "candidate_schema",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "9896d4baeafd784a3686370e7755d744f1216cf4",
+      "sha256": "0081a4264c4e8028febfc41ba5d6fd2abcb87d2b2648fbaa0e591c4445fefe63",
+      "bytes": 4301,
+      "notes": "Canonical candidate contract: Proposal(frozen) proposal_id/proposer_id/parent_task_id/docstring/reasoning/achievements:frozenset/skill_tags/self_report; __post_init__ raises on achievements - ALL_ACHIEVEMENTS (hard backstop). Identical in dicode_src + archive."
+    },
+    {
+      "path": "dicode_v6/auction/student_profile_log.py",
+      "role": "student_profile",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "edab25aabb05cf27cc03b5fa2bef36ab439d646a",
+      "sha256": "11214218d0f4ea282afff745c284c12ccd1be01b7d154c7bf369e14b1ccf1495",
+      "bytes": 7855,
+      "notes": "SAME class name different API: append-only snapshot time series, latest()/recent(k)/forgetting_candidates() with COMBAT-family split; the profile the Modeler consumes. Must reconcile with siege/student_profile."
+    },
+    {
+      "path": "dicode_v6/conf/config.yaml",
+      "role": "config_entry",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "5a29ea393e7ac85417918b7e32efc0d333bd1f23",
+      "sha256": "a237c1ffa4593ae20ccfbcef9641be86578d78d4760295aed86dd5959e8c0f15",
+      "bytes": 632,
+      "notes": "Root defaults (6 groups), chdir, wandb globals, seed:42."
+    },
+    {
+      "path": "dicode_v6/conf/gen_manager/auction_c_v6siege.yaml",
+      "role": "config_entry",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "e587e26ac89b1085b6666614cec69630822eeb3e",
+      "sha256": "5aa05438cae27c97a61ec3ce9eac88f4c39876c182530ac9a6a77cbe5161e8fd",
+      "bytes": 9122,
+      "notes": "Current method: v6 + siege:true; cost-saving providers."
+    },
+    {
+      "path": "dicode_v6/conf/training/default.yaml",
+      "role": "config_entry",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "43a879a0940ec58172de8a9c08c1ba47d2ccd752",
+      "sha256": "ca13c9c8c2337f5b1993e6810eb2a7f981caf75a80ade0dbe2fcb9a5fef05df4",
+      "bytes": 1930,
+      "notes": "PPO+transformer; total_timesteps:2_005_401_600 (long-run budget)."
+    },
+    {
+      "path": "dicode_v6/experiments/training/run_dicode.py",
+      "role": "run_entry",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "8dbfed995bbcf7ec5d30e373c0a61a8e351758f2",
+      "sha256": "3e0220ce023537231fd057e4e48fc48f2dc96bf19ce9a8f77d8d86448f19f443",
+      "bytes": 16247,
+      "notes": "Canonical entry; @hydra.main(version_base=1.2, config_path=../../conf/, config_name=config); zero argparse flags (all Hydra dot-overrides)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/auction_integration.py",
+      "role": "candidate_generation",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "9a6b382955f7dc95fe7a442742126cbb360383a3",
+      "sha256": "c75c27a1ff337232b4953b48c4218ed74a2e916db10b6bcec4084dbcb59b13b0",
+      "bytes": 4351,
+      "notes": "DiCode<->auction adapter; parse_relevant_achievements does SILENT keep-only-legal drop of unknown names (stage-1 pre-filter); profile_to_target_gap omits unknown skills silently -> canonical_v2 must error, not drop."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/gen_manager.py",
+      "role": "candidate_generation",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "0e1509e522a579212f77cb02c601b587ea86e757",
+      "sha256": "4c0a5bafce21199f37cd99c363de98b5c540c66ad1f7095e794ee7e96466c0c8",
+      "bytes": 121492,
+      "notes": "2911 LOC live method head: persona loading, coop proposer loop, _query_and_parse_responses retry, _siege_validate_and_reroll, EnvGenerator reflection loop (infinite re-queue until compile)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/evaluation/online_evaluation.py",
+      "role": "eval_mapping",
+      "reuse": "REFACTOR",
+      "git_blob_sha1": "c82d8415b851512cf2294769ffbfb84063d702cb",
+      "sha256": "9b835c371b655f3ed9dd4dfdacd6f9f24282103eb85942aa20e41f0ee4925b22",
+      "bytes": 15559,
+      "notes": "Same eval mapping but @hydra.main config_path hardcoded to original author's home -> unusable as CLI entry; refactor entry, keep mapping."
+    },
+    {
+      "path": "dicode_v6/src/minicraftax/craftax_state.py",
+      "role": "candidate_schema",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "550a9c07d6bab70ad33950a745644b10bc52ac40",
+      "sha256": "7ed6eed02495fa6f0992ebe3e7a2c89b56d2c8d0798915fed76c60e3a5be770b",
+      "bytes": 4316,
+      "notes": "TaskParams = the task_params field: 12 knobs (spawn/health/damage multipliers, melee_trigger_distance, monsters_killed_to_clear_level, ...)."
+    },
+    {
+      "path": "dicode_v6/src/minicraftax/envs/multitask.py",
+      "role": "conditioning_path_dup",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "8c38bc5cb76e3d6acc8288fdc0b348bb88fef7cf",
+      "sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+      "bytes": 20443,
+      "notes": "Byte-identical to dicode_src multitask (same blob 8c38bc5c)."
+    },
+    {
+      "path": "dicode_v6/src/minicraftax/tasks/base_task.py",
+      "role": "candidate_schema",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "16c5024faccc50db20fc003bf0d798a1a722a958",
+      "sha256": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa",
+      "bytes": 4228,
+      "notes": "Runtime contract: relevant_achievements/completed_achievements/label; success = all relevant done."
+    },
+    {
+      "path": "experiments/henry_dicode_student_upgrade/01_d052/raw_sources/home/oseasy/experiments/d052_unified_eval_20260722/evaluator/obsdim_probe.py",
+      "role": "legacy_d052_experiment_entry",
+      "reuse": "DO_NOT_USE",
+      "git_blob_sha1": "0789ade345b4ab69287c49305ff4fb92b6e14578",
+      "sha256": "1c611b8aa68911d29b6dee844a3833530fc1c10752fd417128360d71b724bfed",
+      "bytes": 7896,
+      "notes": "Carries the voided D052 candidate schema; candidate_hash=sha256(f'{id}:{sorted(names)}')[:16]. Reference/mine only; raw_sources is a vendored server snapshot, NOT a dependency. The 'onehot-32 obs8300' conditioning that fails 67-dim goal-embedding lives here."
+    },
+    {
+      "path": "experiments/henry_dicode_student_upgrade/08_p9_authentic_reset/raw_sources/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_p9_authentic_reset/src/run_p9_authentic_98304.py",
+      "role": "legacy_d052_obsdim_assert",
+      "reuse": "DO_NOT_USE",
+      "git_blob_sha1": "09cd4afefae2fa7d86c51e7cad9a20a2c443b7b5",
+      "sha256": "565296c6249689f81c44be13dc412ddee03892118df3376205849a8673f2ea1f",
+      "bytes": 31354,
+      "notes": "assert obs_dim==8335 and EMB==67 — in-repo confirmation of the canonical obs_dim. Reference only (raw_sources vendored snapshot)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/aggregation/default.yaml",
+      "role": "config_entry",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "8c2e02148f4bb3d08baf6fb879db042404f47a2f",
+      "sha256": "72220815ae68a9388d07626fddc4f80bdf42f74929c6196f02cf0125fec6d8a1",
+      "bytes": 2066,
+      "notes": "Modes A1-A6, blend weights; hardcoded /root cache path -> strip."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/llm/providers.yaml",
+      "role": "config_entry",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "7897ca6e019f1bdf887a3a2503ecd5b628ce1dfd",
+      "sha256": "c62a29660b6fb3753a3bd298235aa47bb6224427949b7c5a254b429cda0194be",
+      "bytes": 822,
+      "notes": "New-style provider registry (schema_version:1, economy/balanced/strong)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/llm/roles/curriculum_roles.yaml",
+      "role": "config_entry",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "dd0be62ec91629359920bde8cb2131088fc9dc4b",
+      "sha256": "033574f19a5fc0b1df439867a01d95b4a04f192d0a0cab954154ebd410bbee70",
+      "bytes": 471,
+      "notes": "Role registry + output schemas (role_judgment_v2)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/training/default.yaml",
+      "role": "config_entry_deprecated_conditioning",
+      "reuse": "DEPRECATE",
+      "git_blob_sha1": "da9253649b6a413de0475ca50fdfabe116e9a9e9",
+      "sha256": "ca13c9c8c2337f5b1993e6810eb2a7f981caf75a80ade0dbe2fcb9a5fef05df4",
+      "bytes": 1930,
+      "notes": "L59 conditioning_type:'one_hot' -> the 32-slot one-hot conditioning that must NOT be the canonical training interface (canonical=achievement_multi_hot, dim 67)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/scripts/run_data_plane_preflight_v3.py",
+      "role": "gate",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "68b0e25f16b32dbea20b1dbc3b8605e59f0b2f89",
+      "sha256": "8e64fb1028c0470557e4bf42bb80587e838c05ec57dfb3c74280f0230a101511",
+      "bytes": 18746,
+      "notes": "13-stage hard-gate preflight pipeline; argparse --mechanism {original,soft_copeland,budgeted_copeland,auction_raw,auction_budgeted}; 'Chain-rejected candidates NEVER enter pool'."
+    },
+    {
+      "path": "gpu1_aggregation_siege/scripts/run_gate_r0_final.py",
+      "role": "gate",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "6ca70cf121d41461ece708b898bb03902069eeb9",
+      "sha256": "a77b96358d08d68ef1543a90704b5f57f360da72b673aa488380eac8ec367083",
+      "bytes": 18484,
+      "notes": "argparse --mechanism --steps (16384); R0 production gate."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/immutable_cache.py",
+      "role": "duplicate_of_mechanisms_immutable_cache",
+      "reuse": "DEPRECATE",
+      "git_blob_sha1": "9baf861c0bcbccf0b4f79960026ea883aad4bb1a",
+      "sha256": "ce1f74e929075bfa7f6ac6e7f74fb1825b2cf10f5a9cadd10de06d7d7d31df72",
+      "bytes": 13556,
+      "notes": "Byte-identical dup (blob 9baf861c); dedup."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/aggregation.py",
+      "role": "selector_path",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "92a7e8b6c74d81a11bbb0c55b2707cce2d99b8ca",
+      "sha256": "590fcef42ea44db5aae753582956b8558772c931acba5a3c11468c12da4e66ec",
+      "bytes": 29697,
+      "notes": "775 LOC; modes raw_weighted/robust_weighted/soft_copeland/budgeted_soft_copeland/budgeted_retention_trigger/entropy_regularized; entry select_tasks_with_aggregation; hardcoded /root diag paths to strip."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/auction.py",
+      "role": "selector_path",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "ec3517288f355e1310212a1584d8ce91a07d4b22",
+      "sha256": "c1503ac116ae65b9f51680b0a26b1f797e4cbbb98a1ac87e01b85a24cd6d331f",
+      "bytes": 10624,
+      "notes": "298 LOC; run_auction_selection auction_type raw/budgeted; build_role_utilities_from_signals."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/immutable_cache.py",
+      "role": "judgment_cache",
+      "reuse": "REFACTOR",
+      "git_blob_sha1": "9baf861c0bcbccf0b4f79960026ea883aad4bb1a",
+      "sha256": "ce1f74e929075bfa7f6ac6e7f74fb1825b2cf10f5a9cadd10de06d7d7d31df72",
+      "bytes": 13556,
+      "notes": "404 LOC; v2 cache, >=95% hit gate, mutation detection; key = sha256(task_code)[:16]_student_stage_id_role_provider_exact_model_prompt_version_schema_version. Dup at src/dicode/immutable_cache.py."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_cache.py",
+      "role": "judgment_cache_v1",
+      "reuse": "DEPRECATE",
+      "git_blob_sha1": "30d7b64ef13c5b71b6287b40ded0bf0e30b8328a",
+      "sha256": "2ce8231a14961078b0eeb68978681bd9c0323a708f8ea578c282907fe63d0e7f",
+      "bytes": 5535,
+      "notes": "185 LOC; v1 cache, fragile summary-hash key (self-described); superseded by immutable_cache v2."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_costs.py",
+      "role": "cost_recording",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "4e64ee91368ce1b670afde84c4c662819b7b5e7a",
+      "sha256": "62c0e6e305876426832d0a72515b88ae5fb9d487688ee3ef63b1746d2951be3e",
+      "bytes": 3751,
+      "notes": "98 LOC; LLMCostTracker budget caps, per-provider/per-role token+USD -> llm_cost_log.jsonl. Minor: can_call() hardcodes $0.0006/1k."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_providers.py",
+      "role": "role_protocol",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "35f34216bc7268c467a65fc9e10916d26487cd4a",
+      "sha256": "edb920972437dc56e11d94fe8e47b7a2dbb0be75f3c9942d542ddc10fb5fd895",
+      "bytes": 7764,
+      "notes": "222 LOC; urllib client; single attempt NO retry despite manifest retry_count:3; static ROLE_PROVIDER_MAP."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_roles.py",
+      "role": "role_protocol",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "d6f3ff850c11d9c20d6184906eb0407df0fb1fe2",
+      "sha256": "4ed252ce08f0443bdadf8ebaf0cef49c815220a25a9bb90343f0522a1f7a90e2",
+      "bytes": 9654,
+      "notes": "257 LOC; strict-JSON judge prompts tutor/critic/explorer; prompt templates hardcode qwen-turbo/deepseek-chat conflicting with manifest -> reconcile."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/model_manifest.py",
+      "role": "role_protocol",
+      "reuse": "REFACTOR",
+      "git_blob_sha1": "97451e80abcd5847252e7bb0bb45320d271dfb7f",
+      "sha256": "4869eb16eec68a455a2b8f0e83446d2f2a75627db11cfbc628b4b4d3331874d5",
+      "bytes": 15679,
+      "notes": "413 LOC; pinned manifest v2.1 aggregation-v2-gpu1; compute_manifest_hash; validate_manifest. Duplicate at src/dicode/model_manifest.py (same blob) -> dedup."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/model_manifest.py",
+      "role": "duplicate_of_mechanisms_model_manifest",
+      "reuse": "DEPRECATE",
+      "git_blob_sha1": "97451e80abcd5847252e7bb0bb45320d271dfb7f",
+      "sha256": "4869eb16eec68a455a2b8f0e83446d2f2a75627db11cfbc628b4b4d3331874d5",
+      "bytes": 15679,
+      "notes": "Byte-identical dup (blob 97451e80); dedup to one import path."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/selection.py",
+      "role": "selector_path",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "8040b32024160e0bae71578c2332c620eb72b2ac",
+      "sha256": "2f7f9f5a3bfe071cae5178dcc9f98f0aee4459412daf4c128eccc46263dc8b1b",
+      "bytes": 9964,
+      "notes": "310 LOC; PLR + aggregation hook. Identical blob in gpu0."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/aggregation_integration.py",
+      "role": "candidate_pool",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "57b0857bcf52780768b32d6dd9ff56aacf255fa1",
+      "sha256": "a4afa02853e03b16b5e38581e7c5c1933846b3b8dd450b05e5f2738e455c873f",
+      "bytes": 10487,
+      "notes": "305 LOC; build_siege_candidate_pool target 32; chain_completeness_gate ('not a weighted preference')."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/production_dispatcher.py",
+      "role": "candidate_pool",
+      "reuse": "REFACTOR",
+      "git_blob_sha1": "4b380586809e32d03f260aa0a3a0fb37a40cedd3",
+      "sha256": "cc63e76bdafa498dc0ed81d839adf433cc3837c620ffb5437fbc727a0f9643a6",
+      "bytes": 15758,
+      "notes": "332 LOC; ALL_MECHANISMS=[original,soft_copeland,budgeted_copeland,auction_raw,auction_budgeted]; compile_candidate. SILENT default-goal fallback (all_achs[:2]) + loose CandidateEnv schema + /root paths -> fail-closed + align to Proposal/TaskParams."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/siege_notebook.py",
+      "role": "student_profile",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "e249c08816f18d4a233e98aabfaaa8715b2aff9d",
+      "sha256": "68571fee426de8a78fc591ed7a5ac3366dece9b0b7b949007d43e3c6ffca8015",
+      "bytes": 6331,
+      "notes": "Orchestrator: profile->chain_order->held_out->focus_quota->rehearsal; emits only binary mastery flags + evidence_source held_out_evaluation."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/student_profile.py",
+      "role": "student_profile",
+      "reuse": "REUSE_AS_IS",
+      "git_blob_sha1": "26e493fff087c3aa5ef628bcbd26ebd9156b4820",
+      "sha256": "bebb526c264304f99fceeaf4570f6e5a0cc902757951a591e69c7930d9149304",
+      "bytes": 4917,
+      "notes": "StudentProfileLog tier engine: tier 0-4 from held-out SR (0.1/0.5/0.8/0.95), is_mastered/is_proficient, get_forgetting_risk; docstring mandates tiers NEVER passed to LLM/selector. Byte-identical dup in gpu0 -> dedup."
+    },
+    {
+      "path": "gpu1_aggregation_siege/tests/test_v3_hard_gates.py",
+      "role": "gate_test",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "git_blob_sha1": "efa584d95ec2ad17da2ea9c3133edbf8190169d6",
+      "sha256": "20316b0c6c3f480ee99039ba26940cecb32b26cdad3fe535331abea3772cb7e7",
+      "bytes": 10058,
+      "notes": "Tests the 13-stage gate pipeline; only place literal target_achievements ctor arg appears (test-only envs)."
+    }
+  ],
+  "extended_catalog": [
+    {
+      "path": "dicode_src/src/dicode/dreaming/gen_manager.py",
+      "git_blob_sha1": "2b57b790d81d5b1f1be74b07f04b64955a77af0b",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "generation.gen_manager",
+      "rationale": "2264 LOC; same as v6 minus siege/level_meta/validator reroll (older)."
+    },
+    {
+      "path": "dicode_v6/auction/behavior_fingerprint_log.py",
+      "git_blob_sha1": "42caa5c0b2d31d9e5f2dfeed7546755edc961830",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "profiling",
+      "rationale": "Deterministic behav_hint evidence log grounding the modeler."
+    },
+    {
+      "path": "dicode_v6/auction/cooccurrence_log.py",
+      "git_blob_sha1": "7b4f6f3bb88ddf8e6c4babd0ed4e3c6fdb37890f",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "profiling",
+      "rationale": "Deterministic cooc_hint evidence log grounding the modeler."
+    },
+    {
+      "path": "dicode_v6/auction/pricing.py",
+      "git_blob_sha1": "d4847b6e272a0243d16ffcf8481777a4f17f93cf",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "selectors.auction",
+      "rationale": "Walrasian shadow prices per achievement (curriculum economics), NOT llm_costs."
+    },
+    {
+      "path": "dicode_v6/conf/dicode_manager/default.yaml",
+      "git_blob_sha1": "35576b7ad7ab628e7c0068dd9fb1a72ef211d4ed",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "Orchestrator: max_updates_per_session, training_sample_size_n:16, active_task_capacity:100."
+    },
+    {
+      "path": "dicode_v6/conf/evaluation/default.yaml",
+      "git_blob_sha1": "fdc6bcb3776bab2b9c859a0a0c55608e8f277528",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "Eval 8192x1024 envs."
+    },
+    {
+      "path": "dicode_v6/conf/gen_manager/auction_c_v6.yaml",
+      "git_blob_sha1": "e515cab35055b6bc45f2ba816dff63f531310fd3",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "v6 cost-saving providers."
+    },
+    {
+      "path": "dicode_v6/conf/gen_manager/default.yaml",
+      "git_blob_sha1": "4b846f77d8696088fbcd7e9349447c228e31b693",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "Baseline; all auction/coop/siege switches default OFF; 4 LLM roles."
+    },
+    {
+      "path": "dicode_v6/conf/gen_manager/llm/dashscope.yaml",
+      "git_blob_sha1": "4b2ea722754cf7502601a3f7063b652e7a505944",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "Per-provider model/base_url/think/sampling (representative of 11 providers)."
+    },
+    {
+      "path": "dicode_v6/dicode_v6.sh",
+      "git_blob_sha1": "b69babfa11c449d862e27bf2826198c8d6f617b2",
+      "reuse": "DEPRECATE",
+      "subsystem": "launch",
+      "rationale": "Older in-package copy, stale endpoints."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/cl_/evolve_mastered_r.py",
+      "git_blob_sha1": "ba795811d225ccc6fc4e927588992c7fa4ecc60a",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "Reflection-loop template (PREVIOUS_RESPONSE/ERROR/TASK_DESC)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/cl_/gen_env.py",
+      "git_blob_sha1": "5f629060c17b049d3180adfc6901af78c31d9f7f",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "generation.prompts",
+      "rationale": "Legacy GenEnv-style env-gen prompt."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/cl_/minicraftax_coder.py",
+      "git_blob_sha1": "dbdf6f0df29e30c703fffeddbae3966439675450",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "Env-codegen prompt; FM sets self.relevant_achievements, returns TaskParams(...)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/ablation.py",
+      "git_blob_sha1": "bd1b37ab4deb2fc395cbb99c2dac6e70faa37aae",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "Ablation proposer (random bottleneck, no parent metrics)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/constants.py",
+      "git_blob_sha1": "00317b07f715347ddeda39eb571966c6d642b4d1",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "Knowledge-base blocks injected via system_prompt.format(CONSTANTS=,MOBS=,...)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/evolve.py",
+      "git_blob_sha1": "0fbe0c3507ab445f3d5b629335552e23110a70c6",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "Baseline single-designer system prompt; blob-identical across packages."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/persona_ambitious.py",
+      "git_blob_sha1": "47e221b745129ede726d0a0a30ba24d257713197",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "PROPOSER-AMBITIOUS (deep prerequisite chains)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/persona_ambitious_coop.py",
+      "git_blob_sha1": "1d8863938ac1f21a8957e575ec8f9221b513d40f",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "generation.prompts",
+      "rationale": "v5-debate coop persona (MODELER_GUIDANCE/PEER_ALREADY_MADE/REFERENCE_LEVEL/MY_TURN_ORDER); v6 canonical, dicode_src copy older."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/persona_breadth.py",
+      "git_blob_sha1": "4939bec8c6494d71d9977dc536d61be0eeda9450",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "PROPOSER-BREADTH (+ ARCHIVE_FAMILY_COVERAGE slot)."
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/prompts/dicode/persona_feasible.py",
+      "git_blob_sha1": "61e456579022cb7e63ed6b36a7d43701ed458fc4",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.prompts",
+      "rationale": "PROPOSER-FEASIBLE (ability edge p~0.5)."
+    },
+    {
+      "path": "dicode_v6siege.sh",
+      "git_blob_sha1": "670d89730c9de041b0c00e71ce5cc582e0f0790c",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "launch",
+      "rationale": "SLURM v6 SIEGE method run (gen_manager=auction_c_v6siege, siege:true)."
+    },
+    {
+      "path": "dicode_v6siege_style.sh",
+      "git_blob_sha1": "800311cb090fb10ca9e84f4ccd8014194fe95013",
+      "reuse": "REFACTOR",
+      "subsystem": "launch",
+      "rationale": "Copy-paste of siege launcher with different run identity -> parametrize."
+    },
+    {
+      "path": "gpu0_training_mechanisms/src/dicode/siege/student_profile.py",
+      "git_blob_sha1": "26e493fff087c3aa5ef628bcbd26ebd9156b4820",
+      "reuse": "DEPRECATE",
+      "subsystem": "profiling",
+      "rationale": "Byte-identical dup of gpu1 student_profile.py (blob 26e493f) -> dedup."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/config.yaml",
+      "git_blob_sha1": "fd9cd7a08d1dd31a6fa46d5921c6f51c6302d93f",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "config",
+      "rationale": "Root + extra group aggregation:default."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/gen_manager/default.yaml",
+      "git_blob_sha1": "4fcddc1a189217277b0c3487680d38bc7a33ec0b",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "config",
+      "rationale": "Stripped baseline (no auction switches)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/llm/experiments/role_rotation_a.yaml",
+      "git_blob_sha1": "37836d4576fef60abff45c8d6384ebbb17a12280",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "Role->provider assignment arm A (between-experiment rotation, not per-round)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/llm/experiments/role_rotation_b.yaml",
+      "git_blob_sha1": "00347c7043b61e4c875121c5625bcd14a79813a7",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "config",
+      "rationale": "Role->provider assignment arm B."
+    },
+    {
+      "path": "gpu1_aggregation_siege/scripts/run_aggregation_sweep.sh",
+      "git_blob_sha1": "bcbf0cb9eaeb1beadee3f2231323f75941c91b0d",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "launch",
+      "rationale": "Mode x trigger sweep; timestamped log dirs; strip /root paths + dedup vs gpu0."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/dreaming/gen_manager.py",
+      "git_blob_sha1": "382b9065f7c353b7d3908022d2660908c9899be0",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "generation.gen_manager",
+      "rationale": "Pre-auction DiCode baseline (control arm); identical to gpu0 (blob 382b9065)."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/diagnostics.py",
+      "git_blob_sha1": "cd591081c5751da7ab0e8dd0893b8121181f69b7",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "integrity",
+      "rationale": "Diagnostics writer; hardcoded /root diag paths -> make path-configurable."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/chain_order.py",
+      "git_blob_sha1": "7d9c31a05ea5636eae12c3e8aa47e4b141ecbe31",
+      "reuse": "REUSE_WITH_ADAPTER",
+      "subsystem": "profiling",
+      "rationale": "Prerequisite chains, mastered-link & break-link detection."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/focus_quota.py",
+      "git_blob_sha1": "bbbe803a67bc0458f0df2df9390f51d52f77e104",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "profiling",
+      "rationale": "Min chain-task quota gate."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/held_out.py",
+      "git_blob_sha1": "0ff8f38a0ed6db1d822f9cbe00e26f19214c489a",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "profiling",
+      "rationale": "Held-out success-rate recorder."
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/rehearsal.py",
+      "git_blob_sha1": "e9031916d5d541854ec452da905a50d8840494a4",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "profiling",
+      "rationale": "Forgetting rehearsal."
+    },
+    {
+      "path": "gpu1_aggregation_siege/tests/test_data_plane_integrity.py",
+      "git_blob_sha1": "739a4a5b924d5427cc73a605a0fa6b3027ca9d8a",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "integrity",
+      "rationale": "Data-plane integrity tests."
+    },
+    {
+      "path": "gpu1_aggregation_siege/tests/test_siege_components.py",
+      "git_blob_sha1": "b277f586b25d753a557b1b97736635c9a8d67c54",
+      "reuse": "REUSE_AS_IS",
+      "subsystem": "integrity",
+      "rationale": "Siege component tests."
+    },
+    {
+      "path": "migration_launchers/gpu0/t1_lpg_hrl_16384.py",
+      "git_blob_sha1": "7bc3473851ce9b383f827924b69300e6522293ff",
+      "reuse": "REFACTOR",
+      "subsystem": "launch",
+      "rationale": "One-shot R0 launcher: hardcoded /root sys.path + ad-hoc config objects -> config-driven preflight."
+    }
+  ]
+}
