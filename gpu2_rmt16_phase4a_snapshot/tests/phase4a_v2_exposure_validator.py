@@ -4,8 +4,11 @@
 Compares the per-arm exposure certificates emitted by train_rmt16_p2replay.py
 (summary["exposure_certificate"]) and adjudicates the three-level replay claim split:
 
-    Level 1  PROTOCOL_MATCH        : the protocol_definition fields (sequence_length, batch_size,
-                                     replay_mode, sampler, loss) are IDENTICAL across both arms.
+    Level 1  PROTOCOL_MATCH        : FULL canonical protocol identity (Phase4A-v2.2 §二/§八):
+                                     every REQUIRED_PROTOCOL_FIELDS present incl. learner and
+                                     rng_rule, identical key sets, identical canonical dicts and
+                                     identical protocol SHA256 across both arms. The old partial
+                                     whitelist (missing learner/rng_rule) is gone.
     Level 2  EXPOSURE_COUNT_MATCH  : the six EXPOSURE_MATCH_FIELDS (replay_attempt_mask,
                                      replay_update_outer_updates, replay_update_count,
                                      replay_sequences_consumed, replay_batch_sizes,
@@ -97,11 +100,16 @@ def validate_two_arm(persistent_summary, reset128_summary):
 
     report = dict(
         validator="phase4a_v2_exposure_validator",
-        spec="RMT16_PHASE4A_V2_1 §五",
+        spec="RMT16_PHASE4A_V2_1 §五 + V2_2 §二/§八 full canonical protocol identity",
         arms=dict(persistent="certificate_present", reset128="certificate_present"),
-        # Level 1
+        # Level 1 (Phase4A-v2.2 §二/§八: FULL canonical protocol identity)
         PROTOCOL_MATCH=result["PROTOCOL_MATCH"],
+        PROTOCOL_MISSING_FIELDS_ARM_A=result["PROTOCOL_MISSING_FIELDS_ARM_A"],
+        PROTOCOL_MISSING_FIELDS_ARM_B=result["PROTOCOL_MISSING_FIELDS_ARM_B"],
+        PROTOCOL_KEYSET_MISMATCH=result["PROTOCOL_KEYSET_MISMATCH"],
         PROTOCOL_DIFFERING_FIELDS=result["PROTOCOL_DIFFERING_FIELDS"],
+        PROTOCOL_DEFINITION_SHA256_ARM_A=result["PROTOCOL_DEFINITION_SHA256_ARM_A"],
+        PROTOCOL_DEFINITION_SHA256_ARM_B=result["PROTOCOL_DEFINITION_SHA256_ARM_B"],
         # Level 2
         EXPOSURE_COUNT_MATCH=result["EXPOSURE_COUNT_MATCH"],
         EXPOSURE_DIFFERING_FIELDS=result["EXPOSURE_DIFFERING_FIELDS"],
@@ -160,7 +168,9 @@ def validate_two_arm(persistent_summary, reset128_summary):
 
 def _synthetic_summary(arm, *, replay_updates, consumed, batch_sizes, seq_lens,
                        attempt_mask, not_ready_updates, drop_field=None,
-                       seq_length=129, batch_size=4):
+                       seq_length=129, batch_size=4,
+                       learner=None, rng_rule=None, drop_protocol_field=None,
+                       extra_protocol_field=None):
     n = len(attempt_mask)
     attempt_outer = [i for i, a in enumerate(attempt_mask) if a]
     update_outer = [i for i, a in enumerate(attempt_mask) if a][:replay_updates]
@@ -181,10 +191,18 @@ def _synthetic_summary(arm, *, replay_updates, consumed, batch_sizes, seq_lens,
         start_offsets_by_outer_update=[[0, 0, 0, 0]] * replay_updates)
     if drop_field is not None:
         cert.pop(drop_field, None)
+    labels = CONTRACT.replay_protocol_labels(
+        "original_vtrace", seq_length, batch_size,
+        **({"learner": learner} if learner is not None else {}),
+        **({"rng_rule": rng_rule} if rng_rule is not None else {}))
+    protocol = labels["protocol_definition"]
+    if drop_protocol_field is not None:
+        protocol.pop(drop_protocol_field, None)  # simulate an incomplete protocol definition
+    if extra_protocol_field is not None:
+        protocol[extra_protocol_field[0]] = extra_protocol_field[1]  # unknown extra field
     return dict(
         arm=arm,
-        phase4a_v2=dict(replay_labels=CONTRACT.replay_protocol_labels(
-            "original_vtrace", seq_length, batch_size)),
+        phase4a_v2=dict(replay_labels=labels),
         exposure_certificate=cert)
 
 
@@ -301,6 +319,91 @@ def self_test():
         check("input_content_claim=PASS -> raised",
               "ENDOGENOUS_REPLAY_CONTENT_CANNOT_BE_CLAIMED_MATCHED" in str(e))
 
+    # --- Phase4A-v2.2 §二/§八: FULL canonical protocol identity ------------------
+    # (9) identical protocol -> protocol SHA256 emitted and equal on both arms
+    check("protocol_sha_emitted_and_equal",
+          rep["PROTOCOL_DEFINITION_SHA256_ARM_A"] is not None
+          and rep["PROTOCOL_DEFINITION_SHA256_ARM_A"] == rep["PROTOCOL_DEFINITION_SHA256_ARM_B"]
+          and rep["PROTOCOL_MISSING_FIELDS_ARM_A"] == []
+          and rep["PROTOCOL_MISSING_FIELDS_ARM_B"] == [])
+
+    # (10) different LEARNER, identical exposure -> PROTOCOL_MATCH=FAIL (old whitelist missed it)
+    sb10 = _synthetic_summary("reset128", replay_updates=3, consumed=12,
+                              batch_sizes=[4, 4, 4], seq_lens=[[129] * 4] * 3,
+                              attempt_mask=[False, True, True, True, True],
+                              not_ready_updates=[0],
+                              learner="full_p2_legacy_update_rmt")
+    rep10 = validate_two_arm(sa, sb10)
+    check("different_learner -> PROTOCOL_MATCH=FAIL & exposure FAIL",
+          rep10["PROTOCOL_MATCH"] == "FAIL"
+          and "learner" in rep10["PROTOCOL_DIFFERING_FIELDS"]
+          and rep10["MATCHED_REPLAY_EXPOSURE"] == "FAIL",
+          str(rep10["PROTOCOL_DIFFERING_FIELDS"]))
+
+    # (11) different RNG RULE, identical exposure -> PROTOCOL_MATCH=FAIL
+    sb11 = _synthetic_summary("reset128", replay_updates=3, consumed=12,
+                              batch_sizes=[4, 4, 4], seq_lens=[[129] * 4] * 3,
+                              attempt_mask=[False, True, True, True, True],
+                              not_ready_updates=[0],
+                              rng_rule="np.random.default_rng(seed)")
+    rep11 = validate_two_arm(sa, sb11)
+    check("different_rng_rule -> PROTOCOL_MATCH=FAIL & exposure FAIL",
+          rep11["PROTOCOL_MATCH"] == "FAIL"
+          and "rng_rule" in rep11["PROTOCOL_DIFFERING_FIELDS"]
+          and rep11["MATCHED_REPLAY_EXPOSURE"] == "FAIL",
+          str(rep11["PROTOCOL_DIFFERING_FIELDS"]))
+
+    # (12) missing LEARNER field -> fail closed PROTOCOL_IDENTITY_INCOMPLETE
+    sb12 = _synthetic_summary("reset128", replay_updates=3, consumed=12,
+                              batch_sizes=[4, 4, 4], seq_lens=[[129] * 4] * 3,
+                              attempt_mask=[False, True, True, True, True],
+                              not_ready_updates=[0], drop_protocol_field="learner")
+    try:
+        validate_two_arm(sa, sb12)
+        check("missing_learner -> PROTOCOL_IDENTITY_INCOMPLETE raised", False, "no raise")
+    except ValueError as e:
+        check("missing_learner -> PROTOCOL_IDENTITY_INCOMPLETE raised",
+              "PROTOCOL_IDENTITY_INCOMPLETE" in str(e) and "learner" in str(e))
+
+    # (13) missing RNG_RULE field -> fail closed
+    sb13 = _synthetic_summary("reset128", replay_updates=3, consumed=12,
+                              batch_sizes=[4, 4, 4], seq_lens=[[129] * 4] * 3,
+                              attempt_mask=[False, True, True, True, True],
+                              not_ready_updates=[0], drop_protocol_field="rng_rule")
+    try:
+        validate_two_arm(sa, sb13)
+        check("missing_rng_rule -> PROTOCOL_IDENTITY_INCOMPLETE raised", False, "no raise")
+    except ValueError as e:
+        check("missing_rng_rule -> PROTOCOL_IDENTITY_INCOMPLETE raised",
+              "PROTOCOL_IDENTITY_INCOMPLETE" in str(e) and "rng_rule" in str(e))
+
+    # (14) extra UNKNOWN protocol field on one arm only -> FAIL via keyset mismatch
+    sb14 = _synthetic_summary("reset128", replay_updates=3, consumed=12,
+                              batch_sizes=[4, 4, 4], seq_lens=[[129] * 4] * 3,
+                              attempt_mask=[False, True, True, True, True],
+                              not_ready_updates=[0],
+                              extra_protocol_field=("unregistered_field", 1))
+    rep14 = validate_two_arm(sa, sb14)
+    check("extra_protocol_field_one_arm -> PROTOCOL_MATCH=FAIL (keyset mismatch)",
+          rep14["PROTOCOL_MATCH"] == "FAIL"
+          and "unregistered_field" in rep14["PROTOCOL_KEYSET_MISMATCH"]
+          and rep14["MATCHED_REPLAY_EXPOSURE"] == "FAIL",
+          str(rep14["PROTOCOL_KEYSET_MISMATCH"]))
+
+    # (15) same keys/values, different INSERTION ORDER -> PASS (canonical comparison)
+    sb15 = _synthetic_summary("reset128", replay_updates=3, consumed=12,
+                              batch_sizes=[4, 4, 4], seq_lens=[[129] * 4] * 3,
+                              attempt_mask=[False, True, True, True, True],
+                              not_ready_updates=[0])
+    proto15 = sb15["phase4a_v2"]["replay_labels"]["protocol_definition"]
+    sb15["phase4a_v2"]["replay_labels"]["protocol_definition"] = dict(
+        reversed(list(proto15.items())))
+    rep15 = validate_two_arm(sa, sb15)
+    check("same_protocol_different_key_order -> PASS",
+          rep15["PROTOCOL_MATCH"] == "PASS" and rep15["MATCHED_REPLAY_EXPOSURE"] == "PASS"
+          and rep15["PROTOCOL_DEFINITION_SHA256_ARM_A"]
+          == rep15["PROTOCOL_DEFINITION_SHA256_ARM_B"])
+
     n_fail = sum(1 for _, ok, _ in results if not ok)
     print(f"SELF_TEST_SUMMARY total={len(results)} pass={len(results) - n_fail} fail={n_fail}",
           flush=True)
@@ -334,9 +437,11 @@ def main(argv=None):
         return 1
 
     print(json.dumps({k: report[k] for k in (
-        "PROTOCOL_MATCH", "PROTOCOL_DIFFERING_FIELDS", "EXPOSURE_COUNT_MATCH",
-        "EXPOSURE_DIFFERING_FIELDS", "MATCHED_REPLAY_EXPOSURE", "CONTENT_MATCH",
-        "MATCHED_REPLAY_CONTENT", "ENDOGENOUS_REPLAY_SCREENING",
+        "PROTOCOL_MATCH", "PROTOCOL_MISSING_FIELDS_ARM_A", "PROTOCOL_MISSING_FIELDS_ARM_B",
+        "PROTOCOL_KEYSET_MISMATCH", "PROTOCOL_DIFFERING_FIELDS",
+        "PROTOCOL_DEFINITION_SHA256_ARM_A", "PROTOCOL_DEFINITION_SHA256_ARM_B",
+        "EXPOSURE_COUNT_MATCH", "EXPOSURE_DIFFERING_FIELDS", "MATCHED_REPLAY_EXPOSURE",
+        "CONTENT_MATCH", "MATCHED_REPLAY_CONTENT", "ENDOGENOUS_REPLAY_SCREENING",
         "one_arm_not_ready_vs_replayed")}, indent=2), flush=True)
     if args.out:
         os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

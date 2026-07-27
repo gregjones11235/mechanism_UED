@@ -101,6 +101,11 @@ scientific_config:
   # ---- Phase4A-v2.1 (§三): legacy lag gate, scoped ONLY to full_p2_legacy (default-forbidden,
   # requires --allow-full-p2-legacy). NOT part of the active original_vtrace config. ----
   legacy_full_p2_only:
+    # Phase4A-v2.2 (§三.1): the ONLY place the numeric legacy lag may appear for
+    # original_vtrace — an explicitly INACTIVE scope. active: false is REQUIRED; a legacy
+    # block with a numeric max_policy_lag but no explicit active: false fails the
+    # ORIGINAL_VTRACE_ACTIVE_POLICY_LAG_LEAK scan closed.
+    active: false
     max_policy_lag: 16
   ema_tau: 0.995
   ent_floor: 0.05

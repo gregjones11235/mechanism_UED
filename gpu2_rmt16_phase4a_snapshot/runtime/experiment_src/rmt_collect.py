@@ -283,14 +283,27 @@ def collect_rollout_rmt(
                     _done_reason = _cands[0] if len(_cands) == 1 else "unknown"
                     _ach_reached = [k.split("/", 1)[1] for k in _ach_keys
                                     if float(np.asarray(info[k])[e]) > 0.0]
-                    episode_records.append(dict(
+                    episode_record = dict(
                         episode_id=int(pending.episode_id[e]), env_id=int(e), length=int(L),
                         update_index=int(outer_update_index), rollout_step=int(_rollout_step_i),
                         # Phase4A-v2 (§二): PRECISE resolved env step at completion (authoritative).
                         completion_resolved_env_step=completion_resolved_env_step(
                             outer_update_index, num_envs, rollout_steps, _rollout_step_i, e),
                         outer_update_index=int(outer_update_index),
+                        # Phase4A-v2.2 (§四): the episode record carries the policy-version
+                        # RANGE (start/end/span), values IDENTICAL to the RMTTrajectory built
+                        # just above. Recompute provenance (update_index/rollout_step/env_id/
+                        # length/episode_id) is unchanged, so frozen recompute stays 20/6,
+                        # 21/5, 8979, BOTH.
+                        policy_version_start=episode_start_version,
+                        policy_version_end=episode_end_version,
+                        policy_version_span=episode_version_span,
+                        # §四 compat: the old UNSCOPED policy_version field is no longer an
+                        # authoritative field; it is an explicit DEPRECATED alias of
+                        # policy_version_end (the completion version).
                         policy_version=int(policy_version),
+                        policy_version_deprecated=True,
+                        policy_version_alias_of="policy_version_end",
                         # DEPRECATED (§二): NOT a precise resolved step (drops *num_envs on the
                         # rollout_step term, the per-env env_id offset and the +1). Kept ONLY for
                         # historical recomparison against pre-v2 records.
@@ -308,7 +321,33 @@ def collect_rollout_rmt(
                         term_is_dead=_is_dead_e, term_done_steps=_done_steps_e,
                         term_is_success=_is_success_e, term_timestep=int(_info_timestep[e]),
                         episode_return=float(np.sum(buf["rew"])),
-                        carry_mode=carry_mode, has_term_signals=bool(_has_term)))
+                        carry_mode=carry_mode, has_term_signals=bool(_has_term))
+                    # Phase4A-v2.2 (§四): PRE-WRITE invariants — the record's range must be
+                    # self-consistent AND exactly equal to the just-built trajectory's range
+                    # (and the trajectory's deprecated alias must equal START). Any violation
+                    # aborts collection loudly rather than writing an inconsistent record.
+                    assert episode_record["policy_version_start"] >= 0, (
+                        f"episode record policy_version_start < 0 (env {e})")
+                    assert episode_record["policy_version_end"] >= (
+                        episode_record["policy_version_start"]), (
+                        f"episode record policy_version_end < start (env {e})")
+                    assert episode_record["policy_version_span"] == (
+                        episode_record["policy_version_end"]
+                        - episode_record["policy_version_start"]), (
+                        f"episode record policy_version_span != end - start (env {e})")
+                    assert traj.policy_version_start == episode_record["policy_version_start"], (
+                        f"traj/record policy_version_start mismatch (env {e})")
+                    assert traj.policy_version_end == episode_record["policy_version_end"], (
+                        f"traj/record policy_version_end mismatch (env {e})")
+                    assert traj.policy_version_span == episode_record["policy_version_span"], (
+                        f"traj/record policy_version_span mismatch (env {e})")
+                    assert traj.policy_version_at_collection == (
+                        episode_record["policy_version_start"]), (
+                        f"traj.policy_version_at_collection != record start (env {e})")
+                    assert episode_record["policy_version"] == (
+                        episode_record["policy_version_end"]), (
+                        f"deprecated policy_version alias != policy_version_end (env {e})")
+                    episode_records.append(episode_record)
                 # Phase4A-v2.1 (§二.3): open the NEXT episode with start version == the CURRENT
                 # rollout's accepted policy_version. This is correct because:
                 #   * after this auto-reset the new episode's FIRST steps (the rest of THIS

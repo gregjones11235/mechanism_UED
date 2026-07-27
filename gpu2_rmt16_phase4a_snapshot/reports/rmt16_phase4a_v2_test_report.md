@@ -101,3 +101,41 @@ original_vtrace replay 更新后与 run 终局各调用一次 `assert_hindsight_
   （见 `rmt16_phase4a_v2_exposure_contract.md`）；`MATCHED_REPLAY_EXPOSURE=NOT_RUN`。
 - 无阈值篡改；无自动修码重跑。开发期一次门禁代码修正（GATE24/26 误用 helper 名，测试代码
   笔误；断言严格度未变），按 §十一 记录原因与差异。
+
+---
+
+## Phase4A-v2.2 测试报告补遗
+
+**门禁（`tests/test_phase4a_v2_gates.py`，总数 38）**：新增 GATE27–38，全部**非 JAX**（纯
+Python/AST/静态/本地 numpy），故本地仍仅 1-skip（GATE08 carry-boundary 需 JAX），服务器 CPU
+0-skip。
+
+| 本地（Anaconda py3.12 / numpy） | 服务器 CPU（JAX_PLATFORMS=cpu） |
+|---|---|
+| 37 PASS / 0 FAIL / 1 SKIP(GATE08) | 38 PASS / 0 FAIL / 0 SKIP（`GATES_RESULT=PASS`） |
+
+- `GATES_RESULT=PASS_LOCAL`（本地，JAX 门挂在服务器）；服务器 `GATES_RESULT=PASS`（无 skip）。
+- **exposure validator self-test**：18/18（v2.1 的 11 + v2.2 协议身份 7：SHA 相等、learner 差异、
+  rng_rule 差异、缺 learner、缺 rng_rule、多键 keyset、键序不变）。
+- **runtime_config self-test**：29/29；`FAIL_CLOSED_NEGATIVE_CASES=28`（≥19，§六.9）：含 seed /
+  total_updates / save_every / sequence_length / replay_mode / carry_mode / task / ppo.lr /
+  vtrace.rho_bar / policy_lag.max_policy_lag / network.embed_size 失配、缺 formal 键、多 runtime
+  键、篡改 formal SHA、错 GPU UUID、错 out_dir、checkpoint label、preflight 抛错 + off 豁免、
+  4 类 arm 绑定、checkpoint SHA PASS/失配/NOT_FROZEN、SHA 键序不变。
+- **config_diff_validator**：`GATE14_CONFIG_DIFF_UNIVARIATE=PASS`，differing paths 仍仅
+  `['carry_mode']`（legacy active:false 编辑两臂逐字相同，未引入新差异）。
+- **compileall**：runtime/experiment_src + runtime/frozen_modules + tests + configs 全通过
+  （本地 + 服务器 CPU）。
+
+**开发期测试代码修正（记录原因 + 差异，断言严格度未降）**：
+1. GATE31 非法用例数据修正：`(0,5,5,0)` 实际**合法**（alias=0==start，span=5==end-start），改为
+   `(3,5,2,0)` 触发 `POLICY_VERSION_ALIAS_MISMATCH`。这是测试数据笔误，被测 validator 逻辑未变。
+2. GATE36 的 `line_of()` 按行匹配，原多行 needle 永不命中 → 改用单行 refusal 字面量
+   `"FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "`。被测 launcher
+   顺序（preflight line 84 < `import jax` 102 < bind 237 < env 320 / ckpt 341，refuse < env）未变。
+3. GATE29 泄漏扫描改为排除注释行：launcher line 1105 是解释“泄漏已移除”的**注释**，非活代码；
+   gate 现只把非注释活代码里的 `max_policy_lag=fp_cfg.max_policy_lag` 判为泄漏。
+
+**未跑 / 未声明（保持 NOT_RUN）**：4096 smoke、24576、98304、正式两臂、GPU、参数更新、旧 probe
+重跑、Hindsight、AWR、full_p2_legacy——全部禁止项均未执行。`MATCHED_REPLAY_EXPOSURE=NOT_RUN`、
+`MATCHED_REPLAY_CONTENT=NOT_CLAIMED`、`GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN=NOT_RUN` 不变。

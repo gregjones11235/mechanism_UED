@@ -25,6 +25,46 @@ from replay_buffer import (
 )
 
 
+# ===========================================================================
+# Phase4A-v2.2 (CC2 §五) — policy-version RANGE invariants (ADDITIVE ONLY)
+# ===========================================================================
+# Pure validation of the (start, end, span, alias) block. These functions NEVER modify sampling
+# behavior or any numeric content; they only raise on invariant violations. The LEGACY DEFAULT
+# 0/0/0/0 is legal (start=0, end=0, span=0, alias=0 satisfies every invariant).
+#   POLICY_VERSION_RANGE_INVALID   : start < 0, OR end < start
+#   POLICY_VERSION_SPAN_MISMATCH   : span != end - start (a negative span always fails here)
+#   POLICY_VERSION_ALIAS_MISMATCH  : policy_version_at_collection != policy_version_start
+def validate_policy_version_range_fields(start, end, span, alias):
+    """Validate the four policy-version range fields. Raises ValueError with one of the codes
+    above on violation; returns the coerced int record on success. Pure — no side effects."""
+    start = int(start); end = int(end); span = int(span); alias = int(alias)
+    if start < 0 or end < start:
+        raise ValueError(
+            f"POLICY_VERSION_RANGE_INVALID: start={start} end={end} span={span} alias={alias}; "
+            "require start >= 0 and end >= start.")
+    if span != end - start:
+        raise ValueError(
+            f"POLICY_VERSION_SPAN_MISMATCH: span={span} != end - start = {end - start} "
+            f"(start={start}, end={end}).")
+    if alias != start:
+        raise ValueError(
+            f"POLICY_VERSION_ALIAS_MISMATCH: policy_version_at_collection={alias} != "
+            f"policy_version_start={start}; the deprecated alias MUST equal start.")
+    return dict(policy_version_start=start, policy_version_end=end,
+                policy_version_span=span, policy_version_at_collection=alias)
+
+
+def validate_sample_policy_version_range(sample):
+    """Phase4A-v2.2 (§五): validate a sampled window's policy-version range (propagated verbatim
+    from the source trajectory by sample()). READ-ONLY: this must never change the sample's
+    numeric content — it inspects the four fields and raises on violation, nothing else."""
+    return validate_policy_version_range_fields(
+        getattr(sample, "policy_version_start", 0),
+        getattr(sample, "policy_version_end", 0),
+        getattr(sample, "policy_version_span", 0),
+        getattr(sample, "policy_version_at_collection", 0))
+
+
 @dataclass
 class RMTTrajectory(Trajectory):
     """A complete episode with sparse GTrXL memory anchors AND RMT16 token anchors.
@@ -90,7 +130,19 @@ class RMTTrajectory(Trajectory):
             raise ValueError("RMT seg_buf anchor count mismatch.")
         if int(np.asarray(self.rmt_anchor_segcount).shape[0]) != n_exp:
             raise ValueError("RMT seg_count anchor count mismatch.")
+        # Phase4A-v2.2 (§五): the policy-version range invariants are enforced here, so every
+        # buffer insert (base insert validates anchors) rejects an inconsistent range.
+        self.validate_policy_version_range()
         return True
+
+    def validate_policy_version_range(self):
+        """Phase4A-v2.2 (§五): validate the episode policy-version RANGE block
+        (start/end/span + deprecated alias==start). PURE validation — never modifies any field.
+        The legacy default 0/0/0/0 is legal. Raises POLICY_VERSION_RANGE_INVALID /
+        POLICY_VERSION_SPAN_MISMATCH / POLICY_VERSION_ALIAS_MISMATCH on violation."""
+        return validate_policy_version_range_fields(
+            self.policy_version_start, self.policy_version_end,
+            self.policy_version_span, self.policy_version_at_collection)
 
     def rmt_anchor_segcount_steps(self):
         """RMT anchors share anchor_steps with the GTrXL anchors (1:1 aligned)."""
@@ -221,7 +273,7 @@ class RMTReplayBuffer(ReplayBuffer):
         self.counters.replay_samples_drawn += 1
         self.counters.total_sequence_length += sequence_length
 
-        return RMTReplaySample(
+        sample = RMTReplaySample(
             observations=traj.observations[start_step:end_step].copy(),
             actions=traj.actions[start_step:end_step].copy(),
             rewards=traj.rewards[start_step:end_step].copy(),
@@ -250,6 +302,10 @@ class RMTReplayBuffer(ReplayBuffer):
             pre_anchor_rmt_segbuf=rmt_segbuf,
             pre_anchor_rmt_segcount=int(rmt_segcount),
         )
+        # Phase4A-v2.2 (§五): the constructed sample's policy-version range must satisfy the
+        # invariants (read-only check; sample numeric content is NOT touched).
+        validate_sample_policy_version_range(sample)
+        return sample
 
     def sample_batch(self, n: int, **kw) -> list:
         return [self.sample(**kw) for _ in range(n)]

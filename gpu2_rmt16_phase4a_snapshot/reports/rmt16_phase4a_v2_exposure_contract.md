@@ -85,3 +85,45 @@ python tests/phase4a_v2_exposure_validator.py \
 
 This round: `MATCHED_REPLAY_EXPOSURE=NOT_RUN` — no formal two-arm run has been launched
 (`FORMAL_TWO_ARM_LAUNCH=NOT_AUTHORIZED`, `NEW_TRAINING_RUNS=0`).
+
+---
+
+## 6. Phase4A-v2.2 ADDENDUM — Level 1 upgraded to FULL canonical protocol identity (§二/§八)
+
+The v2.1 text above described Level 1 as equality over a fixed whitelist
+`PROTOCOL_MATCH_FIELDS = {sequence_length, batch_size, replay_mode, sampler, loss}`. **That
+whitelist is DELETED.** It was incomplete: it did not compare `learner` or `rng_rule`, so two
+arms could differ in the learner update rule or the RNG discipline and still read
+`PROTOCOL_MATCH=PASS`. The comparison is now a **full dictionary identity** over the entire
+`protocol_definition` (11 keys), not a field subset.
+
+Normative Level 1 rules (implemented by `phase4a_v2_contract.compare_protocols`, called from
+`compare_exposure` and from `phase4a_v2_exposure_validator.validate_two_arm`):
+
+* `REQUIRED_PROTOCOL_FIELDS = {sequence_length, batch_size, replay_mode, sampler, learner,
+  loss, rng_rule}` — every protocol MUST be complete on this set. A missing required field
+  raises **`PROTOCOL_IDENTITY_INCOMPLETE`** (fail closed; never coerced to PASS).
+* Both arms MUST carry a `dict` protocol_definition; a non-dict raises
+  `PROTOCOL_IDENTITY_INCOMPLETE`.
+* The two key SETS MUST be identical. An extra/unknown field on one arm only →
+  `PROTOCOL_KEYSET_MISMATCH` → `PROTOCOL_MATCH=FAIL` (guards against one side silently carrying
+  a field the other lacks).
+* EVERY field is diffed (`PROTOCOL_DIFFERING_FIELDS` lists all of them) — including `learner`
+  and `rng_rule`, which the old whitelist skipped.
+* The canonical serialization `canonical_protocol_json` (JSON, `sort_keys=True`,
+  `separators=(",",":")`, `ensure_ascii=False`) and its `protocol_definition_sha256` are emitted
+  for BOTH arms. Key ORDER is irrelevant; any VALUE difference is caught.
+* `PROTOCOL_MATCH=PASS` ⇔ identical key set ∧ empty diff set ∧ canonical JSON equal ∧
+  protocol SHA256 equal.
+
+The runtime-generated protocol now also carries an auditable RNG breakdown
+(`rng_engine=np.random.RandomState`, `rng_seed_derivation=run_seed_plus_7`,
+`rng_stream=dedicated_replay_sampler`, `hidden_buffer_rng_used=false`), so the RNG discipline is
+part of the compared identity rather than an unrecorded convention.
+
+`MATCHED_REPLAY_EXPOSURE=PASS` ⇔ Level 1 (full protocol identity) AND Level 2 (exposure counts)
+PASS. A protocol difference with otherwise-identical exposure yields
+`PROTOCOL_MATCH=FAIL` / `EXPOSURE_COUNT_MATCH=PASS` / `MATCHED_REPLAY_EXPOSURE=FAIL`
+(GATE28). Levels 2 and 3 are unchanged. Self-test grew to 18 checks (protocol SHA equality,
+different learner/rng_rule, missing learner/rng_rule, extra-field keyset mismatch, key-order
+invariance).

@@ -241,3 +241,46 @@ carry_mode；GATE15 full_p2_legacy 需显式授权。**任一门禁失败立即�
 6. **新增门禁 16–26（§十）**：provenance（16–18）、policy-lag（19–21）、标签拆分（22）、
    exposure fail-closed（23–24）、冻结证据（25–26）。本地 25 PASS/1 SKIP(JAX)；服务器 CPU
    26 PASS/0 SKIP。
+
+---
+
+## Phase4A-v2.2 设计补遗（runtime binding + protocol completeness）
+
+V2.2 不改变任何科学阈值／网络／任务／评估器／种子／预算，只把 v2.1 已“定义”的契约**绑定到
+真实 runtime 并补齐协议身份**。六项设计决策：
+
+1. **协议完整身份（§二/§八）**：删除字段白名单 `PROTOCOL_MATCH_FIELDS`。Level 1 升级为对整个
+   `protocol_definition`（11 键）的**全字典身份**比较：`REQUIRED_PROTOCOL_FIELDS`（含
+   `learner`、`rng_rule`）缺一即 fail-closed 抛 `PROTOCOL_IDENTITY_INCOMPLETE`；两臂键集合必须
+   相同（多一个未知键 → `PROTOCOL_KEYSET_MISMATCH`）；逐字段 diff（含旧白名单漏掉的
+   learner/rng_rule）；canonical JSON（`sort_keys`，键序无关）+ `protocol_definition_sha256`
+   双侧输出。协议还带可审计 RNG 细分（rng_engine / rng_seed_derivation / rng_stream /
+   hidden_buffer_rng_used）。
+2. **active policy-lag 泄漏清零（§三）**：`original_vtrace` 活动域不得出现数值
+   `max_policy_lag`。launcher summary 的 `p2_frozen` 改为 `policy_lag_gate_active=False` +
+   `max_policy_lag=None`；legacy `16` 仅保留在 `legacy_full_p2_only{active:false}` 文档域。
+   `assert_no_active_policy_lag_leak` 扫描活动块，任何数值 lag / gate_active=true / legacy 缺
+   active=false 均抛 `ORIGINAL_VTRACE_ACTIVE_POLICY_LAG_LEAK`。
+3. **episode 策略版本区间（§四）**：episode JSONL 记录 `policy_version_start/end/span`；旧
+   `policy_version` 显式标注为 `policy_version_end` 的**弃用别名**
+   （`policy_version_alias_of="policy_version_end"`, `policy_version_deprecated=True`）。
+   per-transition 版本不记录（V-trace 用每步存储的 behavior log_prob）。复跑所需的
+   update_index/rollout_step/env_id/length/episode_id 原样不动。
+4. **轨迹/样本区间校验器（§五）**：`validate_policy_version_range_fields(start,end,span,alias)`
+   纯校验（legacy 0/0/0/0 合法）；`POLICY_VERSION_RANGE_INVALID` / `_SPAN_MISMATCH` /
+   `_ALIAS_MISMATCH` 三类码。`RMTTrajectory.validate_anchors()` 末尾调用（buffer insert 即强制）；
+   `sample()` 构造后做**只读**校验（不改数值内容）。
+5. **YAML↔runtime 绑定（§六，关键门禁）**：`--formal_config <yaml>`；`replay_mode=original_vtrace`
+   缺失即在 `import jax` **之前**抛 `FORMAL_CONFIG_REQUIRED_FOR_ORIGINAL_VTRACE`。arm 绑定
+   （schema/arm/carry_mode 三者一致，否则 `FORMAL_CONFIG_ARM_MISMATCH`）。从**真实**常量构造
+   runtime scientific config，与 YAML 的 `scientific_config` 做 canonical deep-diff +
+   SHA 相等 → `RUNTIME_CONFIG_CERTIFICATE`；任何科学字段差异 → `FORMAL_CONFIG_RUNTIME_MISMATCH`
+   并 `SystemExit`（在 env build / ckpt load 之前）。runtime_assignment（gpu_uuid/out_dir）
+   独立校验 → `RUNTIME_ASSIGNMENT_MISMATCH`。base checkpoint 与冻结期望 SHA
+   `d4e85af5…`（取自两臂冻结 probe summary）fail-closed 比对，从不伪造，否则 `NOT_FROZEN`。
+6. **分层发布状态标签（§七）**：用时间限定标签取代无范围的 `PUSH_PERFORMED`：
+   `BASE_REMOTE_PUBLICATION_STATUS=PASS` / `BASE_REMOTE_HEAD=87d1e55` /
+   `IMPLEMENTATION_ROUND_PUSH_PERFORMED=false` / `V2_2_REMOTE_PUBLICATION_STATUS=NOT_PUSHED` /
+   `V2_2_PUSH_PERFORMED=false`。禁止出现无时间范围的 `PUSH_PERFORMED` 键。
+
+门禁总数 38（新增 27–38），全部非 JAX，本地 1-skip、服务器 0-skip。

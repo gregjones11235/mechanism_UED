@@ -64,3 +64,29 @@
 - 原始 probe 证据冻结于提交时的 SHA256；若后续服务器源文件改变，repo 内副本**不**随之更新
   （它是历史证据快照）。
 - 本轮仅本地 commit，`PUSH_PERFORMED=false`，等待总控复审。
+
+---
+
+## Phase4A-v2.2 已知局限补遗
+
+- **绑定是“静态 + pre-JAX”门禁，不是训练验证**：`--formal_config` 绑定证明 YAML 预登记与真实
+  runtime scientific config **逐字段一致并产出 certificate**，但它**不**运行 4096 smoke、不启动
+  两臂、不更新参数（`SMOKE_4096=NOT_RUN`，`FORMAL_TWO_ARM_LAUNCH=NOT_AUTHORIZED`，
+  `NEW_TRAINING_RUNS=0`，`GPU_TRAINING_RUNS=0`）。certificate PASS 是“配置绑定正确”的证据，
+  **不是**“训练结果正确”的证据。
+- **base checkpoint SHA 比对依赖冻结期望**：`d4e85af5…` 取自两臂冻结 probe summary 的
+  `base_sha256`。若未来换用不同 base checkpoint，期望值需显式更新；缺期望时 fail-safe 标
+  `NOT_FROZEN`，**从不**伪造 PASS。
+- **out_dir 比较允许后缀匹配**：YAML 相对路径（如 `runs/RMT16-PERSISTENT-ORIGVTRACE-129`）与
+  可能的绝对 `args.out` 之间用“精确相等 OR realpath 后缀”判定，避免把路径前缀差异误判为失配；
+  这放宽了“字符串严格相等”，但 gpu_uuid 仍要求精确相等。
+- **certificate 两段式**：结构 + 科学 + assignment 校验在 env build **之前**完成并落盘；base
+  params SHA 在 ckpt load **之后**二次校验并**重写** certificate。中间窗口的 certificate 尚未含
+  base SHA 结论——属设计内的两阶段，非缺陷。
+- **协议身份是“定义级”而非“执行级”**：`PROTOCOL_MATCH` 比较两臂的协议**定义**（learner/rng_rule/
+  各字段 + canonical SHA）；它不比较两臂实际 replay 的**内容**（Level 3 恒
+  `NOT_APPLICABLE_ENDOGENOUS_BUFFERS`）。`MATCHED_REPLAY_EXPOSURE=NOT_RUN`、
+  `MATCHED_REPLAY_CONTENT=NOT_CLAIMED` 仍成立。
+- **本轮仅本地 commit**：`IMPLEMENTATION_ROUND_PUSH_PERFORMED=false`、
+  `V2_2_REMOTE_PUBLICATION_STATUS=NOT_PUSHED`、`V2_2_PUSH_PERFORMED=false`。无时间范围的
+  `PUSH_PERFORMED` 键已禁用；等待总控复审。

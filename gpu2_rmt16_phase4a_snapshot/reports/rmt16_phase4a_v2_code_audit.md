@@ -128,3 +128,55 @@
 - configs：活动 `max_policy_lag:16` 移除；`policy_lag`/`exposure_contract`/`legacy_full_p2_only`
   两臂逐字相同（GATE14 复验仅 carry_mode 差异；runtime_assignment 仅 gpu_uuid/out_dir 差异）。
 - 全部 v2.1 新增/修改 `.py` 通过 `py_compile` 与 `compileall`（本地 + 服务器 CPU）。
+
+---
+
+## Phase4A-v2.2 代码审计补遗（本轮改动文件）
+
+本轮（V2.2）改动严格限定在 `gpu2_rmt16_phase4a_snapshot/` 内；CC3 / CC4 / Henry-branch 未触碰；
+`evidence/raw_probe/` 8 个冻结证据文件逐字节未改（`git diff --exit-code 87d1e55 -- evidence/raw_probe/`
+为空）。无阈值／网络／任务／评估器／种子／预算改动。
+
+**修改的源码（`.py`，均通过 py_compile + compileall）：**
+- `runtime/experiment_src/phase4a_v2_contract.py`：删除 `PROTOCOL_MATCH_FIELDS`；新增
+  `REQUIRED_PROTOCOL_FIELDS` / `canonical_protocol_json` / `protocol_definition_sha256` /
+  `missing_required_protocol_fields` / `compare_protocols`（全字典身份 + canonical SHA）；
+  `replay_protocol_labels` 增补 rng 细分键与 `learner`/`rng_rule`；Level 1 改走 `compare_protocols`；
+  新增 `active_replay_config_manifest` / `legacy_full_p2_manifest` / `assert_no_active_policy_lag_leak`
+  （活动域 lag 泄漏扫描，fail-closed）。
+- `tests/phase4a_v2_exposure_validator.py`：Level-1 spec 文案更新为“全 canonical 协议身份”；
+  report 增补 `PROTOCOL_MISSING_FIELDS_*` / `PROTOCOL_KEYSET_MISMATCH` /
+  `PROTOCOL_DEFINITION_SHA256_*`；`_synthetic_summary` 增补 learner/rng_rule/drop/extra 钩子；
+  self-test 11→18（协议 SHA 相等、learner/rng_rule 差异、缺字段、多键 keyset、键序不变）。
+- `runtime/experiment_src/phase4a_v2_runtime_config.py`（**新增**，纯 Python，无 JAX）：
+  `load_formal_config` / `canonical_scientific_config` / `scientific_config_sha256` /
+  `build_runtime_scientific_config` / `deep_diff` / `preflight_require_formal_config`（pre-JAX）/
+  `validate_arm_binding` / `build_checkpoint_identity` / `verify_checkpoint_params_sha`（冻结期望
+  SHA `d4e85af5…`）/ `validate_runtime_against_formal_config`（certificate）/
+  `write_runtime_config_certificate` / `certificate_shas_record`。self-test 29/29，负例 28（≥19）。
+- `runtime/experiment_src/train_rmt16_p2replay.py`：`--formal_config` 参数；pre-JAX preflight +
+  arm 绑定（line 84 < `import jax` line 102）；从真实常量构造 runtime scientific config +
+  certificate（binding line 237 < env line 320 < ckpt line 341）；certificate_status≠PASS →
+  `SystemExit(FORMAL_CONFIG_RUNTIME_MISMATCH)`（env/ckpt 之前）；base params SHA 加载后比对 +
+  certificate 重写；manifest 与 summary 内嵌 `runtime_config_certificate`；`p2_frozen` 改
+  `max_policy_lag=None`/`policy_lag_gate_active=False`；summary 增补 active_replay_config /
+  legacy_full_p2_only / leak scan。
+- `runtime/experiment_src/rmt_collect.py`：episode 完成块构造 `episode_record`，写入
+  `policy_version_start/end/span` + 旧 `policy_version`（别名=end, deprecated=True）+ 8 条
+  pre-write assert；recompute provenance 键不动（冻结复跑仍 20/6、21/5、8979、BOTH）。
+- `runtime/frozen_modules/rmt_replay_buffer.py`：新增 `validate_policy_version_range_fields` /
+  `validate_sample_policy_version_range`（只读）/ `RMTTrajectory.validate_policy_version_range`；
+  `validate_anchors()` 末尾强制区间校验（insert 即生效）；`sample()` 构造后只读校验。
+
+**修改的配置 / 报告：**
+- `configs/rmt16_phase4a_v2_persistent.yaml` & `_reset128.yaml`：`legacy_full_p2_only` 改
+  `active:false`（保留文档 `max_policy_lag:16`），两臂**逐字相同**编辑；GATE14 复验仅 carry_mode 差异。
+- `reports/rmt16_phase4a_v2_2_labels.json`（新增，§十四 完整标签集，分层发布状态，无范围
+  PUSH_PERFORMED 已禁）。
+- `reports/rmt16_phase4a_v2_2_final.md`（新增，本轮最终报告）。
+- 四份 v2 文档 + exposure_contract.md 各加 V2.2 补遗。
+
+**新增门禁 27–38**（`tests/test_phase4a_v2_gates.py`，全部非 JAX）：协议完整字段（27）、协议
+fail-closed（28）、active lag 泄漏（29）、episode 区间记录（30）、轨迹区间校验（31）、样本区间
+校验（32）、YAML↔runtime 绑定 PASS（33）、科学字段失配（34）、runtime_assignment 失配（35）、
+`--formal_config` pre-JAX（36）、certificate SHA 一致（37）、分层发布标签（38）。门禁总数 38。
