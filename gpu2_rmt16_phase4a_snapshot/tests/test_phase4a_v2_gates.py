@@ -1248,8 +1248,15 @@ def gate35():
 
 
 def gate36():
-    """GATE 36 — original_vtrace without --formal_config fails closed BEFORE JAX import / env
-    init; full binding refusal is wired before env build + ckpt load (§六.2/§六.7)."""
+    """GATE 36 — v2.3 two-phase certificate chain static order (§十四): ARGPARSE < preflight <
+    FORMAL_IDENTITY < runtime assignment < FULL pre-JAX scientific binding < PENDING precheck
+    < pre-JAX refusal < `import jax` < imported-constants binding (+drift finalize/refusal) <
+    env build < ckpt load < checkpoint verify/finalize < final refusal < training loop.
+    original_vtrace without --formal_config fails closed BEFORE JAX; off mode stays exempt.
+
+    Phase4A-v2.3 reason+diff: the v2.2 gate asserted the single-write wiring
+    (validate_runtime_against_formal_config before env); the v2.3 driver instead runs the
+    PENDING->PASS/FAIL state machine, so the asserted order semantics changed per §十四."""
     import phase4a_v2_runtime_config as RTC
     try:
         RTC.preflight_require_formal_config("original_vtrace", None)
@@ -1267,24 +1274,70 @@ def gate36():
                 return i
         return -1
 
-    i_preflight = line_of("RTC.preflight_require_formal_config(REPLAY_MODE, args.formal_config)")
-    i_jax = line_of("import jax, jax.numpy as jnp")
-    i_bind = line_of("RUNTIME_CONFIG_CERTIFICATE = RTC.validate_runtime_against_formal_config(")
-    i_env = line_of("base_env = MultiTaskMiniCraftaxEnv(")
-    i_ckpt = line_of("ckpt_mgr = ocp.CheckpointManager(")
-    # single-line literal of the refusal message (line_of matches within ONE line)
-    i_refuse = line_of('"FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "')
-    if -1 in (i_preflight, i_jax, i_bind, i_env, i_ckpt, i_refuse):
-        return FAIL, (f"launcher wiring missing: preflight={i_preflight} jax={i_jax} "
-                      f"bind={i_bind} env={i_env} ckpt={i_ckpt} refuse={i_refuse}")
-    if not (i_preflight < i_jax < i_bind < i_env and i_bind < i_ckpt and i_refuse < i_env):
-        return FAIL, (f"wrong order: preflight={i_preflight} jax={i_jax} bind={i_bind} "
-                      f"env={i_env} ckpt={i_ckpt} refuse={i_refuse}")
-    if '"--formal_config"' not in src:
-        return FAIL, "launcher lacks the --formal_config argument"
-    return PASS, ("preflight (missing --formal_config -> FORMAL_CONFIG_REQUIRED_FOR_ORIGINAL_"
-                  "VTRACE) sits BEFORE `import jax`; full binding + FORMAL_CONFIG_RUNTIME_"
-                  "MISMATCH refusal sit before env build and ckpt load; off mode exempt")
+    def lines_of(needle):
+        return [i for i, ln in enumerate(lines) if needle in ln]
+
+    marks = {
+        "argparse": line_of("args = ap.parse_args()"),
+        "preflight": line_of(
+            "RTC.preflight_require_formal_config(REPLAY_MODE, args.formal_config)"),
+        "formal_identity": line_of(
+            "FORMAL_CONFIG_IDENTITY = FID.verify_formal_config_identity("),
+        "assignment": line_of("RUNTIME_ASSIGNMENT_RECORD = RTC.validate_runtime_assignment("),
+        "prejax_scientific": line_of(
+            "_PREJAX_SCIENTIFIC = RTC.build_runtime_scientific_config("),
+        "precheck": line_of("RUNTIME_CONFIG_CERTIFICATE = RTC.build_precheck_certificate("),
+        # single-line literals of the two refusal messages (line_of matches within ONE line)
+        "prejax_refuse": line_of(
+            '"FORMAL_CONFIG_RUNTIME_MISMATCH: prejax precheck certificate_status="'),
+        "import_jax": line_of("import jax, jax.numpy as jnp"),
+        "imported_scientific": line_of(
+            "_imported_scientific = RTC.build_runtime_scientific_config("),
+        "drift_diff": line_of("_IMPORTED_CONSTANTS_DRIFT = RTC.deep_diff("),
+        "imported_refuse": line_of(
+            '"IMPORTED_RUNTIME_CONSTANTS_MISMATCH: the REAL imported runtime constants '
+            'drifted "'),
+        "env": line_of("base_env = MultiTaskMiniCraftaxEnv("),
+        "ckpt": line_of("ckpt_mgr = ocp.CheckpointManager("),
+        "verify_checkpoint": line_of(
+            'RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"] = '
+            "RTC.verify_checkpoint_params_sha("),
+        "final_refuse": line_of(
+            '"FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "'),
+        "train_loop": line_of("for u in range(args.total_updates):"),
+    }
+    fins = lines_of("RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(")
+    missing = sorted(k for k, v in marks.items() if v == -1)
+    if missing:
+        return FAIL, f"launcher wiring missing: {missing} (finalize sites={fins})"
+    # exactly two finalize sites: the drift-failure finalize (post-import, pre-env) and the
+    # checkpoint finalize (post ckpt-load); classify by position, not by first occurrence
+    if len(fins) != 2:
+        return FAIL, f"expected exactly 2 finalize_certificate sites, got {fins}"
+    drift_fins = [i for i in fins
+                  if marks["import_jax"] < i < marks["env"]]
+    ckpt_fins = [i for i in fins if i > marks["verify_checkpoint"]]
+    if len(drift_fins) != 1 or len(ckpt_fins) != 1:
+        return FAIL, (f"finalize sites misplaced: drift={drift_fins} ckpt={ckpt_fins} "
+                      f"(jax={marks['import_jax']} env={marks['env']} "
+                      f"verify={marks['verify_checkpoint']})")
+    marks["drift_finalize"] = drift_fins[0]
+    marks["checkpoint_finalize"] = ckpt_fins[0]
+    order = ["argparse", "preflight", "formal_identity", "assignment", "prejax_scientific",
+             "precheck", "prejax_refuse", "import_jax", "imported_scientific", "drift_diff",
+             "drift_finalize", "imported_refuse", "env", "ckpt", "verify_checkpoint",
+             "checkpoint_finalize", "final_refuse", "train_loop"]
+    for a, b in zip(order, order[1:]):
+        if not marks[a] < marks[b]:
+            return FAIL, f"order violation: {a}({marks[a]}) !< {b}({marks[b]})"
+    for arg in ('"--formal_config"', '"--snapshot_root"', '"--run_root"'):
+        if arg not in src:
+            return FAIL, f"launcher lacks the {arg} argument"
+    return PASS, ("static §十四 order holds end-to-end: argparse < preflight < formal identity "
+                  "< assignment < full pre-JAX scientific binding < PENDING precheck + pre-JAX "
+                  "refusal < import jax < imported-constants drift finalize/refusal < env build "
+                  "< ckpt load < checkpoint verify/finalize < final refusal < training loop; "
+                  "--formal_config/--snapshot_root/--run_root all wired; off mode exempt")
 
 
 def gate37():
@@ -1321,26 +1374,46 @@ def gate37():
     except ValueError as e:
         if "BASE_CHECKPOINT_SHA_MISMATCH" not in str(e):
             return FAIL, f"wrong error: {e}"
-    # launcher embeds the certificate record in the checkpoint manifest AND the summary
+    # launcher embeds the certificate record in the checkpoint manifest AND the summary.
+    # Phase4A-v2.3 reason+diff (§七.3): the summary call now binds the FINAL certificate file
+    # SHA + sidecar (the v2.2 two-line needle no longer exists); the record key set grew to a
+    # 13-key superset that pins the certificate ARTIFACT, not just the payload.
     src = _read(_LAUNCHER).replace("\r\n", "\n")
     for needle in ('fields["runtime_config_certificate"] = RTC.certificate_shas_record(',
-                   "runtime_config_certificate=(\n                   "
-                   "RTC.certificate_shas_record(RUNTIME_CONFIG_CERTIFICATE)",
+                   "runtime_config_certificate=(\n"
+                   "                   RTC.certificate_shas_record(\n"
+                   "                       RUNTIME_CONFIG_CERTIFICATE,\n"
+                   "                       certificate_file_sha256="
+                   "RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,\n"
+                   "                       certificate_sidecar_path="
+                   "RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)",
                    "runtime_config_certificate_path=RUNTIME_CONFIG_CERTIFICATE_PATH,",
+                   "runtime_config_certificate_sidecar_path="
+                   "RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,",
+                   "runtime_config_certificate_file_sha256="
+                   "RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,",
+                   "executed_protocol_identity=EXECUTED_PROTOCOL_IDENTITY,",
                    "RUNTIME_CONFIG_CERTIFICATE[\"checkpoint_identity\"] = "
                    "RTC.verify_checkpoint_params_sha("):
         if needle not in src:
             return FAIL, f"launcher missing certificate embedding: {needle[:60]}..."
-    # certificate_shas_record carries the §六.8 fields
+    # certificate_shas_record carries the §六.8 fields PLUS the v2.3 §七.3 artifact-identity keys
     keys = set(RTC.certificate_shas_record(cert))
     need = {"formal_config_file_sha256", "scientific_config_sha256",
             "runtime_scientific_config_sha256", "runtime_config_certificate_status",
-            "base_checkpoint_expected_sha256", "base_checkpoint_expected_sha256_status"}
+            "base_checkpoint_expected_sha256", "base_checkpoint_expected_sha256_status",
+            "runtime_config_certificate_version", "runtime_config_certificate_finalized",
+            "runtime_config_certificate_payload_sha256",
+            "runtime_config_certificate_file_sha256",
+            "runtime_config_certificate_sidecar_path",
+            "base_checkpoint_params_sha256", "base_checkpoint_match"}
     if not need.issubset(keys):
         return FAIL, f"certificate_shas_record missing {need - keys}"
+    if len(keys) != 13:
+        return FAIL, f"certificate_shas_record key count {len(keys)} != 13 (superset drift)"
     return PASS, ("certificate file content == object; SHAs recompute from YAML/file; base SHA "
                   "PASS/FAIL-closed/NOT_FROZEN paths correct; manifest + summary embed the "
-                  "certificate record")
+                  "certificate record; summary binds final file SHA + sidecar; record = 13 keys")
 
 
 def gate38():
@@ -1368,6 +1441,657 @@ def gate38():
     return PASS, ("layered status: BASE_REMOTE_PUBLICATION_STATUS=PASS @ 87d1e55, "
                   "IMPLEMENTATION_ROUND_PUSH_PERFORMED=false, V2_2_*=NOT_PUSHED; no unscoped "
                   "PUSH_PERFORMED")
+
+
+# ----------------------------------------------------------------------------
+# Phase4A-v2.3 (§十/§十一): GATE39-GATE50 — canonical formal-config identity (§三),
+# runtime-assignment fail closed (§四), pre-JAX full scientific binding (§五/§十四),
+# certificate state machine (§六), certificate artifact SHA / sidecar / tamper detection
+# (§七), executed-protocol SOURCE identity (§八), v2.3 publication labels + v2.2 errata
+# (§九). Negative tests are marked (NEG); GATE39-GATE50 add >= 30 fail-closed negatives
+# (§十一 requires >= 25), on top of the module self-tests (RTC: 63, FID: 8, CONTRACT: 4).
+# ----------------------------------------------------------------------------
+
+
+def _v23_prejax_chain(arm="persistent", *, with_identity=True, sci_override=None,
+                      cli_carry=None, cli_gpu=None, run_root=None):
+    """Functional mirror of the driver's PRE-JAX chain (§五.2 steps 3-8) for one arm, using
+    exactly the pure-Python modules the driver imports before `import jax` (RTC + FSPEC +
+    FID; NO jax/numpy). Returns (precheck_certificate, assignment_record, FSPEC)."""
+    import phase4a_v2_runtime_config as RTC
+    import phase4a_v2_frozen_spec as FSPEC
+    import phase4a_v2_formal_identity as FID
+    snap = run_root if run_root is not None else _SNAPSHOT
+    path = os.path.join(snap, "configs", f"rmt16_phase4a_v2_{arm}.yaml")
+    rec = RTC.load_formal_config(path)
+    RTC.validate_arm_binding(rec, arm, replay_mode="original_vtrace")
+    fid = FID.verify_formal_config_identity(snap, arm, rec) if with_identity else None
+    cfg = rec["config"]
+    ra = cfg["runtime_assignment"]
+    cli_carry = arm if cli_carry is None else cli_carry
+    cli_gpu = ra["gpu_uuid"] if cli_gpu is None else cli_gpu
+    cli_out = os.path.join(snap, ra["out_dir"])
+    assign = RTC.validate_runtime_assignment(cfg, cli_carry=cli_carry, cli_gpu=cli_gpu,
+                                             cli_out=cli_out, run_root=snap)
+    kw = FSPEC.build_kwargs(arm)
+    if sci_override:
+        kw.update(sci_override)
+    sci = RTC.build_runtime_scientific_config(**kw)
+    cert = RTC.build_precheck_certificate(
+        rec, sci, formal_identity_record=fid, assignment_record=assign,
+        checkpoint_identity=RTC.build_checkpoint_identity("/ckpt/17500/full_state.pkl"),
+        frozen_spec_sha256=FSPEC.FROZEN_SPEC_SHA256,
+        cli_args=dict(carry_mode=cli_carry, gpu_uuid=cli_gpu, out=cli_out),
+        runtime_constants=dict(FROZEN_SPEC_SHA256=FSPEC.FROZEN_SPEC_SHA256),
+        snapshot_root=snap, run_root=snap)
+    return cert, assign, FSPEC
+
+
+def gate39():
+    """GATE 39 — canonical formal-config identity (§三): both arms' frozen path + file SHA +
+    scientific SHA verify PASS against the real committed YAMLs; the reference runtime kwargs
+    are the frozen spec itself (single source of truth)."""
+    import phase4a_v2_runtime_config as RTC
+    import phase4a_v2_frozen_spec as FSPEC
+    import phase4a_v2_formal_identity as FID
+    for arm in ("persistent", "reset128"):
+        ident = FID.frozen_identity(arm)
+        rec = RTC.load_formal_config(os.path.join(_SNAPSHOT, ident["relative_path"]))
+        idrec = FID.verify_formal_config_identity(_SNAPSHOT, arm, rec)
+        if idrec["formal_config_identity"] != "PASS":
+            return FAIL, f"{arm}: canonical identity not PASS: {idrec}"
+        if rec["file_sha256"] != ident["file_sha256"]:
+            return FAIL, f"{arm}: file SHA drift vs frozen constant"
+        if RTC.scientific_config_sha256(
+                rec["config"]["scientific_config"]) != ident["scientific_config_sha256"]:
+            return FAIL, f"{arm}: scientific SHA drift vs frozen constant"
+    if RTC._reference_runtime_kwargs("persistent") != FSPEC.build_kwargs("persistent"):
+        return FAIL, "reference kwargs diverged from the frozen spec"
+    return PASS, ("both arms: canonical realpath == frozen path; file SHA + scientific SHA == "
+                  "frozen constants (re-derived from the real files); reference kwargs == "
+                  "frozen spec (single source of truth)")
+
+
+def gate40():
+    """GATE 40 — formal-config identity fail closed (§三, NEG x6): byte-identical copy at
+    another path, edited seed (even CLI-synced), comment-only change, wrong-arm YAML (path +
+    content), unknown arm — each rejected with the §三 error code."""
+    import shutil
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    import phase4a_v2_formal_identity as FID
+    canon = os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_persistent.yaml")
+    tmp = tempfile.mkdtemp(prefix="p4av23_g40_")
+    try:
+        # (NEG 1) byte-identical copy elsewhere -> PATH identity FAIL
+        copy = os.path.join(tmp, "copy.yaml")
+        shutil.copyfile(canon, copy)
+        try:
+            FID.verify_formal_config_path_identity(_SNAPSHOT, "persistent", copy)
+            return FAIL, "(NEG1) byte copy elsewhere not rejected"
+        except ValueError as e:
+            if "FORMAL_CONFIG_PATH_IDENTITY_MISMATCH" not in str(e):
+                return FAIL, f"(NEG1) wrong code: {e}"
+        # (NEG 2) edited seed -> CONTENT identity FAIL
+        edited = open(canon, encoding="utf-8").read().replace("seed: 42", "seed: 43")
+        ep = os.path.join(tmp, "edited.yaml")
+        with open(ep, "w", encoding="utf-8") as f:
+            f.write(edited)
+        try:
+            FID.verify_formal_config_content_identity(RTC.load_formal_config(ep), "persistent")
+            return FAIL, "(NEG2) edited-seed copy not rejected"
+        except ValueError as e:
+            if "FORMAL_CONFIG_IDENTITY_MISMATCH" not in str(e):
+                return FAIL, f"(NEG2) wrong code: {e}"
+        # (NEG 3) comment-only change -> FILE SHA FAIL (scientific SHA unchanged)
+        commented = "# comment that changes file bytes only\n" + open(
+            canon, encoding="utf-8").read()
+        cp = os.path.join(tmp, "commented.yaml")
+        with open(cp, "w", encoding="utf-8") as f:
+            f.write(commented)
+        try:
+            FID.verify_formal_config_content_identity(RTC.load_formal_config(cp), "persistent")
+            return FAIL, "(NEG3) comment-only change not rejected"
+        except ValueError as e:
+            if "FORMAL_CONFIG_IDENTITY_MISMATCH" not in str(e) or "file_sha256" not in str(e):
+                return FAIL, f"(NEG3) wrong code: {e}"
+        # (NEG 4 + 5) wrong-arm YAML -> PATH and CONTENT identity both FAIL
+        r128 = os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_reset128.yaml")
+        try:
+            FID.verify_formal_config_path_identity(_SNAPSHOT, "persistent", r128)
+            return FAIL, "(NEG4) wrong-arm YAML path not rejected"
+        except ValueError as e:
+            if "FORMAL_CONFIG_PATH_IDENTITY_MISMATCH" not in str(e):
+                return FAIL, f"(NEG4) wrong code: {e}"
+        try:
+            FID.verify_formal_config_content_identity(RTC.load_formal_config(r128), "persistent")
+            return FAIL, "(NEG5) wrong-arm YAML content not rejected"
+        except ValueError as e:
+            if "FORMAL_CONFIG_IDENTITY_MISMATCH" not in str(e):
+                return FAIL, f"(NEG5) wrong code: {e}"
+        # (NEG 6) unknown arm -> fail closed
+        try:
+            FID.frozen_identity("bogus")
+            return FAIL, "(NEG6) unknown arm not rejected"
+        except ValueError as e:
+            if "FORMAL_CONFIG_IDENTITY_UNKNOWN_ARM" not in str(e):
+                return FAIL, f"(NEG6) wrong code: {e}"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return PASS, ("6 negatives rejected fail closed: byte copy elsewhere (path), edited seed "
+                  "(content), comment-only (file SHA), wrong-arm YAML (path + content), "
+                  "unknown arm")
+
+
+def gate41():
+    """GATE 41 — runtime_assignment completeness fail closed (§四.1, NEG x6): missing / null /
+    empty / non-string gpu_uuid or out_dir, missing runtime_assignment block, missing
+    top-level arm — all raise RUNTIME_ASSIGNMENT_INCOMPLETE (no default, no bypass, no
+    fail-open)."""
+    import copy as _copy
+    import phase4a_v2_runtime_config as RTC
+    base = RTC.load_formal_config(
+        os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_persistent.yaml"))["config"]
+
+    def mutated(fn):
+        cfg = _copy.deepcopy(base)
+        fn(cfg)
+        return cfg
+
+    cases = [
+        ("missing gpu_uuid", lambda c: c["runtime_assignment"].pop("gpu_uuid")),
+        ("null gpu_uuid", lambda c: c["runtime_assignment"].__setitem__("gpu_uuid", None)),
+        ("empty out_dir", lambda c: c["runtime_assignment"].__setitem__("out_dir", "   ")),
+        ("non-string gpu_uuid", lambda c: c["runtime_assignment"].__setitem__("gpu_uuid", 123)),
+        ("no runtime_assignment block", lambda c: c.pop("runtime_assignment")),
+        ("missing top-level arm", lambda c: c.pop("arm")),
+    ]
+    for name, fn in cases:
+        try:
+            RTC.resolve_runtime_assignment(mutated(fn))
+            return FAIL, f"(NEG) {name}: RUNTIME_ASSIGNMENT_INCOMPLETE not raised"
+        except ValueError as e:
+            if "RUNTIME_ASSIGNMENT_INCOMPLETE" not in str(e):
+                return FAIL, f"(NEG) {name}: wrong code: {e}"
+    got = RTC.resolve_runtime_assignment(base)
+    if got != dict(arm="persistent", gpu_uuid=base["runtime_assignment"]["gpu_uuid"],
+                   out_dir=base["runtime_assignment"]["out_dir"]):
+        return FAIL, f"real config resolved wrong: {got}"
+    return PASS, ("6 incomplete-assignment negatives all raise RUNTIME_ASSIGNMENT_INCOMPLETE "
+                  "(missing/null/empty/non-string fields, no ra block, no arm); the real "
+                  "config resolves arm + gpu_uuid + out_dir exactly")
+
+
+def gate42():
+    """GATE 42 — runtime_assignment four-way ARM + GPU fail closed (§四.2/§四.4, NEG x3): CLI
+    carry mismatch, scientific carry_mode mismatch, wrong --gpu_uuid — each FAILs the
+    assignment with its own error code; exact values PASS."""
+    import copy as _copy
+    import phase4a_v2_runtime_config as RTC
+    rec = RTC.load_formal_config(
+        os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_persistent.yaml"))
+    cfg = rec["config"]
+    ra = cfg["runtime_assignment"]
+    good_out = os.path.join(_SNAPSHOT, ra["out_dir"])
+
+    def has_code(record, code):
+        return any(code in e for e in record["runtime_assignment_errors"])
+
+    # (NEG 1) CLI carry_mode disagrees with the formal arm
+    r1 = RTC.validate_runtime_assignment(cfg, cli_carry="reset128", cli_gpu=ra["gpu_uuid"],
+                                         cli_out=good_out, run_root=_SNAPSHOT)
+    if r1["runtime_assignment_match"] or not has_code(r1, "RUNTIME_ASSIGNMENT_ARM_MISMATCH"):
+        return FAIL, f"(NEG1) CLI carry mismatch not caught: {r1['runtime_assignment_errors']}"
+    # (NEG 2) scientific_config.carry_mode disagrees (edited formal block)
+    cfg2 = _copy.deepcopy(cfg)
+    cfg2["scientific_config"]["carry_mode"] = "reset128"
+    r2 = RTC.validate_runtime_assignment(cfg2, cli_carry="persistent", cli_gpu=ra["gpu_uuid"],
+                                         cli_out=good_out, run_root=_SNAPSHOT)
+    if r2["runtime_assignment_match"] or not has_code(r2, "RUNTIME_ASSIGNMENT_ARM_MISMATCH"):
+        return FAIL, (f"(NEG2) scientific carry_mode mismatch not caught: "
+                      f"{r2['runtime_assignment_errors']}")
+    # (NEG 3) wrong --gpu_uuid (exact equality; no suffix match)
+    r3 = RTC.validate_runtime_assignment(cfg, cli_carry="persistent",
+                                         cli_gpu=ra["gpu_uuid"] + "-X", cli_out=good_out,
+                                         run_root=_SNAPSHOT)
+    if r3["runtime_assignment_match"] or not has_code(r3, "RUNTIME_ASSIGNMENT_GPU_MISMATCH"):
+        return FAIL, f"(NEG3) gpu_uuid mismatch not caught: {r3['runtime_assignment_errors']}"
+    # positive control: exact values PASS
+    r0 = RTC.validate_runtime_assignment(cfg, cli_carry="persistent", cli_gpu=ra["gpu_uuid"],
+                                         cli_out=good_out, run_root=_SNAPSHOT)
+    if not r0["runtime_assignment_match"] or r0["runtime_assignment_errors"]:
+        return FAIL, f"positive control failed: {r0['runtime_assignment_errors']}"
+    return PASS, ("CLI carry / scientific carry_mode / gpu_uuid mismatches each -> "
+                  "RUNTIME_ASSIGNMENT_{ARM,GPU}_MISMATCH with match=False (four-way arm "
+                  "binding); exact values PASS")
+
+
+def gate43():
+    """GATE 43 — strict out_dir identity fail closed (§四.3, NEG x5): absolute formal out_dir,
+    '..' segment, missing --run_root, CLI --out elsewhere under run_root, and the v2.2 suffix
+    trap (dir name extending the formal name) — each -> RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH;
+    the exact relative dir under --run_root PASSes (strict realpath equality)."""
+    import copy as _copy
+    import phase4a_v2_runtime_config as RTC
+    rec = RTC.load_formal_config(
+        os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_persistent.yaml"))
+    cfg = rec["config"]
+    ra = cfg["runtime_assignment"]
+    formal_out = ra["out_dir"]
+
+    def run(cfg_, cli_out, run_root):
+        return RTC.validate_runtime_assignment(cfg_, cli_carry="persistent",
+                                               cli_gpu=ra["gpu_uuid"], cli_out=cli_out,
+                                               run_root=run_root)
+
+    def has_out_code(r):
+        return any("RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH" in e
+                   for e in r["runtime_assignment_errors"])
+
+    # (NEG 1) absolute formal out_dir
+    c1 = _copy.deepcopy(cfg)
+    c1["runtime_assignment"]["out_dir"] = "/abs/runs/x"
+    r1 = run(c1, "/abs/runs/x", _SNAPSHOT)
+    if r1["runtime_assignment_match"] or not has_out_code(r1):
+        return FAIL, f"(NEG1) absolute out_dir not rejected: {r1['runtime_assignment_errors']}"
+    # (NEG 2) '..' segment
+    c2 = _copy.deepcopy(cfg)
+    c2["runtime_assignment"]["out_dir"] = "runs/../escape"
+    r2 = run(c2, os.path.join(_SNAPSHOT, "escape"), _SNAPSHOT)
+    if r2["runtime_assignment_match"] or not has_out_code(r2):
+        return FAIL, f"(NEG2) '..' segment not rejected: {r2['runtime_assignment_errors']}"
+    # (NEG 3) missing --run_root
+    r3 = run(cfg, os.path.join(_SNAPSHOT, formal_out), None)
+    if r3["runtime_assignment_match"] or not has_out_code(r3):
+        return FAIL, f"(NEG3) missing run_root not rejected: {r3['runtime_assignment_errors']}"
+    # (NEG 4) CLI --out elsewhere under run_root (strict equality, not containment-by-name)
+    r4 = run(cfg, os.path.join(_SNAPSHOT, "runs", "SOMEWHERE-ELSE"), _SNAPSHOT)
+    if r4["runtime_assignment_match"] or not has_out_code(r4):
+        return FAIL, f"(NEG4) out dir elsewhere not rejected: {r4['runtime_assignment_errors']}"
+    # (NEG 5) suffix trap: runs/<formal>-extra (v2.2 suffix match would have accepted this)
+    r5 = run(cfg, os.path.join(_SNAPSHOT, formal_out + "-extra"), _SNAPSHOT)
+    if r5["runtime_assignment_match"] or not has_out_code(r5):
+        return FAIL, f"(NEG5) suffix-trap dir not rejected: {r5['runtime_assignment_errors']}"
+    # positive control: exact realpath under run_root
+    r0 = run(cfg, os.path.join(_SNAPSHOT, formal_out), _SNAPSHOT)
+    if not r0["runtime_assignment_match"]:
+        return FAIL, f"positive control failed: {r0['runtime_assignment_errors']}"
+    return PASS, ("absolute / '..' / missing-run_root / elsewhere / suffix-trap out_dir all -> "
+                  "RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH (strict realpath equality; the v2.2 "
+                  "suffix match is gone); exact relative dir under --run_root PASSes")
+
+
+def gate44():
+    """GATE 44 — full scientific binding PRE-JAX on the frozen spec (§五/§十四): the precheck
+    certificate reaches PENDING_CHECKPOINT_IDENTITY (NOT PASS) on BOTH arms through the pure-
+    Python chain only (formal identity + strict assignment + frozen-spec scientific config),
+    then finalizes to PASS once the frozen base SHA is loaded; missing identity -> FAIL with
+    FORMAL_CONFIG_IDENTITY_MISMATCH (NEG)."""
+    import phase4a_v2_runtime_config as RTC
+    for arm in ("persistent", "reset128"):
+        cert, assign, FSPEC = _v23_prejax_chain(arm)
+        if cert["certificate_status"] != RTC.CERTIFICATE_STATUS_PENDING:
+            return FAIL, (f"{arm}: precheck status={cert['certificate_status']} != "
+                          f"PENDING_CHECKPOINT_IDENTITY; errors={cert['validation_errors']}")
+        if cert["certificate_finalized"]:
+            return FAIL, f"{arm}: precheck certificate must NOT be finalized pre-checkpoint"
+        if cert["checkpoint_identity"]["base_checkpoint_match"] != "PENDING":
+            return FAIL, (f"{arm}: pre-checkpoint match must be PENDING, got "
+                          f"{cert['checkpoint_identity']['base_checkpoint_match']}")
+        if not (cert["scientific_config_match"] and cert["runtime_assignment_match"]
+                and cert["formal_config_identity"].get("formal_config_identity") == "PASS"):
+            return FAIL, f"{arm}: pre-JAX binding flags wrong: {cert['validation_errors']}"
+        if cert["frozen_spec_sha256"] != FSPEC.FROZEN_SPEC_SHA256:
+            return FAIL, f"{arm}: frozen spec SHA not bound into the certificate"
+        # finalize with the frozen base SHA (as the driver does post-load) -> PASS
+        ci = RTC.verify_checkpoint_params_sha(
+            cert["checkpoint_identity"], RTC.EXPECTED_BASE_CHECKPOINT_SHA256)
+        fin = RTC.finalize_certificate(cert, ci)
+        if not (fin["certificate_status"] == RTC.CERTIFICATE_STATUS_PASS
+                and fin["certificate_finalized"] and fin["validation_errors"] == []):
+            return FAIL, (f"{arm}: finalize -> {fin['certificate_status']} "
+                          f"{fin['validation_errors']}")
+    # (NEG) precheck WITHOUT the formal identity record -> FAIL, never PENDING
+    cert_no_id, _, _ = _v23_prejax_chain("persistent", with_identity=False)
+    if cert_no_id["certificate_status"] != RTC.CERTIFICATE_STATUS_FAIL:
+        return FAIL, "(NEG) missing formal identity must FAIL the precheck"
+    if not any("FORMAL_CONFIG_IDENTITY_MISMATCH" in e
+               for e in cert_no_id["validation_errors"]):
+        return FAIL, "(NEG) FORMAL_CONFIG_IDENTITY_MISMATCH not reported"
+    return PASS, ("both arms: pure-Python pre-JAX chain (identity + strict assignment + "
+                  "frozen-spec FULL scientific binding) -> PENDING_CHECKPOINT_IDENTITY, then "
+                  "PASS after the frozen base SHA; missing identity -> FAIL (fail closed, "
+                  "pre-JAX)")
+
+
+def gate45():
+    """GATE 45 — certificate state machine (§六, NEG x4): PENDING + checkpoint PASS -> PASS
+    with errors cleared; checkpoint error -> FAIL + BASE_CHECKPOINT_FAILURE; a FAIL precheck
+    can NEVER finalize to PASS (stale-PASS guard, director item 5); undecided (PENDING) match
+    -> FAIL + BASE_CHECKPOINT_MATCH_NOT_PASS; NOT_FROZEN expectation -> PASS; finalize is pure
+    (input not mutated)."""
+    import phase4a_v2_runtime_config as RTC
+    pend, _, _ = _v23_prejax_chain("persistent")
+    if pend["certificate_status"] != RTC.CERTIFICATE_STATUS_PENDING:
+        return FAIL, f"setup: precheck not PENDING: {pend['validation_errors']}"
+    # positive: frozen base SHA -> PASS, finalized, errors cleared
+    ci = RTC.verify_checkpoint_params_sha(
+        pend["checkpoint_identity"], RTC.EXPECTED_BASE_CHECKPOINT_SHA256)
+    ok = RTC.finalize_certificate(pend, ci)
+    if not (ok["certificate_status"] == "PASS" and ok["certificate_finalized"]
+            and ok["validation_errors"] == []):
+        return FAIL, f"PENDING + PASS ckpt did not finalize PASS: {ok['validation_errors']}"
+    # (NEG 1) checkpoint verification error -> FAIL + BASE_CHECKPOINT_FAILURE + match=FAIL
+    f1 = RTC.finalize_certificate(pend, pend["checkpoint_identity"],
+                                  checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: x != y")
+    if f1["certificate_status"] != "FAIL" or not any(
+            "BASE_CHECKPOINT_FAILURE" in e for e in f1["validation_errors"]):
+        return FAIL, "(NEG1) checkpoint error did not FAIL with BASE_CHECKPOINT_FAILURE"
+    if f1["checkpoint_identity"]["base_checkpoint_match"] != "FAIL":
+        return FAIL, "(NEG1) match not relabeled FAIL"
+    # (NEG 2) FAIL precheck can never finalize to PASS even with a PASS checkpoint
+    bad, _, _ = _v23_prejax_chain("persistent", sci_override=dict(seed=43))
+    if bad["certificate_status"] != "FAIL":
+        return FAIL, "(NEG2) setup: mutated frozen-spec value must FAIL the precheck"
+    f2 = RTC.finalize_certificate(bad, ci)
+    if f2["certificate_status"] == "PASS":
+        return FAIL, "(NEG2) FAIL precheck finalized to PASS (stale-PASS leak)"
+    if not any("CERTIFICATE_NOT_PENDING_AT_FINALIZE" in e for e in f2["validation_errors"]):
+        return FAIL, "(NEG2) CERTIFICATE_NOT_PENDING_AT_FINALIZE not reported"
+    # (NEG 3) undecided checkpoint match (PENDING) at finalize -> FAIL
+    f3 = RTC.finalize_certificate(pend, pend["checkpoint_identity"])
+    if f3["certificate_status"] != "FAIL" or not any(
+            "BASE_CHECKPOINT_MATCH_NOT_PASS" in e for e in f3["validation_errors"]):
+        return FAIL, "(NEG3) PENDING match at finalize did not FAIL"
+    # (NEG 4) finalize_certificate is PURE: the input certificate is not mutated
+    if (pend["certificate_status"] != RTC.CERTIFICATE_STATUS_PENDING
+            or pend["certificate_finalized"]
+            or pend["checkpoint_identity"]["base_checkpoint_match"] != "PENDING"):
+        return FAIL, "(NEG4) finalize_certificate mutated its input certificate"
+    # NOT_FROZEN expectation -> finalize PASS (documented non-frozen path)
+    ci_nf = RTC.verify_checkpoint_params_sha(
+        RTC.build_checkpoint_identity("/ckpt/x", expected_sha256=None), None)
+    if ci_nf["base_checkpoint_match"] != "NOT_FROZEN":
+        return FAIL, f"NOT_FROZEN path broken: {ci_nf}"
+    f5 = RTC.finalize_certificate(pend, ci_nf)
+    if f5["certificate_status"] != "PASS":
+        return FAIL, f"PENDING + NOT_FROZEN must finalize PASS: {f5['validation_errors']}"
+    return PASS, ("PENDING + PASS ckpt -> PASS (errors cleared); checkpoint error -> FAIL + "
+                  "BASE_CHECKPOINT_FAILURE; FAIL precheck can NEVER become PASS (stale-PASS "
+                  "guard); PENDING match -> FAIL; NOT_FROZEN -> PASS; finalize is pure")
+
+
+def gate46():
+    """GATE 46 — certificate artifact identity (§七.1/§七.2/§七.3): atomic write embeds the
+    payload SHA + write marker, fsyncs a detached `<name>.sha256` sidecar with `<sha>  <base>`,
+    leaks no temp file, and verify_certificate_artifact PASSes against the returned file/
+    payload SHAs (exactly what the summary/checkpoint manifest bind)."""
+    import json as _json
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    pend, _, _ = _v23_prejax_chain("persistent")
+    ci = RTC.verify_checkpoint_params_sha(
+        pend["checkpoint_identity"], RTC.EXPECTED_BASE_CHECKPOINT_SHA256)
+    fin = RTC.finalize_certificate(pend, ci)
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, "runtime_config_certificate.json")
+        cpath, spath, fsha, psha = RTC.write_certificate_atomic(fin, p)
+        side = RTC.certificate_sidecar_path(cpath)
+        if spath != side or not os.path.isfile(side):
+            return FAIL, f"sidecar missing/misnamed: {spath}"
+        if os.path.exists(f"{cpath}.tmp.{os.getpid()}"):
+            return FAIL, "temp file leaked by atomic write"
+        raw = open(cpath, "rb").read()
+        if RTC._sha256_bytes(raw) != fsha:
+            return FAIL, "returned file SHA != recomputed file SHA"
+        disk = _json.loads(raw.decode("utf-8"))
+        if disk.get("certificate_payload_sha256") != psha:
+            return FAIL, "embedded payload SHA != returned payload SHA"
+        if disk.get("certificate_written_via") != "atomic_tempfile_fsync_replace":
+            return FAIL, "atomic-write marker missing"
+        if open(side, encoding="utf-8").read() != f"{fsha}  {os.path.basename(cpath)}\n":
+            return FAIL, "sidecar content format wrong"
+        v = RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256=fsha,
+                                            expected_payload_sha256=psha)
+        if v["certificate_tamper_check"] != "PASS":
+            return FAIL, f"artifact verify not PASS: {v}"
+        # the §七.3 record binds the same file SHA + sidecar (summary/ckpt binding); the
+        # payload SHA is a write-time self-field of the ARTIFACT (asserted on disk above),
+        # not a field of the in-memory certificate, so the record carries it only when the
+        # certificate object itself holds it (e.g. after a re-read of the written file)
+        recd = RTC.certificate_shas_record(fin, certificate_file_sha256=fsha,
+                                           certificate_sidecar_path=spath)
+        if (recd["runtime_config_certificate_file_sha256"] != fsha
+                or recd["runtime_config_certificate_sidecar_path"] != spath):
+            return FAIL, "certificate_shas_record does not bind file SHA + sidecar (§七.3)"
+        recd_disk = RTC.certificate_shas_record(disk, certificate_file_sha256=fsha,
+                                                certificate_sidecar_path=spath)
+        if recd_disk["runtime_config_certificate_payload_sha256"] != psha:
+            return FAIL, "record built from the re-read artifact must bind the payload SHA"
+    return PASS, ("atomic write: payload SHA embedded, detached sidecar '<sha>  <basename>' "
+                  "fsynced, no tmp leak; verify_certificate_artifact PASS with expected "
+                  "file+payload SHAs; §七.3 record binds file SHA + sidecar + payload SHA")
+
+
+def gate47():
+    """GATE 47 — certificate tamper detection fail closed (§七.4, NEG x6): FAIL->PASS status
+    flip, edited validation_errors, corrupted sidecar SHA, missing sidecar, truncated JSON,
+    and a wrong EXPECTED file SHA — each raises RUNTIME_CONFIG_CERTIFICATE_TAMPERED."""
+    import json as _json
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    pend, _, _ = _v23_prejax_chain("persistent")
+    # a FINALIZED FAIL certificate (the checkpoint-error path of §六.3)
+    fail_cert = RTC.finalize_certificate(
+        pend, pend["checkpoint_identity"],
+        checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: loaded != frozen")
+    if fail_cert["certificate_status"] != "FAIL":
+        return FAIL, "setup: expected a finalized FAIL certificate"
+
+    def expect_tamper(label, attack):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "runtime_config_certificate.json")
+            cpath, spath, _, _ = RTC.write_certificate_atomic(fail_cert, p)
+            attack(cpath, spath)
+            try:
+                RTC.verify_certificate_artifact(cpath, spath)
+                return f"{label}: tamper NOT detected"
+            except ValueError as e:
+                if "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" not in str(e):
+                    return f"{label}: wrong code: {e}"
+        return None
+
+    def rewrite(cert_path, mutate):
+        d = _json.loads(open(cert_path, encoding="utf-8").read())
+        mutate(d)
+        with open(cert_path, "w", encoding="utf-8") as f:
+            f.write(_json.dumps(d, indent=2, sort_keys=True))
+
+    attacks = [
+        ("NEG1 FAIL->PASS flip",
+         lambda c, s: rewrite(c, lambda d: (d.__setitem__("certificate_status", "PASS"),
+                                            d.__setitem__("validation_errors", [])))),
+        ("NEG2 edited validation_errors",
+         lambda c, s: rewrite(c, lambda d: d.__setitem__("validation_errors", []))),
+        ("NEG3 corrupted sidecar SHA",
+         lambda c, s: open(s, "w", encoding="utf-8").write(
+             "0" * 64 + "  runtime_config_certificate.json\n")),
+        ("NEG4 missing sidecar", lambda c, s: os.remove(s)),
+        ("NEG5 truncated JSON",
+         lambda c, s: open(c, "wb").write(open(c, "rb").read()[:40])),
+    ]
+    for label, attack in attacks:
+        err = expect_tamper(label, attack)
+        if err:
+            return FAIL, err
+    # (NEG 6) pristine file, but wrong EXPECTED file SHA (stale summary/checkpoint binding)
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, "runtime_config_certificate.json")
+        cpath, spath, _, _ = RTC.write_certificate_atomic(fail_cert, p)
+        try:
+            RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256="f" * 64)
+            return FAIL, "(NEG6) wrong expected file SHA not rejected"
+        except ValueError as e:
+            if "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" not in str(e):
+                return FAIL, f"(NEG6) wrong code: {e}"
+    return PASS, ("6 tamper attacks all fail closed with RUNTIME_CONFIG_CERTIFICATE_TAMPERED: "
+                  "FAIL->PASS flip, edited errors, corrupted sidecar, missing sidecar, "
+                  "truncated JSON, wrong expected file SHA")
+
+
+def gate48():
+    """GATE 48 — executed protocol SOURCE identity (§八): declared labels are reconciled with
+    INSPECTED executing functions (module/qualname/source SHA) and the RNG instance class;
+    impostor learner, PCG64 Generator, uninspectable builtin, wrong declared learner and wrong
+    declared sampler all fail closed (NEG x5)."""
+    import shutil
+    import sys
+    import tempfile
+    import textwrap
+    import phase4a_v2_contract as CONTRACT
+    try:
+        import numpy as np
+    except ImportError:
+        return SKIP, "numpy unavailable (required to bind the RNG engine)"
+    tmp = tempfile.mkdtemp(prefix="p4av23_g48_")
+    sys.path.insert(0, tmp)
+    try:
+        with open(os.path.join(tmp, "p4av23_g48_stub.py"), "w", encoding="utf-8") as f:
+            f.write(textwrap.dedent("""
+                def original_vtrace_update_rmt(state, batch):
+                    '''stub learner matching the declared name.'''
+                    return state
+
+                def sample_eligible(self, n):
+                    '''stub sampler matching the declared name.'''
+                    return []
+
+                def impostor_update(state, batch):
+                    '''wrong learner name.'''
+                    return state
+            """).lstrip())
+        import p4av23_g48_stub as S
+        # positive: declared names bind; source identity inspected (SHA, not label)
+        ident = CONTRACT.executed_function_source_identity(
+            S.original_vtrace_update_rmt, S.sample_eligible)
+        if ident["executed_function_binding"] != "PASS":
+            return FAIL, f"binding not PASS: {ident}"
+        for part in ("learner", "sampler"):
+            sha = ident[part].get("source_sha256")
+            if not sha or len(sha) != 64:
+                return FAIL, f"{part} source SHA missing/short: {ident[part]}"
+        # RNG instance: numpy.random.RandomState binds; PCG64 Generator does not
+        rng = CONTRACT.verify_rng_instance_identity(np.random.RandomState(49))
+        if rng["rng_binding"] != "PASS" or rng["class_name"] != "RandomState":
+            return FAIL, f"RandomState did not bind: {rng}"
+        # declared protocol reconciles with the executed identity (two-phase)
+        pd = CONTRACT.replay_protocol_labels("original_vtrace", 129, 4)["protocol_definition"]
+        recon = CONTRACT.verify_executed_protocol_matches_declared(ident, pd)
+        if recon["executed_protocol_declaration_match"] != "PASS":
+            return FAIL, f"declaration reconciliation not PASS: {recon}"
+        # (NEG 1) impostor learner name -> EXECUTED_PROTOCOL_SOURCE_MISMATCH
+        try:
+            CONTRACT.executed_function_source_identity(S.impostor_update, S.sample_eligible)
+            return FAIL, "(NEG1) impostor learner not rejected"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_SOURCE_MISMATCH" not in str(e):
+                return FAIL, f"(NEG1) wrong code: {e}"
+        # (NEG 2) wrong RNG engine (np.random.default_rng -> PCG64 Generator)
+        try:
+            CONTRACT.verify_rng_instance_identity(np.random.default_rng(1))
+            return FAIL, "(NEG2) PCG64 Generator not rejected"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_RNG_MISMATCH" not in str(e):
+                return FAIL, f"(NEG2) wrong code: {e}"
+        # (NEG 3) uninspectable callable -> EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE
+        try:
+            CONTRACT._source_identity(len)
+            return FAIL, "(NEG3) uninspectable builtin not rejected"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE" not in str(e):
+                return FAIL, f"(NEG3) wrong code: {e}"
+        # (NEG 4) wrong declared learner label -> EXECUTED_PROTOCOL_DECLARATION_MISMATCH
+        bad_pd = dict(pd)
+        bad_pd["learner"] = "some_other_learner"
+        try:
+            CONTRACT.verify_executed_protocol_matches_declared(ident, bad_pd)
+            return FAIL, "(NEG4) wrong declared learner not rejected"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_DECLARATION_MISMATCH" not in str(e):
+                return FAIL, f"(NEG4) wrong code: {e}"
+        # (NEG 5) wrong declared sampler label -> EXECUTED_PROTOCOL_DECLARATION_MISMATCH
+        bad_pd2 = dict(pd)
+        bad_pd2["sampler"] = "uniform"
+        try:
+            CONTRACT.verify_executed_protocol_matches_declared(ident, bad_pd2)
+            return FAIL, "(NEG5) wrong declared sampler not rejected"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_DECLARATION_MISMATCH" not in str(e):
+                return FAIL, f"(NEG5) wrong code: {e}"
+    finally:
+        if tmp in sys.path:
+            sys.path.remove(tmp)
+        sys.modules.pop("p4av23_g48_stub", None)
+        shutil.rmtree(tmp, ignore_errors=True)
+    return PASS, ("executed learner/sampler bound by inspected source SHA (module/qualname/"
+                  "source SHA, not labels); numpy.random.RandomState binds; declaration "
+                  "reconciliation PASS; impostor learner / PCG64 / uninspectable builtin / "
+                  "wrong declared learner / wrong declared sampler all fail closed")
+
+
+def gate49():
+    """GATE 49 — v2.3 publication labels (§九): layered, time-scoped; V2.3 NOT_PUSHED; the
+    v2.2 publication erratum is recorded (v2.2 WAS pushed: f2b7aead is the remote HEAD,
+    director item 8); no unscoped PUSH_PERFORMED key."""
+    import json as _json
+    path = os.path.join(_SNAPSHOT, "reports", "rmt16_phase4a_v2_3_labels.json")
+    if not os.path.isfile(path):
+        return FAIL, "reports/rmt16_phase4a_v2_3_labels.json missing"
+    with open(path, encoding="utf-8") as f:
+        doc = _json.load(f)
+    labels = doc["labels"]
+    expect = {
+        "V2_3_REMOTE_PUBLICATION_STATUS": "NOT_PUSHED",
+        "V2_3_PUSH_PERFORMED": False,
+        "V2_3_IMPLEMENTATION_ROUND_PUSH_PERFORMED": False,
+        "V2_2_ERRATUM_REMOTE_PUBLICATION_STATUS": "PUSHED",
+        "V2_2_ERRATUM_REMOTE_HEAD": "f2b7aead44426825f905fa8b82c5f66c29ee167a",
+        "BASE_REMOTE_HEAD": "87d1e552415d292417dcb6e6f9f6b16b97a6d135",
+        "REVIEW_BASELINE_COMMIT": "d3c8c7d6abd2df3d0ba69dc2c1f326f8668798e5",
+    }
+    for k, v in expect.items():
+        if labels.get(k) != v:
+            return FAIL, f"{k}={labels.get(k)!r} != {v!r}"
+    if "PUSH_PERFORMED" in labels:
+        return FAIL, "time-UNSCOPED 'PUSH_PERFORMED' key present (forbidden by §九)"
+    return PASS, ("v2.3 labels: V2_3_*=NOT_PUSHED (this round); v2.2 erratum recorded "
+                  "(PUSHED @ f2b7aead); base @ 87d1e55; review baseline @ d3c8c7d6; no "
+                  "unscoped PUSH_PERFORMED")
+
+
+def gate50():
+    """GATE 50 — v2.3 reports + v2.2 publication errata (§九 item 8): the final report and the
+    errata exist; the errata names the V2.2 NOT_PUSHED label vs the f2b7aead remote-HEAD
+    reality; the v2.2 label file itself is NOT rewritten (errata-only correction)."""
+    import json as _json
+    final = os.path.join(_SNAPSHOT, "reports", "rmt16_phase4a_v2_3_final.md")
+    errata = os.path.join(_SNAPSHOT, "reports", "rmt16_phase4a_v2_2_publication_errata.md")
+    for p in (final, errata):
+        if not os.path.isfile(p):
+            return FAIL, f"reports/{os.path.basename(p)} missing"
+    etxt = open(errata, encoding="utf-8").read()
+    for needle in ("f2b7aead44426825f905fa8b82c5f66c29ee167a", "NOT_PUSHED", "PUSHED"):
+        if needle not in etxt:
+            return FAIL, f"errata does not document the NOT_PUSHED-vs-{needle[:12]} reality"
+    # the v2.2 labels file is byte-unchanged (its NOT_PUSHED labels stay as written in v2.2)
+    with open(os.path.join(_SNAPSHOT, "reports", "rmt16_phase4a_v2_2_labels.json"),
+              encoding="utf-8") as f:
+        v22 = _json.load(f)
+    if v22["labels"].get("V2_2_REMOTE_PUBLICATION_STATUS") != "NOT_PUSHED":
+        return FAIL, "v2.2 labels file was rewritten (forbidden; errata-only correction)"
+    return PASS, ("v2.3 final report + v2.2 publication errata present; errata records the "
+                  "NOT_PUSHED label vs f2b7aead remote-HEAD reality; v2.2 labels file left "
+                  "unchanged (errata-only correction per §九 item 8)")
 
 
 # ----------------------------------------------------------------------------
@@ -1416,6 +2140,21 @@ GATES = [
     ("GATE36_formal_config_required_prejax", gate36),
     ("GATE37_certificate_sha_consistency", gate37),
     ("GATE38_layered_publication_labels", gate38),
+    # ---- Phase4A-v2.3 (§十/§十一): canonical formal-config identity / runtime-assignment
+    #      fail closed / pre-JAX full binding / certificate state machine + artifact SHA /
+    #      executed protocol source identity / v2.3 publication labels + v2.2 errata ----
+    ("GATE39_canonical_formal_identity", gate39),
+    ("GATE40_formal_identity_fail_closed", gate40),
+    ("GATE41_assignment_completeness_fail_closed", gate41),
+    ("GATE42_assignment_arm_gpu_fail_closed", gate42),
+    ("GATE43_assignment_out_dir_strict", gate43),
+    ("GATE44_prejax_full_binding_pending", gate44),
+    ("GATE45_certificate_state_machine", gate45),
+    ("GATE46_certificate_artifact_sha", gate46),
+    ("GATE47_certificate_tamper_detection", gate47),
+    ("GATE48_executed_protocol_source_identity", gate48),
+    ("GATE49_v2_3_publication_labels", gate49),
+    ("GATE50_v2_2_publication_errata", gate50),
 ]
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Phase4A-v2.2 (CC2 §六) — PRE-REGISTERED YAML <-> REAL RUNTIME binding, fail closed.
+"""Phase4A-v2.2/v2.3 (CC2 §六 / §四 / §六 / §七) — PRE-REGISTERED YAML <-> REAL RUNTIME binding,
+fail closed.
 
 Binds the pre-registered formal config (configs/rmt16_phase4a_v2_{persistent,reset128}.yaml)
 to the ACTUAL values the driver will run with, and refuses to proceed on any mismatch:
@@ -21,6 +22,22 @@ to the ACTUAL values the driver will run with, and refuses to proceed on any mis
   (§六.7) write_runtime_config_certificate(...) emits runtime_config_certificate.json; only
           scientific_config_match=true AND runtime_assignment_match=true AND validation_errors=[]
           AND certificate_status=PASS permits env/training to proceed.
+
+Phase4A-v2.3 additions:
+  (v2.3 §四) runtime_assignment completeness + STRICT identity: REQUIRED_RUNTIME_ASSIGNMENT_FIELDS
+          {arm, gpu_uuid, out_dir} must all be present + non-empty (RUNTIME_ASSIGNMENT_INCOMPLETE);
+          arm bound four ways (RUNTIME_ASSIGNMENT_ARM_MISMATCH); gpu_uuid EXACT, no suffix
+          (RUNTIME_ASSIGNMENT_GPU_MISMATCH); out_dir matched by REALPATH equality anchored at
+          --run_root — relative only, no `..`, no absolute path, no suffix match
+          (RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH).
+  (v2.3 §六) certificate STATE MACHINE: build_precheck_certificate (pre-JAX) ->
+          PENDING_CHECKPOINT_IDENTITY or FAIL; finalize_certificate (post checkpoint load) ->
+          PASS/FAIL, certificate_finalized flag; a FAIL finalize overwrites any stale certificate
+          so no old PASS can survive a checkpoint failure.
+  (v2.3 §七) certificate artifact binding: payload SHA (§七.1), ATOMIC tempfile+fsync+replace
+          write (§六.4), detached file-SHA sidecar (§七.2), extended certificate_shas_record
+          (§七.3), verify_certificate_artifact tamper detection (§七.4 ->
+          RUNTIME_CONFIG_CERTIFICATE_TAMPERED).
 
 PURE Python: stdlib + PyYAML ONLY. NO JAX / numpy / optax — this module is imported by the
 driver BEFORE `import jax` and must run on a machine without JAX (local gate box).
@@ -274,6 +291,119 @@ def validate_arm_binding(formal_record, carry_mode, replay_mode=None):
 
 
 # ---------------------------------------------------------------------------
+# Phase4A-v2.3 (§四) — runtime_assignment COMPLETENESS + STRICT identity, fail closed
+# ---------------------------------------------------------------------------
+# v2.2 validated gpu_uuid/out_dir LOOSELY: absent fields were silently skipped and out_dir used
+# a suffix match (a runtime path merely ENDING WITH the formal out_dir passed). v2.3 makes the
+# assignment fail CLOSED: every required field must be present and non-empty; arm is bound four
+# ways; gpu_uuid must match exactly; out_dir must match by REALPATH equality anchored at the
+# driver's --run_root (relative path only; no `..`; no absolute path; no suffix match).
+
+REQUIRED_RUNTIME_ASSIGNMENT_FIELDS = ("arm", "gpu_uuid", "out_dir")
+
+
+def _is_nonempty_str(value):
+    return isinstance(value, str) and value.strip() != ""
+
+
+def resolve_runtime_assignment(config):
+    """§四.1 Resolve the effective runtime assignment, fail closed. `arm` comes from the formal
+    config's canonical top-level `arm` field (the frozen YAML's runtime_assignment block carries
+    gpu_uuid/out_dir only; arm is NOT duplicated there); gpu_uuid/out_dir come from
+    runtime_assignment. Missing / null / empty / non-string on ANY required field raises
+    RUNTIME_ASSIGNMENT_INCOMPLETE — there is no default and no bypass (no fail-open)."""
+    if not isinstance(config, dict):
+        raise ValueError("RUNTIME_ASSIGNMENT_INCOMPLETE: formal config is not a mapping.")
+    ra = config.get("runtime_assignment")
+    if not isinstance(ra, dict):
+        raise ValueError(
+            "RUNTIME_ASSIGNMENT_INCOMPLETE: formal YAML has no runtime_assignment mapping "
+            "(gpu_uuid/out_dir must be pre-registered).")
+    resolved = dict(arm=config.get("arm"),
+                    gpu_uuid=ra.get("gpu_uuid"),
+                    out_dir=ra.get("out_dir"))
+    missing = [k for k in REQUIRED_RUNTIME_ASSIGNMENT_FIELDS
+               if not _is_nonempty_str(resolved.get(k))]
+    if missing:
+        raise ValueError(
+            f"RUNTIME_ASSIGNMENT_INCOMPLETE: required runtime_assignment field(s) "
+            f"missing/null/empty/non-string: {missing}. Required (all non-empty strings): "
+            f"{list(REQUIRED_RUNTIME_ASSIGNMENT_FIELDS)} — arm from the formal top-level `arm`, "
+            "gpu_uuid/out_dir from runtime_assignment. No default, no bypass.")
+    return resolved
+
+
+def _validate_out_dir_strict(formal_out_dir, cli_out, run_root):
+    """§四.3 STRICT out_dir identity. The formal out_dir must be a RELATIVE path (no absolute
+    path, no drive letter, no `..` segment) that resolves INSIDE run_root, and the realpath of
+    the actual CLI --out must EQUAL realpath(run_root/formal_out_dir). Exact equality — the v2.2
+    suffix match is gone. Returns a list of errors (empty == PASS)."""
+    errors = []
+    f = str(formal_out_dir).replace("\\", "/")
+    if os.path.isabs(f) or f.startswith("/") or (len(f) >= 2 and f[1] == ":"):
+        errors.append(
+            f"RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH: formal out_dir must be a RELATIVE path under "
+            f"--run_root, got {formal_out_dir!r}")
+        return errors
+    if ".." in f.split("/"):
+        errors.append(
+            f"RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH: formal out_dir must not contain a '..' "
+            f"segment, got {formal_out_dir!r}")
+        return errors
+    if not run_root:
+        errors.append(
+            "RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH: --run_root is required to pin the strict "
+            "out_dir identity (realpath equality; no suffix match).")
+        return errors
+    run_root_real = os.path.realpath(str(run_root))
+    expected = os.path.realpath(os.path.join(run_root_real, f))
+    if not (expected == run_root_real or expected.startswith(run_root_real + os.sep)):
+        errors.append(
+            f"RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH: formal out_dir resolves OUTSIDE --run_root: "
+            f"{expected!r} not under {run_root_real!r}")
+        return errors
+    actual = os.path.realpath(str(cli_out))
+    if actual != expected:
+        errors.append(
+            f"RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH: actual out realpath={actual!r} != expected "
+            f"realpath(run_root/out_dir)={expected!r} (strict equality; no suffix match).")
+    return errors
+
+
+def validate_runtime_assignment(config, *, cli_carry, cli_gpu, cli_out, run_root=None):
+    """§四.2/§四.3/§四.4 fail-closed runtime_assignment validation (SEPARATE from the scientific
+    SHA). Returns a record: runtime_assignment_match + runtime_assignment_errors + the resolved
+    assignment. Error codes:
+      RUNTIME_ASSIGNMENT_INCOMPLETE      — required field missing/null/empty (raised by resolve)
+      RUNTIME_ASSIGNMENT_ARM_MISMATCH    — runtime_assignment.arm / formal top-level arm /
+                                           scientific_config.carry_mode / CLI carry_mode disagree
+      RUNTIME_ASSIGNMENT_GPU_MISMATCH    — formal gpu_uuid != CLI --gpu_uuid (exact; no suffix)
+      RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH— strict realpath mismatch (see _validate_out_dir_strict)
+    """
+    resolved = resolve_runtime_assignment(config)   # may raise RUNTIME_ASSIGNMENT_INCOMPLETE
+    errors = []
+    sci = config.get("scientific_config") or {}
+    arms = dict(runtime_assignment_arm=resolved["arm"],
+                formal_top_arm=config.get("arm"),
+                scientific_config_carry_mode=sci.get("carry_mode"),
+                cli_carry_mode=cli_carry)
+    if len(set(str(v) for v in arms.values())) != 1:
+        errors.append(
+            f"RUNTIME_ASSIGNMENT_ARM_MISMATCH: four-way arm binding disagrees: {arms}")
+    if str(resolved["gpu_uuid"]) != str(cli_gpu):
+        errors.append(
+            f"RUNTIME_ASSIGNMENT_GPU_MISMATCH: formal gpu_uuid={resolved['gpu_uuid']!r} != "
+            f"cli --gpu_uuid={cli_gpu!r} (exact equality; no suffix match).")
+    errors.extend(_validate_out_dir_strict(resolved["out_dir"], cli_out, run_root))
+    return dict(runtime_assignment_match=(not errors),
+                runtime_assignment_errors=errors,
+                runtime_assignment_resolved=resolved,
+                cli_carry_mode=cli_carry, cli_gpu_uuid=cli_gpu, cli_out=cli_out,
+                run_root=run_root,
+                cli_out_realpath=(os.path.realpath(str(cli_out)) if cli_out else None))
+
+
+# ---------------------------------------------------------------------------
 # §六.5 — base checkpoint identity
 # ---------------------------------------------------------------------------
 
@@ -373,10 +503,15 @@ def validate_runtime_against_formal_config(formal_record, runtime_scientific_con
     f_out = str(ra.get("out_dir") or "").replace("\\", "/").rstrip("/")
     r_out = str(out_dir or "").replace("\\", "/").rstrip("/")
     if f_out and gpu_uuid is not None and out_dir is not None:
-        if not (f_out == r_out or r_out.endswith("/" + f_out) or r_out.endswith(f_out)):
+        # Phase4A-v2.3 (§四.3): STRICT equality only. The v2.2 suffix match
+        # (r_out.endswith("/"+f_out) / r_out.endswith(f_out)) is REMOVED: a runtime path that
+        # merely ENDS WITH the formal out_dir is no longer accepted. The driver's primary
+        # assignment validation is validate_runtime_assignment() (realpath equality anchored at
+        # --run_root); this legacy in-certificate check is kept strict-consistent with it.
+        if f_out != r_out:
             ra_errors.append(
                 f"RUNTIME_ASSIGNMENT_MISMATCH: out_dir runtime={out_dir!r} != formal="
-                f"{ra.get('out_dir')!r}")
+                f"{ra.get('out_dir')!r} (strict equality; no suffix match)")
     validation_errors.extend(ra_errors)
     runtime_assignment_match = not ra_errors
 
@@ -423,18 +558,323 @@ def write_runtime_config_certificate(certificate, path):
     return os.path.abspath(path)
 
 
-def certificate_shas_record(certificate):
-    """The compact SHA record embedded in checkpoints / summaries / launch status (§六.8)."""
+def certificate_shas_record(certificate, *, certificate_file_sha256=None,
+                            certificate_sidecar_path=None):
+    """The compact SHA record embedded in checkpoints / summaries / launch status (§六.8).
+
+    Phase4A-v2.3 (§七.3): the record now ALSO binds the certificate's own artifact identity —
+    payload SHA, final FILE SHA, sidecar path, finalized flag, and the full base-checkpoint
+    comparison (loaded params SHA + match) — so checkpoint/summary readers can re-verify the
+    certificate chain without trust. The v2.2 keys are all retained (superset)."""
+    cert = certificate or {}
+    ci = cert.get("checkpoint_identity") or {}
+    rec = dict(
+        formal_config_file_sha256=cert.get("formal_config_file_sha256"),
+        scientific_config_sha256=cert.get("scientific_config_sha256"),
+        runtime_scientific_config_sha256=cert.get("runtime_scientific_config_sha256"),
+        runtime_config_certificate_status=cert.get("certificate_status"),
+        base_checkpoint_expected_sha256=ci.get("base_checkpoint_expected_sha256"),
+        base_checkpoint_expected_sha256_status=ci.get(
+            "base_checkpoint_expected_sha256_status"))
+    rec.update(dict(
+        runtime_config_certificate_version=cert.get("certificate_version"),
+        runtime_config_certificate_finalized=cert.get("certificate_finalized"),
+        runtime_config_certificate_payload_sha256=cert.get("certificate_payload_sha256"),
+        runtime_config_certificate_file_sha256=certificate_file_sha256,
+        runtime_config_certificate_sidecar_path=certificate_sidecar_path,
+        base_checkpoint_params_sha256=ci.get("base_checkpoint_params_sha256"),
+        base_checkpoint_match=ci.get("base_checkpoint_match")))
+    return rec
+
+
+# ---------------------------------------------------------------------------
+# Phase4A-v2.3 (§六) — certificate STATE MACHINE: PENDING_CHECKPOINT_IDENTITY -> PASS/FAIL
+# ---------------------------------------------------------------------------
+# v2.2 wrote the certificate ONCE with status PASS before the checkpoint params were loaded,
+# then REWROTE it after load — so a checkpoint-SHA failure could leave a stale PASS on disk, and
+# the full scientific binding ran only AFTER `import jax`. v2.3 introduces an explicit state
+# machine:
+#   1. PRE-JAX  build_precheck_certificate -> PENDING_CHECKPOINT_IDENTITY (full scientific
+#      binding from the frozen pure-Python spec + formal identity + strict assignment), written
+#      ATOMICALLY as a provisional, NOT-finalized certificate.
+#   2. POST-import: the driver diffs the REAL imported constants against the frozen spec
+#      (IMPORTED_RUNTIME_CONSTANTS_MISMATCH on drift) and binds the executed protocol source.
+#   3. POST-load finalize_certificate -> PASS (from PENDING + checkpoint PASS/NOT_FROZEN) or
+#      FAIL (anything else, incl. checkpoint error). The FAIL finalize OVERWRITES the on-disk
+#      certificate, so NO stale PASS/PENDING survives a failure, and the driver exits nonzero.
+
+CERTIFICATE_VERSION = "phase4a_v2.3"
+CERTIFICATE_STATUS_PENDING = "PENDING_CHECKPOINT_IDENTITY"
+CERTIFICATE_STATUS_PASS = "PASS"
+CERTIFICATE_STATUS_FAIL = "FAIL"
+
+
+def build_precheck_certificate(formal_record, runtime_scientific_config, *,
+                               formal_identity_record=None,
+                               assignment_record=None,
+                               checkpoint_identity=None,
+                               frozen_spec_sha256=None,
+                               cli_args=None, runtime_constants=None,
+                               snapshot_root=None, run_root=None):
+    """§五.2/§六.1 the PRE-JAX precheck certificate. Binds, all before `import jax`:
+      * formal_config_identity (§三: canonical path + file SHA + scientific SHA),
+      * the FULL scientific_config (formal YAML vs the runtime scientific config built from the
+        frozen pure-Python spec — canonical deep diff + SHA),
+      * runtime_assignment (§四: completeness + 4-way arm + gpu + strict out_dir).
+    certificate_status = PENDING_CHECKPOINT_IDENTITY when all three pass (NOT PASS — the base
+    checkpoint params SHA can only be compared after the post-JAX load), else FAIL.
+    certificate_finalized stays False until finalize_certificate()."""
+    if formal_record is None:
+        raise ValueError(
+            "FORMAL_CONFIG_REQUIRED_FOR_ORIGINAL_VTRACE: no formal config loaded.")
+    config = formal_record.get("config") or {}
+    formal_sci_raw = config.get("scientific_config")
+    if not isinstance(formal_sci_raw, dict):
+        raise ValueError("FORMAL_CONFIG_INVALID: formal YAML has no scientific_config block.")
+
+    formal_sci = canonical_scientific_config(formal_sci_raw)
+    runtime_sci = canonical_scientific_config(runtime_scientific_config)
+    formal_sha = scientific_config_sha256(formal_sci_raw)
+    runtime_sha = scientific_config_sha256(runtime_scientific_config)
+
+    validation_errors = []
+    diffs = deep_diff(formal_sci, runtime_sci)
+    for d in diffs:
+        validation_errors.append(
+            f"FORMAL_CONFIG_RUNTIME_MISMATCH @ {d['path']}: formal={d['formal']!r} "
+            f"runtime={d['runtime']!r} ({d['kind']})")
+    if formal_sha != runtime_sha:
+        validation_errors.append(
+            f"FORMAL_CONFIG_RUNTIME_MISMATCH: scientific_config_sha256 formal={formal_sha} "
+            f"!= runtime={runtime_sha}")
+    scientific_config_match = (not diffs) and (formal_sha == runtime_sha)
+
+    formal_config_identity = bool(
+        isinstance(formal_identity_record, dict)
+        and formal_identity_record.get("formal_config_identity") == "PASS")
+    runtime_assignment_match = bool(
+        isinstance(assignment_record, dict)
+        and assignment_record.get("runtime_assignment_match"))
+    if isinstance(assignment_record, dict):
+        validation_errors.extend(assignment_record.get("runtime_assignment_errors") or [])
+
+    ci = dict(checkpoint_identity or {})
+    # params SHA cannot be compared pre-JAX: build_checkpoint_identity sets match=None, which we
+    # relabel PENDING (undecided). A truthy match here would be a logic error and is left as-is
+    # for the caller to surface.
+    if not ci.get("base_checkpoint_match"):
+        ci["base_checkpoint_match"] = "PENDING"
+
+    if (scientific_config_match and runtime_assignment_match and formal_config_identity
+            and not validation_errors):
+        status = CERTIFICATE_STATUS_PENDING
+    else:
+        status = CERTIFICATE_STATUS_FAIL
+        if not formal_config_identity and not any(
+                e.startswith(("FORMAL_CONFIG", "RUNTIME_ASSIGNMENT"))
+                for e in validation_errors):
+            validation_errors.append(
+                "FORMAL_CONFIG_IDENTITY_MISMATCH: canonical formal-config identity did not PASS "
+                "(§三 path + content identity is REQUIRED for the precheck certificate).")
+
     return dict(
-        formal_config_file_sha256=certificate.get("formal_config_file_sha256"),
-        scientific_config_sha256=certificate.get("scientific_config_sha256"),
-        runtime_scientific_config_sha256=certificate.get("runtime_scientific_config_sha256"),
-        runtime_config_certificate_status=certificate.get("certificate_status"),
-        base_checkpoint_expected_sha256=(
-            certificate.get("checkpoint_identity") or {}).get("base_checkpoint_expected_sha256"),
-        base_checkpoint_expected_sha256_status=(
-            certificate.get("checkpoint_identity") or {}).get(
-                "base_checkpoint_expected_sha256_status"))
+        schema=SCHEMA,
+        certificate_version=CERTIFICATE_VERSION,
+        certificate_status=status,
+        certificate_finalized=False,
+        frozen_spec_sha256=frozen_spec_sha256,
+        formal_config_identity=dict(formal_identity_record or {}),
+        formal_config_path=formal_record.get("path"),
+        formal_config_realpath=formal_record.get("realpath"),
+        formal_config_file_sha256=formal_record.get("file_sha256"),
+        scientific_config_sha256=formal_sha,
+        runtime_scientific_config_sha256=runtime_sha,
+        scientific_config_match=scientific_config_match,
+        scientific_config_diffs=diffs,
+        runtime_assignment_match=runtime_assignment_match,
+        runtime_assignment=dict(assignment_record or {}),
+        snapshot_root=snapshot_root,
+        run_root=run_root,
+        arm=runtime_sci.get("carry_mode"),
+        carry_mode=runtime_sci.get("carry_mode"),
+        replay_mode=runtime_sci.get("replay_mode"),
+        actual_cli_args=dict(cli_args or {}),
+        runtime_constants=dict(runtime_constants or {}),
+        checkpoint_identity=ci,
+        validation_errors=validation_errors)
+
+
+def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,
+                         checkpoint_error=None):
+    """§六.2/§六.3 deterministic finalization. Returns a NEW certificate (input not mutated):
+      * checkpoint_error is None AND checkpoint match is PASS/NOT_FROZEN AND the precheck status
+        was PENDING_CHECKPOINT_IDENTITY  ->  status PASS, certificate_finalized=True, and the
+        validation_errors list is cleared.
+      * anything else (checkpoint error, non-PENDING precheck, match not PASS/NOT_FROZEN)
+        ->  status FAIL, certificate_finalized=True, reasons appended.
+    A FAIL finalization MUST be written over the on-disk certificate (the driver calls
+    write_certificate_atomic right after), so a checkpoint-SHA failure can never leave a stale
+    PASS behind."""
+    cert = dict(precheck_certificate or {})
+    ci = dict(checkpoint_identity or cert.get("checkpoint_identity") or {})
+    cert["checkpoint_identity"] = ci
+    if checkpoint_error is not None:
+        ci["base_checkpoint_match"] = "FAIL"
+        errs = list(cert.get("validation_errors") or [])
+        errs.append(f"BASE_CHECKPOINT_FAILURE: {checkpoint_error}")
+        cert["validation_errors"] = errs
+        cert["certificate_status"] = CERTIFICATE_STATUS_FAIL
+        cert["certificate_finalized"] = True
+        return cert
+    match = ci.get("base_checkpoint_match")
+    pre_status = cert.get("certificate_status")
+    if pre_status == CERTIFICATE_STATUS_PENDING and match in ("PASS", "NOT_FROZEN"):
+        cert["certificate_status"] = CERTIFICATE_STATUS_PASS
+        cert["certificate_finalized"] = True
+        cert["validation_errors"] = []
+        return cert
+    errs = list(cert.get("validation_errors") or [])
+    if pre_status != CERTIFICATE_STATUS_PENDING:
+        errs.append(
+            f"CERTIFICATE_NOT_PENDING_AT_FINALIZE: precheck status={pre_status!r} (a FAIL "
+            "precheck can never finalize to PASS).")
+    if match not in ("PASS", "NOT_FROZEN"):
+        errs.append(f"BASE_CHECKPOINT_MATCH_NOT_PASS: base_checkpoint_match={match!r}")
+    cert["validation_errors"] = errs
+    cert["certificate_status"] = CERTIFICATE_STATUS_FAIL
+    cert["certificate_finalized"] = True
+    return cert
+
+
+# ---------------------------------------------------------------------------
+# Phase4A-v2.3 (§七) — certificate payload/file SHA, ATOMIC write, sidecar, tamper detection
+# ---------------------------------------------------------------------------
+# v2.2's certificate carried no SHA of ITSELF and was written non-atomically (direct open/write),
+# so a checkpoint/summary could not be bound to the exact certificate FILE, and a crash mid-write
+# could leave a truncated certificate. v2.3 embeds a payload SHA (§七.1), writes via
+# tempfile+fsync+os.replace (§六.4), records the FINAL file SHA in a detached sidecar (§七.2),
+# binds that file SHA into checkpoint/summary records (§七.3), and provides a tamper detector
+# (§七.4) that fails closed on ANY modification.
+
+# Fields computed AT WRITE TIME; excluded from the signed payload so the payload stays stable.
+_CERTIFICATE_SELF_FIELDS = ("certificate_payload_sha256", "certificate_file_sha256",
+                            "certificate_sidecar_path", "certificate_written_via")
+
+
+def compute_certificate_payload_sha(certificate):
+    """§七.1 SHA256 over the canonical JSON of the certificate EXCLUDING the self-fields. Covers
+    certificate_status, certificate_finalized, validation_errors, both scientific SHAs, the FULL
+    checkpoint_identity (incl. the loaded base params SHA) and every other payload field — so a
+    FAIL->PASS flip, an edited error list or an edited base SHA all change this SHA."""
+    payload = {k: v for k, v in (certificate or {}).items()
+               if k not in _CERTIFICATE_SELF_FIELDS}
+    return _sha256_bytes(canonical_json(payload).encode("utf-8"))
+
+
+def atomic_write_json(path, obj):
+    """§六.4 ATOMIC JSON write: same-directory temp file -> write -> flush -> fsync -> os.replace.
+    Readers can never observe a partial or truncated certificate. Returns the absolute path."""
+    path = os.path.abspath(str(path))
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    tmp = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    return path
+
+
+def certificate_sidecar_path(certificate_path):
+    """The detached file-SHA sidecar name (§七.2): runtime_config_certificate.json ->
+    runtime_config_certificate.sha256."""
+    p = str(certificate_path)
+    if p.lower().endswith(".json"):
+        return p[:-len(".json")] + ".sha256"
+    return p + ".sha256"
+
+
+def write_certificate_atomic(certificate, path):
+    """§七.1/§七.2 FINAL certificate write. Embeds the payload SHA (§七.1), writes atomically
+    (§六.4), computes the FINAL file SHA over the exact written bytes, and writes the detached
+    sidecar `<name>.sha256` containing `<sha256>  <basename>`. The certificate file is NOT
+    written again after this call, so the sidecar SHA stays valid for the artifact's lifetime.
+    Returns (cert_path, sidecar_path, file_sha256, payload_sha256)."""
+    cert = dict(certificate or {})
+    for k in _CERTIFICATE_SELF_FIELDS:
+        cert.pop(k, None)
+    payload_sha = compute_certificate_payload_sha(cert)
+    cert["certificate_payload_sha256"] = payload_sha
+    cert["certificate_written_via"] = "atomic_tempfile_fsync_replace"
+    cert_path = atomic_write_json(path, cert)
+    with open(cert_path, "rb") as f:
+        file_sha = _sha256_bytes(f.read())
+    sidecar = certificate_sidecar_path(cert_path)
+    base = os.path.basename(cert_path)
+    with open(sidecar, "w", encoding="utf-8") as f:
+        f.write(f"{file_sha}  {base}\n")
+        f.flush()
+        os.fsync(f.fileno())
+    return cert_path, sidecar, file_sha, payload_sha
+
+
+def verify_certificate_artifact(certificate_path, sidecar_path=None, *,
+                                expected_file_sha256=None,
+                                expected_payload_sha256=None):
+    """§七.4 tamper detection over a written certificate. Recomputes the file SHA (over the disk
+    bytes) and the payload SHA (over the parsed certificate minus self-fields) and requires ALL:
+      * recomputed payload SHA == the embedded certificate_payload_sha256 (catches FAIL->PASS
+        flips, edited validation_errors, edited base-checkpoint SHA),
+      * file SHA == the detached sidecar's SHA (catches ANY byte change, including an attacker
+        who also recomputes the payload SHA),
+      * expected file/payload SHAs (e.g. from the summary/checkpoint manifest) match, if given.
+    Any violation raises RUNTIME_CONFIG_CERTIFICATE_TAMPERED. Returns a PASS record."""
+    with open(certificate_path, "rb") as f:
+        raw = f.read()
+    file_sha = _sha256_bytes(raw)
+    try:
+        cert = json.loads(raw.decode("utf-8"))
+    except ValueError as e:
+        raise ValueError(
+            f"RUNTIME_CONFIG_CERTIFICATE_TAMPERED: certificate is not valid JSON ({e})")
+    payload_sha = compute_certificate_payload_sha(cert)
+    errors = []
+    embedded_payload = cert.get("certificate_payload_sha256")
+    if embedded_payload != payload_sha:
+        errors.append(
+            f"payload sha tampered: embedded={embedded_payload} recomputed={payload_sha}")
+    if expected_payload_sha256 is not None and payload_sha != expected_payload_sha256:
+        errors.append(
+            f"payload sha != expected: recomputed={payload_sha} "
+            f"expected={expected_payload_sha256}")
+    if expected_file_sha256 is not None and file_sha != expected_file_sha256:
+        errors.append(
+            f"file sha != expected: actual={file_sha} expected={expected_file_sha256}")
+    if sidecar_path is None:
+        sidecar_path = certificate_sidecar_path(certificate_path)
+    if os.path.exists(sidecar_path):
+        with open(sidecar_path, encoding="utf-8") as f:
+            parts = f.read().split()
+        sidecar_sha = parts[0] if parts else None
+        if sidecar_sha != file_sha:
+            errors.append(
+                f"sidecar file sha mismatch: sidecar={sidecar_sha} actual={file_sha}")
+    else:
+        errors.append(f"sidecar missing: {sidecar_path}")
+    if errors:
+        raise ValueError("RUNTIME_CONFIG_CERTIFICATE_TAMPERED: " + " | ".join(errors))
+    return dict(certificate_tamper_check="PASS", certificate_path=str(certificate_path),
+                sidecar_path=str(sidecar_path), file_sha256=file_sha,
+                payload_sha256=payload_sha)
 
 
 # ---------------------------------------------------------------------------
@@ -445,35 +885,14 @@ def _reference_runtime_kwargs(carry_mode="persistent"):
     """The REAL frozen runtime values of the driver (mirrors Cfg / FullP2Config / K_BATCH /
     ANCHOR_INTERVAL / MIN_SEQUENCE_LENGTH / args defaults). Used to build both the reference
     runtime scientific_config and — when no YAML file is reachable — the reference formal block,
-    so a match PASS is the identity comparison."""
-    return dict(
-        carry_mode=carry_mode,
-        replay_mode="original_vtrace",
-        allow_full_p2_legacy=False,
-        sequence_length=129, segment_len=128,
-        hindsight=False, awr=False, w_original_vtrace=1.0,
-        base_checkpoint="ckpt17500", seed=42, total_updates=12, save_every=2,
-        num_envs=16, num_steps=128, task="DEFEAT_KOBOLD",
-        optimistic_reset_ratio=16, condition_on_task=True,
-        replay_batch_size=4, replay_buffer_capacity=64, anchor_interval=128,
-        min_sequence_length=129, eligible_only_sampling=True,
-        ppo_lr=2.0e-5, ppo_max_grad_norm=1.0, ppo_gamma=0.999, ppo_gae_lambda=0.8,
-        ppo_clip_eps=0.2, ppo_vf_coef=0.5, ppo_ent_coef=0.002, ppo_update_epochs=1,
-        ppo_num_minibatches=2, ppo_value_target_clip_min=-50.0,
-        ppo_value_target_clip_max=300.0,
-        vtrace_rho_bar=1.0, vtrace_c_bar=1.0, vtrace_vt_clip_min=-50.0,
-        vtrace_vt_clip_max=300.0,
-        kl_replay_max=0.05, kl_run_max=0.1,
-        actor_step_scales=[1.0, 0.5, 0.25, 0.125],
-        policy_lag_gate_active=False,
-        policy_lag_gate_mode="not_applicable_original_vtrace",
-        policy_lag_max_policy_lag=None,
-        legacy_full_p2_active=False, legacy_full_p2_max_policy_lag=16,
-        ema_tau=0.995, ent_floor=0.05, grad_clip=1.0, adam_eps=1.0e-5,
-        net_activation="relu", net_embed_size=256, net_num_heads=8, net_qkv_features=256,
-        net_num_layers=2, net_gating=True, net_gating_bias=2.0, net_window_mem=128,
-        net_rmt_num_tokens=16,
-        evaluator="frozen_rmt16_evaluator")
+    so a match PASS is the identity comparison.
+
+    Phase4A-v2.3 (§五.1): the single source of truth for these values is the pure-Python frozen
+    spec (phase4a_v2_frozen_spec.FROZEN_SPEC), which the driver imports BEFORE `import jax` to
+    perform the full pre-JAX scientific binding. This function DELEGATES to it, so the reference
+    / self-test binding can never silently diverge from the frozen spec the driver binds."""
+    import phase4a_v2_frozen_spec as FSPEC   # lazy import: FSPEC imports RTC only inside funcs
+    return FSPEC.build_kwargs(carry_mode)
 
 
 def _reference_formal_record(carry_mode="persistent",
@@ -656,9 +1075,307 @@ def self_test():
     check("scientific SHA key-order invariant",
           scientific_config_sha256(sci_a) == scientific_config_sha256(sci_b))
 
+    # =======================================================================
+    # Phase4A-v2.3 additions (§四 assignment fail-closed / §六 state machine / §七 SHA+sidecar)
+    # =======================================================================
+    import tempfile
+    import shutil
+
+    _GPU = "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    _OUT = "runs/RMT16-PERSISTENT-ORIGVTRACE-129"
+
+    def _cfg_with_ra(arm="persistent", gpu=_GPU, out=_OUT, top_arm=None):
+        return dict(schema=SCHEMA, arm=(top_arm if top_arm is not None else arm),
+                    scientific_config=build_runtime_scientific_config(
+                        **_reference_runtime_kwargs(arm)),
+                    runtime_assignment=dict(gpu_uuid=gpu, out_dir=out))
+
+    # (23) §四.1 completeness -> RUNTIME_ASSIGNMENT_INCOMPLETE (fail closed, no default)
+    def expect_incomplete(name, cfg):
+        try:
+            resolve_runtime_assignment(cfg)
+            check(name, False, "no raise")
+        except ValueError as e:
+            check(name, "RUNTIME_ASSIGNMENT_INCOMPLETE" in str(e))
+
+    c = _cfg_with_ra(); c["runtime_assignment"]["gpu_uuid"] = None
+    expect_incomplete("(23a) null gpu_uuid -> INCOMPLETE", c)
+    c = _cfg_with_ra(); c["runtime_assignment"]["out_dir"] = ""
+    expect_incomplete("(23b) empty out_dir -> INCOMPLETE", c)
+    c = _cfg_with_ra(); del c["runtime_assignment"]["gpu_uuid"]
+    expect_incomplete("(23c) missing gpu_uuid key -> INCOMPLETE", c)
+    c = _cfg_with_ra(); c["arm"] = None
+    expect_incomplete("(23d) null top-level arm -> INCOMPLETE", c)
+    c = _cfg_with_ra(); del c["runtime_assignment"]
+    expect_incomplete("(23e) no runtime_assignment block -> INCOMPLETE", c)
+    c = _cfg_with_ra(); c["runtime_assignment"]["gpu_uuid"] = 12345
+    expect_incomplete("(23f) non-string gpu_uuid -> INCOMPLETE", c)
+
+    # (24) §四.2-4 fully consistent assignment (real temp run_root) -> PASS, and each of the
+    # three mismatch classes fails closed independently.
+    tmp_root = tempfile.mkdtemp(prefix="p4av23_ra_")
+    try:
+        cli_out_abs = os.path.join(tmp_root, _OUT)
+        os.makedirs(cli_out_abs, exist_ok=True)
+        rec = validate_runtime_assignment(_cfg_with_ra(), cli_carry="persistent",
+                                          cli_gpu=_GPU, cli_out=cli_out_abs,
+                                          run_root=tmp_root)
+        check("(24a) consistent assignment -> PASS",
+              rec["runtime_assignment_match"] and rec["runtime_assignment_errors"] == [])
+
+        rec = validate_runtime_assignment(_cfg_with_ra(), cli_carry="reset128",
+                                          cli_gpu=_GPU, cli_out=cli_out_abs,
+                                          run_root=tmp_root)
+        check("(24b) CLI carry_mode disagrees -> RUNTIME_ASSIGNMENT_ARM_MISMATCH",
+              not rec["runtime_assignment_match"] and any(
+                  "RUNTIME_ASSIGNMENT_ARM_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+
+        rec = validate_runtime_assignment(
+            _cfg_with_ra(top_arm="reset128"), cli_carry="persistent",
+            cli_gpu=_GPU, cli_out=cli_out_abs, run_root=tmp_root)
+        check("(24c) formal top-level arm disagrees -> RUNTIME_ASSIGNMENT_ARM_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_ARM_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+
+        rec = validate_runtime_assignment(_cfg_with_ra(), cli_carry="persistent",
+                                          cli_gpu="GPU-ffffffff-other",
+                                          cli_out=cli_out_abs, run_root=tmp_root)
+        check("(24d) gpu_uuid mismatch -> RUNTIME_ASSIGNMENT_GPU_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_GPU_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+
+        # (25) §四.3 strict out_dir: absolute / `..` / missing run_root / wrong realpath /
+        # outside run_root / THE SUFFIX TRAP v2.2 wrongly accepted.
+        rec = validate_runtime_assignment(_cfg_with_ra(out="/abs/runs/x"),
+                                          cli_carry="persistent", cli_gpu=_GPU,
+                                          cli_out=cli_out_abs, run_root=tmp_root)
+        check("(25a) absolute formal out_dir -> OUT_DIR_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+
+        rec = validate_runtime_assignment(_cfg_with_ra(out="../escape"),
+                                          cli_carry="persistent", cli_gpu=_GPU,
+                                          cli_out=cli_out_abs, run_root=tmp_root)
+        check("(25b) '..' formal out_dir -> OUT_DIR_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+
+        rec = validate_runtime_assignment(_cfg_with_ra(), cli_carry="persistent",
+                                          cli_gpu=_GPU, cli_out=cli_out_abs, run_root=None)
+        check("(25c) missing --run_root -> OUT_DIR_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+
+        other_abs = os.path.join(tempfile.gettempdir(), "p4av23_other_out")
+        os.makedirs(other_abs, exist_ok=True)
+        rec = validate_runtime_assignment(_cfg_with_ra(), cli_carry="persistent",
+                                          cli_gpu=_GPU, cli_out=other_abs,
+                                          run_root=tmp_root)
+        check("(25d) --out elsewhere (same relative name possible) -> OUT_DIR_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+        shutil.rmtree(other_abs, ignore_errors=True)
+
+        # the suffix trap: formal out_dir "run" would SUFFIX-match ".../runs/...-129" under
+        # v2.2's endswith(); v2.3 must reject (realpath inequality).
+        trap_abs = os.path.join(tmp_root, "prefix_" + _OUT)
+        os.makedirs(trap_abs, exist_ok=True)
+        rec = validate_runtime_assignment(_cfg_with_ra(), cli_carry="persistent",
+                                          cli_gpu=_GPU, cli_out=trap_abs, run_root=tmp_root)
+        check("(25e) suffix-trap --out (ends with formal out_dir) -> OUT_DIR_MISMATCH",
+              any("RUNTIME_ASSIGNMENT_OUT_DIR_MISMATCH" in e
+                  for e in rec["runtime_assignment_errors"]))
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+
+    # (26) §六 certificate state machine: PENDING -> PASS / FAIL, finalized flag, stale-PASS guard
+    fid_pass = dict(formal_config_identity="PASS")
+    ra_pass = dict(runtime_assignment_match=True, runtime_assignment_errors=[])
+    kw = _reference_runtime_kwargs(); rec = _reference_formal_record()
+    pre = build_precheck_certificate(
+        rec, build_runtime_scientific_config(**kw), formal_identity_record=fid_pass,
+        assignment_record=ra_pass,
+        checkpoint_identity=build_checkpoint_identity("/ckpt/17500/full_state.pkl"))
+    check("(26a) all-pass precheck -> PENDING_CHECKPOINT_IDENTITY (NOT PASS) + not finalized",
+          pre["certificate_status"] == CERTIFICATE_STATUS_PENDING
+          and pre["certificate_finalized"] is False
+          and pre["checkpoint_identity"]["base_checkpoint_match"] == "PENDING"
+          and pre["validation_errors"] == [])
+
+    fin = finalize_certificate(
+        pre, verify_checkpoint_params_sha(
+            pre["checkpoint_identity"], EXPECTED_BASE_CHECKPOINT_SHA256))
+    check("(26b) finalize with checkpoint PASS -> PASS + finalized + errors cleared",
+          fin["certificate_status"] == CERTIFICATE_STATUS_PASS
+          and fin["certificate_finalized"] is True and fin["validation_errors"] == []
+          and fin["checkpoint_identity"]["base_checkpoint_match"] == "PASS")
+    check("(26b') finalize does not mutate the precheck certificate",
+          pre["certificate_status"] == CERTIFICATE_STATUS_PENDING
+          and pre["certificate_finalized"] is False)
+
+    fin_nf = finalize_certificate(
+        pre, verify_checkpoint_params_sha(
+            build_checkpoint_identity("/ckpt/17500/x", expected_sha256=None), "abc"))
+    check("(26c) finalize with NOT_FROZEN checkpoint -> PASS (never fabricated)",
+          fin_nf["certificate_status"] == CERTIFICATE_STATUS_PASS
+          and fin_nf["checkpoint_identity"]["base_checkpoint_match"] == "NOT_FROZEN")
+
+    fin_err = finalize_certificate(pre, checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: x != y")
+    check("(26d) finalize with checkpoint error -> FAIL + finalized + error recorded",
+          fin_err["certificate_status"] == CERTIFICATE_STATUS_FAIL
+          and fin_err["certificate_finalized"] is True
+          and any("BASE_CHECKPOINT_FAILURE" in e for e in fin_err["validation_errors"])
+          and fin_err["checkpoint_identity"]["base_checkpoint_match"] == "FAIL")
+
+    kw_bad = _reference_runtime_kwargs(); kw_bad["seed"] = 43
+    pre_bad = build_precheck_certificate(
+        _reference_formal_record(), build_runtime_scientific_config(**kw_bad),
+        formal_identity_record=fid_pass, assignment_record=ra_pass)
+    check("(26e) scientific-mismatch precheck -> FAIL (not PENDING)",
+          pre_bad["certificate_status"] == CERTIFICATE_STATUS_FAIL
+          and any("FORMAL_CONFIG_RUNTIME_MISMATCH" in e
+                  for e in pre_bad["validation_errors"]))
+    fin_bad = finalize_certificate(
+        pre_bad, verify_checkpoint_params_sha(
+            build_checkpoint_identity("/ckpt/17500/x"), EXPECTED_BASE_CHECKPOINT_SHA256))
+    check("(26f) a FAIL precheck can NEVER finalize to PASS (stale-PASS guard)",
+          fin_bad["certificate_status"] == CERTIFICATE_STATUS_FAIL
+          and fin_bad["certificate_finalized"] is True
+          and any("CERTIFICATE_NOT_PENDING_AT_FINALIZE" in e
+                  for e in fin_bad["validation_errors"]))
+
+    pre_nofid = build_precheck_certificate(
+        _reference_formal_record(),
+        build_runtime_scientific_config(**_reference_runtime_kwargs()),
+        formal_identity_record=None, assignment_record=ra_pass)
+    check("(26g) precheck without formal-config identity -> FAIL + identity error",
+          pre_nofid["certificate_status"] == CERTIFICATE_STATUS_FAIL
+          and any("FORMAL_CONFIG_IDENTITY_MISMATCH" in e
+                  for e in pre_nofid["validation_errors"]))
+
+    # (27) §七 atomic write + payload SHA + file SHA + sidecar + tamper detection
+    tmp_cert = tempfile.mkdtemp(prefix="p4av23_cert_")
+    try:
+        cpath = os.path.join(tmp_cert, "runtime_config_certificate.json")
+        cpath, spath, fsha, psha = write_certificate_atomic(fin, cpath)
+        on_disk = json.load(open(cpath, encoding="utf-8"))
+        sidecar_line = open(spath, encoding="utf-8").read().split()
+        check("(27a) atomic write: payload SHA embedded, sidecar = '<sha>  <basename>'",
+              on_disk["certificate_payload_sha256"] == psha
+              and sidecar_line == [fsha, "runtime_config_certificate.json"]
+              and spath == cpath[:-len(".json")] + ".sha256")
+        check("(27b) no stray temp file remains (atomic replace)",
+              not [f for f in os.listdir(tmp_cert) if ".tmp." in f])
+        vr = verify_certificate_artifact(cpath)
+        check("(27c) untampered certificate -> tamper check PASS",
+              vr["certificate_tamper_check"] == "PASS"
+              and vr["file_sha256"] == fsha and vr["payload_sha256"] == psha)
+        vr2 = verify_certificate_artifact(
+            cpath, expected_file_sha256=fsha, expected_payload_sha256=psha)
+        check("(27c') expected-SHA verification (summary/manifest binding) -> PASS",
+              vr2["certificate_tamper_check"] == "PASS")
+
+        # tamper 1: the REAL threat model — a FAIL certificate flipped to PASS on disk (payload
+        # changes; the attacker does NOT recompute the payload SHA). NOTE: the certificate under
+        # test must actually be FAIL; flipping an already-PASS cert is a byte no-op and correctly
+        # verifies clean (that is not tampering).
+        write_certificate_atomic(fin_err, cpath)   # fin_err is FAIL (see 26d)
+        on_disk_fail = json.load(open(cpath, encoding="utf-8"))
+        assert on_disk_fail["certificate_status"] == "FAIL", "tamper test needs a FAIL cert"
+        t1 = dict(on_disk_fail); t1["certificate_status"] = "PASS"; t1["validation_errors"] = []
+        atomic_write_json(cpath, t1)
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27d) FAIL->PASS flip without payload recompute -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27d) FAIL->PASS flip without payload recompute -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "payload sha tampered" in str(e))
+
+        # tamper 2: attacker ALSO recomputes + re-embeds the payload SHA -> the file bytes still
+        # differ, so the detached sidecar file-SHA no longer matches (second layer catches it).
+        t2 = dict(on_disk_fail); t2["certificate_status"] = "PASS"; t2["validation_errors"] = []
+        t2["certificate_payload_sha256"] = compute_certificate_payload_sha(t2)
+        atomic_write_json(cpath, t2)
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27e) recomputed-payload attack -> sidecar file-SHA TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27e) recomputed-payload attack -> sidecar file-SHA TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "sidecar file sha mismatch" in str(e))
+
+        # restore + tamper 3: delete the sidecar
+        write_certificate_atomic(fin, cpath)
+        os.remove(certificate_sidecar_path(cpath))
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27f) missing sidecar -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27f) missing sidecar -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e) and "sidecar missing" in str(e))
+
+        # restore + tamper 4: expected file SHA from a stale summary no longer matches
+        _, _, fsha_new, psha_new = write_certificate_atomic(fin, cpath)
+        try:
+            verify_certificate_artifact(cpath, expected_file_sha256="0" * 64)
+            check("(27g) expected-file-SHA mismatch -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27g) expected-file-SHA mismatch -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "file sha != expected" in str(e))
+
+        # tamper 5: corrupt the file to invalid JSON
+        with open(cpath, "w", encoding="utf-8") as f:
+            f.write("{corrupt")
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27h) invalid-JSON certificate -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27h) invalid-JSON certificate -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e))
+
+        # (28) certificate_shas_record carries the §七.3 artifact-binding keys (superset of v2.2)
+        _, sp2, fsh2, psh2 = write_certificate_atomic(fin, cpath)
+        rec28 = certificate_shas_record(
+            json.load(open(cpath, encoding="utf-8")),
+            certificate_file_sha256=fsh2, certificate_sidecar_path=sp2)
+        need = {"formal_config_file_sha256", "scientific_config_sha256",
+                "runtime_scientific_config_sha256", "runtime_config_certificate_status",
+                "base_checkpoint_expected_sha256", "base_checkpoint_expected_sha256_status",
+                "runtime_config_certificate_finalized",
+                "runtime_config_certificate_payload_sha256",
+                "runtime_config_certificate_file_sha256",
+                "runtime_config_certificate_sidecar_path",
+                "base_checkpoint_params_sha256", "base_checkpoint_match"}
+        check("(28) certificate_shas_record carries v2.2 + §七.3 keys",
+              need.issubset(set(rec28))
+              and rec28["runtime_config_certificate_file_sha256"] == fsh2
+              and rec28["runtime_config_certificate_payload_sha256"] == psh2
+              and rec28["base_checkpoint_match"] == "PASS")
+    finally:
+        shutil.rmtree(tmp_cert, ignore_errors=True)
+
+    # (29) §四.3 legacy in-certificate check: the v2.2 SUFFIX match is gone (strict equality)
+    kw = _reference_runtime_kwargs(); rec = _reference_formal_record()
+    cert = validate_runtime_against_formal_config(
+        rec, build_runtime_scientific_config(**kw), gpu_uuid=_GPU,
+        out_dir="some/prefix/runs/RMT16-PERSISTENT-ORIGVTRACE-129")   # ends with formal out_dir
+    check("(29) legacy validate: out_dir merely ENDING WITH formal -> FAIL (suffix removed)",
+          cert["certificate_status"] == "FAIL" and not cert["runtime_assignment_match"]
+          and any("RUNTIME_ASSIGNMENT_MISMATCH" in e for e in cert["validation_errors"]))
+
+    # (30) §五.1 single source of truth: reference kwargs == frozen spec kwargs
+    import phase4a_v2_frozen_spec as FSPEC
+    check("(30) _reference_runtime_kwargs delegates to frozen spec (no divergence)",
+          _reference_runtime_kwargs("persistent") == FSPEC.build_kwargs("persistent")
+          and _reference_runtime_kwargs("reset128") == FSPEC.build_kwargs("reset128"))
+
     n = len(results); n_pass = sum(results)
     print(f"SELF_TEST_SUMMARY total={n} pass={n_pass} fail={n - n_pass}", flush=True)
-    print(f"FAIL_CLOSED_NEGATIVE_CASES={n - 1} (>= 19 required by §六.9)", flush=True)
+    print(f"FAIL_CLOSED_NEGATIVE_CASES={n - 1} (>= 19 required by §六.9; v2.3 adds §四/§六/§七 "
+          "fail-closed cases)", flush=True)
     return 0 if n_pass == n else 1
 
 

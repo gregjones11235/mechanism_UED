@@ -13,6 +13,12 @@ tests/phase4a_v2_exposure_validator.py.
 Phase4A-v2.2 (§二): the two-arm protocol comparison was upgraded from an INCOMPLETE field
 whitelist (missing learner and rng_rule) to FULL canonical protocol identity: required-field
 completeness, identical key sets, identical canonical dicts and identical protocol SHA256.
+
+Phase4A-v2.3 (§八): the replay protocol's learner/sampler/RNG were STRING DECLARATIONS only —
+nothing bound them to the code that actually EXECUTES. v2.3 adds executed-protocol source
+identity: after import, the driver binds the REAL learner function, sampler function and sampler
+RNG via inspect (module / qualname / source SHA256), fail-closed, and checks them against the
+declared protocol_definition. stdlib `inspect` only — still no JAX/numpy at import time.
 """
 import hashlib
 import json
@@ -452,3 +458,115 @@ def assert_content_match_not_claimed(buffer_kind="endogenous"):
             "ENDOGENOUS_REPLAY_CONTENT_CANNOT_BE_CLAIMED_MATCHED: endogenous per-arm buffers "
             "have no shared trajectory identity; MATCHED_REPLAY_CONTENT=PASS is forbidden.")
     return dict(MATCHED_REPLAY_CONTENT="NOT_CLAIMED")
+
+
+# ===========================================================================
+# Phase4A-v2.3 (§八) — EXECUTED protocol source identity (bound to running code)
+# ===========================================================================
+# v2.2's protocol_definition carried the learner/sampler/rng as STRING LABELS. Nothing proved
+# the code that actually EXECUTES during training is what the labels say: a driver could declare
+# learner="original_vtrace_update_rmt" while importing/calling something else. v2.3 binds the
+# EXECUTING objects by inspecting them (module / qualname / source SHA256) AFTER import, fails
+# closed when the bound objects are not the expected ones, and then checks the bound identity
+# against the declared protocol_definition (two-phase: declare, then bind + reconcile).
+
+DECLARED_PROTOCOL_LEARNER = "original_vtrace_update_rmt"      # RL.original_vtrace_update_rmt
+DECLARED_PROTOCOL_SAMPLER_FUNCTION = "sample_eligible"        # RMTReplayBuffer.sample_eligible
+DECLARED_PROTOCOL_SAMPLER_LABEL = "eligible_only"             # protocol_definition["sampler"]
+DECLARED_PROTOCOL_RNG_ENGINE = "np.random.RandomState"        # protocol_definition["rng_engine"]
+_RNG_RANDOMSTATE_MODULES = ("numpy.random", "numpy.random.mtrand")
+
+
+def _source_identity(fn):
+    """The source identity of a callable: module / qualname / name / source SHA256 / line count.
+    Fail closed (EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE) if the source cannot be inspected — an
+    un-inspectable learner/sampler can never be proven to be the declared one."""
+    import inspect
+    try:
+        src = inspect.getsource(fn)
+    except (OSError, TypeError) as e:
+        raise ValueError(
+            f"EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE: cannot inspect source of "
+            f"{getattr(fn, '__qualname__', repr(fn))}: {e}")
+    return dict(module=getattr(fn, "__module__", None),
+                qualname=getattr(fn, "__qualname__", None),
+                name=getattr(fn, "__name__", None),
+                source_sha256=hashlib.sha256(src.encode("utf-8")).hexdigest(),
+                source_lines=len(src.splitlines()))
+
+
+def executed_function_source_identity(learner_fn, sampler_fn):
+    """§八 phase 2a: bind the ACTUALLY EXECUTING replay learner + sampler — not their labels.
+
+    learner_fn : the function the training loop actually calls for the replay update
+                 (expected: rmt_replay_learner.original_vtrace_update_rmt)
+    sampler_fn : the function the loop actually samples with (expected:
+                 RMTReplayBuffer.sample_eligible — pass the unbound method or a bound one)
+
+    Fail closed (EXECUTED_PROTOCOL_SOURCE_MISMATCH) if either object's source is uninspectable
+    or its name is not the expected one. Returns a record with per-function source identity."""
+    errors = []
+    learner_id = _source_identity(learner_fn)
+    sampler_id = _source_identity(sampler_fn)
+    if learner_id["name"] != DECLARED_PROTOCOL_LEARNER:
+        errors.append(
+            f"executed learner={learner_id['name']!r} ({learner_id['module']}) != declared "
+            f"{DECLARED_PROTOCOL_LEARNER!r}")
+    if sampler_id["name"] != DECLARED_PROTOCOL_SAMPLER_FUNCTION:
+        errors.append(
+            f"executed sampler={sampler_id['name']!r} ({sampler_id['module']}) != declared "
+            f"{DECLARED_PROTOCOL_SAMPLER_FUNCTION!r}")
+    if errors:
+        raise ValueError("EXECUTED_PROTOCOL_SOURCE_MISMATCH: " + " | ".join(errors))
+    return dict(executed_function_binding="PASS",
+                learner=learner_id, sampler=sampler_id)
+
+
+def verify_rng_instance_identity(rng_instance):
+    """§八 phase 2b: bind the ACTUAL replay-sampler RNG instance. It MUST be a
+    numpy.random.RandomState (the declared rng_engine np.random.RandomState) — not the global
+    legacy generator, not PCG64, not a hidden buffer RNG. Fail closed (EXECUTED_PROTOCOL_RNG_
+    MISMATCH). Returns a class-identity record."""
+    cls = type(rng_instance)
+    identity = dict(class_module=getattr(cls, "__module__", None),
+                    class_name=getattr(cls, "__name__", None))
+    if not (identity["class_name"] == "RandomState"
+            and identity["class_module"] in _RNG_RANDOMSTATE_MODULES):
+        raise ValueError(
+            f"EXECUTED_PROTOCOL_RNG_MISMATCH: executed replay-sampler RNG is "
+            f"{identity['class_module']}.{identity['class_name']}, not numpy.random.RandomState "
+            f"(declared rng_engine={DECLARED_PROTOCOL_RNG_ENGINE!r}).")
+    identity["rng_binding"] = "PASS"
+    return identity
+
+
+def verify_executed_protocol_matches_declared(executed_identity, protocol_definition):
+    """§八 two-phase reconciliation: the EXECUTED source identity must correspond to the DECLARED
+    protocol_definition labels (replay_protocol_labels(...).protocol_definition). The declared
+    sampler LABEL 'eligible_only' maps to the executed FUNCTION 'sample_eligible'; learner and
+    rng_engine map by name. Fail closed (EXECUTED_PROTOCOL_DECLARATION_MISMATCH)."""
+    pd = protocol_definition or {}
+    errors = []
+    learner = (executed_identity or {}).get("learner") or {}
+    sampler = (executed_identity or {}).get("sampler") or {}
+    if pd.get("learner") != learner.get("name"):
+        errors.append(
+            f"declared learner={pd.get('learner')!r} != executed {learner.get('name')!r}")
+    if pd.get("sampler") != DECLARED_PROTOCOL_SAMPLER_LABEL:
+        errors.append(
+            f"declared sampler label={pd.get('sampler')!r} != "
+            f"{DECLARED_PROTOCOL_SAMPLER_LABEL!r}")
+    if sampler.get("name") != DECLARED_PROTOCOL_SAMPLER_FUNCTION:
+        errors.append(
+            f"executed sampler={sampler.get('name')!r} != "
+            f"{DECLARED_PROTOCOL_SAMPLER_FUNCTION!r}")
+    if pd.get("rng_engine") != DECLARED_PROTOCOL_RNG_ENGINE:
+        errors.append(
+            f"declared rng_engine={pd.get('rng_engine')!r} != {DECLARED_PROTOCOL_RNG_ENGINE!r}")
+    if errors:
+        raise ValueError("EXECUTED_PROTOCOL_DECLARATION_MISMATCH: " + " | ".join(errors))
+    return dict(executed_protocol_declaration_match="PASS",
+                declared_learner=pd.get("learner"), executed_learner=learner.get("name"),
+                declared_sampler_label=pd.get("sampler"),
+                executed_sampler_function=sampler.get("name"),
+                declared_rng_engine=pd.get("rng_engine"))

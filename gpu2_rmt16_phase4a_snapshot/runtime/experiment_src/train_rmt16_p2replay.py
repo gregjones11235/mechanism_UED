@@ -53,6 +53,20 @@ ap.add_argument("--formal_config", default=None,
                      "required for replay_mode=original_vtrace. The driver binds it to the REAL "
                      "runtime scientific config / runtime assignment / base checkpoint identity "
                      "and refuses to proceed (FORMAL_CONFIG_RUNTIME_MISMATCH) on any difference.")
+# ---- Phase4A-v2.3 (CC2 §三/§四): canonical path identity + strict run-root placement ----
+# --snapshot_root pins the canonical pre-registered formal-config PATH (§三.2): realpath(args.
+# formal_config) must equal realpath(snapshot_root/configs/rmt16_phase4a_v2_<arm>.yaml); byte
+# copies, symlink escapes and `..` traversals are rejected. --run_root pins the STRICT out_dir
+# identity (§四.3): realpath(args.out) must EQUAL realpath(run_root/<formal out_dir>) — relative
+# path only, no `..`, no suffix match. Both are required for replay_mode=original_vtrace and are
+# enforced BEFORE `import jax` (fail closed, no bypass).
+ap.add_argument("--snapshot_root", default=None,
+                help="root of the frozen experiment snapshot; pins the canonical formal-config "
+                     "PATH identity (§三.2). Required for replay_mode=original_vtrace.")
+ap.add_argument("--run_root", default=None,
+                help="root under which the formal runtime_assignment.out_dir (a RELATIVE path) "
+                     "must resolve; realpath(run_root/out_dir) must equal realpath(--out) exactly "
+                     "(§四.3; no suffix match). Required for replay_mode=original_vtrace.")
 ap.add_argument("--total_updates", type=int, default=12)     # 12 * 2048 = 24576
 ap.add_argument("--seed", type=int, default=42)
 ap.add_argument("--save_every", type=int, default=2)         # updates between saves (2 => every 4096)
@@ -72,21 +86,80 @@ if REPLAY_MODE == "full_p2_legacy" and not args.allow_full_p2_legacy:
     ap.error("--replay_mode full_p2_legacy requires explicit --allow-full-p2-legacy "
              "(default-forbidden for formal science).")
 
-# ---- Phase4A-v2.2 (§六.2/§六.3): PRE-JAX fail-closed formal-config gates ----
-# phase4a_v2_runtime_config is PURE Python (yaml/json/hashlib/os only) and is imported HERE,
-# BEFORE `import jax`, BEFORE env vars, BEFORE env build / ckpt load. replay_mode=original_vtrace
-# without --formal_config exits immediately (FORMAL_CONFIG_REQUIRED_FOR_ORIGINAL_VTRACE); the
-# supplied YAML must be THIS arm's pre-registration (schema/arm/carry_mode/replay_mode) or the
-# driver exits with FORMAL_CONFIG_ARM_MISMATCH. The full scientific/assignment/checkpoint
-# binding runs below once the frozen runtime constants exist — still before env/ckpt/training.
-import phase4a_v2_runtime_config as RTC  # noqa: E402
+# ---- Phase4A-v2.2/2.3 (§六.2/§六.3 + §三/§四/§五.2/§六.1/§七): PRE-JAX identity + FULL binding ----
+# Everything here is PURE Python (yaml/json/hashlib/os/inspect; NO jax/numpy) and runs BEFORE
+# `import jax`, BEFORE CUDA env vars, BEFORE env build / ckpt load / training, in this order:
+#   1. preflight  : original_vtrace REQUIRES --formal_config                (v2.2 §六.2)
+#   2. arm binding: schema/arm/carry_mode/replay_mode                       (v2.2 §六.3)
+#   3. FORMAL IDENTITY: canonical PATH + CONTENT (frozen file SHA / scientific SHA) (§三)
+#   4. runtime_assignment: completeness + 4-way arm + exact gpu + STRICT out_dir      (§四)
+#   5. FULL scientific binding: the pre-JAX runtime scientific config built from the frozen
+#      pure-Python spec (phase4a_v2_frozen_spec) must equal the YAML scientific_config (§五.2)
+#   6. provisional PENDING_CHECKPOINT_IDENTITY certificate written ATOMICALLY + sidecar (§六/§七)
+# Only when the precheck certificate is PENDING_CHECKPOINT_IDENTITY does the driver continue to
+# `import jax`. The REAL imported objects are re-bound + diffed against the frozen spec AFTER
+# import (§五.3: IMPORTED_RUNTIME_CONSTANTS_MISMATCH on drift) — still before env build. The
+# base checkpoint params SHA is verified after load and FINALIZES the certificate (§六.2/§六.3).
+import phase4a_v2_runtime_config as RTC      # noqa: E402  (pure: yaml/json/hashlib/os)
+import phase4a_v2_frozen_spec as FSPEC       # noqa: E402  (pure: stdlib only)
+import phase4a_v2_formal_identity as FID     # noqa: E402  (pure: stdlib + yaml via RTC)
+FORMAL_CONFIG_RECORD = None
+FORMAL_CONFIG_IDENTITY = None
+RUNTIME_ASSIGNMENT_RECORD = None
+RUNTIME_CONFIG_CERTIFICATE = None
+RUNTIME_CONFIG_CERTIFICATE_PATH = None
+RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH = None
+RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256 = None
+EXECUTED_PROTOCOL_IDENTITY = None
 try:
     RTC.preflight_require_formal_config(REPLAY_MODE, args.formal_config)
     if args.formal_config:
         FORMAL_CONFIG_RECORD = RTC.load_formal_config(args.formal_config)
         RTC.validate_arm_binding(FORMAL_CONFIG_RECORD, args.carry_mode, replay_mode=REPLAY_MODE)
-    else:
-        FORMAL_CONFIG_RECORD = None
+        # §三 canonical formal-config PATH + CONTENT identity (frozen pre-registration).
+        FORMAL_CONFIG_IDENTITY = FID.verify_formal_config_identity(
+            args.snapshot_root, args.carry_mode, FORMAL_CONFIG_RECORD)
+        # §四 fail-closed runtime_assignment (completeness + 4-way arm + exact gpu + strict
+        # realpath out_dir anchored at --run_root; the v2.2 suffix match is gone).
+        RUNTIME_ASSIGNMENT_RECORD = RTC.validate_runtime_assignment(
+            FORMAL_CONFIG_RECORD["config"],
+            cli_carry=args.carry_mode, cli_gpu=args.gpu_uuid, cli_out=args.out,
+            run_root=args.run_root)
+        # §五.2 FULL scientific binding PRE-JAX: build the runtime scientific config from the
+        # frozen pure-Python spec (single source of truth; no jax needed) and bind it to the
+        # formal YAML inside the precheck certificate.
+        _PREJAX_SCIENTIFIC = RTC.build_runtime_scientific_config(
+            **FSPEC.build_kwargs(args.carry_mode))
+        RUNTIME_CONFIG_CERTIFICATE = RTC.build_precheck_certificate(
+            FORMAL_CONFIG_RECORD, _PREJAX_SCIENTIFIC,
+            formal_identity_record=FORMAL_CONFIG_IDENTITY,
+            assignment_record=RUNTIME_ASSIGNMENT_RECORD,
+            checkpoint_identity=RTC.build_checkpoint_identity(args.ckpt17500),
+            frozen_spec_sha256=FSPEC.FROZEN_SPEC_SHA256,
+            cli_args={k: v for k, v in vars(args).items()},
+            runtime_constants=dict(FROZEN_SPEC_SHA256=FSPEC.FROZEN_SPEC_SHA256),
+            snapshot_root=args.snapshot_root, run_root=args.run_root)
+        if RUNTIME_CONFIG_CERTIFICATE["certificate_status"] != RTC.CERTIFICATE_STATUS_PENDING:
+            raise ValueError(
+                "FORMAL_CONFIG_RUNTIME_MISMATCH: prejax precheck certificate_status="
+                + RUNTIME_CONFIG_CERTIFICATE["certificate_status"]
+                + " (required: PENDING_CHECKPOINT_IDENTITY); no `import jax` / env build / ckpt "
+                "load will proceed. errors: "
+                + " | ".join(RUNTIME_CONFIG_CERTIFICATE["validation_errors"]))
+        # §六.1/§六.4/§七 provisional PENDING certificate: ATOMIC write + payload SHA + detached
+        # file-SHA sidecar. This file is OVERWRITTEN by the finalized certificate after the base
+        # checkpoint SHA is verified (§六.2/§六.3); a failure can never leave a stale PASS here
+        # because the status is PENDING and certificate_finalized is false.
+        (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+         RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, _PREJAX_CERT_PAYLOAD_SHA) = (
+            RTC.write_certificate_atomic(
+                RUNTIME_CONFIG_CERTIFICATE,
+                os.path.join(args.out, "runtime_config_certificate.json")))
+        print(f"[formal-config] prejax precheck certificate_status="
+              f"{RUNTIME_CONFIG_CERTIFICATE['certificate_status']} "
+              f"frozen_spec_sha={FSPEC.FROZEN_SPEC_SHA256[:16]} "
+              f"certificate_file_sha={RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256[:16]} "
+              f"path={RUNTIME_CONFIG_CERTIFICATE_PATH}", flush=True)
 except ValueError as e:
     raise SystemExit(str(e))
 
@@ -176,19 +249,18 @@ K_BATCH = 4
 L_SEQ = 512
 STEPS_PER_UPDATE = cfg.num_envs * cfg.num_steps     # 2048
 
-# ----------------------- Phase4A-v2.2 (§六.4-§六.7): formal config <-> REAL runtime binding -----------------------
-# Runs AFTER the frozen runtime constants (Cfg / FullP2Config / K_BATCH / ANCHOR_INTERVAL /
-# MIN_SEQUENCE_LENGTH) are materialized and BEFORE env build / network init / checkpoint load /
-# training. (The FORMAL_CONFIG_REQUIRED / ARM gates above already ran before `import jax`.)
-# The runtime scientific_config is rebuilt from the ACTUAL execution values and must equal the
-# pre-registered YAML block exactly (canonical deep diff + SHA); runtime_assignment (gpu_uuid,
-# out_dir) is validated separately; the base checkpoint identity carries the FROZEN expected
-# params SHA from reviewed evidence (verified right after load below). Any mismatch exits with
-# FORMAL_CONFIG_RUNTIME_MISMATCH before anything is built or trained.
-RUNTIME_CONFIG_CERTIFICATE = None
-RUNTIME_CONFIG_CERTIFICATE_PATH = None
+# ----------------------- Phase4A-v2.3 (§五.3/§八): imported constants + executed-protocol binding -----------------------
+# Runs AFTER `import jax` and the REAL constant materialization (Cfg / FullP2Config / K_BATCH /
+# ANCHOR_INTERVAL / MIN_SEQUENCE_LENGTH / RL.W_ORIGINAL_VTRACE) and BEFORE env build / network
+# init / checkpoint load / training. The pre-JAX precheck certificate already bound the formal
+# YAML to the FROZEN pure-Python spec (§五.2). Here the runtime scientific config is rebuilt from
+# the REAL imported objects and diffed against the frozen spec: any drift =>
+# IMPORTED_RUNTIME_CONSTANTS_MISMATCH (the finalized FAIL certificate is written and the driver
+# exits). By transitivity: formal YAML == frozen spec == REAL executing constants.
+# Then the replay protocol's EXECUTED source identity is bound via inspect on the real imported
+# learner + sampler (§八; NOT string declarations) and reconciled with the declared labels.
 if FORMAL_CONFIG_RECORD is not None:
-    _runtime_scientific = RTC.build_runtime_scientific_config(
+    _imported_scientific = RTC.build_runtime_scientific_config(
         carry_mode=args.carry_mode,
         replay_mode=REPLAY_MODE,
         allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
@@ -234,28 +306,59 @@ if FORMAL_CONFIG_RECORD is not None:
         net_num_layers=int(cfg.num_layers), net_gating=bool(cfg.gating),
         net_gating_bias=float(cfg.gating_bias), net_window_mem=int(cfg.window_mem),
         net_rmt_num_tokens=int(cfg.rmt_num_tokens))
-    RUNTIME_CONFIG_CERTIFICATE = RTC.validate_runtime_against_formal_config(
-        FORMAL_CONFIG_RECORD, _runtime_scientific,
-        gpu_uuid=args.gpu_uuid, out_dir=args.out,
-        checkpoint_identity=RTC.build_checkpoint_identity(args.ckpt17500),
-        cli_args={k: v for k, v in vars(args).items()},
-        runtime_constants=dict(SEQUENCE_LENGTH=SEQUENCE_LENGTH, SEGMENT_LEN=SEGMENT_LEN,
-                               ENGINEERING_LONG_WINDOW_MODE=ENGINEERING_LONG_WINDOW_MODE,
-                               K_BATCH=K_BATCH, STEPS_PER_UPDATE=STEPS_PER_UPDATE, ARM=ARM,
-                               ANCHOR_INTERVAL=int(ANCHOR_INTERVAL),
-                               MIN_SEQUENCE_LENGTH=int(MIN_SEQUENCE_LENGTH)))
-    RUNTIME_CONFIG_CERTIFICATE_PATH = RTC.write_runtime_config_certificate(
-        RUNTIME_CONFIG_CERTIFICATE, os.path.join(args.out, "runtime_config_certificate.json"))
-    print(f"[formal-config] certificate_status={RUNTIME_CONFIG_CERTIFICATE['certificate_status']} "
-          f"scientific_match={RUNTIME_CONFIG_CERTIFICATE['scientific_config_match']} "
-          f"runtime_assignment_match={RUNTIME_CONFIG_CERTIFICATE['runtime_assignment_match']} "
-          f"scientific_sha={RUNTIME_CONFIG_CERTIFICATE['scientific_config_sha256'][:16]} "
-          f"path={RUNTIME_CONFIG_CERTIFICATE_PATH}", flush=True)
-    if RUNTIME_CONFIG_CERTIFICATE["certificate_status"] != "PASS":
+    _FROZEN_SCIENTIFIC = RTC.build_runtime_scientific_config(
+        **FSPEC.build_kwargs(args.carry_mode))
+    _IMPORTED_CONSTANTS_DRIFT = RTC.deep_diff(
+        RTC.canonical_scientific_config(_FROZEN_SCIENTIFIC),
+        RTC.canonical_scientific_config(_imported_scientific))
+    if _IMPORTED_CONSTANTS_DRIFT:
+        _drift_msg = " | ".join(
+            f"{d['path']}: frozen={d['formal']!r} imported={d['runtime']!r} ({d['kind']})"
+            for d in _IMPORTED_CONSTANTS_DRIFT)
+        # §六: a constants-drift failure FINALIZES the certificate FAIL and overwrites the
+        # provisional PENDING file before exit (no stale PENDING/PASS survives).
+        RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(
+            RUNTIME_CONFIG_CERTIFICATE,
+            checkpoint_error="IMPORTED_RUNTIME_CONSTANTS_MISMATCH: " + _drift_msg)
+        (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+         RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, _DRIFT_CERT_PAYLOAD_SHA) = (
+            RTC.write_certificate_atomic(
+                RUNTIME_CONFIG_CERTIFICATE, RUNTIME_CONFIG_CERTIFICATE_PATH))
         raise SystemExit(
-            "FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "
-            "no env build / ckpt load / training will proceed. errors: "
-            + " | ".join(RUNTIME_CONFIG_CERTIFICATE["validation_errors"]))
+            "IMPORTED_RUNTIME_CONSTANTS_MISMATCH: the REAL imported runtime constants drifted "
+            "from the frozen pre-JAX spec (FROZEN_SPEC_SHA256=" + FSPEC.FROZEN_SPEC_SHA256
+            + "); no env build / ckpt load / training will proceed. drift: " + _drift_msg)
+    RUNTIME_CONFIG_CERTIFICATE["runtime_constants_imported"] = dict(
+        SEQUENCE_LENGTH=SEQUENCE_LENGTH, SEGMENT_LEN=SEGMENT_LEN,
+        ENGINEERING_LONG_WINDOW_MODE=ENGINEERING_LONG_WINDOW_MODE,
+        K_BATCH=K_BATCH, STEPS_PER_UPDATE=STEPS_PER_UPDATE, ARM=ARM,
+        ANCHOR_INTERVAL=int(ANCHOR_INTERVAL),
+        MIN_SEQUENCE_LENGTH=int(MIN_SEQUENCE_LENGTH))
+    RUNTIME_CONFIG_CERTIFICATE["imported_constants_binding"] = dict(
+        imported_constants_match=True,
+        imported_vs_frozen_drift=[],
+        frozen_spec_sha256=FSPEC.FROZEN_SPEC_SHA256,
+        imported_scientific_config_sha256=RTC.scientific_config_sha256(_imported_scientific))
+    # §八 phase 2a: bind the ACTUALLY EXECUTING replay learner + sampler by inspecting the real
+    # imported objects (module / qualname / source SHA; fail closed), and reconcile with the
+    # declared protocol labels (learner / sampler / rng_engine).
+    EXECUTED_PROTOCOL_IDENTITY = CONTRACT.executed_function_source_identity(
+        RL.original_vtrace_update_rmt, RMTReplayBuffer.sample_eligible)
+    _DECLARED_PROTOCOL_DEFINITION = CONTRACT.replay_protocol_labels(
+        REPLAY_MODE, SEQUENCE_LENGTH, K_BATCH)["protocol_definition"]
+    EXECUTED_PROTOCOL_IDENTITY["declaration_match"] = (
+        CONTRACT.verify_executed_protocol_matches_declared(
+            EXECUTED_PROTOCOL_IDENTITY, _DECLARED_PROTOCOL_DEFINITION))
+    EXECUTED_PROTOCOL_IDENTITY["declared_protocol_definition"] = _DECLARED_PROTOCOL_DEFINITION
+    RUNTIME_CONFIG_CERTIFICATE["executed_protocol_identity"] = dict(
+        learner=EXECUTED_PROTOCOL_IDENTITY["learner"],
+        sampler=EXECUTED_PROTOCOL_IDENTITY["sampler"],
+        declaration_match=EXECUTED_PROTOCOL_IDENTITY["declaration_match"])
+    print(f"[formal-config] imported constants binding=PASS (drift=0 vs frozen spec) "
+          f"executed_learner={EXECUTED_PROTOCOL_IDENTITY['learner']['qualname']} "
+          f"executed_sampler={EXECUTED_PROTOCOL_IDENTITY['sampler']['qualname']} "
+          f"learner_src_sha={EXECUTED_PROTOCOL_IDENTITY['learner']['source_sha256'][:16]}",
+          flush=True)
 
 # ----------------------- Stage4 DEFEAT_KOBOLD task (identical to bakeoff) -----------------------
 S4_TASK_CODE = '''
@@ -346,23 +449,44 @@ base_sha = _params_sha(base_inner)
 print(f"[load] ckpt17500 leaves={len(jax.tree_util.tree_leaves(base_inner))} "
       f"sha={base_sha[:16]} ({time.time()-t0:.1f}s)", flush=True)
 
-# Phase4A-v2.2 (§六.5): fail-closed comparison of the loaded base params SHA against the FROZEN
-# expectation from reviewed evidence (both arms' frozen raw-probe summaries record this
-# base_sha256). Mismatch -> BASE_CHECKPOINT_SHA_MISMATCH, exit before any training step. The
-# certificate is then finalized with the real SHA and rewritten (§六.7/§六.8).
+# Phase4A-v2.2/2.3 (§六.5 + §六.2/§六.3/§七): fail-closed base params SHA comparison + deterministic
+# certificate FINALIZATION. The loaded base params SHA is compared against the FROZEN expectation
+# from reviewed evidence (both arms' frozen raw-probe summaries record this base_sha256), then
+# the certificate is finalized: PENDING + checkpoint PASS/NOT_FROZEN -> PASS; ANY failure ->
+# FAIL. The FINALIZED certificate is rewritten ATOMICALLY (payload SHA + final file SHA + fresh
+# sidecar) and this is the LAST write to the file — checkpoint manifests and the summary pin this
+# exact file SHA (§七.3). A checkpoint-SHA failure OVERWRITES the provisional PENDING certificate
+# with a finalized FAIL and exits nonzero: no stale PASS/PENDING can survive the failure.
 if RUNTIME_CONFIG_CERTIFICATE is not None:
+    _CHECKPOINT_VERIFY_ERROR = None
     try:
         RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"] = RTC.verify_checkpoint_params_sha(
             RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"], base_sha)
     except ValueError as e:
-        raise SystemExit(str(e))
-    RTC.write_runtime_config_certificate(RUNTIME_CONFIG_CERTIFICATE,
-                                         RUNTIME_CONFIG_CERTIFICATE_PATH)
+        _CHECKPOINT_VERIFY_ERROR = str(e)
+    RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(
+        RUNTIME_CONFIG_CERTIFICATE,
+        RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"],
+        checkpoint_error=_CHECKPOINT_VERIFY_ERROR)
+    (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+     RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, _FINAL_CERT_PAYLOAD_SHA) = (
+        RTC.write_certificate_atomic(
+            RUNTIME_CONFIG_CERTIFICATE, RUNTIME_CONFIG_CERTIFICATE_PATH))
     _bc_match = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"]["base_checkpoint_match"]
     _bc_expected = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"][
         "base_checkpoint_expected_sha256"]
-    print(f"[formal-config] base_checkpoint_match={_bc_match} "
-          f"expected={_bc_expected[:16]} loaded={base_sha[:16]}", flush=True)
+    print(f"[formal-config] FINAL certificate_status="
+          f"{RUNTIME_CONFIG_CERTIFICATE['certificate_status']} "
+          f"finalized={RUNTIME_CONFIG_CERTIFICATE['certificate_finalized']} "
+          f"base_checkpoint_match={_bc_match} expected={_bc_expected[:16]} "
+          f"loaded={base_sha[:16]} certificate_file_sha="
+          f"{RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256[:16]}", flush=True)
+    if RUNTIME_CONFIG_CERTIFICATE["certificate_status"] != RTC.CERTIFICATE_STATUS_PASS:
+        raise SystemExit(
+            "FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "
+            "no training step will proceed (the finalized FAIL certificate overwrote the "
+            "provisional file). errors: "
+            + " | ".join(RUNTIME_CONFIG_CERTIFICATE["validation_errors"]))
 
 rng_init = jax.random.PRNGKey(args.seed); rng_init, _rng = jax.random.split(rng_init)
 full_params = network.init(
@@ -434,6 +558,13 @@ counters = Phase4ACounters()
 # sample_ids/start_offsets/sequence_lengths. Seeded from args.seed so it is reproducible and
 # independent of the JAX rollout/action RNG streams.
 replay_sample_rng = np.random.RandomState(args.seed + 7)
+# Phase4A-v2.3 (§八 phase 2b): bind the ACTUAL replay-sampler RNG instance (fail closed: it MUST
+# be numpy.random.RandomState — not the global generator, not PCG64, not a hidden buffer RNG).
+# Together with the learner/sampler SOURCE binding above this completes the executed-protocol
+# identity recorded in the summary (executed_protocol_identity.rng_instance).
+if EXECUTED_PROTOCOL_IDENTITY is not None:
+    EXECUTED_PROTOCOL_IDENTITY["rng_instance"] = CONTRACT.verify_rng_instance_identity(
+        replay_sample_rng)
 # ---- Phase4A-v2.1 (CC2 §五): per-arm MATCHED_REPLAY_EXPOSURE certificate accumulation ----
 # These per-outer-update lists are the raw exposure record the two-arm validator compares at
 # level 2 (EXPOSURE_COUNT_MATCH). sample_ids_by_outer_update / start_offsets_by_outer_update are
@@ -554,9 +685,18 @@ def _phase4a_v2_manifest_fields():
     # later checkpoints) references the runtime_config_certificate SHAs + status + path, so the
     # binding evidence is anchored inside the artifacts themselves.
     if RUNTIME_CONFIG_CERTIFICATE is not None:
+        # Phase4A-v2.3 (§七.3): the manifest pins the finalized certificate's OWN artifact
+        # identity — payload SHA, FINAL file SHA, sidecar path — so checkpoint readers can
+        # re-verify the certificate file byte-for-byte (verify_certificate_artifact).
         fields["runtime_config_certificate"] = RTC.certificate_shas_record(
-            RUNTIME_CONFIG_CERTIFICATE)
+            RUNTIME_CONFIG_CERTIFICATE,
+            certificate_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+            certificate_sidecar_path=RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)
         fields["runtime_config_certificate_path"] = RUNTIME_CONFIG_CERTIFICATE_PATH
+        fields["runtime_config_certificate_sidecar_path"] = (
+            RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)
+        fields["runtime_config_certificate_file_sha256"] = (
+            RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256)
     return fields
 
 
@@ -1118,10 +1258,19 @@ summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
                # Phase4A-v2.2 (§六.8): the formal-config binding record (SHAs + status + path +
                # frozen base-checkpoint expectation). None when no --formal_config was supplied
                # (replay_mode=off / probe legacy dev compat).
+               # Phase4A-v2.3 (§七.3 + §八): the summary pins the FINALIZED certificate's file
+               # SHA / sidecar / payload SHA and the executed-protocol SOURCE identity (learner
+               # + sampler source SHA via inspect, RNG instance class) — not string labels.
                runtime_config_certificate=(
-                   RTC.certificate_shas_record(RUNTIME_CONFIG_CERTIFICATE)
+                   RTC.certificate_shas_record(
+                       RUNTIME_CONFIG_CERTIFICATE,
+                       certificate_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+                       certificate_sidecar_path=RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)
                    if RUNTIME_CONFIG_CERTIFICATE is not None else None),
                runtime_config_certificate_path=RUNTIME_CONFIG_CERTIFICATE_PATH,
+               runtime_config_certificate_sidecar_path=RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+               runtime_config_certificate_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+               executed_protocol_identity=EXECUTED_PROTOCOL_IDENTITY,
                status="COMPLETE",
                arm_status=ARM_STATUS,
                arm_gates_pass=bool(ARM_GATES_PASS),
@@ -1160,17 +1309,25 @@ print(f"  accepted_policy_updates={accepted_policy_updates} kl_rejected={kl_reje
       f"hindsight={hindsight_eligible}/{hindsight_attempts}", flush=True)
 print("=" * 78, flush=True)
 print(f"PHASE4A_ARM_FINAL_STATUS={ARM_STATUS}", flush=True)
-# Phase4A-v2.2 (§六.8): launch-status line for the formal-config binding.
+# Phase4A-v2.2/2.3 (§六.8 + §七): launch-status line for the formal-config binding — now also
+# carries the FINALIZED flag and the certificate's own FINAL file SHA + sidecar (§七.3), so the
+# launch log alone lets a reviewer re-fetch + re-verify the exact certificate artifact.
 if RUNTIME_CONFIG_CERTIFICATE is not None:
     _cert_status = RUNTIME_CONFIG_CERTIFICATE["certificate_status"]
+    _cert_finalized = RUNTIME_CONFIG_CERTIFICATE["certificate_finalized"]
     _cert_sci_sha = RUNTIME_CONFIG_CERTIFICATE["scientific_config_sha256"]
     _cert_rt_sha = RUNTIME_CONFIG_CERTIFICATE["runtime_scientific_config_sha256"]
     _cert_bc_status = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"][
         "base_checkpoint_expected_sha256_status"]
+    _cert_bc_match = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"]["base_checkpoint_match"]
     print(f"RUNTIME_CONFIG_CERTIFICATE_STATUS={_cert_status} "
+          f"certificate_finalized={_cert_finalized} "
           f"scientific_config_sha256={_cert_sci_sha} "
           f"runtime_scientific_config_sha256={_cert_rt_sha} "
-          f"base_checkpoint_expected_sha256_status={_cert_bc_status}", flush=True)
+          f"base_checkpoint_expected_sha256_status={_cert_bc_status} "
+          f"base_checkpoint_match={_cert_bc_match} "
+          f"certificate_file_sha256={RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256} "
+          f"certificate_sidecar_path={RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH}", flush=True)
 else:
     print("RUNTIME_CONFIG_CERTIFICATE_STATUS=NOT_REQUIRED_NO_FORMAL_CONFIG "
           "(replay_mode=off/probe legacy dev compat)", flush=True)
