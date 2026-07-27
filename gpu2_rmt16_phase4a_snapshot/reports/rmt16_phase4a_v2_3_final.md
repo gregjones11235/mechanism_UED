@@ -6,7 +6,13 @@
 **Review baseline:** `d3c8c7d6abd2df3d0ba69dc2c1f326f8668798e5`
 **Scope:** evidence-chain integrity + fail-closed enforcement ONLY. No algorithm, design,
 hyperparameter, network, task, evaluator, seed, budget, CC3/CC4/Henry-branch changes. No
-training, no smoke, no push, no merge.
+training, no smoke, no merge; no push was performed before this commit's creation.
+
+> **Publication-status discipline (review fix):** every publication label in this round is
+> **creation-time evidence** (`..._AT_COMMIT_CREATION` / `..._BEFORE_COMMIT`). This report
+> makes NO claim about the CURRENT remote state of the branch — a later push by 总控 does
+> not falsify any statement here. This is the fix for the v2.2 errata failure mode
+> (v2.2 had asserted a current-remote `NOT_PUSHED` that a push then contradicted).
 
 ---
 
@@ -61,7 +67,10 @@ No training/smoke/evaluation launched; no GPU touched (GPU0/GPU1 forbidden); no 
 updates; no hyperparameter/architecture/task/evaluator/seed/budget changes; CC3/CC4/Henry
 files untouched; no merge/rebase/amend/force-push/reset/clean; no `git add .` (path-limited
 add only); single local commit `fix(rmt16): finalize formal identity and runtime certificate
-chain`; no push performed (V2.3 = NOT_PUSHED, pending 总控复审); no secrets printed or
+chain`; no push performed before commit creation
+(`V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION=NOT_PUSHED`,
+`V2_3_PUSH_PERFORMED_BEFORE_COMMIT=false` — creation-time facts; NO current-remote claim is
+made, so a later push by 总控 cannot contradict this evidence); no secrets printed or
 requested; every fix recorded with reason+diff.
 
 ## 6. §十七 frozen labels (final)
@@ -80,6 +89,7 @@ DECLARED_PROTOCOL_SAMPLER_FUNCTION         = sample_eligible
 DECLARED_PROTOCOL_SAMPLER_LABEL            = eligible_only
 DECLARED_PROTOCOL_RNG_ENGINE               = np.random.RandomState
 TOTAL_GATE_COUNT                           = 50
-V2_3_REMOTE_PUBLICATION_STATUS             = NOT_PUSHED
+V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION = NOT_PUSHED   (creation-time; NOT a current claim)
+V2_3_PUSH_PERFORMED_BEFORE_COMMIT          = false        (creation-time; NOT a current claim)
 V2_2_ERRATUM_REMOTE_PUBLICATION_STATUS     = PUSHED (f2b7aead44426825f905fa8b82c5f66c29ee167a)
 ```

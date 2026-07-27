@@ -45,9 +45,8 @@
     "V2_2_ERRATUM_REMOTE_PUBLICATION_STATUS": "PUSHED",
     "V2_2_ERRATUM_REMOTE_HEAD": "f2b7aead44426825f905fa8b82c5f66c29ee167a",
     "V2_2_ERRATUM_FILE": "reports/rmt16_phase4a_v2_2_publication_errata.md",
-    "V2_3_IMPLEMENTATION_ROUND_PUSH_PERFORMED": false,
-    "V2_3_REMOTE_PUBLICATION_STATUS": "NOT_PUSHED",
-    "V2_3_PUSH_PERFORMED": false
+    "V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION": "NOT_PUSHED",
+    "V2_3_PUSH_PERFORMED_BEFORE_COMMIT": false
   },
   "director_residual_items_resolved": {
     "1_canonical_file_identity_not_frozen": "RESOLVED: phase4a_v2_formal_identity freezes path+file SHA+scientific SHA per arm; GATE39/GATE40",

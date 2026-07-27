@@ -40,9 +40,14 @@ The correction is carried **forward**, in V2.3, by this errata and by the V2.3 l
 ```
 "V2_2_ERRATUM_REMOTE_PUBLICATION_STATUS": "PUSHED",
 "V2_2_ERRATUM_REMOTE_HEAD": "f2b7aead44426825f905fa8b82c5f66c29ee167a",
-"V2_3_REMOTE_PUBLICATION_STATUS": "NOT_PUSHED",
-"V2_3_PUSH_PERFORMED": false,
+"V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION": "NOT_PUSHED",
+"V2_3_PUSH_PERFORMED_BEFORE_COMMIT": false,
 ```
+
+The V2.3 keys are deliberately **creation-time** labels: they state that no push had
+happened when the V2.3 commit was created, and make NO claim about the current remote
+state — so a later push by 总控 cannot contradict them (the exact failure mode this
+errata documents for V2.2).
 
 ## Current layered publication truth (as of V2.3 finalization)
 
@@ -50,7 +55,9 @@ The correction is carried **forward**, in V2.3, by this errata and by the V2.3 l
 | --- | --- | --- |
 | Base (pre-V2.2) | PUSHED (PASS) | `87d1e552415d292417dcb6e6f9f6b16b97a6d135` |
 | V2.2 | PUSHED (per this errata) | `f2b7aead44426825f905fa8b82c5f66c29ee167a` |
-| V2.3 | NOT_PUSHED (pending 总控复审) | local commit on this branch only |
+| V2.3 | NOT_PUSHED **at V2.3 commit creation** (creation-time fact; no current-remote claim) | local commit on this branch at creation time |
 
 No unscoped `PUSH_PERFORMED` key is introduced (the §九 layering rule remains in force).
-The V2.3 round performs **no push**; pushing V2.3 is a later, separately-authorized step.
+The V2.3 round performed **no push before its commit creation**; whether 总控 later pushes
+V2.3 is deliberately NOT asserted here — asserting it would re-create exactly the failure
+mode this errata records for V2.2.

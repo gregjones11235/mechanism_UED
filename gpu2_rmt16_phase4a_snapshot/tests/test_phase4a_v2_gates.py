@@ -2040,9 +2040,21 @@ def gate48():
 
 
 def gate49():
-    """GATE 49 — v2.3 publication labels (§九): layered, time-scoped; V2.3 NOT_PUSHED; the
-    v2.2 publication erratum is recorded (v2.2 WAS pushed: f2b7aead is the remote HEAD,
-    director item 8); no unscoped PUSH_PERFORMED key."""
+    """GATE 49 — v2.3 publication labels (§九): TIME-SCOPED creation-time evidence only.
+
+    The gate asserts facts that are IMMUABLE — true at the moment the v2.3 commit was
+    created, and NOT falsified if 总控 later pushes the branch:
+      V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION = NOT_PUSHED
+      V2_3_PUSH_PERFORMED_BEFORE_COMMIT          = false
+    plus the historical v2.2 erratum facts (v2.2 WAS pushed: f2b7aead is the remote HEAD,
+    director item 8). It REJECTS any label that asserts the CURRENT remote state
+    (V2_3_REMOTE_PUBLICATION_STATUS / V2_3_PUSH_PERFORMED / unscoped PUSH_PERFORMED /
+    V2_3_IMPLEMENTATION_ROUND_PUSH_PERFORMED) or any PUSH_PERFORMED label lacking a time
+    qualifier — exactly the push-falsifiable shape that produced the v2.2 errata.
+
+    Review-fix reason+diff: the original v2.3 gate asserted "current remote = NOT_PUSHED";
+    a push by 总控 would instantly contradict the committed evidence (repeat of the v2.2
+    errata failure mode). The assertion is now "NOT_PUSHED AT COMMIT CREATION"."""
     import json as _json
     path = os.path.join(_SNAPSHOT, "reports", "rmt16_phase4a_v2_3_labels.json")
     if not os.path.isfile(path):
@@ -2050,10 +2062,10 @@ def gate49():
     with open(path, encoding="utf-8") as f:
         doc = _json.load(f)
     labels = doc["labels"]
+    # creation-time / historical facts — a later push does NOT falsify any of these
     expect = {
-        "V2_3_REMOTE_PUBLICATION_STATUS": "NOT_PUSHED",
-        "V2_3_PUSH_PERFORMED": False,
-        "V2_3_IMPLEMENTATION_ROUND_PUSH_PERFORMED": False,
+        "V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION": "NOT_PUSHED",
+        "V2_3_PUSH_PERFORMED_BEFORE_COMMIT": False,
         "V2_2_ERRATUM_REMOTE_PUBLICATION_STATUS": "PUSHED",
         "V2_2_ERRATUM_REMOTE_HEAD": "f2b7aead44426825f905fa8b82c5f66c29ee167a",
         "BASE_REMOTE_HEAD": "87d1e552415d292417dcb6e6f9f6b16b97a6d135",
@@ -2062,11 +2074,24 @@ def gate49():
     for k, v in expect.items():
         if labels.get(k) != v:
             return FAIL, f"{k}={labels.get(k)!r} != {v!r}"
-    if "PUSH_PERFORMED" in labels:
-        return FAIL, "time-UNSCOPED 'PUSH_PERFORMED' key present (forbidden by §九)"
-    return PASS, ("v2.3 labels: V2_3_*=NOT_PUSHED (this round); v2.2 erratum recorded "
-                  "(PUSHED @ f2b7aead); base @ 87d1e55; review baseline @ d3c8c7d6; no "
-                  "unscoped PUSH_PERFORMED")
+    # forbid CURRENT-remote-state publication labels: a push would falsify them
+    forbidden = {"PUSH_PERFORMED",
+                 "V2_3_PUSH_PERFORMED",
+                 "V2_3_REMOTE_PUBLICATION_STATUS",
+                 "V2_3_IMPLEMENTATION_ROUND_PUSH_PERFORMED"}
+    bad = sorted(forbidden & set(labels))
+    if bad:
+        return FAIL, f"push-falsifiable current-state publication label(s) present: {bad}"
+    # any PUSH_PERFORMED label must carry an explicit time qualifier
+    for k in labels:
+        if "PUSH_PERFORMED" in k and not any(
+                q in k for q in ("BEFORE_COMMIT", "AT_COMMIT_CREATION", "ERRATUM")):
+            return FAIL, (f"push label {k!r} lacks a time qualifier "
+                          "(BEFORE_COMMIT / AT_COMMIT_CREATION / ERRATUM)")
+    return PASS, ("v2.3 labels are creation-time evidence: NOT_PUSHED at commit creation, "
+                  "no push performed before commit; no push-falsifiable current-state label; "
+                  "v2.2 erratum recorded (PUSHED @ f2b7aead); base @ 87d1e55; review "
+                  "baseline @ d3c8c7d6")
 
 
 def gate50():
@@ -2083,6 +2108,16 @@ def gate50():
     for needle in ("f2b7aead44426825f905fa8b82c5f66c29ee167a", "NOT_PUSHED", "PUSHED"):
         if needle not in etxt:
             return FAIL, f"errata does not document the NOT_PUSHED-vs-{needle[:12]} reality"
+    # the v2.3 final report must state the CREATION-TIME status, never a current-remote claim
+    # (review-fix: a current-state claim would be falsified by a later push)
+    ftxt = open(final, encoding="utf-8").read()
+    if "V2_3_PUBLICATION_STATUS_AT_COMMIT_CREATION" not in ftxt:
+        return FAIL, "final report must state the creation-time (not current) v2.3 status"
+    bare = ftxt.replace("V2_3_PUSH_PERFORMED_BEFORE_COMMIT", "")
+    for cur in ("V2_3_REMOTE_PUBLICATION_STATUS", "V2_3_PUSH_PERFORMED",
+                "V2_3_IMPLEMENTATION_ROUND_PUSH_PERFORMED"):
+        if cur in bare:
+            return FAIL, f"final report carries push-falsifiable current-state label {cur}"
     # the v2.2 labels file is byte-unchanged (its NOT_PUSHED labels stay as written in v2.2)
     with open(os.path.join(_SNAPSHOT, "reports", "rmt16_phase4a_v2_2_labels.json"),
               encoding="utf-8") as f:
