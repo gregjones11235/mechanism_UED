@@ -1,0 +1,57 @@
+{
+  "boundary_predicate_version": "tier3_predicates/v1",
+  "common_state_bank_for_all_arms": true,
+  "entries": [
+    {
+      "index": 0,
+      "seed": 10000,
+      "state_payload_hash": "8e235400521041b8630a8016ded3bbc8efba35850e8aee29ad35a94093a29ccf",
+      "synthetic": true
+    },
+    {
+      "index": 1,
+      "seed": 10001,
+      "state_payload_hash": "706ceace76aba6cf42d6c4d64690bd16ea3cafdca6b476158e35ce92834f6884",
+      "synthetic": true
+    },
+    {
+      "index": 2,
+      "seed": 10002,
+      "state_payload_hash": "871e5f15f7682bc3e0d0370110ec6df0a163315a10692aebdc738487f03c3469",
+      "synthetic": true
+    },
+    {
+      "index": 3,
+      "seed": 10003,
+      "state_payload_hash": "85b814c815c19f47241fdf258e5f499caaae3345f5573cb40f089f76a0ca347a",
+      "synthetic": true
+    }
+  ],
+  "hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+  "hash_status": "NOT_MATERIALIZED",
+  "manifest_version": "tier3_state_manifest/v1",
+  "materialization_status": "BLOCKED_ENVIRONMENT",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenario": "front_l2",
+  "schema": "mechanism_UED.tier3_state_manifest/v1",
+  "seed_schedule_params": {
+    "n": 4,
+    "scenario": "front_l2",
+    "seed_base": 10000,
+    "stride": 1
+  },
+  "seeds": [
+    10000,
+    10001,
+    10002,
+    10003
+  ],
+  "source_shas": {
+    "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+  },
+  "state_bank_hash": "e9ba7db167f354bbaf6e9650f3f5776c6405d4ec9a576edc35838f4fcb828989",
+  "state_count": 4,
+  "state_order": "0..3 ascending (ORDER-SENSITIVE)",
+  "states_are": "SYNTHETIC_TEST_ONLY"
+}
