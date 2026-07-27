@@ -1,0 +1,51 @@
+{
+  "checkpoint_params_sha256": null,
+  "contract": {
+    "action_mode": "greedy_argmax",
+    "action_space": "canonical_craftax_action_set",
+    "identical_for_all_arms": true,
+    "max_timesteps": 4096,
+    "observation_schema": "canonical_craftax_symbolic"
+  },
+  "episode_count": 3,
+  "failure_rule_version": "tier3_failure_rules/v1",
+  "materialization_status": "BLOCKED_ENVIRONMENT",
+  "metrics": {
+    "dense": {
+      "is_success_substitute": false,
+      "metric": "NORMALIZED_CORRIDOR_PROGRESS",
+      "monotonicity_guaranteed": false,
+      "range": [
+        0,
+        1
+      ],
+      "scenario": "front_l2",
+      "scored": 3,
+      "valid_starts": 3,
+      "value": 0.6666666666666666
+    },
+    "primary": {
+      "conditional_on": "valid_start",
+      "diagnostic_only": true,
+      "metric": "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START",
+      "scenario": "front_l2",
+      "successes": 1,
+      "valid_starts": 3,
+      "value": 0.3333333333333333
+    },
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "front_l2",
+    "schema": "mechanism_UED.tier3_metrics/v1"
+  },
+  "result_version": "tier3_evaluation_result/v1",
+  "rollout_status": "BLOCKED_ENVIRONMENT",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenario": "front_l2",
+  "schema": "mechanism_UED.tier3_evaluation_result/v1",
+  "terminal_label_counts": {
+    "DIED_IN_CORRIDOR": 1,
+    "EXIT_REACHED": 1,
+    "TIMEOUT_EXIT_NOT_FOUND": 1
+  },
+  "valid_start_count": 3
+}

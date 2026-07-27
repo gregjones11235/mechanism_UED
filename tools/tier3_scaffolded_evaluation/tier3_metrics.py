@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""CC4 Tier3 — frozen metric semantics (pure functions over episode records).
+
+Metrics are FROZEN and identical across every arm / scenario. Scaffold metrics are
+CONDITIONAL on a valid scaffold start and are for MECHANISM DIAGNOSIS ONLY — they can
+never replace the full-task DEFEAT_KOBOLD_SR (scaffolded_results_can_replace_full_task
+= false). Dense progress is not a success substitute.
+
+Frozen primary / dense metrics:
+  FULL   : DEFEAT_KOBOLD_SR                              = P(defeat | valid_full_start)
+  FRONT  : P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START     = P(exit    | valid_front_start)
+           dense NORMALIZED_CORRIDOR_PROGRESS in [0,1]   (graph-distance; see predicates)
+  BACK   : P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START        = P(defeat | valid_back_start)
+
+All estimators are pure ratios over validated episode records; an episode without a
+valid_start flag is rejected upstream by the evaluator (NEG19).
+"""
+from __future__ import annotations
+
+import os
+import sys
+
+# Runnable-as-script AND importable-as-package.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tier3_source_audit as audit        # noqa: E402
+
+SCHEMA = "mechanism_UED.tier3_metrics/v1"
+
+FULL = "full"
+FRONT = "front_l2"
+BACK = "back_l2"
+
+FULL_PRIMARY_METRIC = "DEFEAT_KOBOLD_SR"
+FRONT_PRIMARY_METRIC = "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START"
+FRONT_DENSE_METRIC = "NORMALIZED_CORRIDOR_PROGRESS"
+BACK_PRIMARY_METRIC = "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START"
+
+PRIMARY_METRIC = {
+    FULL: FULL_PRIMARY_METRIC,
+    FRONT: FRONT_PRIMARY_METRIC,
+    BACK: BACK_PRIMARY_METRIC,
+}
+
+
+class FailClosed(Exception):
+    """Hard stop on invalid metric inputs."""
+
+
+def require(cond, msg):
+    if not cond:
+        raise FailClosed(msg)
+
+
+def assert_progress_in_range(progress):
+    """NEG17 guard reused at the metric layer: dense progress must lie in [0,1]."""
+    require(isinstance(progress, (int, float)) and not isinstance(progress, bool)
+            and 0.0 <= float(progress) <= 1.0,
+            "FAIL CLOSED (NEG17): normalized_corridor_progress %r outside [0,1]" % (progress,))
+    return float(progress)
+
+
+def _valid_episodes(scenario, episodes):
+    return [e for e in episodes if e.get("scenario") == scenario and e.get("valid_start") is True]
+
+
+def _ratio(num, den):
+    if den == 0:
+        return None     # undefined (no valid starts) -> reported as such, never faked
+    return float(num) / float(den)
+
+
+def compute_primary_metric(scenario, episodes):
+    """Conditional success probability over valid starts for the scenario."""
+    valid = _valid_episodes(scenario, episodes)
+    n = len(valid)
+    if scenario == FULL:
+        successes = sum(1 for e in valid if e.get("defeat_kobold") is True)
+    elif scenario == FRONT:
+        successes = sum(1 for e in valid if e.get("corridor_exit_reached") is True)
+    elif scenario == BACK:
+        successes = sum(1 for e in valid if e.get("defeat_kobold") is True)
+    else:
+        raise FailClosed("FAIL CLOSED: unknown scenario %r" % scenario)
+    return {
+        "metric": PRIMARY_METRIC[scenario],
+        "scenario": scenario,
+        "valid_starts": n,
+        "successes": successes,
+        "value": _ratio(successes, n),
+        "conditional_on": "valid_start",
+        "diagnostic_only": scenario != FULL,
+    }
+
+
+def compute_dense_progress(scenario, episodes):
+    """Mean NORMALIZED_CORRIDOR_PROGRESS over valid FRONT starts (front only)."""
+    if scenario != FRONT:
+        return {"metric": FRONT_DENSE_METRIC, "scenario": scenario,
+                "value": None, "note": "dense progress defined for front_l2 only"}
+    valid = _valid_episodes(FRONT, episodes)
+    vals = []
+    for e in valid:
+        p = e.get("normalized_corridor_progress")
+        if p is not None:
+            vals.append(assert_progress_in_range(p))
+    return {
+        "metric": FRONT_DENSE_METRIC,
+        "scenario": FRONT,
+        "valid_starts": len(valid),
+        "scored": len(vals),
+        "value": (sum(vals) / len(vals)) if vals else None,
+        "range": [0, 1],
+        "monotonicity_guaranteed": False,
+        "is_success_substitute": False,
+    }
+
+
+def summarize(scenario, episodes):
+    primary = compute_primary_metric(scenario, episodes)
+    dense = compute_dense_progress(scenario, episodes)
+    return {
+        "schema": SCHEMA,
+        "scenario": scenario,
+        "primary": primary,
+        "dense": dense,
+        "scaffolded_results_can_replace_full_task": False,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Self-test (synthetic episodes; runs on this host).
+# ---------------------------------------------------------------------------
+def _ep(scenario, valid_start, **flags):
+    e = {"scenario": scenario, "valid_start": valid_start,
+         "corridor_exit_reached": False, "defeat_kobold": False,
+         "normalized_corridor_progress": None}
+    e.update(flags)
+    return e
+
+
+def self_test() -> int:
+    problems = []
+
+    def check(name, cond):
+        if not cond:
+            problems.append(name)
+
+    # FULL: 1/2 defeat among valid starts; invalid starts excluded.
+    full = [_ep(FULL, True, defeat_kobold=True), _ep(FULL, True, defeat_kobold=False),
+            _ep(FULL, False, defeat_kobold=True)]
+    fp = compute_primary_metric(FULL, full)
+    check("full_primary_1_of_2", fp["value"] == 0.5 and fp["valid_starts"] == 2)
+    check("full_metric_name", fp["metric"] == FULL_PRIMARY_METRIC)
+
+    # FRONT: 2/4 exit; dense progress mean over scored valid starts.
+    front = [_ep(FRONT, True, corridor_exit_reached=True, normalized_corridor_progress=1.0),
+             _ep(FRONT, True, corridor_exit_reached=True, normalized_corridor_progress=0.8),
+             _ep(FRONT, True, corridor_exit_reached=False, normalized_corridor_progress=0.2),
+             _ep(FRONT, True, corridor_exit_reached=False, normalized_corridor_progress=0.0),
+             _ep(FRONT, False, corridor_exit_reached=True)]
+    frp = compute_primary_metric(FRONT, front)
+    check("front_primary_2_of_4", frp["value"] == 0.5 and frp["valid_starts"] == 4)
+    check("front_metric_name", frp["metric"] == FRONT_PRIMARY_METRIC)
+    frd = compute_dense_progress(FRONT, front)
+    check("front_dense_mean", abs(frd["value"] - 0.5) < 1e-9)
+    check("front_dense_not_success_substitute", frd["is_success_substitute"] is False)
+
+    # BACK: 1/3 defeat.
+    back = [_ep(BACK, True, defeat_kobold=True), _ep(BACK, True, defeat_kobold=False),
+            _ep(BACK, True, defeat_kobold=False)]
+    bp = compute_primary_metric(BACK, back)
+    check("back_primary_1_of_3", abs(bp["value"] - 1 / 3) < 1e-9 and bp["valid_starts"] == 3)
+    check("back_metric_name", bp["metric"] == BACK_PRIMARY_METRIC)
+
+    # No valid starts -> value undefined (None), never faked.
+    check("empty_undefined", compute_primary_metric(FRONT, [])["value"] is None)
+
+    # NEG17 guard: out-of-range progress rejected.
+    check("progress_in_range_ok", assert_progress_in_range(0.5) == 0.5)
+    try:
+        assert_progress_in_range(1.5)
+        check("NEG17_metric_range_rejected", False)
+    except FailClosed:
+        check("NEG17_metric_range_rejected", True)
+
+    if problems:
+        print("TIER3_METRICS_SELF_TEST_FAIL")
+        for p in problems:
+            print("  -", p)
+        return 1
+    print("TIER3_METRICS_SELF_TEST_PASS (metrics frozen; diagnostic_only enforced)")
+    return 0
+
+
+def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--self-test" in argv:
+        return self_test()
+    print("usage: tier3_metrics.py --self-test")
+    return 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

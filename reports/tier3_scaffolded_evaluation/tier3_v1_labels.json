@@ -1,0 +1,34 @@
+{
+  "back_primary_metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+  "back_scaffold_state_bank_hash": "NOT_MATERIALIZED",
+  "blocked_items": [
+    "craftax_enum_indices(BLOCKED_SOURCE_SEMANTICS)",
+    "real_kobold_type_id(BLOCKED_SOURCE_SEMANTICS)",
+    "walkable_blocktype_set(BLOCKED_SOURCE_SEMANTICS)",
+    "get_distance_map(BLOCKED_SOURCE_SEMANTICS)",
+    "real_materialization(BLOCKED_ENVIRONMENT)",
+    "real_rollout(NOT_RUN)"
+  ],
+  "cc2_cc3_files_touched": false,
+  "evidence_level": "IMPLEMENTED_STATIC/TESTED_SYNTHETIC",
+  "formal_evaluation_runs": 0,
+  "front_back_l1_status": "RESERVED_NOT_IMPLEMENTED",
+  "front_primary_metric": "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START",
+  "front_scaffold_evaluation": "NOT_RUN",
+  "front_scaffold_state_bank_hash": "NOT_MATERIALIZED",
+  "full_primary_metric": "DEFEAT_KOBOLD_SR",
+  "global_world_set_hash": "BLOCKED_SOURCE_UNVERIFIED",
+  "henry_branch_touched": false,
+  "new_training_runs": 0,
+  "overclaim_guard": [
+    "FRONT_SCAFFOLD_EVALUATION=PASS is FORBIDDEN this round",
+    "TIER3_FRONT_HALF_BREAKTHROUGH is FORBIDDEN this round",
+    "scaffolded_results_can_replace_full_task=false"
+  ],
+  "push_performed": false,
+  "real_craftax_scaffold_test": "BLOCKED_ENVIRONMENT",
+  "real_student_evaluation": "NOT_RUN",
+  "scaffolded_results_can_replace_full_task": false,
+  "schema": "mechanism_UED.tier3_v1_labels/v1",
+  "task": "CC4_TIER3_SCAFFOLDED_EVALUATION_ENVIRONMENT_V1"
+}

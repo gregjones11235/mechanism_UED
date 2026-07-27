@@ -1,0 +1,36 @@
+{
+  "cert_version": "tier3_evaluation_certificate/v1",
+  "claims": [],
+  "failure_rule_version": "tier3_failure_rules/v1",
+  "headline_metric": "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START",
+  "headline_metric_achieved": null,
+  "headline_metric_value": 0.3333333333333333,
+  "identity_class": "TIER3_FRONT_DIAGNOSTIC_SCAFFOLD",
+  "rollout_status": "BLOCKED_ENVIRONMENT",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenario": "front_l2",
+  "schema": "mechanism_UED.tier3_evaluation_certificate/v1",
+  "source_audit_schema": "mechanism_UED.tier3_source_audit/v1",
+  "state_bank_hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+  "status_labels": {
+    "BACK_SCAFFOLD_STATE_BANK_HASH": "NOT_MATERIALIZED",
+    "BOUNDARY_SCHEMA": "IMPLEMENTED_STATIC",
+    "EVALUATOR": "TESTED_SYNTHETIC",
+    "FORMAL_EVALUATION_RUNS": 0,
+    "FRONT_SCAFFOLD_STATE_BANK_HASH": "NOT_MATERIALIZED",
+    "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+    "NEGATIVE_TESTS": "PASS",
+    "NEW_TRAINING_RUNS": 0,
+    "REAL_CRAFTAX_SCAFFOLD_TEST": "BLOCKED_ENVIRONMENT",
+    "REAL_STUDENT_EVALUATION": "NOT_RUN",
+    "SCAFFOLDED_RESULTS_CAN_REPLACE_FULL_TASK": false,
+    "SCAFFOLD_BUILDER": "IMPLEMENTED_STATIC",
+    "STATE_BANK_MATERIALIZER": "TESTED_SYNTHETIC"
+  },
+  "terminal_label_counts": {
+    "DIED_IN_CORRIDOR": 1,
+    "EXIT_REACHED": 1,
+    "TIMEOUT_EXIT_NOT_FOUND": 1
+  },
+  "valid_starts": 3
+}

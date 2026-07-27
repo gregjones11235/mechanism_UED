@@ -7,19 +7,14 @@ the suite requirement is FAIL=0 (no negative test silently accepts a violation).
 BLOCKED is allowed only with a documented environment-capability absence — never a
 fake PASS.
 
-Commit-2 coverage (this file, runs now):
-  NEG01–NEG18  boundary / builder / state-bank / predicate level
-  NEG24        scaffold hash must never be the GLOBAL_WORLD_SET_HASH
-  NEG26        state/sample selection must be blind to Student performance
-
-Commit-3 coverage (added with the evaluator / checkpoint-adapter / certificate
-modules; see the PENDING_COMMIT_3 registry):
-  NEG19 episode missing valid_start; NEG20 ambiguous termination silently labelled;
-  NEG21 checkpoint params SHA mismatch; NEG22 checkpoint observation shape mismatch;
-  NEG23 evaluation tries to update params; NEG25 scaffold result claims full-task success.
-
-These are NOT stubbed as passing: until the owning module exists they are reported as
-PENDING and excluded from the FAIL count (never counted as PASS).
+Coverage (all 26 implemented; FAIL=0 required):
+  NEG01-NEG18  boundary / builder / state-bank / predicate level
+  NEG19        episode missing valid_start (evaluator)
+  NEG20        ambiguous termination silently labelled (failure taxonomy)
+  NEG21-NEG23  checkpoint params SHA / observation shape / params update (adapter)
+  NEG24        scaffold hash must never be the GLOBAL_WORLD_SET_HASH (materializer/cert)
+  NEG25        scaffold result claims full-task success (certificate)
+  NEG26        state/sample selection must be blind to Student performance (materializer)
 """
 from __future__ import annotations
 
@@ -34,10 +29,16 @@ import tier3_event_predicates as pred             # noqa: E402
 import tier3_state_serializer as ser              # noqa: E402
 import tier3_scaffold_builder as builder          # noqa: E402
 import tier3_state_bank_materializer as mat       # noqa: E402
+import tier3_checkpoint_adapter as ckpt          # noqa: E402
+import tier3_metrics as metrics                   # noqa: E402
+import tier3_failure_taxonomy as taxonomy         # noqa: E402
+import tier3_evaluator as evaluator              # noqa: E402
+import tier3_evaluation_certificate as certmod    # noqa: E402
 
 # Every guard may raise its own module's FailClosed (or the reused V3 one).
 FAILCLOSED = (audit.FailClosed, pred.FailClosed, ser.FailClosed, builder.FailClosed,
-              mat.FailClosed, ser.v3mat.FailClosed)
+              mat.FailClosed, ckpt.FailClosed, metrics.FailClosed, taxonomy.FailClosed,
+              evaluator.FailClosed, certmod.FailClosed, ser.v3mat.FailClosed)
 
 KOBOLD = mat.SYNTHETIC_KOBOLD_TYPE_ID   # synthetic test type_id (real one is BLOCKED)
 
@@ -225,6 +226,57 @@ def neg26():
     return rejects(lambda: mat.assert_selection_is_result_blind(m))
 
 
+def neg19():
+    """Episode record missing the valid_start flag -> fail."""
+    ep = {"episode_id": "e", "scenario": mat.FRONT, "terminal_label": "",
+          "corridor_exit_reached": True, "defeat_kobold": False, "timesteps": 5}
+    # no valid_start key
+    return rejects(lambda: evaluator.validate_episode_record(ep))
+
+
+def neg20():
+    """Ambiguous/contradictory termination silently assigned one label -> fail."""
+    ep = {"scenario": mat.FRONT, "valid_start": True, "defeat_kobold": True,
+          "player_died": True, "timed_out": False, "corridor_exit_reached": True,
+          "kobold_engaged": False, "boss_area_reached": False}
+    return rejects(lambda: taxonomy.classify_episode(ep))
+
+
+def neg21():
+    """Checkpoint params SHA mismatch -> fail."""
+    rec = ckpt.make_checkpoint_record({"w": [1, 2]}, (67, 7, 7), "canonical_craftax_action_set")
+    return rejects(lambda: ckpt.assert_params_identity(rec, "0" * 64))
+
+
+def neg22():
+    """Checkpoint observation shape mismatch -> fail."""
+    rec = ckpt.make_checkpoint_record({"w": [1, 2]}, (67, 7, 7), "canonical_craftax_action_set")
+    return rejects(lambda: ckpt.assert_observation_shape(rec, (68, 7, 7)))
+
+
+def neg23():
+    """Evaluation tries to update params -> fail."""
+    rec = ckpt.make_checkpoint_record({"w": [1, 2]}, (67, 7, 7), "canonical_craftax_action_set")
+    mutated = dict(rec)
+    mutated["params_sha256"] = ckpt.params_sha256({"w": [9, 9]})
+    return rejects(lambda: ckpt.assert_evaluation_does_not_update_params(rec, mutated))
+
+
+def neg25():
+    """Scaffold result claims full-task success / breakthrough -> fail."""
+    claims = ["TIER3_FRONT_HALF_BREAKTHROUGH"]
+    result = {
+        "scenario": mat.FRONT,
+        "contract": {"observation_schema": "canonical_craftax_symbolic"},
+        "metrics": {"primary": {"metric": metrics.FRONT_PRIMARY_METRIC, "value": 0.5,
+                                "valid_starts": 4}},
+        "failure_rule_version": taxonomy.FAILURE_RULE_VERSION,
+        "terminal_label_counts": {},
+        "rollout_status": "BLOCKED_ENVIRONMENT",
+    }
+    return rejects(lambda: certmod.build_certificate(result, claims=claims))
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -247,19 +299,18 @@ NEG_TESTS = [
     ("NEG16", "back state has no live Kobold", neg16),
     ("NEG17", "progress always within [0,1]", neg17),
     ("NEG18", "unreachable exit without blocked label", neg18),
+    ("NEG19", "episode missing valid_start", neg19),
+    ("NEG20", "ambiguous termination silently labelled", neg20),
+    ("NEG21", "checkpoint params SHA mismatch", neg21),
+    ("NEG22", "checkpoint observation shape mismatch", neg22),
+    ("NEG23", "evaluation tries to update params", neg23),
     ("NEG24", "scaffold hash used as GLOBAL_WORLD_SET_HASH", neg24),
+    ("NEG25", "scaffold result claims full-task success", neg25),
     ("NEG26", "result-based state/sample selection", neg26),
 ]
 
-# Owning modules land in Commit 3; NOT counted as PASS until then.
-PENDING_COMMIT_3 = [
-    ("NEG19", "episode missing valid_start", "tier3_evaluator / episode record"),
-    ("NEG20", "ambiguous termination silently labelled", "tier3_failure_taxonomy"),
-    ("NEG21", "checkpoint params SHA mismatch", "tier3_checkpoint_adapter"),
-    ("NEG22", "checkpoint observation shape mismatch", "tier3_checkpoint_adapter"),
-    ("NEG23", "evaluation tries to update params", "tier3_checkpoint_adapter"),
-    ("NEG25", "scaffold result claims full-task success", "tier3_evaluation_certificate"),
-]
+# All 26 NEG tests are implemented (NEG19-23/25 landed with the Commit-3 modules).
+PENDING_COMMIT_3 = []
 
 
 def run_all():
