@@ -42,11 +42,21 @@ _SRC = audit.SOURCE_FILES
 
 
 def predicate_code_sha256() -> str:
-    """SHA256 of the predicate source code (binds schema -> exact predicate impl)."""
+    """SHA256 of the predicate source CODE CONTENT (binds schema -> exact impl).
+
+    Line-ending INDEPENDENT by construction: the raw bytes are CRLF-normalized
+    to LF before hashing. Under core.autocrlf=true a clean worktree file may
+    legitimately carry either LF or CRLF bytes (git treats both as the same
+    content; the index blob is always LF), so hashing the raw worktree bytes
+    makes the frozen binding flip with the checkout state (observed drift:
+    LF=05ac6edc... vs CRLF=d66fe614... for the SAME blob d20ead15...). The
+    LF-normalized digest equals the SHA256 of the blob's stored content and is
+    therefore the single stable "source code SHA" across every checkout form.
+    """
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "tier3_event_predicates.py")
     with open(path, "rb") as fh:
-        return hashlib.sha256(fh.read()).hexdigest()
+        return hashlib.sha256(fh.read().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _event(name, definition, source_fields, source_role, hidden, fail_closed):
