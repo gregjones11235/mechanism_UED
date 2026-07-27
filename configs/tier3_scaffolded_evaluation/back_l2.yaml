@@ -1,0 +1,38 @@
+# CC4 Tier3 decomposed evaluation — TIER3_BACK_HALF_SCAFFOLDED_L2 contract (frozen V1).
+# Diagnostic scaffold: removes the floor-2 corridor bottleneck; keeps boss/kobold
+# search, engagement, combat, survival, and DEFEAT_KOBOLD on floor 3.
+# STATUS this round: IMPLEMENTED_STATIC only. NOT materialized (no JAX host).
+schema: mechanism_UED.tier3_scenario_config/v1
+scenario: back_l2
+identity_class: TIER3_BACK_DIAGNOSTIC_SCAFFOLD
+scaffolded: true
+state_bank: TIER3_BACK_SCAFFOLD_STATE_BANK
+state_bank_hash_label: BACK_SCAFFOLD_STATE_BANK_HASH
+state_bank_hash_status: NOT_MATERIALIZED
+# Boundary (source-grounded in canonical s4 task 45fdd17c; kobold is on floor 3).
+start_floor: 3
+boss_floor: 3
+back_half_start_predicate: valid_back_scaffold_start
+boss_area_predicate: boss_area_reached
+defeat_kobold_predicate: defeat_kobold
+# A live Kobold MUST be present in every back start (else invalid scaffold, NEG16);
+# DEFEAT_KOBOLD must NOT already be set (NEG15).
+require_live_kobold_at_start: true
+forbid_defeat_kobold_at_start: true
+# Metrics (frozen).
+primary_metric: P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START
+dense_metric: none
+# Scaffold legality (all MUST hold; enforced by builder + negative tests).
+no_privileged_information: true
+no_extra_observation_channel: true
+no_hidden_boss_direction: true
+no_shortest_path_hint: true
+no_future_monster_action: true
+no_arm_specific_state: true
+same_action_space: true
+same_observation_schema: true
+common_state_bank_for_all_arms: true
+action_mode: greedy_argmax
+max_timesteps: 4096
+episode_budget: NOT_EXECUTED_THIS_ROUND
+scaffolded_results_can_replace_full_task: false

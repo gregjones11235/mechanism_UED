@@ -1,0 +1,25 @@
+# CC4 Tier3 decomposed evaluation — FULL_END_TO_END scenario contract (frozen V1).
+# Declarative spec consumed by tools/tier3_scaffolded_evaluation/tier3_evaluator.py.
+# STATUS this round: IMPLEMENTED_STATIC only. NOT executed (no Student run, no JAX host).
+schema: mechanism_UED.tier3_scenario_config/v1
+scenario: full
+identity_class: CANONICAL_S4_EVALUATION
+scaffolded: false
+# Full task uses the canonical Stage4 task unchanged; NO scaffold is added.
+task_source_sha256: 45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d
+task_label: DEFEAT_KOBOLD
+starting_floor: 2
+# Primary metric (frozen). Dense progress is NOT a full-task success substitute.
+primary_metric: DEFEAT_KOBOLD_SR
+dense_metric: none
+# World-set hash scope: the canonical GLOBAL_WORLD_SET_HASH (seed42 materializer).
+world_set_hash_scope: GLOBAL_WORLD_SET_HASH
+global_world_set_hash_status: BLOCKED_SOURCE_UNVERIFIED
+# Frozen eval contract shared by ALL arms/scenarios.
+action_mode: greedy_argmax
+max_timesteps: 4096
+episode_budget: NOT_EXECUTED_THIS_ROUND
+observation_schema: canonical_craftax_symbolic
+action_space_identity: canonical_craftax_action_set
+# Scientific boundary: scaffold results can never replace this full task.
+scaffolded_results_can_replace_full_task: false
