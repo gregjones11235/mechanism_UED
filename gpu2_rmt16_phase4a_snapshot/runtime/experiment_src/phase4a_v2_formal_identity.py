@@ -9,11 +9,26 @@ refuses anything that is not byte-for-byte THE frozen pre-registration at THE fr
 
 Checks (all BEFORE the CLI/runtime value comparison, all BEFORE `import jax`):
   (§三.2) PATH identity   : realpath(args.formal_config) MUST equal
-                            realpath(snapshot_root / frozen relative_path). No suffix match, no
-                            arbitrary copy, no symlink escape, no `..` bypass, no basename-only.
+                            realpath(snapshot_root / frozen relative_path), AND the CLI
+                            --snapshot_root MUST equal the snapshot root DERIVED from this
+                            executing module's own __file__ (Phase4A-v2.4 §十一), so the CLI
+                            can never point at a snapshot different from the executing code.
+                            An INDIVIDUAL file copied elsewhere, a symlink escape or a `..`
+                            traversal is rejected (no suffix match, no basename-only).
                             => FORMAL_CONFIG_PATH_IDENTITY_MISMATCH.
   (§三.3) CONTENT identity: actual file SHA == frozen file SHA AND actual scientific_config
                             canonical SHA == frozen scientific SHA. => FORMAL_CONFIG_IDENTITY_MISMATCH.
+
+Phase4A-v2.4 (§十一) relocation semantics — the labels state this precisely:
+  FORMAL_CONFIG_PATH_IDENTITY        = CANONICAL_RELATIVE_PATH_UNDER_EXECUTING_SNAPSHOT_ROOT
+  FORMAL_CONFIG_SNAPSHOT_RELOCATION  = LAYOUT_AND_CONTENT_BOUND
+Relocating the WHOLE snapshot (the executing modules AND the YAMLs together, layout preserved)
+is LEGITIMATE: the derived root moves with the module, the canonical relative path still
+resolves, and the frozen file/scientific SHAs still bind the content byte-for-byte. What is
+NOT legitimate is pointing the CLI at a snapshot other than the one containing the executing
+code, or supplying a lone YAML copy — those fail closed. The v2.3 "no copy of the snapshot"
+label wording is dropped: it over-claimed (it would have forbidden a legitimate whole-snapshot
+relocation).
 
 The frozen SHAs below were COMPUTED from the real files in the f2b7aead work tree (never
 hand-guessed): see `--self-test`, which re-derives them and compares.
@@ -28,6 +43,11 @@ import os
 import phase4a_v2_runtime_config as RTC  # pure (yaml/json/hashlib/os)
 
 SCHEMA = "rmt16_phase4a_v2"
+
+# Phase4A-v2.4 (§十一): accurate path-identity labels (see module docstring). These are the
+# labels reported in certificates / summaries / reports; the v2.3 NO_COPY wording is gone.
+FORMAL_CONFIG_PATH_IDENTITY_LABEL = "CANONICAL_RELATIVE_PATH_UNDER_EXECUTING_SNAPSHOT_ROOT"
+FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL = "LAYOUT_AND_CONTENT_BOUND"
 
 # ---------------------------------------------------------------------------
 # §三.1 — FROZEN canonical formal-config identities (computed from f2b7aead work tree).
@@ -68,6 +88,17 @@ def frozen_identity(arm):
     return ident
 
 
+def derived_snapshot_root():
+    """Phase4A-v2.4 (§十一): the snapshot root DERIVED from this executing module's own
+    __file__: realpath(<this file>/../..). The layout is frozen — this module lives at
+    <snapshot>/runtime/experiment_src/phase4a_v2_formal_identity.py — so the derived root is
+    the snapshot that contains the EXECUTING code. The CLI --snapshot_root must equal it, which
+    prevents the CLI from pointing at a snapshot different from the executing code while a
+    legitimate whole-snapshot relocation (module + YAMLs moved together) still passes."""
+    return os.path.realpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+
 def resolve_expected_formal_path(snapshot_root, arm):
     """The canonical realpath the formal config MUST occupy: realpath(snapshot_root/relative_path)."""
     if not snapshot_root:
@@ -79,24 +110,43 @@ def resolve_expected_formal_path(snapshot_root, arm):
 
 
 def verify_formal_config_path_identity(snapshot_root, arm, formal_config_path):
-    """§三.2 fail closed: the supplied formal config MUST resolve to the canonical frozen path.
-
-    realpath() collapses symlinks and `..`, so a copy elsewhere, a symlink escaping
-    snapshot_root, or a `..` traversal all resolve to a path != expected and are rejected. A
-    symlink whose REALPATH equals the canonical file is explicitly allowed (same bytes, same
-    inode target). Returns a PASS record."""
+    """§三.2 fail closed (Phase4A-v2.4 §十一): TWO realpath conditions, both mandatory:
+      (a) realpath(--snapshot_root) == the snapshot root DERIVED from this executing module's
+          __file__ — the CLI may not point at a snapshot other than the one containing the
+          executing code (a lone relocated YAML, or a different snapshot checkout, is rejected);
+      (b) realpath(args.formal_config) == realpath(snapshot_root / frozen relative_path) — the
+          canonical relative path under that root (no individual-file copy, no symlink escape,
+          no `..` bypass, no suffix/basename match).
+    Relocating the WHOLE snapshot (module + YAMLs together, layout preserved) is legitimate:
+    (a) then holds because the derived root moved with the module, and (b) + the frozen content
+    SHAs still bind the bytes. A symlink whose REALPATH equals the canonical file is allowed
+    (same bytes, same inode target). Returns a PASS record carrying the v2.4 labels."""
     if not formal_config_path:
         raise ValueError(
             "FORMAL_CONFIG_PATH_IDENTITY_MISMATCH: no formal config path supplied.")
+    derived = derived_snapshot_root()
+    declared = os.path.realpath(str(snapshot_root)) if snapshot_root else None
+    if declared != derived:
+        raise ValueError(
+            f"FORMAL_CONFIG_PATH_IDENTITY_MISMATCH: declared --snapshot_root realpath="
+            f"{declared!r} != the executing code's derived snapshot root={derived!r}. The CLI "
+            "must point at the snapshot containing the EXECUTING modules; a different snapshot "
+            "(or a lone relocated YAML) is rejected. Whole-snapshot relocation is allowed: the "
+            "modules and the YAMLs must move together (layout and content bound).")
     expected = resolve_expected_formal_path(snapshot_root, arm)
     actual = os.path.realpath(formal_config_path)
     if actual != expected:
         raise ValueError(
             f"FORMAL_CONFIG_PATH_IDENTITY_MISMATCH: formal config realpath={actual!r} != "
-            f"canonical frozen path={expected!r} (arm={arm!r}). Copies, symlink escapes, and "
-            "'..' traversals are rejected; only the canonical pre-registration path is accepted.")
+            f"canonical frozen path={expected!r} (arm={arm!r}). An individual file copied "
+            "elsewhere, a symlink escape, or a '..' traversal is rejected; only the canonical "
+            "relative path under the executing snapshot root is accepted.")
     return dict(path_identity="PASS", arm=arm, expected_realpath=expected,
-                actual_realpath=actual)
+                actual_realpath=actual,
+                formal_config_path_identity=FORMAL_CONFIG_PATH_IDENTITY_LABEL,
+                formal_config_snapshot_relocation=FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL,
+                declared_snapshot_root_realpath=declared,
+                derived_snapshot_root_realpath=derived)
 
 
 def verify_formal_config_content_identity(formal_record, arm):
@@ -298,6 +348,30 @@ def self_test():
             check("(8) unknown arm -> raised", False, "no raise")
         except ValueError as e:
             check("(8) unknown arm -> raised", "FORMAL_CONFIG_IDENTITY_UNKNOWN_ARM" in str(e))
+
+        # (9) Phase4A-v2.4 (§十一): the declared --snapshot_root MUST equal the root DERIVED from
+        # this executing module's __file__. A DIFFERENT tree — even one holding a byte-identical
+        # canonical YAML at the correct relative path — fails closed (the CLI may not point at a
+        # snapshot other than the executing code's).
+        other_root = os.path.join(tmp, "other_snapshot_root")
+        os.makedirs(os.path.join(other_root, "configs"))
+        other_yaml = os.path.join(other_root, "configs", "rmt16_phase4a_v2_persistent.yaml")
+        shutil.copyfile(canon, other_yaml)
+        try:
+            verify_formal_config_path_identity(other_root, "persistent", other_yaml)
+            check("(9a) other snapshot_root (valid YAML, right relative path) -> FAIL",
+                  False, "no raise")
+        except ValueError as e:
+            check("(9a) other snapshot_root (valid YAML, right relative path) -> FAIL",
+                  "FORMAL_CONFIG_PATH_IDENTITY_MISMATCH" in str(e)
+                  and "derived snapshot root" in str(e))
+        idrec9 = verify_formal_config_identity(snap, "persistent", RTC.load_formal_config(canon))
+        check("(9b) path identity record carries v2.4 labels + derived root binding",
+              idrec9["formal_config_path_identity"] == FORMAL_CONFIG_PATH_IDENTITY_LABEL
+              and idrec9["formal_config_snapshot_relocation"]
+              == FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL
+              and idrec9["derived_snapshot_root_realpath"] == os.path.realpath(snap)
+              and idrec9["declared_snapshot_root_realpath"] == os.path.realpath(snap))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

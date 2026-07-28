@@ -82,6 +82,25 @@ def extract_certificate(arm_summary, arm_name="arm"):
             f"MATCHED_REPLAY_CERTIFICATE_REQUIRED: {arm_name} summary has no "
             "phase4a_v2.replay_labels.protocol_definition block.")
     cert["protocol_definition"] = dict(protocol)
+    # Phase4A-v2.4 (§九): the EFFECTIVE protocol comparison is fail-closed — an arm summary
+    # WITHOUT a complete executed identity / effective protocol definition may NOT be compared
+    # on declared strings alone (that was the v2.2 hole). Missing => EXECUTED_PROTOCOL_
+    # IDENTITY_REQUIRED, raised HERE with the correct arm name.
+    executed = arm_summary.get("executed_protocol_identity")
+    if not isinstance(executed, dict):
+        raise ValueError(
+            f"EXECUTED_PROTOCOL_IDENTITY_REQUIRED: {arm_name} summary has no "
+            "executed_protocol_identity; the two-arm protocol comparison is fail-closed "
+            "(NO fallback to declared-string-only comparison).")
+    cert["executed_protocol_identity"] = executed
+    effective = arm_summary.get("effective_protocol_definition")
+    effective_sha = arm_summary.get("effective_protocol_sha256")
+    if not isinstance(effective, dict) or not effective_sha:
+        raise ValueError(
+            f"EXECUTED_PROTOCOL_IDENTITY_REQUIRED: {arm_name} summary has no "
+            "effective_protocol_definition / effective_protocol_sha256 block.")
+    cert["effective_protocol_definition"] = effective
+    cert["effective_protocol_sha256"] = effective_sha
     return cert
 
 
@@ -100,10 +119,18 @@ def validate_two_arm(persistent_summary, reset128_summary):
 
     report = dict(
         validator="phase4a_v2_exposure_validator",
-        spec="RMT16_PHASE4A_V2_1 §五 + V2_2 §二/§八 full canonical protocol identity",
+        spec=("RMT16_PHASE4A_V2_1 §五 + V2_2 §二/§八 full canonical protocol identity "
+              "+ V2_4 §九 effective (declared + executed + RNG) protocol identity"),
         arms=dict(persistent="certificate_present", reset128="certificate_present"),
-        # Level 1 (Phase4A-v2.2 §二/§八: FULL canonical protocol identity)
+        # Level 1 (Phase4A-v2.4 §九: PROTOCOL_MATCH = declared AND executed AND effective)
         PROTOCOL_MATCH=result["PROTOCOL_MATCH"],
+        DECLARED_PROTOCOL_MATCH=result["DECLARED_PROTOCOL_MATCH"],
+        EXECUTED_PROTOCOL_MATCH=result["EXECUTED_PROTOCOL_MATCH"],
+        EFFECTIVE_PROTOCOL_MATCH=result["EFFECTIVE_PROTOCOL_MATCH"],
+        EFFECTIVE_PROTOCOL_SHA256_ARM_A=result["EFFECTIVE_PROTOCOL_SHA256_ARM_A"],
+        EFFECTIVE_PROTOCOL_SHA256_ARM_B=result["EFFECTIVE_PROTOCOL_SHA256_ARM_B"],
+        EFFECTIVE_PROTOCOL_KEYSET_MISMATCH=result["EFFECTIVE_PROTOCOL_KEYSET_MISMATCH"],
+        EXECUTED_PROTOCOL_DIFFERING_FIELDS=result["EXECUTED_PROTOCOL_DIFFERING_FIELDS"],
         PROTOCOL_MISSING_FIELDS_ARM_A=result["PROTOCOL_MISSING_FIELDS_ARM_A"],
         PROTOCOL_MISSING_FIELDS_ARM_B=result["PROTOCOL_MISSING_FIELDS_ARM_B"],
         PROTOCOL_KEYSET_MISMATCH=result["PROTOCOL_KEYSET_MISMATCH"],
@@ -166,11 +193,38 @@ def validate_two_arm(persistent_summary, reset128_summary):
 # §五 self-test (synthetic certificates; no training, no JAX)
 # ----------------------------------------------------------------------------
 
+def _synthetic_executed_identity(*, learner_src_sha=None, sampler_src_sha=None,
+                                 learner_file_sha=None, sampler_file_sha=None,
+                                 numpy_version="2.2.6",
+                                 seed_derivation="run_seed_plus_7"):
+    """A COMPLETE synthetic executed-protocol identity (v2.4 §七/§八 field sets) for self-test
+    fixtures. Deterministic default SHAs; any parameter may be overridden on ONE arm to simulate
+    a same-name-different-source / different-module-file / different-numpy divergence."""
+    def _fn(module, qualname, name, file_sha, src_sha):
+        return dict(module=module, qualname=qualname, name=name,
+                    module_realpath=f"/snap/runtime/experiment_src/{module}.py",
+                    module_file_sha256=file_sha, function_source_sha256=src_sha,
+                    source_lines=42)
+    return dict(
+        executed_function_binding="PASS",
+        learner=_fn("rmt_replay_learner", "original_vtrace_update_rmt",
+                    "original_vtrace_update_rmt",
+                    learner_file_sha or ("c1" * 32), learner_src_sha or ("a1" * 32)),
+        sampler=_fn("rmt_replay_buffer", "RMTReplayBuffer.sample_eligible",
+                    "sample_eligible",
+                    sampler_file_sha or ("d1" * 32), sampler_src_sha or ("b1" * 32)),
+        rng_instance=dict(class_module="numpy.random", class_name="RandomState",
+                          numpy_version=numpy_version, seed_derivation=seed_derivation,
+                          hidden_buffer_rng_used=False, rng_binding="PASS"),
+        declaration_match=dict(executed_protocol_declaration_match="PASS"))
+
+
 def _synthetic_summary(arm, *, replay_updates, consumed, batch_sizes, seq_lens,
                        attempt_mask, not_ready_updates, drop_field=None,
                        seq_length=129, batch_size=4,
                        learner=None, rng_rule=None, drop_protocol_field=None,
-                       extra_protocol_field=None):
+                       extra_protocol_field=None,
+                       executed_kwargs=None, drop_executed=False, drop_effective=False):
     n = len(attempt_mask)
     attempt_outer = [i for i, a in enumerate(attempt_mask) if a]
     update_outer = [i for i, a in enumerate(attempt_mask) if a][:replay_updates]
@@ -196,14 +250,35 @@ def _synthetic_summary(arm, *, replay_updates, consumed, batch_sizes, seq_lens,
         **({"learner": learner} if learner is not None else {}),
         **({"rng_rule": rng_rule} if rng_rule is not None else {}))
     protocol = labels["protocol_definition"]
-    if drop_protocol_field is not None:
-        protocol.pop(drop_protocol_field, None)  # simulate an incomplete protocol definition
+    executed = _synthetic_executed_identity(**(executed_kwargs or {}))
+    # Mutation ordering mirrors the real driver: the effective protocol is built from the
+    # declared protocol EXACTLY as declared at runtime, so an unknown extra field on one arm
+    # MUST propagate into that arm's effective definition + SHA (v2.4 self-test fix: building
+    # the effective BEFORE applying extra_protocol_field modelled an impossible state where
+    # the declared protocol carries a field the effective definition does not, letting
+    # case 14 report EFFECTIVE_PROTOCOL_MATCH=PASS on differing declared protocols).
     if extra_protocol_field is not None:
         protocol[extra_protocol_field[0]] = extra_protocol_field[1]  # unknown extra field
-    return dict(
+    effective, eff_sha = CONTRACT.build_effective_protocol_definition(
+        protocol, executed, executed["rng_instance"])
+    # drop_protocol_field is applied AFTER the effective build so the (12)/(13) negatives
+    # still trip PROTOCOL_IDENTITY_INCOMPLETE on the declared comparison (the executed /
+    # effective identity itself stays complete — that is a separate fail-closed dimension).
+    if drop_protocol_field is not None:
+        protocol.pop(drop_protocol_field, None)  # simulate an incomplete protocol definition
+    summary = dict(
         arm=arm,
         phase4a_v2=dict(replay_labels=labels),
         exposure_certificate=cert)
+    # Phase4A-v2.4 (§九): attach the executed identity + effective protocol. Both arms default
+    # to IDENTICAL bindings (same SHAs) so the legacy exposure cases keep their meaning; tests
+    # override one arm's SHAs / numpy version to prove the effective comparison fails closed.
+    if not drop_executed:
+        summary["executed_protocol_identity"] = executed
+    if not drop_effective:
+        summary["effective_protocol_definition"] = effective
+        summary["effective_protocol_sha256"] = eff_sha
+    return summary
 
 
 def self_test():
@@ -404,6 +479,88 @@ def self_test():
           and rep15["PROTOCOL_DEFINITION_SHA256_ARM_A"]
           == rep15["PROTOCOL_DEFINITION_SHA256_ARM_B"])
 
+    # --- Phase4A-v2.4 (§九): EFFECTIVE protocol cross-arm comparison ----------------
+    def _kw16(**over):
+        return dict(replay_updates=3, consumed=12, batch_sizes=[4, 4, 4],
+                    seq_lens=[[129] * 4] * 3, attempt_mask=[False, True, True, True, True],
+                    not_ready_updates=[0], **over)
+
+    # (16) missing executed identity on one arm -> fail closed (NO declared-only fallback)
+    sb16 = _synthetic_summary("reset128", **_kw16(drop_executed=True))
+    try:
+        validate_two_arm(sa, sb16)
+        check("missing_executed_identity -> EXECUTED_PROTOCOL_IDENTITY_REQUIRED raised",
+              False, "no raise")
+    except ValueError as e:
+        check("missing_executed_identity -> EXECUTED_PROTOCOL_IDENTITY_REQUIRED raised",
+              "EXECUTED_PROTOCOL_IDENTITY_REQUIRED" in str(e))
+    # (16b) executed present but effective block missing -> fail closed too
+    sb16b = _synthetic_summary("reset128", **_kw16(drop_effective=True))
+    try:
+        validate_two_arm(sa, sb16b)
+        check("missing_effective_block -> EXECUTED_PROTOCOL_IDENTITY_REQUIRED raised",
+              False, "no raise")
+    except ValueError as e:
+        check("missing_effective_block -> EXECUTED_PROTOCOL_IDENTITY_REQUIRED raised",
+              "EXECUTED_PROTOCOL_IDENTITY_REQUIRED" in str(e))
+
+    # (17) SAME-NAME-DIFFERENT-SOURCE: learner function_source_sha differs on one arm while the
+    # DECLARED protocol is still identical -> DECLARED PASS but EXECUTED/EFFECTIVE FAIL (the
+    # v2.2 declared-only comparison would have wrongly passed this).
+    sb17 = _synthetic_summary("reset128", **_kw16(
+        executed_kwargs=dict(learner_src_sha="ff" * 32)))
+    rep17 = validate_two_arm(sa, sb17)
+    check("different_learner_source_sha -> EFFECTIVE FAIL (declared still PASS)",
+          rep17["DECLARED_PROTOCOL_MATCH"] == "PASS"
+          and rep17["EXECUTED_PROTOCOL_MATCH"] == "FAIL"
+          and rep17["EFFECTIVE_PROTOCOL_MATCH"] == "FAIL"
+          and rep17["PROTOCOL_MATCH"] == "FAIL"
+          and rep17["MATCHED_REPLAY_EXPOSURE"] == "FAIL"
+          and "learner.function_source_sha256"
+          in rep17["EXECUTED_PROTOCOL_DIFFERING_FIELDS"],
+          str(rep17["EXECUTED_PROTOCOL_DIFFERING_FIELDS"]))
+
+    # (18) same function source but DIFFERENT MODULE FILE SHA on one arm -> FAIL
+    sb18 = _synthetic_summary("reset128", **_kw16(
+        executed_kwargs=dict(sampler_file_sha="ee" * 32)))
+    rep18 = validate_two_arm(sa, sb18)
+    check("different_sampler_module_file_sha -> EFFECTIVE FAIL",
+          rep18["EFFECTIVE_PROTOCOL_MATCH"] == "FAIL"
+          and rep18["MATCHED_REPLAY_EXPOSURE"] == "FAIL"
+          and "sampler.module_file_sha256" in rep18["EXECUTED_PROTOCOL_DIFFERING_FIELDS"],
+          str(rep18["EXECUTED_PROTOCOL_DIFFERING_FIELDS"]))
+
+    # (19) different NUMPY VERSION behind the RandomState -> FAIL
+    sb19 = _synthetic_summary("reset128", **_kw16(
+        executed_kwargs=dict(numpy_version="1.26.4")))
+    rep19 = validate_two_arm(sa, sb19)
+    check("different_rng_numpy_version -> EFFECTIVE FAIL",
+          rep19["EFFECTIVE_PROTOCOL_MATCH"] == "FAIL"
+          and rep19["MATCHED_REPLAY_EXPOSURE"] == "FAIL"
+          and "rng_instance.numpy_version" in rep19["EXECUTED_PROTOCOL_DIFFERING_FIELDS"],
+          str(rep19["EXECUTED_PROTOCOL_DIFFERING_FIELDS"]))
+
+    # (20) different SEED DERIVATION rule -> FAIL
+    sb20 = _synthetic_summary("reset128", **_kw16(
+        executed_kwargs=dict(seed_derivation="buffer_rng")))
+    rep20 = validate_two_arm(sa, sb20)
+    check("different_seed_derivation -> EFFECTIVE FAIL",
+          rep20["EFFECTIVE_PROTOCOL_MATCH"] == "FAIL"
+          and "rng_instance.seed_derivation" in rep20["EXECUTED_PROTOCOL_DIFFERING_FIELDS"],
+          str(rep20["EXECUTED_PROTOCOL_DIFFERING_FIELDS"]))
+
+    # (21) MATCHED_REPLAY_EXPOSURE=PASS => EFFECTIVE_PROTOCOL_MATCH=PASS AND
+    # EXPOSURE_COUNT_MATCH=PASS (and the effective SHAs are emitted + equal)
+    check("matched_exposure_pass_requires_effective_and_exposure_pass",
+          rep["MATCHED_REPLAY_EXPOSURE"] == "PASS"
+          and rep["EFFECTIVE_PROTOCOL_MATCH"] == "PASS"
+          and rep["EXECUTED_PROTOCOL_MATCH"] == "PASS"
+          and rep["DECLARED_PROTOCOL_MATCH"] == "PASS"
+          and rep["EXPOSURE_COUNT_MATCH"] == "PASS"
+          and rep["EFFECTIVE_PROTOCOL_SHA256_ARM_A"] is not None
+          and rep["EFFECTIVE_PROTOCOL_SHA256_ARM_A"] == rep["EFFECTIVE_PROTOCOL_SHA256_ARM_B"]
+          and rep["EXECUTED_PROTOCOL_DIFFERING_FIELDS"] == [])
+
     n_fail = sum(1 for _, ok, _ in results if not ok)
     print(f"SELF_TEST_SUMMARY total={len(results)} pass={len(results) - n_fail} fail={n_fail}",
           flush=True)
@@ -437,7 +594,11 @@ def main(argv=None):
         return 1
 
     print(json.dumps({k: report[k] for k in (
-        "PROTOCOL_MATCH", "PROTOCOL_MISSING_FIELDS_ARM_A", "PROTOCOL_MISSING_FIELDS_ARM_B",
+        "PROTOCOL_MATCH", "DECLARED_PROTOCOL_MATCH", "EXECUTED_PROTOCOL_MATCH",
+        "EFFECTIVE_PROTOCOL_MATCH", "EFFECTIVE_PROTOCOL_SHA256_ARM_A",
+        "EFFECTIVE_PROTOCOL_SHA256_ARM_B", "EFFECTIVE_PROTOCOL_KEYSET_MISMATCH",
+        "EXECUTED_PROTOCOL_DIFFERING_FIELDS",
+        "PROTOCOL_MISSING_FIELDS_ARM_A", "PROTOCOL_MISSING_FIELDS_ARM_B",
         "PROTOCOL_KEYSET_MISMATCH", "PROTOCOL_DIFFERING_FIELDS",
         "PROTOCOL_DEFINITION_SHA256_ARM_A", "PROTOCOL_DEFINITION_SHA256_ARM_B",
         "EXPOSURE_COUNT_MATCH", "EXPOSURE_DIFFERING_FIELDS", "MATCHED_REPLAY_EXPOSURE",

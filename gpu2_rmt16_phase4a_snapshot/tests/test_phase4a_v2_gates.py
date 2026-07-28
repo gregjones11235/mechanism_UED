@@ -1248,15 +1248,21 @@ def gate35():
 
 
 def gate36():
-    """GATE 36 — v2.3 two-phase certificate chain static order (§十四): ARGPARSE < preflight <
-    FORMAL_IDENTITY < runtime assignment < FULL pre-JAX scientific binding < PENDING precheck
-    < pre-JAX refusal < `import jax` < imported-constants binding (+drift finalize/refusal) <
-    env build < ckpt load < checkpoint verify/finalize < final refusal < training loop.
-    original_vtrace without --formal_config fails closed BEFORE JAX; off mode stays exempt.
+    """GATE 36 — v2.4 certificate chain static order (§六 + §十四): ARGPARSE < preflight <
+    FORMAL_IDENTITY < runtime assignment < ACTUAL-CLI pre-JAX scientific binding < PENDING
+    precheck < pre-JAX refusal < `import jax` < imported-constants binding (+drift
+    finalize/refusal) < replay-RNG construction < executed learner/sampler SOURCE binding <
+    RNG identity binding < EFFECTIVE protocol build (+executed-protocol finalize/refusal) <
+    staged ckpt load < checkpoint verify/finalize < post-write verify + disk re-read < final
+    refusal < env build < training loop. original_vtrace without --formal_config fails closed
+    BEFORE JAX; off mode stays exempt.
 
-    Phase4A-v2.3 reason+diff: the v2.2 gate asserted the single-write wiring
-    (validate_runtime_against_formal_config before env); the v2.3 driver instead runs the
-    PENDING->PASS/FAIL state machine, so the asserted order semantics changed per §十四."""
+    Phase4A-v2.4 reason+diff: v2.3 asserted two finalize sites with env build BEFORE ckpt
+    load; v2.4 (§六) binds the executed protocol (learner/sampler/RNG + effective definition)
+    BEFORE the checkpoint finalize, moves ckpt load + finalize BEFORE env build, adds the
+    executed-protocol finalize site (3 sites total), the §三.1 actual-CLI kwargs override,
+    the staged checkpoint failure labels, and a post-write verify + disk re-read on the final
+    PASS certificate."""
     import phase4a_v2_runtime_config as RTC
     try:
         RTC.preflight_require_formal_config("original_vtrace", None)
@@ -1284,10 +1290,12 @@ def gate36():
         "formal_identity": line_of(
             "FORMAL_CONFIG_IDENTITY = FID.verify_formal_config_identity("),
         "assignment": line_of("RUNTIME_ASSIGNMENT_RECORD = RTC.validate_runtime_assignment("),
+        # §三.1: the frozen spec kwargs are overridden with the ACTUAL CLI values pre-JAX.
+        "prejax_cli_override": line_of("_prejax_kwargs.update("),
         "prejax_scientific": line_of(
             "_PREJAX_SCIENTIFIC = RTC.build_runtime_scientific_config("),
         "precheck": line_of("RUNTIME_CONFIG_CERTIFICATE = RTC.build_precheck_certificate("),
-        # single-line literals of the two refusal messages (line_of matches within ONE line)
+        # single-line literals of the refusal messages (line_of matches within ONE line)
         "prejax_refuse": line_of(
             '"FORMAL_CONFIG_RUNTIME_MISMATCH: prejax precheck certificate_status="'),
         "import_jax": line_of("import jax, jax.numpy as jnp"),
@@ -1297,46 +1305,78 @@ def gate36():
         "imported_refuse": line_of(
             '"IMPORTED_RUNTIME_CONSTANTS_MISMATCH: the REAL imported runtime constants '
             'drifted "'),
-        "env": line_of("base_env = MultiTaskMiniCraftaxEnv("),
+        # §六 ordering: RNG construction < executed binding < RNG identity < effective build.
+        "rng_construct": line_of("replay_sample_rng = np.random.RandomState(args.seed + 7)"),
+        "executed_bind": line_of(
+            "EXECUTED_PROTOCOL_IDENTITY = CONTRACT.executed_function_source_identity("),
+        "rng_bind": line_of(
+            'EXECUTED_PROTOCOL_IDENTITY["rng_instance"] = '
+            "CONTRACT.verify_rng_instance_identity("),
+        "effective_build": line_of(
+            "EFFECTIVE_PROTOCOL_DEFINITION, EFFECTIVE_PROTOCOL_SHA256 = ("),
+        "executed_refuse": line_of(
+            '"EXECUTED_PROTOCOL_BINDING_FAILURE: the executed replay protocol (learner '
+            'source "'),
+        # §四: the staged checkpoint flow (stage labels) precedes the manager init.
+        "ckpt_stage": line_of('_CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_MANAGER_INIT"'),
         "ckpt": line_of("ckpt_mgr = ocp.CheckpointManager("),
         "verify_checkpoint": line_of(
             'RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"] = '
             "RTC.verify_checkpoint_params_sha("),
+        # §五.2: post-write verification + disk re-read on the final PASS certificate.
+        "cert_disk_reread": line_of("_disk_certificate = json.load(_cert_f)"),
         "final_refuse": line_of(
-            '"FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "'),
+            '"FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL "'),
+        "env": line_of("base_env = MultiTaskMiniCraftaxEnv("),
         "train_loop": line_of("for u in range(args.total_updates):"),
     }
     fins = lines_of("RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(")
+    verifys = lines_of("RTC.verify_certificate_artifact(")
     missing = sorted(k for k, v in marks.items() if v == -1)
     if missing:
         return FAIL, f"launcher wiring missing: {missing} (finalize sites={fins})"
-    # exactly two finalize sites: the drift-failure finalize (post-import, pre-env) and the
-    # checkpoint finalize (post ckpt-load); classify by position, not by first occurrence
-    if len(fins) != 2:
-        return FAIL, f"expected exactly 2 finalize_certificate sites, got {fins}"
+    # exactly THREE finalize sites (v2.4): the drift-failure finalize, the executed-protocol
+    # failure finalize, and the checkpoint finalize; classify by position.
+    if len(fins) != 3:
+        return FAIL, f"expected exactly 3 finalize_certificate sites, got {fins}"
     drift_fins = [i for i in fins
-                  if marks["import_jax"] < i < marks["env"]]
+                  if marks["drift_diff"] < i < marks["rng_construct"]]
+    executed_fins = [i for i in fins
+                     if marks["effective_build"] < i < marks["ckpt_stage"]]
     ckpt_fins = [i for i in fins if i > marks["verify_checkpoint"]]
-    if len(drift_fins) != 1 or len(ckpt_fins) != 1:
-        return FAIL, (f"finalize sites misplaced: drift={drift_fins} ckpt={ckpt_fins} "
-                      f"(jax={marks['import_jax']} env={marks['env']} "
-                      f"verify={marks['verify_checkpoint']})")
+    if len(drift_fins) != 1 or len(executed_fins) != 1 or len(ckpt_fins) != 1:
+        return FAIL, (f"finalize sites misplaced: drift={drift_fins} "
+                      f"executed={executed_fins} ckpt={ckpt_fins}")
     marks["drift_finalize"] = drift_fins[0]
+    marks["executed_finalize"] = executed_fins[0]
     marks["checkpoint_finalize"] = ckpt_fins[0]
-    order = ["argparse", "preflight", "formal_identity", "assignment", "prejax_scientific",
-             "precheck", "prejax_refuse", "import_jax", "imported_scientific", "drift_diff",
-             "drift_finalize", "imported_refuse", "env", "ckpt", "verify_checkpoint",
-             "checkpoint_finalize", "final_refuse", "train_loop"]
+    # a verify_certificate_artifact call must follow the checkpoint finalize (§五.2: verify
+    # after EVERY write), and the last verify must be the post-final-write one.
+    post_final_verify = [i for i in verifys if i > marks["checkpoint_finalize"]]
+    if not post_final_verify:
+        return FAIL, (f"no verify_certificate_artifact after the checkpoint finalize "
+                      f"(verify sites={verifys}, finalize={marks['checkpoint_finalize']})")
+    marks["cert_verify_final"] = post_final_verify[0]
+    order = ["argparse", "preflight", "formal_identity", "assignment", "prejax_cli_override",
+             "prejax_scientific", "precheck", "prejax_refuse", "import_jax",
+             "imported_scientific", "drift_diff", "drift_finalize", "imported_refuse",
+             "rng_construct", "executed_bind", "rng_bind", "effective_build",
+             "executed_finalize", "executed_refuse", "ckpt_stage", "ckpt",
+             "verify_checkpoint", "checkpoint_finalize", "cert_verify_final",
+             "cert_disk_reread", "final_refuse", "env", "train_loop"]
     for a, b in zip(order, order[1:]):
         if not marks[a] < marks[b]:
             return FAIL, f"order violation: {a}({marks[a]}) !< {b}({marks[b]})"
     for arg in ('"--formal_config"', '"--snapshot_root"', '"--run_root"'):
         if arg not in src:
             return FAIL, f"launcher lacks the {arg} argument"
-    return PASS, ("static §十四 order holds end-to-end: argparse < preflight < formal identity "
-                  "< assignment < full pre-JAX scientific binding < PENDING precheck + pre-JAX "
-                  "refusal < import jax < imported-constants drift finalize/refusal < env build "
-                  "< ckpt load < checkpoint verify/finalize < final refusal < training loop; "
+    return PASS, ("static §六/§十四 order holds end-to-end: argparse < preflight < formal "
+                  "identity < assignment < ACTUAL-CLI pre-JAX scientific binding < PENDING "
+                  "precheck + pre-JAX refusal < import jax < imported-constants drift "
+                  "finalize/refusal < replay-RNG construction < executed learner/sampler + RNG "
+                  "binding < effective protocol build + executed-protocol finalize/refusal < "
+                  "staged ckpt load < checkpoint verify/finalize < post-write verify + disk "
+                  "re-read < final refusal < env build < training loop; 3 finalize sites; "
                   "--formal_config/--snapshot_root/--run_root all wired; off mode exempt")
 
 
@@ -1449,31 +1489,51 @@ def gate38():
 # certificate state machine (§六), certificate artifact SHA / sidecar / tamper detection
 # (§七), executed-protocol SOURCE identity (§八), v2.3 publication labels + v2.2 errata
 # (§九). Negative tests are marked (NEG); GATE39-GATE50 add >= 30 fail-closed negatives
-# (§十一 requires >= 25), on top of the module self-tests (RTC: 63, FID: 8, CONTRACT: 4).
+# (§十一 requires >= 25), on top of the module self-tests (RTC: 76, FID: 13, exposure
+# validator: 25).
 # ----------------------------------------------------------------------------
 
 
 def _v23_prejax_chain(arm="persistent", *, with_identity=True, sci_override=None,
-                      cli_carry=None, cli_gpu=None, run_root=None):
+                      cli_carry=None, cli_gpu=None, run_root=None,
+                      cli_replay_mode="original_vtrace", cli_allow_full_p2_legacy=False,
+                      cli_sequence_length=129, cli_seed=42, cli_total_updates=12,
+                      cli_save_every=2):
     """Functional mirror of the driver's PRE-JAX chain (§五.2 steps 3-8) for one arm, using
     exactly the pure-Python modules the driver imports before `import jax` (RTC + FSPEC +
-    FID; NO jax/numpy). Returns (precheck_certificate, assignment_record, FSPEC)."""
+    FID; NO jax/numpy). Returns (precheck_certificate, assignment_record, FSPEC).
+
+    Phase4A-v2.4 (§三.1): the mirror binds the ACTUAL CLI VALUES — the frozen spec kwargs are
+    overridden with the seven CLI-facing keys (carry_mode / replay_mode / allow_full_p2_legacy
+    / sequence_length / seed / total_updates / save_every) EXACTLY as the driver now does, so
+    a wrong simulated CLI value FAILs the precheck HERE (pre-JAX), not later. The defaults
+    equal the frozen spec, so legacy callers behave unchanged."""
     import phase4a_v2_runtime_config as RTC
     import phase4a_v2_frozen_spec as FSPEC
     import phase4a_v2_formal_identity as FID
     snap = run_root if run_root is not None else _SNAPSHOT
     path = os.path.join(snap, "configs", f"rmt16_phase4a_v2_{arm}.yaml")
     rec = RTC.load_formal_config(path)
-    RTC.validate_arm_binding(rec, arm, replay_mode="original_vtrace")
-    fid = FID.verify_formal_config_identity(snap, arm, rec) if with_identity else None
     cfg = rec["config"]
     ra = cfg["runtime_assignment"]
     cli_carry = arm if cli_carry is None else cli_carry
     cli_gpu = ra["gpu_uuid"] if cli_gpu is None else cli_gpu
     cli_out = os.path.join(snap, ra["out_dir"])
+    # §三: the arm binding uses the ACTUAL CLI carry/replay (a wrong --carry_mode /
+    # --replay_mode raises FORMAL_CONFIG_ARM_MISMATCH here, before any scientific build).
+    RTC.validate_arm_binding(rec, cli_carry, replay_mode=cli_replay_mode)
+    fid = FID.verify_formal_config_identity(snap, arm, rec) if with_identity else None
     assign = RTC.validate_runtime_assignment(cfg, cli_carry=cli_carry, cli_gpu=cli_gpu,
                                              cli_out=cli_out, run_root=snap)
     kw = FSPEC.build_kwargs(arm)
+    kw.update(
+        carry_mode=cli_carry,
+        replay_mode=cli_replay_mode,
+        allow_full_p2_legacy=bool(cli_allow_full_p2_legacy),
+        sequence_length=int(cli_sequence_length),
+        seed=int(cli_seed),
+        total_updates=int(cli_total_updates),
+        save_every=int(cli_save_every))
     if sci_override:
         kw.update(sci_override)
     sci = RTC.build_runtime_scientific_config(**kw)
@@ -1835,7 +1895,10 @@ def gate46():
     fin = RTC.finalize_certificate(pend, ci)
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, "runtime_config_certificate.json")
-        cpath, spath, fsha, psha = RTC.write_certificate_atomic(fin, p)
+        # Phase4A-v2.4 (§五): write_certificate_atomic returns a 5-tuple; the fifth element is
+        # the EXACT serialized artifact the caller must adopt (RUNTIME_CONFIG_CERTIFICATE =
+        # written_certificate).
+        cpath, spath, fsha, psha, written = RTC.write_certificate_atomic(fin, p)
         side = RTC.certificate_sidecar_path(cpath)
         if spath != side or not os.path.isfile(side):
             return FAIL, f"sidecar missing/misnamed: {spath}"
@@ -1845,6 +1908,10 @@ def gate46():
         if RTC._sha256_bytes(raw) != fsha:
             return FAIL, "returned file SHA != recomputed file SHA"
         disk = _json.loads(raw.decode("utf-8"))
+        if written != disk:
+            return FAIL, "returned written certificate != disk artifact (§五 adoption broken)"
+        if written.get("certificate_payload_sha256") != psha:
+            return FAIL, "written certificate does not carry the embedded payload SHA"
         if disk.get("certificate_payload_sha256") != psha:
             return FAIL, "embedded payload SHA != returned payload SHA"
         if disk.get("certificate_written_via") != "atomic_tempfile_fsync_replace":
@@ -1891,7 +1958,7 @@ def gate47():
     def expect_tamper(label, attack):
         with tempfile.TemporaryDirectory() as td:
             p = os.path.join(td, "runtime_config_certificate.json")
-            cpath, spath, _, _ = RTC.write_certificate_atomic(fail_cert, p)
+            cpath, spath, _, _, _ = RTC.write_certificate_atomic(fail_cert, p)
             attack(cpath, spath)
             try:
                 RTC.verify_certificate_artifact(cpath, spath)
@@ -1927,7 +1994,7 @@ def gate47():
     # (NEG 6) pristine file, but wrong EXPECTED file SHA (stale summary/checkpoint binding)
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, "runtime_config_certificate.json")
-        cpath, spath, _, _ = RTC.write_certificate_atomic(fail_cert, p)
+        cpath, spath, _, _, _ = RTC.write_certificate_atomic(fail_cert, p)
         try:
             RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256="f" * 64)
             return FAIL, "(NEG6) wrong expected file SHA not rejected"
@@ -1940,10 +2007,20 @@ def gate47():
 
 
 def gate48():
-    """GATE 48 — executed protocol SOURCE identity (§八): declared labels are reconciled with
-    INSPECTED executing functions (module/qualname/source SHA) and the RNG instance class;
-    impostor learner, PCG64 Generator, uninspectable builtin, wrong declared learner and wrong
-    declared sampler all fail closed (NEG x5)."""
+    """GATE 48 — executed protocol SOURCE identity (v2.3 §八 + v2.4 §七): the executed learner
+    / sampler are bound by INSPECTED source identity — module, qualname, module realpath,
+    module FILE SHA256, FUNCTION SOURCE SHA256, source lines — and the functions MUST execute
+    from the declared modules (rmt_replay_learner / rmt_replay_buffer with qualname
+    RMTReplayBuffer.sample_eligible). A same-name impostor from another module, a PCG64
+    Generator, an uninspectable builtin, a DELETED source file, and wrong declared labels all
+    fail closed (NEG x6).
+
+    Phase4A-v2.4 reason+diff: v2.3 asserted a single source_sha256 on an arbitrarily-named
+    stub module; v2.4 §七 binds the full identity tuple (module realpath + module file SHA +
+    function source SHA) and REQUIRES the declared module names, so the positive stubs must be
+    real rmt_replay_learner.py / rmt_replay_buffer.py modules, and the same-name-impostor /
+    deleted-source-file negatives are new fail-closed dimensions."""
+    import linecache
     import shutil
     import sys
     import tempfile
@@ -1953,46 +2030,88 @@ def gate48():
         import numpy as np
     except ImportError:
         return SKIP, "numpy unavailable (required to bind the RNG engine)"
-    tmp = tempfile.mkdtemp(prefix="p4av23_g48_")
+    tmp = tempfile.mkdtemp(prefix="p4av24_g48_")
+    # The positive stubs MUST carry the declared module names (v2.4 §七 module binding).
+    with open(os.path.join(tmp, "rmt_replay_learner.py"), "w", encoding="utf-8") as f:
+        f.write(textwrap.dedent('''
+            def original_vtrace_update_rmt(state, batch):
+                """v2.4 GATE48 stub learner matching the declared module + function name."""
+                return state
+        ''').lstrip())
+    with open(os.path.join(tmp, "rmt_replay_buffer.py"), "w", encoding="utf-8") as f:
+        f.write(textwrap.dedent('''
+            class RMTReplayBuffer:
+                """v2.4 GATE48 stub buffer matching the declared module + qualname."""
+
+                def sample_eligible(self, seq_length, rng, k):
+                    return []
+        ''').lstrip())
+    with open(os.path.join(tmp, "p4av24_g48_impostor.py"), "w", encoding="utf-8") as f:
+        f.write(textwrap.dedent('''
+            def original_vtrace_update_rmt(state, batch):
+                """SAME function name as the declared learner, DIFFERENT module: impostor."""
+                return state
+        ''').lstrip())
+    saved = {n: sys.modules.pop(n)
+             for n in ("rmt_replay_learner", "rmt_replay_buffer", "p4av24_g48_impostor")
+             if n in sys.modules}
     sys.path.insert(0, tmp)
     try:
-        with open(os.path.join(tmp, "p4av23_g48_stub.py"), "w", encoding="utf-8") as f:
-            f.write(textwrap.dedent("""
-                def original_vtrace_update_rmt(state, batch):
-                    '''stub learner matching the declared name.'''
-                    return state
-
-                def sample_eligible(self, n):
-                    '''stub sampler matching the declared name.'''
-                    return []
-
-                def impostor_update(state, batch):
-                    '''wrong learner name.'''
-                    return state
-            """).lstrip())
-        import p4av23_g48_stub as S
-        # positive: declared names bind; source identity inspected (SHA, not label)
+        import rmt_replay_learner as L
+        import rmt_replay_buffer as B
+        import p4av24_g48_impostor as IMP
+        # positive: declared module + function names bind; the FULL identity tuple is
+        # inspected (module realpath / module file SHA / function source SHA — not labels)
         ident = CONTRACT.executed_function_source_identity(
-            S.original_vtrace_update_rmt, S.sample_eligible)
+            L.original_vtrace_update_rmt, B.RMTReplayBuffer.sample_eligible)
         if ident["executed_function_binding"] != "PASS":
             return FAIL, f"binding not PASS: {ident}"
-        for part in ("learner", "sampler"):
-            sha = ident[part].get("source_sha256")
-            if not sha or len(sha) != 64:
-                return FAIL, f"{part} source SHA missing/short: {ident[part]}"
-        # RNG instance: numpy.random.RandomState binds; PCG64 Generator does not
-        rng = CONTRACT.verify_rng_instance_identity(np.random.RandomState(49))
+        for part, mod in (("learner", "rmt_replay_learner"),
+                          ("sampler", "rmt_replay_buffer")):
+            pid = ident[part]
+            for fld in ("module", "qualname", "name", "module_realpath",
+                        "module_file_sha256", "function_source_sha256", "source_lines"):
+                if pid.get(fld) in (None, ""):
+                    return FAIL, f"{part}.{fld} missing: {pid}"
+            if pid["module"] != mod:
+                return FAIL, f"{part} module={pid['module']!r} != {mod!r}"
+            if len(pid["module_file_sha256"]) != 64 or len(
+                    pid["function_source_sha256"]) != 64:
+                return FAIL, f"{part} SHAs not length-64: {pid}"
+            if not os.path.isfile(pid["module_realpath"]):
+                return FAIL, f"{part} module_realpath missing on disk: {pid['module_realpath']}"
+        if ident["sampler"]["qualname"] != "RMTReplayBuffer.sample_eligible":
+            return FAIL, f"sampler qualname wrong: {ident['sampler']['qualname']}"
+        # RNG instance: numpy.random.RandomState binds with the full identity tuple; the
+        # binding draws NO random numbers (state untouched).
+        rs = np.random.RandomState(49)
+        pristine = np.random.RandomState(49).get_state()
+        rng = CONTRACT.verify_rng_instance_identity(rs)
         if rng["rng_binding"] != "PASS" or rng["class_name"] != "RandomState":
             return FAIL, f"RandomState did not bind: {rng}"
+        for fld in ("class_module", "class_name", "numpy_version", "seed_derivation",
+                    "hidden_buffer_rng_used"):
+            if rng.get(fld) in (None, ""):
+                return FAIL, f"rng identity field {fld} missing: {rng}"
+        if rng["seed_derivation"] != "run_seed_plus_7":
+            return FAIL, f"rng seed_derivation wrong: {rng['seed_derivation']}"
+        if rng["hidden_buffer_rng_used"] is not False:
+            return FAIL, f"rng hidden_buffer_rng_used must be False: {rng}"
+        if rng["numpy_version"] != np.__version__:
+            return FAIL, f"rng numpy_version {rng['numpy_version']} != {np.__version__}"
+        state_after = rs.get_state()
+        if not np.array_equal(state_after[1], pristine[1]) or state_after[2] != pristine[2]:
+            return FAIL, "verify_rng_instance_identity CONSUMED random state (must not)"
         # declared protocol reconciles with the executed identity (two-phase)
         pd = CONTRACT.replay_protocol_labels("original_vtrace", 129, 4)["protocol_definition"]
         recon = CONTRACT.verify_executed_protocol_matches_declared(ident, pd)
         if recon["executed_protocol_declaration_match"] != "PASS":
             return FAIL, f"declaration reconciliation not PASS: {recon}"
-        # (NEG 1) impostor learner name -> EXECUTED_PROTOCOL_SOURCE_MISMATCH
+        # (NEG 1) same-name impostor learner from ANOTHER module -> SOURCE_MISMATCH
         try:
-            CONTRACT.executed_function_source_identity(S.impostor_update, S.sample_eligible)
-            return FAIL, "(NEG1) impostor learner not rejected"
+            CONTRACT.executed_function_source_identity(
+                IMP.original_vtrace_update_rmt, B.RMTReplayBuffer.sample_eligible)
+            return FAIL, "(NEG1) same-name impostor learner not rejected"
         except ValueError as e:
             if "EXECUTED_PROTOCOL_SOURCE_MISMATCH" not in str(e):
                 return FAIL, f"(NEG1) wrong code: {e}"
@@ -2003,40 +2122,56 @@ def gate48():
         except ValueError as e:
             if "EXECUTED_PROTOCOL_RNG_MISMATCH" not in str(e):
                 return FAIL, f"(NEG2) wrong code: {e}"
-        # (NEG 3) uninspectable callable -> EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE
+        # (NEG 3) uninspectable callable -> SOURCE_UNAVAILABLE
         try:
             CONTRACT._source_identity(len)
             return FAIL, "(NEG3) uninspectable builtin not rejected"
         except ValueError as e:
             if "EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE" not in str(e):
                 return FAIL, f"(NEG3) wrong code: {e}"
-        # (NEG 4) wrong declared learner label -> EXECUTED_PROTOCOL_DECLARATION_MISMATCH
+        # (NEG 4) DELETED source file -> SOURCE_UNAVAILABLE (the executed function's source is
+        # no longer inspectable / hashable on disk; linecache cleared to mirror a fresh
+        # process that cannot read the file).
+        os.remove(os.path.join(tmp, "rmt_replay_learner.py"))
+        linecache.clearcache()
+        try:
+            CONTRACT._source_identity(L.original_vtrace_update_rmt)
+            return FAIL, "(NEG4) deleted source file not rejected"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_SOURCE_UNAVAILABLE" not in str(e):
+                return FAIL, f"(NEG4) wrong code: {e}"
+        # (NEG 5) wrong declared learner label -> DECLARATION_MISMATCH
         bad_pd = dict(pd)
         bad_pd["learner"] = "some_other_learner"
         try:
             CONTRACT.verify_executed_protocol_matches_declared(ident, bad_pd)
-            return FAIL, "(NEG4) wrong declared learner not rejected"
+            return FAIL, "(NEG5) wrong declared learner not rejected"
         except ValueError as e:
             if "EXECUTED_PROTOCOL_DECLARATION_MISMATCH" not in str(e):
-                return FAIL, f"(NEG4) wrong code: {e}"
-        # (NEG 5) wrong declared sampler label -> EXECUTED_PROTOCOL_DECLARATION_MISMATCH
+                return FAIL, f"(NEG5) wrong code: {e}"
+        # (NEG 6) wrong declared sampler label -> DECLARATION_MISMATCH
         bad_pd2 = dict(pd)
         bad_pd2["sampler"] = "uniform"
         try:
             CONTRACT.verify_executed_protocol_matches_declared(ident, bad_pd2)
-            return FAIL, "(NEG5) wrong declared sampler not rejected"
+            return FAIL, "(NEG6) wrong declared sampler not rejected"
         except ValueError as e:
             if "EXECUTED_PROTOCOL_DECLARATION_MISMATCH" not in str(e):
-                return FAIL, f"(NEG5) wrong code: {e}"
+                return FAIL, f"(NEG6) wrong code: {e}"
     finally:
         if tmp in sys.path:
             sys.path.remove(tmp)
-        sys.modules.pop("p4av23_g48_stub", None)
+        for n in ("rmt_replay_learner", "rmt_replay_buffer", "p4av24_g48_impostor"):
+            sys.modules.pop(n, None)
+        sys.modules.update(saved)
         shutil.rmtree(tmp, ignore_errors=True)
-    return PASS, ("executed learner/sampler bound by inspected source SHA (module/qualname/"
-                  "source SHA, not labels); numpy.random.RandomState binds; declaration "
-                  "reconciliation PASS; impostor learner / PCG64 / uninspectable builtin / "
-                  "wrong declared learner / wrong declared sampler all fail closed")
+    return PASS, ("executed learner/sampler bound by the FULL inspected identity tuple "
+                  "(module / qualname / module realpath / module file SHA / function source "
+                  "SHA / source lines) from the declared modules; RandomState binds with "
+                  "numpy version + seed derivation + no hidden buffer RNG and consumes no "
+                  "state; declaration reconciliation PASS; same-name impostor / PCG64 / "
+                  "uninspectable builtin / DELETED source file / wrong declared learner / "
+                  "wrong declared sampler all fail closed")
 
 
 def gate49():
@@ -2130,6 +2265,701 @@ def gate50():
 
 
 # ----------------------------------------------------------------------------
+# Phase4A-v2.4 (§十二): GATE51-GATE62 — actual-CLI pre-JAX binding (§三), subprocess
+# import sentinel (§三.3), staged checkpoint failure finalization (§四), certificate
+# disk-object sync + payload-SHA manifest binding (§五), executed-protocol source identity
+# completeness + same-name-different-source rejection (§七), RNG identity before certificate
+# PASS (§六), effective protocol definition stability (§八), cross-arm effective comparison
+# fail closed (§九), strict sidecar basename/format validation (§十), relocatable formal
+# path labels (§十一). Module self-tests this round: RTC 76, FID 13, exposure validator 25.
+# ----------------------------------------------------------------------------
+
+
+def gate51():
+    """GATE 51 — v2.4 §三.1 ACTUAL CLI pre-JAX binding: the precheck certificate binds the
+    ACTUAL CLI values (frozen-spec kwargs overridden with the seven CLI-facing keys). Every
+    wrong CLI value FAILs the precheck PRE-JAX with FORMAL_CONFIG_RUNTIME_MISMATCH (seed /
+    total_updates / save_every / sequence_length / allow-full-p2-legacy), and a wrong
+    --replay_mode / --carry_mode fails the arm binding (FORMAL_CONFIG_ARM_MISMATCH). The
+    correct CLI reproduces PENDING_CHECKPOINT_IDENTITY on both arms."""
+    import phase4a_v2_runtime_config as RTC
+    for arm in ("persistent", "reset128"):
+        cert, _, _ = _v23_prejax_chain(arm)
+        if cert["certificate_status"] != RTC.CERTIFICATE_STATUS_PENDING:
+            return FAIL, (f"{arm}: correct-CLI precheck={cert['certificate_status']} "
+                          f"({cert['validation_errors']})")
+    wrong = [
+        ("seed=43", dict(cli_seed=43)),
+        ("total_updates=13", dict(cli_total_updates=13)),
+        ("save_every=3", dict(cli_save_every=3)),
+        ("sequence_length=130", dict(cli_sequence_length=130)),
+        ("allow_full_p2_legacy=True", dict(cli_allow_full_p2_legacy=True)),
+    ]
+    for name, kw in wrong:
+        cert, _, _ = _v23_prejax_chain("persistent", **kw)
+        if cert["certificate_status"] != RTC.CERTIFICATE_STATUS_FAIL:
+            return FAIL, f"(NEG) {name}: precheck not FAIL: {cert['certificate_status']}"
+        if not any("FORMAL_CONFIG_RUNTIME_MISMATCH" in e for e in cert["validation_errors"]):
+            return FAIL, f"(NEG) {name}: no FORMAL_CONFIG_RUNTIME_MISMATCH in errors"
+        if cert["certificate_finalized"]:
+            return FAIL, f"(NEG) {name}: precheck must not be finalized"
+    for name, kw in [("replay_mode=off", dict(cli_replay_mode="off")),
+                     ("carry_mode=reset128 on persistent YAML", dict(cli_carry="reset128"))]:
+        try:
+            _v23_prejax_chain("persistent", **kw)
+            return FAIL, f"(NEG) {name}: arm binding did NOT raise"
+        except ValueError as e:
+            if "FORMAL_CONFIG_ARM_MISMATCH" not in str(e):
+                return FAIL, f"(NEG) {name}: wrong code: {e}"
+    # static: the driver overrides the frozen kwargs with the ACTUAL CLI before building
+    src = _read(_LAUNCHER).replace("\r\n", "\n")
+    for needle in ("_prejax_kwargs = FSPEC.build_kwargs(args.carry_mode)",
+                   "_prejax_kwargs.update(",
+                   "carry_mode=args.carry_mode,",
+                   "replay_mode=REPLAY_MODE,",
+                   "allow_full_p2_legacy=bool(args.allow_full_p2_legacy),",
+                   "sequence_length=int(args.sequence_length),",
+                   "seed=int(args.seed),",
+                   "total_updates=int(args.total_updates),",
+                   "save_every=int(args.save_every))",
+                   "_PREJAX_SCIENTIFIC = RTC.build_runtime_scientific_config("
+                   "**_prejax_kwargs)"):
+        if needle not in src:
+            return FAIL, f"driver missing actual-CLI pre-JAX binding: {needle}"
+    if src.find("_prejax_kwargs.update(") > src.find(
+            "_PREJAX_SCIENTIFIC = RTC.build_runtime_scientific_config(**_prejax_kwargs)"):
+        return FAIL, "the CLI override must precede the pre-JAX scientific build"
+    return PASS, ("actual-CLI pre-JAX binding: correct CLI -> PENDING on both arms; wrong "
+                  "seed/total_updates/save_every/sequence_length/allow-full-p2-legacy -> "
+                  "precheck FAIL with FORMAL_CONFIG_RUNTIME_MISMATCH (pre-JAX); wrong "
+                  "replay_mode/carry_mode -> FORMAL_CONFIG_ARM_MISMATCH; driver override "
+                  "wired before the scientific build")
+
+
+def gate52():
+    """GATE 52 — v2.4 §三.3 subprocess import sentinel: the driver is launched as a subprocess
+    with a FAKE `jax` package whose __init__ writes a sentinel file on import. With a correct
+    formal CLI the driver passes the pre-JAX chain and IMPORTS jax (sentinel written, no
+    FORMAL_CONFIG_RUNTIME_MISMATCH); with a wrong CLI (--seed 43) it exits nonzero with
+    FORMAL_CONFIG_RUNTIME_MISMATCH and the sentinel is NEVER written — proving the refusal
+    fires BEFORE `import jax` / CUDA env / env build / ckpt load."""
+    import shutil
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    cfg = RTC.load_formal_config(
+        os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_persistent.yaml"))["config"]
+    ra = cfg["runtime_assignment"]
+    work = tempfile.mkdtemp(prefix="p4av24_g52_")
+    fake = os.path.join(work, "fake_modules")
+    os.makedirs(os.path.join(fake, "jax"))
+    sentinel = os.path.join(work, "jax_imported.sentinel")
+    with open(os.path.join(fake, "jax", "__init__.py"), "w", encoding="utf-8") as f:
+        f.write(f"open({sentinel!r}, 'w').write('jax imported by the driver subprocess')\n")
+    with open(os.path.join(fake, "jax", "numpy.py"), "w", encoding="utf-8") as f:
+        f.write("# blocking stub for jax.numpy (import only)\n")
+    run_root = os.path.join(work, "run")
+    out_dir = os.path.join(run_root, ra["out_dir"])
+    os.makedirs(out_dir, exist_ok=True)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = _EXP + os.pathsep + fake
+    env["JAX_PLATFORMS"] = "cpu"
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    cmd = [sys.executable, _LAUNCHER,
+           "--carry_mode", "persistent",
+           "--replay_mode", "original_vtrace",
+           "--sequence_length", "129",
+           "--ckpt17500", "/ckpt/17500/full_state.pkl",
+           "--out", out_dir,
+           "--gpu_uuid", str(ra["gpu_uuid"]),
+           "--formal_config",
+           os.path.join(_SNAPSHOT, "configs", "rmt16_phase4a_v2_persistent.yaml"),
+           "--snapshot_root", _SNAPSHOT,
+           "--run_root", run_root,
+           "--seed", "42", "--total_updates", "12", "--save_every", "2"]
+    try:
+        # (POS) correct CLI -> the pre-JAX chain passes and `import jax` executes. The driver
+        # then dies on the FAKE jax (no real arrays / optax) — that is fine: the assertions
+        # are (a) no FORMAL_CONFIG_RUNTIME_MISMATCH and (b) the sentinel proves `import jax`
+        # was reached.
+        pos = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+        pos_out = (pos.stdout or "") + (pos.stderr or "")
+        if "FORMAL_CONFIG_RUNTIME_MISMATCH" in pos_out:
+            return FAIL, f"(POS) correct CLI hit a pre-JAX mismatch: {pos_out[-900:]}"
+        if not os.path.exists(sentinel):
+            return FAIL, (f"(POS) sentinel missing although the pre-JAX chain passed "
+                          f"(rc={pos.returncode}): `import jax` never ran: {pos_out[-900:]}")
+        # (NEG) wrong --seed 43 -> nonzero exit + mismatch message + sentinel NEVER written
+        os.remove(sentinel)
+        neg = subprocess.run(cmd + ["--seed", "43"], capture_output=True, text=True,
+                             timeout=300, env=env)
+        neg_out = (neg.stdout or "") + (neg.stderr or "")
+        if neg.returncode == 0:
+            return FAIL, "(NEG) wrong --seed 43 exited 0 (must be nonzero)"
+        if "FORMAL_CONFIG_RUNTIME_MISMATCH" not in neg_out:
+            return FAIL, f"(NEG) mismatch message missing: {neg_out[-900:]}"
+        if os.path.exists(sentinel):
+            return FAIL, ("(NEG) sentinel written: `import jax` ran DESPITE the pre-JAX "
+                          "refusal (the refusal must precede `import jax`)")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    return PASS, ("subprocess import sentinel: correct CLI passes pre-JAX and imports jax "
+                  "(sentinel written, no mismatch); wrong --seed 43 exits nonzero with "
+                  "FORMAL_CONFIG_RUNTIME_MISMATCH and NEVER imports jax (sentinel absent)")
+
+
+def gate53():
+    """GATE 53 — v2.4 §四: EVERY checkpoint-flow failure stage FINALIZES the certificate FAIL
+    (finalized=true + staged label on DISK). A pure-Python replica of the driver's staged try
+    (manager init -> restore -> structure -> params extraction -> params hash -> SHA compare)
+    is fault-injected at each stage; the finalized certificate is written atomically and
+    RE-READ from disk. Valid structure + wrong SHA -> CHECKPOINT_SHA_COMPARE; a clean flow ->
+    PASS + stage NONE; an unknown stage label fails closed (CHECKPOINT_FAILURE_STAGE_INVALID)."""
+    import json as _json
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    stages = ["CHECKPOINT_MANAGER_INIT", "CHECKPOINT_RESTORE", "CHECKPOINT_STRUCTURE",
+              "CHECKPOINT_PARAMS_EXTRACTION", "CHECKPOINT_PARAMS_HASH"]
+
+    def run_staged(fault_stage, loaded_sha):
+        cert, _, _ = _v23_prejax_chain("persistent")
+        error = None
+        stage = "NONE"
+        try:
+            for st in stages:
+                stage = st
+                if fault_stage == st:
+                    raise RuntimeError(f"injected fault at {st}")
+            stage = "CHECKPOINT_SHA_COMPARE"
+            cert["checkpoint_identity"] = RTC.verify_checkpoint_params_sha(
+                cert["checkpoint_identity"], loaded_sha)
+            stage = "NONE"
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+        return RTC.finalize_certificate(cert, cert["checkpoint_identity"],
+                                        checkpoint_error=error,
+                                        checkpoint_failure_stage=stage)
+
+    for fault in stages + ["CHECKPOINT_SHA_COMPARE"]:
+        loaded = ("f" * 64) if fault == "CHECKPOINT_SHA_COMPARE" \
+            else RTC.EXPECTED_BASE_CHECKPOINT_SHA256
+        fin = run_staged(fault, loaded)
+        if fin["certificate_status"] != "FAIL" or not fin["certificate_finalized"]:
+            return FAIL, f"{fault}: not finalized FAIL: {fin['validation_errors']}"
+        if fin.get("checkpoint_failure_stage") != fault:
+            return FAIL, (f"{fault}: checkpoint_failure_stage="
+                          f"{fin.get('checkpoint_failure_stage')!r}")
+        with tempfile.TemporaryDirectory() as td:
+            cpath, spath, fsha, psha, written = RTC.write_certificate_atomic(
+                fin, os.path.join(td, "runtime_config_certificate.json"))
+            disk = _json.load(open(cpath, encoding="utf-8"))
+            if disk != written or disk["certificate_status"] != "FAIL":
+                return FAIL, f"{fault}: disk artifact is not the finalized FAIL certificate"
+            if (not disk["certificate_finalized"]
+                    or disk.get("checkpoint_failure_stage") != fault):
+                return FAIL, f"{fault}: disk artifact missing finalized/stage"
+            v = RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256=fsha,
+                                                expected_payload_sha256=psha)
+            if v["certificate_tamper_check"] != "PASS":
+                return FAIL, f"{fault}: FAIL-certificate artifact verify not PASS: {v}"
+    # clean flow -> PASS + stage NONE + finalized
+    fin = run_staged(None, RTC.EXPECTED_BASE_CHECKPOINT_SHA256)
+    if fin["certificate_status"] != "PASS" or not fin["certificate_finalized"]:
+        return FAIL, f"clean flow not PASS: {fin['validation_errors']}"
+    if fin.get("checkpoint_failure_stage") != "NONE":
+        return FAIL, f"clean flow stage != NONE: {fin.get('checkpoint_failure_stage')!r}"
+    # (NEG) unknown stage label -> fail closed
+    cert, _, _ = _v23_prejax_chain("persistent")
+    try:
+        RTC.finalize_certificate(cert, cert["checkpoint_identity"],
+                                 checkpoint_error="x", checkpoint_failure_stage="BOGUS_STAGE")
+        return FAIL, "(NEG) invalid stage label accepted"
+    except ValueError as e:
+        if "CHECKPOINT_FAILURE_STAGE_INVALID" not in str(e):
+            return FAIL, f"(NEG) wrong code: {e}"
+    # static: the driver stages the whole checkpoint flow under one try with stage labels
+    src = _read(_LAUNCHER)
+    for st in stages + ["CHECKPOINT_SHA_COMPARE"]:
+        if f'"{st}"' not in src:
+            return FAIL, f"driver missing stage label {st}"
+    if "checkpoint_failure_stage=_CHECKPOINT_FAILURE_STAGE)" not in src:
+        return FAIL, "driver does not pass the staged label to finalize_certificate"
+    if src.count('_CHECKPOINT_ERROR = f"{type(exc).__name__}: {exc}"') < 2:
+        return FAIL, "driver lacks the unified checkpoint/executed except handlers"
+    return PASS, ("all six checkpoint failure stages finalize FAIL with the staged label ON "
+                  "DISK (manager init / restore / structure / params extraction / params hash "
+                  "/ SHA compare); clean flow -> PASS + stage NONE; invalid stage label fails "
+                  "closed; driver stages the flow under one try with unified except")
+
+
+def gate54():
+    """GATE 54 — v2.4 §五: after EVERY certificate write the caller adopts the returned
+    written artifact and re-verifies it, and on a final PASS the driver re-reads the disk
+    certificate and requires equality. Functional: written == disk for PENDING / finalized
+    FAIL / finalized PASS certificates; static: 4 write sites, >= 4 verify sites, adoption +
+    re-read + mismatch-refusal wiring."""
+    import json as _json
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    pend, _, _ = _v23_prejax_chain("persistent")
+    ci = RTC.verify_checkpoint_params_sha(pend["checkpoint_identity"],
+                                          RTC.EXPECTED_BASE_CHECKPOINT_SHA256)
+    variants = [
+        ("PENDING", pend),
+        ("finalized_FAIL", RTC.finalize_certificate(
+            pend, pend["checkpoint_identity"],
+            checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: loaded != frozen",
+            checkpoint_failure_stage="CHECKPOINT_SHA_COMPARE")),
+        ("finalized_PASS", RTC.finalize_certificate(pend, ci)),
+    ]
+    for name, cert in variants:
+        with tempfile.TemporaryDirectory() as td:
+            cpath, spath, fsha, psha, written = RTC.write_certificate_atomic(
+                cert, os.path.join(td, "runtime_config_certificate.json"))
+            disk = _json.load(open(cpath, encoding="utf-8"))
+            if written != disk:
+                return FAIL, f"{name}: adopted written certificate != disk artifact"
+            if not (isinstance(psha, str) and len(psha) == 64):
+                return FAIL, f"{name}: payload SHA not length-64: {psha!r}"
+            if RTC._sha256_bytes(open(cpath, "rb").read()) != fsha:
+                return FAIL, f"{name}: returned file SHA != recomputed file SHA"
+            v = RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256=fsha,
+                                                expected_payload_sha256=psha)
+            if v["certificate_tamper_check"] != "PASS":
+                return FAIL, f"{name}: post-write verify not PASS: {v}"
+    src = _read(_LAUNCHER).replace("\r\n", "\n")
+    n_write = src.count("RTC.write_certificate_atomic(")
+    n_verify = src.count("RTC.verify_certificate_artifact(")
+    if n_write != 4:
+        return FAIL, f"driver write_certificate_atomic sites={n_write} != 4"
+    if n_verify < 4:
+        return FAIL, (f"driver verify_certificate_artifact sites={n_verify} < 4 (one per "
+                      "write required)")
+    for needle in ("RUNTIME_CONFIG_CERTIFICATE) = (",
+                   "_disk_certificate = json.load(_cert_f)",
+                   "if _disk_certificate != RUNTIME_CONFIG_CERTIFICATE:",
+                   "CERTIFICATE_DISK_OBJECT_MISMATCH"):
+        if needle not in src:
+            return FAIL, f"driver missing disk-object sync wiring: {needle}"
+    return PASS, ("written == disk for PENDING / finalized FAIL / finalized PASS; payload + "
+                  "file SHAs recompute; post-write verify PASS; driver has 4 write sites each "
+                  "followed by a verify, adopts the written object, and re-reads the disk "
+                  "certificate on final PASS (CERTIFICATE_DISK_OBJECT_MISMATCH guard)")
+
+
+def gate55():
+    """GATE 55 — v2.4 §五.3: the certificate PAYLOAD SHA + file SHA + base checkpoint params
+    SHA are first-class, non-null length-64 fields in the manifest / summary / launch-status
+    wiring. Functional: certificate_shas_record built from the DISK artifact carries all
+    three; static: manifest + summary + launch-status needles."""
+    import json as _json
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    pend, _, _ = _v23_prejax_chain("persistent")
+    ci = RTC.verify_checkpoint_params_sha(pend["checkpoint_identity"],
+                                          RTC.EXPECTED_BASE_CHECKPOINT_SHA256)
+    fin = RTC.finalize_certificate(pend, ci)
+    with tempfile.TemporaryDirectory() as td:
+        cpath, spath, fsha, psha, written = RTC.write_certificate_atomic(
+            fin, os.path.join(td, "runtime_config_certificate.json"))
+        disk = _json.load(open(cpath, encoding="utf-8"))
+    recd = RTC.certificate_shas_record(disk, certificate_file_sha256=fsha,
+                                       certificate_sidecar_path=spath)
+    for key in ("runtime_config_certificate_payload_sha256",
+                "runtime_config_certificate_file_sha256",
+                "base_checkpoint_params_sha256"):
+        val = recd.get(key)
+        if not (isinstance(val, str) and len(val) == 64):
+            return FAIL, f"record {key} not non-null length-64: {val!r}"
+    if recd["runtime_config_certificate_payload_sha256"] != psha:
+        return FAIL, "record payload SHA != the written artifact's payload SHA"
+    src = _read(_LAUNCHER).replace("\r\n", "\n")
+    for needle in ('fields["runtime_config_certificate_payload_sha256"] = (',
+                   'fields["base_checkpoint_params_sha256"] = base_sha',
+                   "runtime_config_certificate_payload_sha256=(\n"
+                   "                   RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256),",
+                   "base_checkpoint_params_sha256=base_sha,",
+                   "certificate_payload_sha256={RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256} ",
+                   "base_checkpoint_params_sha256={base_sha} "):
+        if needle not in src:
+            return FAIL, f"driver missing payload/base-SHA binding: {needle[:70]}..."
+    return PASS, ("manifest record from the DISK artifact carries non-null length-64 payload "
+                  "SHA + file SHA + base checkpoint params SHA (payload SHA == written); "
+                  "manifest / summary / launch-status all bind them")
+
+
+def gate56():
+    """GATE 56 — v2.4 §七: the REAL frozen replay modules' executed identity is COMPLETE —
+    module, qualname, name, module_realpath, module_file_sha256 (recomputed from disk),
+    function_source_sha256 (recomputed via inspect.getsource), source_lines — for both the
+    learner and the sampler; executed binding + declaration reconciliation PASS on the real
+    modules."""
+    if not HAVE_JAX:
+        return SKIP, ("JAX absent (the REAL frozen replay modules import jax at module "
+                      "scope; runs on server CPU)")
+    import hashlib
+    import inspect
+    import phase4a_v2_contract as CONTRACT
+    import rmt_replay_learner as RL
+    from rmt_replay_buffer import RMTReplayBuffer
+    ident = CONTRACT.executed_function_source_identity(
+        RL.original_vtrace_update_rmt, RMTReplayBuffer.sample_eligible)
+    if ident["executed_function_binding"] != "PASS":
+        return FAIL, f"real-module binding not PASS: {ident}"
+    for part, fn in (("learner", RL.original_vtrace_update_rmt),
+                     ("sampler", RMTReplayBuffer.sample_eligible)):
+        pid = ident[part]
+        for fld in CONTRACT.EXECUTED_SOURCE_IDENTITY_FIELDS:
+            if pid.get(fld) in (None, ""):
+                return FAIL, f"{part}.{fld} missing: {pid}"
+        rp = pid["module_realpath"]
+        if not os.path.isfile(rp):
+            return FAIL, f"{part}: module_realpath not a file: {rp}"
+        with open(rp, "rb") as f:
+            file_sha = hashlib.sha256(f.read()).hexdigest()
+        if pid["module_file_sha256"] != file_sha:
+            return FAIL, f"{part}: module_file_sha256 != recomputed disk SHA"
+        src_sha = hashlib.sha256(inspect.getsource(fn).encode("utf-8")).hexdigest()
+        if pid["function_source_sha256"] != src_sha:
+            return FAIL, f"{part}: function_source_sha256 != recomputed source SHA"
+        if int(pid["source_lines"]) < 1:
+            return FAIL, f"{part}: source_lines={pid['source_lines']}"
+    if ident["learner"]["module"] != "rmt_replay_learner":
+        return FAIL, f"learner module={ident['learner']['module']!r}"
+    if ident["sampler"]["qualname"] != "RMTReplayBuffer.sample_eligible":
+        return FAIL, f"sampler qualname={ident['sampler']['qualname']!r}"
+    pd = CONTRACT.replay_protocol_labels("original_vtrace", 129, 4)["protocol_definition"]
+    recon = CONTRACT.verify_executed_protocol_matches_declared(ident, pd)
+    if recon["executed_protocol_declaration_match"] != "PASS":
+        return FAIL, f"real-module declaration reconciliation not PASS: {recon}"
+    return PASS, ("real frozen learner/sampler: complete identity tuple (module / qualname / "
+                  "name / module realpath / module file SHA / function source SHA / source "
+                  "lines) with file + source SHAs recomputed and equal; declared-module "
+                  "binding + reconciliation PASS")
+
+
+def gate57():
+    """GATE 57 — v2.4 §七.1 SAME-NAME-DIFFERENT-SOURCE negative: functions with identical
+    declared names/modules but DIFFERENT source (or a different module file SHA) are rejected
+    by the cross-arm effective comparison — EFFECTIVE_PROTOCOL_MATCH=FAIL on
+    learner.function_source_sha256 / sampler.module_file_sha256 even though the DECLARED
+    protocol still matches; PROTOCOL_MATCH and MATCHED_REPLAY_EXPOSURE cannot be PASS."""
+    import phase4a_v2_exposure_validator as EV
+    kw = dict(replay_updates=2, consumed=8, batch_sizes=[4, 4], seq_lens=[[129] * 4] * 2,
+              attempt_mask=[False, True, True], not_ready_updates=[0])
+    sa = EV._synthetic_summary("persistent", **kw)
+    sb = EV._synthetic_summary("reset128",
+                               executed_kwargs=dict(learner_src_sha="ab" * 32), **kw)
+    rep = EV.validate_two_arm(sa, sb)
+    if rep["DECLARED_PROTOCOL_MATCH"] != "PASS":
+        return FAIL, f"declared match must survive a source difference: {rep}"
+    if rep["EFFECTIVE_PROTOCOL_MATCH"] != "FAIL":
+        return FAIL, "same-name different-source must FAIL the EFFECTIVE match"
+    if "learner.function_source_sha256" not in rep["EXECUTED_PROTOCOL_DIFFERING_FIELDS"]:
+        return FAIL, ("differing fields must name learner.function_source_sha256: "
+                      f"{rep['EXECUTED_PROTOCOL_DIFFERING_FIELDS']}")
+    if rep["PROTOCOL_MATCH"] == "PASS" or rep["MATCHED_REPLAY_EXPOSURE"] == "PASS":
+        return FAIL, "same-name different-source must not reach PROTOCOL / EXPOSURE PASS"
+    if rep["EFFECTIVE_PROTOCOL_SHA256_ARM_A"] == rep["EFFECTIVE_PROTOCOL_SHA256_ARM_B"]:
+        return FAIL, "effective SHAs must differ when the learner source differs"
+    sb2 = EV._synthetic_summary("reset128",
+                                executed_kwargs=dict(sampler_file_sha="cd" * 32), **kw)
+    rep2 = EV.validate_two_arm(sa, sb2)
+    if (rep2["EFFECTIVE_PROTOCOL_MATCH"] != "FAIL"
+            or "sampler.module_file_sha256" not in rep2["EXECUTED_PROTOCOL_DIFFERING_FIELDS"]):
+        return FAIL, ("sampler module-file tamper not caught: "
+                      f"{rep2['EXECUTED_PROTOCOL_DIFFERING_FIELDS']}")
+    return PASS, ("same-name-different-source rejected: learner function_source_sha256 / "
+                  "sampler module_file_sha256 differences FAIL the effective match (declared "
+                  "stays PASS); effective SHAs differ; no PROTOCOL / EXPOSURE PASS")
+
+
+def gate58():
+    """GATE 58 — v2.4 §六: the replay-sampler RNG identity is bound BEFORE the certificate can
+    reach PASS (static: RNG construction + identity binding precede the last finalize site),
+    verify_rng_instance_identity draws NO random numbers, and a mismatched numpy_version
+    fails closed."""
+    import numpy as np
+    import phase4a_v2_contract as CONTRACT
+    src = _read(_LAUNCHER).replace("\r\n", "\n")
+    lines = src.split("\n")
+
+    def line_of(needle):
+        for i, ln in enumerate(lines):
+            if needle in ln:
+                return i
+        return -1
+
+    rng_c = line_of("replay_sample_rng = np.random.RandomState(args.seed + 7)")
+    rng_b = line_of(
+        'EXECUTED_PROTOCOL_IDENTITY["rng_instance"] = '
+        "CONTRACT.verify_rng_instance_identity(")
+    fins = [i for i, ln in enumerate(lines)
+            if "RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(" in ln]
+    if rng_c == -1 or rng_b == -1 or len(fins) != 3:
+        return FAIL, f"wiring missing (rng_construct={rng_c} rng_bind={rng_b} fins={fins})"
+    if not (rng_c < rng_b < max(fins)):
+        return FAIL, (f"RNG identity not bound before the checkpoint finalize: "
+                      f"construct={rng_c} bind={rng_b} last_finalize={max(fins)}")
+    # functional: no random state is consumed by the identity binding
+    rs = np.random.RandomState(7)
+    pristine = np.random.RandomState(7).get_state()
+    rng = CONTRACT.verify_rng_instance_identity(rs)
+    state_after = rs.get_state()
+    if not np.array_equal(state_after[1], pristine[1]) or state_after[2] != pristine[2]:
+        return FAIL, "verify_rng_instance_identity CONSUMED random state (must draw nothing)"
+    if rng["numpy_version"] != np.__version__:
+        return FAIL, f"numpy_version binding wrong: {rng['numpy_version']} != {np.__version__}"
+    # (NEG) an unavailable (falsy) numpy_version fails closed: the executed RNG identity MUST
+    # bind the exact numpy version. (An explicit non-empty numpy_version is recorded as given;
+    # the cross-check against the executing numpy happens in
+    # build_effective_protocol_definition — see GATE59 NEG3.)
+    try:
+        CONTRACT.verify_rng_instance_identity(np.random.RandomState(7), numpy_version="")
+        return FAIL, "(NEG) unavailable numpy_version not rejected"
+    except ValueError as e:
+        if "EXECUTED_PROTOCOL_RNG_MISMATCH" not in str(e):
+            return FAIL, f"(NEG) wrong code: {e}"
+    return PASS, ("RNG construction + identity binding precede the checkpoint finalize; the "
+                  "binding draws no random numbers (state untouched); numpy_version bound to "
+                  "the executing numpy; mismatched numpy_version fails closed")
+
+
+def gate59():
+    """GATE 59 — v2.4 §八: the effective protocol definition is COMPLETE (declared protocol +
+    executed learner/sampler 5-field projections + executed RNG 5 fields), its SHA256 is
+    stable under input key-order permutation, missing/incomplete inputs fail closed, and the
+    driver builds + emits it."""
+    if not HAVE_JAX:
+        return SKIP, ("JAX absent (the REAL frozen replay modules import jax at module "
+                      "scope; runs on server CPU)")
+    import numpy as np
+    import phase4a_v2_contract as CONTRACT
+    import rmt_replay_learner as RL
+    from rmt_replay_buffer import RMTReplayBuffer
+    ident = CONTRACT.executed_function_source_identity(
+        RL.original_vtrace_update_rmt, RMTReplayBuffer.sample_eligible)
+    ident["rng_instance"] = CONTRACT.verify_rng_instance_identity(np.random.RandomState(49))
+    pd = CONTRACT.replay_protocol_labels("original_vtrace", 129, 4)["protocol_definition"]
+    eff, sha = CONTRACT.build_effective_protocol_definition(
+        pd, ident, ident["rng_instance"])
+    if set(eff) != {"declared_protocol", "executed_learner", "executed_sampler",
+                    "executed_rng"}:
+        return FAIL, f"effective key set wrong: {sorted(eff)}"
+    if set(eff["executed_learner"]) != set(CONTRACT.EFFECTIVE_PROTOCOL_LEARNER_FIELDS):
+        return FAIL, f"executed_learner projection wrong: {sorted(eff['executed_learner'])}"
+    if set(eff["executed_sampler"]) != set(CONTRACT.EFFECTIVE_PROTOCOL_SAMPLER_FIELDS):
+        return FAIL, f"executed_sampler projection wrong: {sorted(eff['executed_sampler'])}"
+    if set(eff["executed_rng"]) != set(CONTRACT.EFFECTIVE_PROTOCOL_RNG_FIELDS):
+        return FAIL, f"executed_rng fields wrong: {sorted(eff['executed_rng'])}"
+    if not (isinstance(sha, str) and len(sha) == 64):
+        return FAIL, f"effective SHA not length-64: {sha!r}"
+    # stable under key-order permutation of ALL inputs
+    eff2, sha2 = CONTRACT.build_effective_protocol_definition(
+        dict(reversed(list(pd.items()))),
+        dict(reversed(list(ident.items()))),
+        dict(reversed(list(ident["rng_instance"].items()))))
+    if sha2 != sha:
+        return FAIL, "effective protocol SHA not key-order invariant"
+    if eff2 != eff:
+        return FAIL, "effective protocol definition not key-order invariant"
+    # fail closed: missing executed identity
+    try:
+        CONTRACT.build_effective_protocol_definition(pd, None, ident["rng_instance"])
+        return FAIL, "(NEG1) missing executed identity not rejected"
+    except ValueError as e:
+        if "EXECUTED_PROTOCOL_IDENTITY_REQUIRED" not in str(e):
+            return FAIL, f"(NEG1) wrong code: {e}"
+    # fail closed: incomplete declared protocol
+    bad_pd = dict(pd)
+    bad_pd.pop("learner")
+    try:
+        CONTRACT.build_effective_protocol_definition(bad_pd, ident, ident["rng_instance"])
+        return FAIL, "(NEG2) incomplete declared protocol not rejected"
+    except ValueError as e:
+        if "PROTOCOL_IDENTITY_INCOMPLETE" not in str(e):
+            return FAIL, f"(NEG2) wrong code: {e}"
+    # fail closed: rng numpy_version disagreement
+    try:
+        CONTRACT.build_effective_protocol_definition(pd, ident, ident["rng_instance"],
+                                                     numpy_version="0.0.0")
+        return FAIL, "(NEG3) rng numpy_version mismatch not rejected"
+    except ValueError as e:
+        if "EXECUTED_PROTOCOL_RNG_MISMATCH" not in str(e):
+            return FAIL, f"(NEG3) wrong code: {e}"
+    # static: driver builds the effective protocol and the summary emits it
+    src = _read(_LAUNCHER)
+    for needle in ("EFFECTIVE_PROTOCOL_DEFINITION, EFFECTIVE_PROTOCOL_SHA256 = (",
+                   "declared_protocol_definition=DECLARED_PROTOCOL_DEFINITION,",
+                   "effective_protocol_definition=EFFECTIVE_PROTOCOL_DEFINITION,",
+                   "effective_protocol_sha256=EFFECTIVE_PROTOCOL_SHA256,"):
+        if needle not in src:
+            return FAIL, f"driver missing effective-protocol wiring: {needle}"
+    return PASS, ("effective protocol complete (declared + learner/sampler 5-field projections "
+                  "+ RNG 5 fields); SHA256 stable under key-order permutation; missing "
+                  "executed identity / incomplete declared / RNG mismatch all fail closed; "
+                  "driver builds + summary emits declared/effective definition + SHA")
+
+
+def gate60():
+    """GATE 60 — v2.4 §九: the two-arm validator compares the EFFECTIVE protocol and fails
+    closed: missing executed identity OR effective block on either arm raises
+    EXECUTED_PROTOCOL_IDENTITY_REQUIRED (NO declared-only fallback); an executed-source / RNG
+    difference FAILs the effective match while declared stays PASS; MATCHED_REPLAY_EXPOSURE
+    PASS requires BOTH EFFECTIVE_PROTOCOL_MATCH and EXPOSURE_COUNT_MATCH."""
+    import phase4a_v2_exposure_validator as EV
+    kw = dict(replay_updates=2, consumed=8, batch_sizes=[4, 4], seq_lens=[[129] * 4] * 2,
+              attempt_mask=[False, True, True], not_ready_updates=[0])
+    sa = EV._synthetic_summary("persistent", **kw)
+    sb = EV._synthetic_summary("reset128", **kw)
+    rep = EV.validate_two_arm(sa, sb)
+    for key in ("DECLARED_PROTOCOL_MATCH", "EXECUTED_PROTOCOL_MATCH",
+                "EFFECTIVE_PROTOCOL_MATCH", "EFFECTIVE_PROTOCOL_SHA256_ARM_A",
+                "EFFECTIVE_PROTOCOL_SHA256_ARM_B", "EXECUTED_PROTOCOL_DIFFERING_FIELDS",
+                "EXPOSURE_COUNT_MATCH"):
+        if key not in rep:
+            return FAIL, f"report missing {key}"
+    if not (rep["DECLARED_PROTOCOL_MATCH"] == rep["EXECUTED_PROTOCOL_MATCH"]
+            == rep["EFFECTIVE_PROTOCOL_MATCH"] == "PASS"):
+        return FAIL, f"equal arms not all PASS: declared/executed/effective={rep}"
+    if rep["EFFECTIVE_PROTOCOL_SHA256_ARM_A"] != rep["EFFECTIVE_PROTOCOL_SHA256_ARM_B"]:
+        return FAIL, "equal arms' effective SHAs differ"
+    if rep["MATCHED_REPLAY_EXPOSURE"] != "PASS" or rep["PROTOCOL_MATCH"] != "PASS":
+        return FAIL, "equal arms must reach MATCHED_REPLAY_EXPOSURE + PROTOCOL PASS"
+    # (NEG1) missing executed identity / effective block -> fail closed, no fallback
+    for name, extra in [("executed", dict(drop_executed=True)),
+                        ("effective", dict(drop_effective=True))]:
+        sb_x = EV._synthetic_summary("reset128", **dict(kw, **extra))
+        try:
+            EV.validate_two_arm(sa, sb_x)
+            return FAIL, f"(NEG1) missing {name} identity did NOT raise"
+        except ValueError as e:
+            if "EXECUTED_PROTOCOL_IDENTITY_REQUIRED" not in str(e):
+                return FAIL, f"(NEG1) missing {name}: wrong code: {e}"
+    # executed learner source differs -> declared PASS, effective FAIL, no MATCHED PASS
+    sb_d = EV._synthetic_summary("reset128",
+                                 executed_kwargs=dict(learner_src_sha="9a" * 32), **kw)
+    rep_d = EV.validate_two_arm(sa, sb_d)
+    if rep_d["DECLARED_PROTOCOL_MATCH"] != "PASS":
+        return FAIL, "declared match must survive an executed-source difference"
+    if rep_d["EFFECTIVE_PROTOCOL_MATCH"] != "FAIL" or rep_d["PROTOCOL_MATCH"] == "PASS":
+        return FAIL, "executed-source difference must FAIL the effective + overall match"
+    if rep_d["MATCHED_REPLAY_EXPOSURE"] == "PASS":
+        return FAIL, "MATCHED_REPLAY_EXPOSURE requires EFFECTIVE_PROTOCOL_MATCH=PASS"
+    # exposure difference + effective equal -> effective PASS but MATCHED FAIL
+    sb_e = EV._synthetic_summary("reset128", replay_updates=1, consumed=4, batch_sizes=[4],
+                                 seq_lens=[[129] * 4], attempt_mask=[False, True, True],
+                                 not_ready_updates=[0])
+    rep_e = EV.validate_two_arm(sa, sb_e)
+    if rep_e["EFFECTIVE_PROTOCOL_MATCH"] != "PASS":
+        return FAIL, f"effective match must survive an exposure difference: {rep_e}"
+    if rep_e["MATCHED_REPLAY_EXPOSURE"] == "PASS":
+        return FAIL, "exposure mismatch must FAIL MATCHED_REPLAY_EXPOSURE"
+    return PASS, ("two-arm validator compares the EFFECTIVE protocol: equal arms -> all three "
+                  "matches PASS + equal effective SHAs + MATCHED PASS; missing executed / "
+                  "effective identity raises EXECUTED_PROTOCOL_IDENTITY_REQUIRED (no "
+                  "declared-only fallback); executed-source difference -> effective FAIL with "
+                  "declared PASS; MATCHED requires effective AND exposure PASS")
+
+
+def gate61():
+    """GATE 61 — v2.4 §十: the sidecar is validated in FULL — exactly `<sha256>  <certificate
+    basename>\n` (two tokens; token[0] == file SHA; token[1] == basename; trailing newline).
+    Correct SHA + WRONG basename, extra tokens, empty sidecar, a lone token, and a missing
+    trailing newline (truncation) all fail closed with RUNTIME_CONFIG_CERTIFICATE_TAMPERED."""
+    import tempfile
+    import phase4a_v2_runtime_config as RTC
+    pend, _, _ = _v23_prejax_chain("persistent")
+    fin = RTC.finalize_certificate(pend, pend["checkpoint_identity"],
+                                   checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: x")
+
+    def expect_tamper(label, sidecar_text):
+        with tempfile.TemporaryDirectory() as td:
+            cpath, spath, fsha, psha, _ = RTC.write_certificate_atomic(
+                fin, os.path.join(td, "runtime_config_certificate.json"))
+            with open(spath, "w", encoding="utf-8") as f:
+                f.write(sidecar_text)
+            try:
+                RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256=fsha,
+                                                expected_payload_sha256=psha)
+                return f"{label}: tamper NOT detected"
+            except ValueError as e:
+                if "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" not in str(e):
+                    return f"{label}: wrong code: {e}"
+        return None
+
+    with tempfile.TemporaryDirectory() as td:
+        cpath, spath, fsha, psha, _ = RTC.write_certificate_atomic(
+            fin, os.path.join(td, "runtime_config_certificate.json"))
+        base = os.path.basename(cpath)
+        if open(spath, encoding="utf-8").read() != f"{fsha}  {base}\n":
+            return FAIL, "pristine sidecar is not exactly '<sha>  <basename>\\n'"
+        v = RTC.verify_certificate_artifact(cpath, spath, expected_file_sha256=fsha,
+                                            expected_payload_sha256=psha)
+        if v["certificate_tamper_check"] != "PASS":
+            return FAIL, f"pristine sidecar verify not PASS: {v}"
+        attacks = [
+            ("correct SHA + wrong basename", f"{fsha}  wrong_name.json\n"),
+            ("extra tokens", f"{fsha}  {base} extra\n"),
+            ("empty sidecar", ""),
+            ("lone token (no basename)", f"{fsha}\n"),
+            ("missing trailing newline (truncated)", f"{fsha}  {base}"),
+        ]
+    for label, content in attacks:
+        err = expect_tamper(label, content)
+        if err:
+            return FAIL, err
+    return PASS, ("sidecar full validation: pristine '<sha>  <basename>\\n' PASSes; correct "
+                  "SHA + wrong basename / extra tokens / empty / lone token / truncated "
+                  "(no newline) all fail closed with RUNTIME_CONFIG_CERTIFICATE_TAMPERED")
+
+
+def gate62():
+    """GATE 62 — v2.4 §十一: the formal path labels match the RELOCATABLE semantics —
+    CANONICAL_RELATIVE_PATH_UNDER_EXECUTING_SNAPSHOT_ROOT + LAYOUT_AND_CONTENT_BOUND (whole-
+    snapshot relocation IS legitimate; the v2.3 NO_COPY wording is gone) — and the snapshot
+    root is DERIVED from the executing module location (realpath equality required; a
+    different snapshot root fails closed)."""
+    import phase4a_v2_formal_identity as FID
+    import phase4a_v2_runtime_config as RTC
+    fid_src = _read(os.path.join(_EXP, "phase4a_v2_formal_identity.py"))
+    if "REALPATH_EQUALITY_NO_COPY_NO_SYMLINK_ESCAPE" in fid_src:
+        return FAIL, "v2.3 NO_COPY label still present (whole-snapshot relocation is legal)"
+    if FID.FORMAL_CONFIG_PATH_IDENTITY_LABEL != (
+            "CANONICAL_RELATIVE_PATH_UNDER_EXECUTING_SNAPSHOT_ROOT"):
+        return FAIL, f"path identity label wrong: {FID.FORMAL_CONFIG_PATH_IDENTITY_LABEL}"
+    if FID.FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL != "LAYOUT_AND_CONTENT_BOUND":
+        return FAIL, f"relocation label wrong: {FID.FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL}"
+    derived = FID.derived_snapshot_root()
+    if os.path.realpath(derived) != os.path.realpath(_SNAPSHOT):
+        return FAIL, (f"derived_snapshot_root()={derived!r} does not resolve to the running "
+                      f"snapshot {_SNAPSHOT!r}")
+    for arm in ("persistent", "reset128"):
+        canon = os.path.join(_SNAPSHOT, "configs", f"rmt16_phase4a_v2_{arm}.yaml")
+        idrec = FID.verify_formal_config_path_identity(_SNAPSHOT, arm, canon)
+        if idrec.get("formal_config_path_identity") != (
+                FID.FORMAL_CONFIG_PATH_IDENTITY_LABEL):
+            return FAIL, f"{arm}: path identity record wrong: {idrec}"
+        if idrec.get("formal_config_snapshot_relocation") != (
+                FID.FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL):
+            return FAIL, f"{arm}: relocation record wrong: {idrec}"
+        if os.path.realpath(idrec.get("derived_snapshot_root_realpath") or "") != derived:
+            return FAIL, f"{arm}: derived root not recorded: {idrec}"
+        # (NEG) a snapshot root OTHER than the derived one fails closed, even with a valid
+        # canonical YAML underneath it.
+        try:
+            FID.verify_formal_config_path_identity(os.path.join(_SNAPSHOT, "configs"), arm,
+                                                   canon)
+            return FAIL, f"(NEG) {arm}: non-derived snapshot_root not rejected"
+        except ValueError as e:
+            if "derived snapshot root" not in str(e):
+                return FAIL, f"(NEG) {arm}: wrong message: {e}"
+    return PASS, ("formal path labels match relocatable semantics (canonical relative path "
+                  "under the executing snapshot root + layout-and-content bound); NO_COPY "
+                  "wording gone; snapshot root derived from the executing module; other "
+                  "snapshot roots fail closed on the derived-root check")
+
+
+# ----------------------------------------------------------------------------
 # registry + runners
 # ----------------------------------------------------------------------------
 
@@ -2190,6 +3020,18 @@ GATES = [
     ("GATE48_executed_protocol_source_identity", gate48),
     ("GATE49_v2_3_publication_labels", gate49),
     ("GATE50_v2_2_publication_errata", gate50),
+    ("GATE51_actual_cli_prejax_binding", gate51),
+    ("GATE52_subprocess_import_sentinel", gate52),
+    ("GATE53_checkpoint_failures_finalized", gate53),
+    ("GATE54_certificate_disk_object_sync", gate54),
+    ("GATE55_payload_sha_manifest_binding", gate55),
+    ("GATE56_executed_source_identity_complete", gate56),
+    ("GATE57_same_name_different_source_rejected", gate57),
+    ("GATE58_rng_identity_before_certificate_pass", gate58),
+    ("GATE59_effective_protocol_complete_stable", gate59),
+    ("GATE60_two_arm_effective_comparison", gate60),
+    ("GATE61_sidecar_basename_validation", gate61),
+    ("GATE62_formal_path_labels_relocatable", gate62),
 ]
 
 

@@ -608,6 +608,23 @@ CERTIFICATE_STATUS_PENDING = "PENDING_CHECKPOINT_IDENTITY"
 CERTIFICATE_STATUS_PASS = "PASS"
 CERTIFICATE_STATUS_FAIL = "FAIL"
 
+# Phase4A-v2.4 (§四.1): the checkpoint flow is ONE unified fail-closed try/except in the driver
+# (manager init -> restore -> structure -> params extraction -> params hash -> SHA compare).
+# Whichever stage raises is recorded in the finalized FAIL certificate as
+# `checkpoint_failure_stage`, so a reviewer can tell a missing-checkpoint failure from a restore
+# exception, a structural break, a hash failure or a frozen-SHA mismatch WITHOUT rerunning.
+# NONE = the checkpoint flow completed (the certificate then finalizes PASS, or FAILs for a
+# non-checkpoint reason such as a non-PENDING precheck).
+CHECKPOINT_FAILURE_STAGES = (
+    "CHECKPOINT_MANAGER_INIT",
+    "CHECKPOINT_RESTORE",
+    "CHECKPOINT_STRUCTURE",
+    "CHECKPOINT_PARAMS_EXTRACTION",
+    "CHECKPOINT_PARAMS_HASH",
+    "CHECKPOINT_SHA_COMPARE",
+    "NONE",
+)
+
 
 def build_precheck_certificate(formal_record, runtime_scientific_config, *,
                                formal_identity_record=None,
@@ -705,7 +722,7 @@ def build_precheck_certificate(formal_record, runtime_scientific_config, *,
 
 
 def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,
-                         checkpoint_error=None):
+                         checkpoint_error=None, checkpoint_failure_stage="NONE"):
     """§六.2/§六.3 deterministic finalization. Returns a NEW certificate (input not mutated):
       * checkpoint_error is None AND checkpoint match is PASS/NOT_FROZEN AND the precheck status
         was PENDING_CHECKPOINT_IDENTITY  ->  status PASS, certificate_finalized=True, and the
@@ -714,7 +731,16 @@ def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,
         ->  status FAIL, certificate_finalized=True, reasons appended.
     A FAIL finalization MUST be written over the on-disk certificate (the driver calls
     write_certificate_atomic right after), so a checkpoint-SHA failure can never leave a stale
-    PASS behind."""
+    PASS behind.
+
+    Phase4A-v2.4 (§四.1): the finalized certificate ALSO carries `checkpoint_failure_stage`
+    (one of CHECKPOINT_FAILURE_STAGES). On a checkpoint failure it names the exact stage that
+    raised (manager init / restore / structure / params extraction / params hash / SHA compare);
+    on a clean checkpoint flow it is NONE. An unknown stage value is rejected fail-closed."""
+    if checkpoint_failure_stage not in CHECKPOINT_FAILURE_STAGES:
+        raise ValueError(
+            f"CHECKPOINT_FAILURE_STAGE_INVALID: {checkpoint_failure_stage!r} not in "
+            f"{CHECKPOINT_FAILURE_STAGES}")
     cert = dict(precheck_certificate or {})
     ci = dict(checkpoint_identity or cert.get("checkpoint_identity") or {})
     cert["checkpoint_identity"] = ci
@@ -725,6 +751,9 @@ def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,
         cert["validation_errors"] = errs
         cert["certificate_status"] = CERTIFICATE_STATUS_FAIL
         cert["certificate_finalized"] = True
+        cert["checkpoint_failure_stage"] = (
+            checkpoint_failure_stage if checkpoint_failure_stage != "NONE"
+            else "CHECKPOINT_SHA_COMPARE")
         return cert
     match = ci.get("base_checkpoint_match")
     pre_status = cert.get("certificate_status")
@@ -732,6 +761,7 @@ def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,
         cert["certificate_status"] = CERTIFICATE_STATUS_PASS
         cert["certificate_finalized"] = True
         cert["validation_errors"] = []
+        cert["checkpoint_failure_stage"] = "NONE"
         return cert
     errs = list(cert.get("validation_errors") or [])
     if pre_status != CERTIFICATE_STATUS_PENDING:
@@ -743,6 +773,7 @@ def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,
     cert["validation_errors"] = errs
     cert["certificate_status"] = CERTIFICATE_STATUS_FAIL
     cert["certificate_finalized"] = True
+    cert["checkpoint_failure_stage"] = checkpoint_failure_stage
     return cert
 
 
@@ -806,9 +837,17 @@ def certificate_sidecar_path(certificate_path):
 def write_certificate_atomic(certificate, path):
     """§七.1/§七.2 FINAL certificate write. Embeds the payload SHA (§七.1), writes atomically
     (§六.4), computes the FINAL file SHA over the exact written bytes, and writes the detached
-    sidecar `<name>.sha256` containing `<sha256>  <basename>`. The certificate file is NOT
-    written again after this call, so the sidecar SHA stays valid for the artifact's lifetime.
-    Returns (cert_path, sidecar_path, file_sha256, payload_sha256)."""
+    sidecar `<name>.sha256` containing EXACTLY `<sha256>  <basename>\n` (two tokens; v2.4 §十
+    verifies the basename token too). The certificate file is NOT written again after this call,
+    so the sidecar SHA stays valid for the artifact's lifetime.
+
+    Phase4A-v2.4 (§五.1): returns the FIFTH element `written_certificate` — the EXACT dict that
+    was serialized to disk (payload SHA + written_via included). v2.3 mutated a LOCAL copy, so
+    the caller's in-memory certificate never carried `certificate_payload_sha256` and the
+    manifest/summary payload SHA was always null. v2.4 callers MUST immediately adopt it:
+        RUNTIME_CONFIG_CERTIFICATE = written_certificate
+    so manifest / summary / launch-status bind the SAME object that is on disk.
+    Returns (cert_path, sidecar_path, file_sha256, payload_sha256, written_certificate)."""
     cert = dict(certificate or {})
     for k in _CERTIFICATE_SELF_FIELDS:
         cert.pop(k, None)
@@ -824,7 +863,7 @@ def write_certificate_atomic(certificate, path):
         f.write(f"{file_sha}  {base}\n")
         f.flush()
         os.fsync(f.fileno())
-    return cert_path, sidecar, file_sha, payload_sha
+    return cert_path, sidecar, file_sha, payload_sha, cert
 
 
 def verify_certificate_artifact(certificate_path, sidecar_path=None, *,
@@ -837,7 +876,14 @@ def verify_certificate_artifact(certificate_path, sidecar_path=None, *,
       * file SHA == the detached sidecar's SHA (catches ANY byte change, including an attacker
         who also recomputes the payload SHA),
       * expected file/payload SHAs (e.g. from the summary/checkpoint manifest) match, if given.
-    Any violation raises RUNTIME_CONFIG_CERTIFICATE_TAMPERED. Returns a PASS record."""
+    Any violation raises RUNTIME_CONFIG_CERTIFICATE_TAMPERED. Returns a PASS record.
+
+    Phase4A-v2.4 (§十): the sidecar is validated as a WHOLE LINE, not just its first token. It
+    MUST be exactly `<sha256>  <certificate basename>\n`: exactly two whitespace-separated
+    tokens, token[0] == the recomputed file SHA, token[1] == os.path.basename of the
+    certificate, and a single trailing newline. A correct SHA with a WRONG basename (sidecar
+    transplanted from another certificate file), extra tokens, an empty sidecar, or a
+    truncated/missing newline all raise RUNTIME_CONFIG_CERTIFICATE_TAMPERED."""
     with open(certificate_path, "rb") as f:
         raw = f.read()
     file_sha = _sha256_bytes(raw)
@@ -863,11 +909,25 @@ def verify_certificate_artifact(certificate_path, sidecar_path=None, *,
         sidecar_path = certificate_sidecar_path(certificate_path)
     if os.path.exists(sidecar_path):
         with open(sidecar_path, encoding="utf-8") as f:
-            parts = f.read().split()
+            sidecar_raw = f.read()
+        parts = sidecar_raw.split()
         sidecar_sha = parts[0] if parts else None
+        sidecar_base = parts[1] if len(parts) >= 2 else None
+        expected_base = os.path.basename(str(certificate_path))
         if sidecar_sha != file_sha:
             errors.append(
                 f"sidecar file sha mismatch: sidecar={sidecar_sha} actual={file_sha}")
+        if len(parts) != 2:
+            errors.append(
+                f"sidecar format invalid: expected exactly 2 tokens '<sha256>  <basename>', "
+                f"got {len(parts)} token(s) in {sidecar_raw!r}")
+        elif sidecar_base != expected_base:
+            errors.append(
+                f"sidecar basename mismatch: sidecar references {sidecar_base!r} but the "
+                f"certificate file basename is {expected_base!r}")
+        elif not sidecar_raw.endswith("\n"):
+            errors.append(
+                "sidecar format invalid: missing trailing newline (truncated sidecar)")
     else:
         errors.append(f"sidecar missing: {sidecar_path}")
     if errors:
@@ -1221,12 +1281,31 @@ def self_test():
           fin_nf["certificate_status"] == CERTIFICATE_STATUS_PASS
           and fin_nf["checkpoint_identity"]["base_checkpoint_match"] == "NOT_FROZEN")
 
-    fin_err = finalize_certificate(pre, checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: x != y")
-    check("(26d) finalize with checkpoint error -> FAIL + finalized + error recorded",
+    fin_err = finalize_certificate(pre, checkpoint_error="BASE_CHECKPOINT_SHA_MISMATCH: x != y",
+                                   checkpoint_failure_stage="CHECKPOINT_SHA_COMPARE")
+    check("(26d) finalize with checkpoint error -> FAIL + finalized + error + stage recorded",
           fin_err["certificate_status"] == CERTIFICATE_STATUS_FAIL
           and fin_err["certificate_finalized"] is True
           and any("BASE_CHECKPOINT_FAILURE" in e for e in fin_err["validation_errors"])
-          and fin_err["checkpoint_identity"]["base_checkpoint_match"] == "FAIL")
+          and fin_err["checkpoint_identity"]["base_checkpoint_match"] == "FAIL"
+          and fin_err["checkpoint_failure_stage"] == "CHECKPOINT_SHA_COMPARE")
+    check("(26d') a PASS finalize records checkpoint_failure_stage=NONE",
+          fin["checkpoint_failure_stage"] == "NONE")
+    for _stage in ("CHECKPOINT_MANAGER_INIT", "CHECKPOINT_RESTORE", "CHECKPOINT_STRUCTURE",
+                   "CHECKPOINT_PARAMS_EXTRACTION", "CHECKPOINT_PARAMS_HASH"):
+        _f = finalize_certificate(pre, checkpoint_error=f"{_stage}: simulated fault",
+                                  checkpoint_failure_stage=_stage)
+        check(f"(26d'') stage {_stage} -> FAIL cert carries that exact stage",
+              _f["certificate_status"] == CERTIFICATE_STATUS_FAIL
+              and _f["certificate_finalized"] is True
+              and _f["checkpoint_failure_stage"] == _stage
+              and any("BASE_CHECKPOINT_FAILURE" in e for e in _f["validation_errors"]))
+    try:
+        finalize_certificate(pre, checkpoint_error="x", checkpoint_failure_stage="BOGUS_STAGE")
+        check("(26d''') invalid checkpoint_failure_stage -> raised", False, "no raise")
+    except ValueError as e:
+        check("(26d''') invalid checkpoint_failure_stage -> raised",
+              "CHECKPOINT_FAILURE_STAGE_INVALID" in str(e))
 
     kw_bad = _reference_runtime_kwargs(); kw_bad["seed"] = 43
     pre_bad = build_precheck_certificate(
@@ -1258,13 +1337,17 @@ def self_test():
     tmp_cert = tempfile.mkdtemp(prefix="p4av23_cert_")
     try:
         cpath = os.path.join(tmp_cert, "runtime_config_certificate.json")
-        cpath, spath, fsha, psha = write_certificate_atomic(fin, cpath)
+        cpath, spath, fsha, psha, written = write_certificate_atomic(fin, cpath)
         on_disk = json.load(open(cpath, encoding="utf-8"))
         sidecar_line = open(spath, encoding="utf-8").read().split()
         check("(27a) atomic write: payload SHA embedded, sidecar = '<sha>  <basename>'",
               on_disk["certificate_payload_sha256"] == psha
               and sidecar_line == [fsha, "runtime_config_certificate.json"]
               and spath == cpath[:-len(".json")] + ".sha256")
+        check("(27a') §五.1: returned written_certificate is byte-exact the disk JSON and "
+              "carries the payload SHA (caller MUST adopt it)",
+              written == on_disk and written["certificate_payload_sha256"] == psha
+              and written["certificate_written_via"] == "atomic_tempfile_fsync_replace")
         check("(27b) no stray temp file remains (atomic replace)",
               not [f for f in os.listdir(tmp_cert) if ".tmp." in f])
         vr = verify_certificate_artifact(cpath)
@@ -1317,7 +1400,7 @@ def self_test():
                   "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e) and "sidecar missing" in str(e))
 
         # restore + tamper 4: expected file SHA from a stale summary no longer matches
-        _, _, fsha_new, psha_new = write_certificate_atomic(fin, cpath)
+        _, _, fsha_new, psha_new, _ = write_certificate_atomic(fin, cpath)
         try:
             verify_certificate_artifact(cpath, expected_file_sha256="0" * 64)
             check("(27g) expected-file-SHA mismatch -> TAMPERED", False, "no raise")
@@ -1336,8 +1419,50 @@ def self_test():
             check("(27h) invalid-JSON certificate -> TAMPERED",
                   "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e))
 
+        # (27i-l) Phase4A-v2.4 (§十): sidecar WHOLE-LINE validation. A first-token-only check
+        # would accept a sidecar transplanted from ANOTHER certificate file (correct SHA for a
+        # different basename), padded with extra tokens, emptied, or truncated.
+        _, sp_sl, fsha_sl, psha_sl, _ = write_certificate_atomic(fin, cpath)
+        base_sl = os.path.basename(cpath)
+        with open(sp_sl, "w", encoding="utf-8") as f:
+            f.write(f"{fsha_sl}  some_other_certificate.json\n")   # right SHA, WRONG basename
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27i) sidecar correct-SHA-but-wrong-basename -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27i) sidecar correct-SHA-but-wrong-basename -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "basename mismatch" in str(e))
+        with open(sp_sl, "w", encoding="utf-8") as f:
+            f.write(f"{fsha_sl}  {base_sl}  extra_token\n")        # extra tokens
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27j) sidecar extra tokens -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27j) sidecar extra tokens -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "exactly 2 tokens" in str(e))
+        with open(sp_sl, "w", encoding="utf-8") as f:
+            f.write("")                                            # empty sidecar
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27k) empty sidecar -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27k) empty sidecar -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "exactly 2 tokens" in str(e))
+        with open(sp_sl, "w", encoding="utf-8") as f:
+            f.write(f"{fsha_sl}  {base_sl}")                       # truncated: no newline
+        try:
+            verify_certificate_artifact(cpath)
+            check("(27l) sidecar missing trailing newline -> TAMPERED", False, "no raise")
+        except ValueError as e:
+            check("(27l) sidecar missing trailing newline -> TAMPERED",
+                  "RUNTIME_CONFIG_CERTIFICATE_TAMPERED" in str(e)
+                  and "trailing newline" in str(e))
+
         # (28) certificate_shas_record carries the §七.3 artifact-binding keys (superset of v2.2)
-        _, sp2, fsh2, psh2 = write_certificate_atomic(fin, cpath)
+        _, sp2, fsh2, psh2, _ = write_certificate_atomic(fin, cpath)
         rec28 = certificate_shas_record(
             json.load(open(cpath, encoding="utf-8")),
             certificate_file_sha256=fsh2, certificate_sidecar_path=sp2)
