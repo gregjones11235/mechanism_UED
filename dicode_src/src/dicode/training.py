@@ -298,10 +298,12 @@ def _create_achievement_masks(
     for i, task_cls in enumerate(task_classes):
         temp_task = task_cls(StaticEnvParams(), EnvParams())
         if temp_task.relevant_achievements:
-            indices = jnp.array([ach.value for ach in temp_task.relevant_achievements])
+            indices = jnp.array([a if isinstance(a, int) else a.value
+                                 for a in temp_task.relevant_achievements])
             task_achievement_mask = task_achievement_mask.at[i, indices].set(True)
         if temp_task.completed_achievements:
-            indices = jnp.array([ach.value for ach in temp_task.completed_achievements])
+            indices = jnp.array([a if isinstance(a, int) else a.value
+                                 for a in temp_task.completed_achievements])
             task_completed_mask = task_completed_mask.at[i, indices].set(True)
 
     return task_achievement_mask, task_completed_mask
