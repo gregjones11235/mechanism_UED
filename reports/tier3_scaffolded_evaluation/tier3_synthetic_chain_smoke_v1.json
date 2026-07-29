@@ -1,0 +1,131 @@
+{
+  "NEG23_params_unchanged": true,
+  "cc2_checkpoint_available": false,
+  "cc2_interface_smoke_label": "WAITING_CC2_CHECKPOINT",
+  "checkpoint": {
+    "NEG21_identity_bound": true,
+    "file_sha256": "b9188c8156cecfa01cb3f9d9112f9985a08b308c2f38a9a937306e81d77179bc",
+    "params_sha256_declared": "60637b2eb422d156aaa7917f1ed77d0c54ed75cf96f612daf40f140a5224056d",
+    "params_sha256_recomputed": "60637b2eb422d156aaa7917f1ed77d0c54ed75cf96f612daf40f140a5224056d",
+    "path": "D:/cc4tmp\\.tier3_ft_scratch\\chain_smoke\\full_state.pkl",
+    "trained_by": "SYNTHETIC_CHAIN_SMOKE_NOT_A_STUDENT"
+  },
+  "disclaimer": "SYNTHETIC all-zero params; NOT a Student; NO training by CC4; NO performance comparison; NO arm comparison. Proves the chain checkpoint->adapter->evaluator->state-bank->record->taxonomy->metrics->certificate is ready for the real CC2 checkpoint.",
+  "env_contract": {
+    "NEG22_obs_shape_bound": true,
+    "action_count": 43,
+    "observation_shape": [
+      8335
+    ]
+  },
+  "per_scenario": {
+    "back_l2": {
+      "cert_identity_class": "BOSS_COMBAT_SCAFFOLDED",
+      "cert_real_student_evaluation": "NOT_RUN",
+      "cert_status_real_scaffold_test": "TESTED_REAL_ENV_RESET",
+      "primary_metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+      "records": [
+        {
+          "defeat_kobold": false,
+          "episode_id": "smoke_back_0",
+          "front_floor_transition_reached": false,
+          "kobold_engaged": true,
+          "player_died": true,
+          "timed_out": false,
+          "timesteps": 24,
+          "valid_start": true
+        },
+        {
+          "defeat_kobold": false,
+          "episode_id": "smoke_back_1",
+          "front_floor_transition_reached": false,
+          "kobold_engaged": true,
+          "player_died": false,
+          "timed_out": true,
+          "timesteps": 32,
+          "valid_start": true
+        }
+      ],
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "terminal_label_counts": {
+        "DIED_AFTER_ENGAGEMENT": 1,
+        "TIMEOUT_COMBAT_NOT_WON": 1
+      },
+      "valid_start_count": 2
+    },
+    "front_l2": {
+      "cert_identity_class": "TIER3_FRONT_DIAGNOSTIC_SCAFFOLD",
+      "cert_real_student_evaluation": "NOT_RUN",
+      "cert_status_real_scaffold_test": "TESTED_REAL_ENV_RESET",
+      "primary_metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+      "records": [
+        {
+          "defeat_kobold": false,
+          "episode_id": "smoke_front_0",
+          "front_floor_transition_reached": false,
+          "kobold_engaged": false,
+          "player_died": false,
+          "timed_out": true,
+          "timesteps": 32,
+          "valid_start": true
+        },
+        {
+          "defeat_kobold": false,
+          "episode_id": "smoke_front_1",
+          "front_floor_transition_reached": false,
+          "kobold_engaged": false,
+          "player_died": false,
+          "timed_out": true,
+          "timesteps": 32,
+          "valid_start": true
+        }
+      ],
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_TRANSITION": 2
+      },
+      "valid_start_count": 2
+    },
+    "full": {
+      "cert_identity_class": "CANONICAL_S4_EVALUATION",
+      "cert_real_student_evaluation": "NOT_RUN",
+      "cert_status_real_scaffold_test": "TESTED_REAL_ENV_RESET",
+      "primary_metric": "DEFEAT_KOBOLD_SR",
+      "records": [
+        {
+          "defeat_kobold": false,
+          "episode_id": "smoke_full_0",
+          "front_floor_transition_reached": false,
+          "kobold_engaged": false,
+          "player_died": false,
+          "timed_out": true,
+          "timesteps": 32,
+          "valid_start": true
+        },
+        {
+          "defeat_kobold": false,
+          "episode_id": "smoke_full_1",
+          "front_floor_transition_reached": false,
+          "kobold_engaged": false,
+          "player_died": false,
+          "timed_out": true,
+          "timesteps": 32,
+          "valid_start": true
+        }
+      ],
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_KOBOLD": 2
+      },
+      "valid_start_count": 2
+    }
+  },
+  "rollout": {
+    "all_episodes_valid_start_and_stepped": true,
+    "episodes_per_scenario": 2,
+    "frozen_cap": 4096,
+    "max_steps": 32,
+    "policy": "greedy_argmax over synthetic zero params"
+  },
+  "schema": "mechanism_UED.tier3_synthetic_chain_smoke/v1"
+}

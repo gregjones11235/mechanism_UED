@@ -1,0 +1,188 @@
+{
+  "arm_independence": {
+    "NEG07_no_arm_partition": "PASS",
+    "NEG08_no_arm_specific_metadata": "PASS",
+    "NEG26_selection_result_blind": "PASS",
+    "bank_generation_takes_no_arm_argument": true,
+    "common_state_bank_for_all_arms": true
+  },
+  "back_l2": {
+    "boundary_predicate_version": "tier3_predicates/v1",
+    "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+    "hash_label": "BACK_SCAFFOLD_STATE_BANK_HASH",
+    "ordered_entry_ids": [
+      [
+        0,
+        1010000
+      ],
+      [
+        1,
+        1010001
+      ],
+      [
+        2,
+        1010002
+      ],
+      [
+        3,
+        1010003
+      ],
+      [
+        4,
+        1010004
+      ],
+      [
+        5,
+        1010005
+      ],
+      [
+        6,
+        1010006
+      ],
+      [
+        7,
+        1010007
+      ]
+    ],
+    "ordered_payload_hashes": [
+      "51cc71ca6267de891cf8d8f0362dd79e197cb0c034534c2f7c202f64246562f0",
+      "4e6e01398046b59ed49bda84defa4d3be905ee79b038d72a189ac027f25f25a6",
+      "af5c1302002cd2d402db82a5203522c40ce35679acae5de7f4f86d9628389f84",
+      "fa42185788d1fc02829cc5565c3506450666d75403bf85424713e30dfb390ba2",
+      "9837030ab0a1575ae1f7722846beca71f630575f8d6a23e0c784ccf3f84bcaa3",
+      "6357943d3df06820d8886bbef26975308cab1430015e23a1852686f70b15d3b9",
+      "600740f087824785a1b63803fb135c75284c2e0e566f70874dd765375069790e",
+      "b8e46e74905276eb562468cdfac011b08768fd461a8231f4d37084c9f14dab5a"
+    ],
+    "resolved_kobold_type_id": 3,
+    "seeds": [
+      1010000,
+      1010001,
+      1010002,
+      1010003,
+      1010004,
+      1010005,
+      1010006,
+      1010007
+    ],
+    "state_bank_hash": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "state_count": 8,
+    "states_are": "REAL_ENVSTATE",
+    "two_process_agreement": true
+  },
+  "canonical_env_contract": {
+    "achievement_count": 67,
+    "action_count": 43,
+    "defeat_kobold_index": 41,
+    "matches_canonical_s4": true,
+    "observation_shape": [
+      8335
+    ],
+    "task_identity": {
+      "expected_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "match": true,
+      "path": "D:\\Projects\\dicode-codex-director\\audit_outputs\\global_raw_data_extract_20260726T110032Z\\home\\oseasy\\experiments\\p2_v1_20260722\\evidence\\s4_task_code.py",
+      "realpath": "D:\\Projects\\dicode-codex-director\\audit_outputs\\global_raw_data_extract_20260726T110032Z\\home\\oseasy\\experiments\\p2_v1_20260722\\evidence\\s4_task_code.py",
+      "role": "canonical_s4_task",
+      "sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d"
+    }
+  },
+  "environment": {
+    "craftax": "1.4.5",
+    "device": "TFRT_CPU_0",
+    "jax": "0.4.30",
+    "jaxlib": "0.4.30",
+    "serializer_env": "JAX_CRAFTAX_AVAILABLE"
+  },
+  "front_l2": {
+    "boundary_predicate_version": "tier3_predicates/v1",
+    "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+    "front_reset_equivalence_vs_canonical": {
+      "rng_seed_0": true,
+      "rng_seed_1": true
+    },
+    "hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+    "ordered_entry_ids": [
+      [
+        0,
+        10000
+      ],
+      [
+        1,
+        10001
+      ],
+      [
+        2,
+        10002
+      ],
+      [
+        3,
+        10003
+      ],
+      [
+        4,
+        10004
+      ],
+      [
+        5,
+        10005
+      ],
+      [
+        6,
+        10006
+      ],
+      [
+        7,
+        10007
+      ]
+    ],
+    "ordered_payload_hashes": [
+      "840bfe92efe00b5e26f184e9eef55a3023d014cba4f82f6b3d5bb2c14793866d",
+      "95ceca2147416bd6a145cc8d0993f3e79c71fa3834702152e1b29f0d495156e9",
+      "8d0c8bd590efef2281d662fa218109dee76bf6c31cdf40144651ee9586b0e568",
+      "7445af0705118a6edc2ee8b705f5d663627d2f542404fdd9902fb041985a3c1a",
+      "e43b55f06a77391c29d7b67b930aa53d1837af70404173d3facce3ebd634c559",
+      "bf6446f06ae8d6e5b99878bc2b722b07a430d1d72b14aa976956699021c4e46b",
+      "0dd0dfa9dee1e7d8a5a1fc9c59c3bfe9c883ffd6b61b989adb76dd887dac5251",
+      "8255c12a21ab3307b756aca09d791411ed9007c2fa584cc67d99ad9ad441d008"
+    ],
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007
+    ],
+    "state_bank_hash": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "state_count": 8,
+    "states_are": "REAL_ENVSTATE",
+    "two_process_agreement": true
+  },
+  "manifest_paths": {
+    "back_l2": [
+      "D:/cc4tmp\\.tier3_ft_scratch\\evidence\\back_l2\\manifest_a_back_l2.json",
+      "D:/cc4tmp\\.tier3_ft_scratch\\evidence\\back_l2\\manifest_b_back_l2.json"
+    ],
+    "front_l2": [
+      "D:/cc4tmp\\.tier3_ft_scratch\\evidence\\front_l2\\manifest_a_front_l2.json",
+      "D:/cc4tmp\\.tier3_ft_scratch\\evidence\\front_l2\\manifest_b_front_l2.json"
+    ]
+  },
+  "negative_tests": {
+    "fail": 0,
+    "implemented": 26
+  },
+  "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+  "privileged_information": {
+    "basis": "bank state carries NO boss direction / shortest path / hidden field; reset post-processing and get_obs are the canonical code paths verbatim",
+    "front_bank_reset_obs_identical_to_canonical_reset_obs": true,
+    "no_extra_channel_no_boss_direction_no_shortest_path": true,
+    "observation_generator": "canonical envns.get_obs (unmodified s4 source)",
+    "observation_shape_identical_to_canonical": true
+  },
+  "schema": "mechanism_UED.tier3_real_materialization_evidence/v1",
+  "scope": "chain validation only; NO performance comparison; NO Student training by CC4"
+}
