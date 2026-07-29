@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CC4 Tier3 — negative tests (§十七 NEG01–NEG28).
+"""CC4 Tier3 — negative tests (§十七 NEG01–NEG29).
 
 Each negative test constructs an INVALID input and asserts the corresponding guard
 REJECTS it (fail-closed). A test PASSES when the rejection is correctly detected;
@@ -7,7 +7,7 @@ the suite requirement is FAIL=0 (no negative test silently accepts a violation).
 BLOCKED is allowed only with a documented environment-capability absence — never a
 fake PASS.
 
-Coverage (all 28 implemented; FAIL=0 required):
+Coverage (all 29 implemented; FAIL=0 required):
   NEG01-NEG18  boundary / builder / state-bank / predicate level
   NEG19        episode missing valid_start (evaluator)
   NEG20        ambiguous termination silently labelled (failure taxonomy)
@@ -17,6 +17,8 @@ Coverage (all 28 implemented; FAIL=0 required):
   NEG26        state/sample selection must be blind to Student performance (materializer)
   NEG27        certificate eval_binding must carry real VALUES, never labels (certificate)
   NEG28        tampered frozen bank manifest fails closed (materializer, pure compare)
+  NEG29        certificate provenance (pid/argv/times/exit code/driver SHA) missing or
+               invalid (certificate)
 """
 from __future__ import annotations
 
@@ -323,6 +325,61 @@ def neg27():
     return label_rejected and missing_rejected and changed_rejected
 
 
+def neg29():
+    """Certificate eval_binding with missing / invalid PROCESS PROVENANCE (actual pid /
+    argv / start-end UTC / exit code) or driver-source SHA -> fail closed.
+
+    A complete provenance binding is accepted; ten tamper paths (bad/missing pid,
+    empty argv, empty argv element, unparseable/empty timestamps, non-zero/missing
+    exit code, non-hex/missing driver SHA) are each rejected."""
+    result = {
+        "scenario": mat.FRONT,
+        "contract": {"observation_schema": "canonical_craftax_symbolic"},
+        "metrics": {"primary": {"metric": metrics.FRONT_PRIMARY_METRIC, "value": 0.5,
+                                "valid_starts": 4}},
+        "failure_rule_version": taxonomy.FAILURE_RULE_VERSION,
+        "terminal_label_counts": {},
+        "rollout_status": "BLOCKED_ENVIRONMENT",
+    }
+    binding = {
+        "state_bank_hash": "a" * 64,
+        "state_payload_hashes": ["a" * 64],
+        "checkpoint_file_sha256": "b" * 64,
+        "cc2_params_sha256": "c" * 64,
+        "checkpoint_step": 98304,
+        "carry_mode": "persistent",
+        "run_class": "INTERFACE_SMOKE",
+        "episode_records_sha256": "d" * 64,
+        "cc2_policy_source_sha256": "e" * 64,
+        "evaluator_source_sha256": "f" * 64,
+        "predicate_code_sha256": "0" * 64,
+        "driver_source_sha256": "9" * 64,
+        "process_pid": 4242,
+        "process_argv": ["python", "tier3_evaluator.py", "--interface-smoke"],
+        "run_start_utc": "2026-07-30T00:00:00+00:00",
+        "run_end_utc": "2026-07-30T00:05:00+00:00",
+        "run_exit_code": 0,
+        "observation_shape": [8335],
+        "action_dim": 43,
+        "params_unchanged": True,
+        "performance_claim_authorized": False,
+    }
+    complete_accepted = not rejects(
+        lambda: certmod.build_certificate(result, eval_binding=dict(binding)))
+    tamper_results = []
+    for over in ({"process_pid": None}, {"process_pid": 0},
+                 {"process_argv": []}, {"process_argv": ["python", ""]},
+                 {"run_start_utc": "yesterday"}, {"run_end_utc": None},
+                 {"run_exit_code": 137}, {"run_exit_code": None},
+                 {"driver_source_sha256": "not-a-sha"},
+                 {"driver_source_sha256": None}):
+        b = dict(binding)
+        b.update(over)
+        tamper_results.append(rejects(
+            lambda b=b: certmod.build_certificate(result, eval_binding=b)))
+    return complete_accepted and all(tamper_results)
+
+
 def _fake_real_manifest(scenario, n=8):
     """A manifest shaped EXACTLY like a REAL bank with every frozen binding correct
     EXCEPT the per-entry payload hashes (which are fabricated 64-hex values, so the
@@ -402,9 +459,11 @@ NEG_TESTS = [
     ("NEG26", "result-based state/sample selection", neg26),
     ("NEG27", "certificate eval_binding label / missing value / params changed", neg27),
     ("NEG28", "tampered frozen bank manifest (payload / hash / seeds)", neg28),
+    ("NEG29", "certificate provenance missing/invalid (pid/argv/times/exit/driver SHA)",
+     neg29),
 ]
 
-# All 26 NEG tests are implemented (NEG19-23/25 landed with the Commit-3 modules).
+# All 29 NEG tests are implemented (NEG19-23/25 landed with the Commit-3 modules).
 PENDING_COMMIT_3 = []
 
 
@@ -435,7 +494,7 @@ def self_test() -> int:
     if n_fail != 0:
         print("TIER3_NEGATIVE_TESTS_FAIL (FAIL=%d/%d implemented)" % (n_fail, implemented))
         return 1
-    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/28, pending_commit3=%d)"
+    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/29, pending_commit3=%d)"
           % (implemented, pending))
     return 0
 

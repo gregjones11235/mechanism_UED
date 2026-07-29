@@ -8,6 +8,8 @@ over-claiming: it refuses to let a scaffold result masquerade as a full-task res
 Guards (negative tests):
   NEG24 scaffold hash presented as GLOBAL_WORLD_SET_HASH       -> fail closed
   NEG25 scaffold result claims full-task success / breakthrough -> fail closed
+  NEG29 certificate provenance missing/invalid (pid/argv/times/exit code/driver SHA)
+                                                                 -> fail closed
 
 Honest status discipline: this round can only ever claim IMPLEMENTED_STATIC /
 TESTED_SYNTHETIC (plus TESTED_REAL_ENV_RESET on a JAX host). It NEVER emits
@@ -59,11 +61,16 @@ EVAL_BINDING_REQUIRED_FIELDS = (
     "episode_records_sha256", "cc2_policy_source_sha256", "evaluator_source_sha256",
     "predicate_code_sha256", "observation_shape", "action_dim", "params_unchanged",
     "performance_claim_authorized",
+    # REAL process provenance (task §五 / NEG29): the certificate must bind the ACTUAL
+    # evaluator process that produced it and the SHA-bound driver source the network
+    # hyperparameters were recovered from.
+    "driver_source_sha256", "process_pid", "process_argv",
+    "run_start_utc", "run_end_utc", "run_exit_code",
 )
 EVAL_BINDING_SHA_FIELDS = (
     "state_bank_hash", "checkpoint_file_sha256", "cc2_params_sha256",
     "episode_records_sha256", "cc2_policy_source_sha256", "evaluator_source_sha256",
-    "predicate_code_sha256",
+    "predicate_code_sha256", "driver_source_sha256",
 )
 FROZEN_OBSERVATION_SHAPE = [8335]      # canonical S4 symbolic obs (unchanged)
 FROZEN_ACTION_DIM = 43                 # canonical craftax action set (unchanged)
@@ -82,6 +89,20 @@ def require(cond, msg):
 def _is_sha256_hex(v) -> bool:
     return (isinstance(v, str) and len(v) == 64
             and all(c in "0123456789abcdef" for c in v))
+
+
+def _require_iso_utc(value, field):
+    """NEG29: a provenance timestamp must be a non-empty, parseable ISO-8601 string."""
+    require(isinstance(value, str) and value,
+            "FAIL CLOSED (NEG29): eval_binding.%s %r is not a non-empty ISO-8601 string "
+            "(the actual run start/end time must be bound)" % (field, value))
+    import datetime as _dt
+    try:
+        _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise FailClosed(
+            "FAIL CLOSED (NEG29): eval_binding.%s %r is not a parseable ISO-8601 "
+            "timestamp" % (field, value))
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +157,26 @@ def assert_eval_binding_complete(cert: dict) -> dict:
             or binding["run_class"] == "FORMAL_EVALUATION",
             "FAIL CLOSED (NEG27): run_class=INTERFACE_SMOKE can never authorize a "
             "performance claim")
+    # ---- NEG29: REAL process provenance (actual pid / argv / times / exit code) ----
+    require(isinstance(binding["process_pid"], int)
+            and not isinstance(binding["process_pid"], bool)
+            and binding["process_pid"] > 0,
+            "FAIL CLOSED (NEG29): eval_binding process_pid %r is not a positive int "
+            "(the certificate must bind the ACTUAL evaluator child PID)"
+            % binding["process_pid"])
+    require(isinstance(binding["process_argv"], list) and binding["process_argv"]
+            and all(isinstance(a, str) and a for a in binding["process_argv"]),
+            "FAIL CLOSED (NEG29): eval_binding process_argv %r is not a non-empty list "
+            "of non-empty strings (the ACTUAL evaluator argv must be bound)"
+            % binding["process_argv"])
+    _require_iso_utc(binding["run_start_utc"], "run_start_utc")
+    _require_iso_utc(binding["run_end_utc"], "run_end_utc")
+    require(isinstance(binding["run_exit_code"], int)
+            and not isinstance(binding["run_exit_code"], bool)
+            and binding["run_exit_code"] == 0,
+            "FAIL CLOSED (NEG29): eval_binding run_exit_code %r != 0 (a certificate is "
+            "only ever emitted on a successful evaluator exit)"
+            % binding["run_exit_code"])
     return binding
 
 
@@ -326,6 +367,12 @@ def self_test() -> int:
             "action_dim": 43,
             "params_unchanged": True,
             "performance_claim_authorized": False,
+            "driver_source_sha256": "9" * 64,
+            "process_pid": 12345,
+            "process_argv": ["python", "tier3_evaluator.py", "--interface-smoke"],
+            "run_start_utc": "2026-07-30T00:00:00+00:00",
+            "run_end_utc": "2026-07-30T00:05:00+00:00",
+            "run_exit_code": 0,
         }
         b.update(over)
         return b
@@ -341,7 +388,17 @@ def self_test() -> int:
             ({"params_unchanged": False}, "params_changed"),
             ({"run_class": "SMOKE_BUT_PERFORMANCE"}, "bad_run_class"),
             ({"performance_claim_authorized": True}, "smoke_claims_performance"),
-            ({"carry_mode": "sideways"}, "bad_carry_mode")):
+            ({"carry_mode": "sideways"}, "bad_carry_mode"),
+            # ---- NEG29: process provenance must be real and valid ----
+            ({"process_pid": -1}, "NEG29_bad_pid"),
+            ({"process_pid": None}, "NEG29_missing_pid"),
+            ({"process_argv": []}, "NEG29_empty_argv"),
+            ({"process_argv": ["python", ""]}, "NEG29_empty_argv_element"),
+            ({"run_start_utc": "not-a-time"}, "NEG29_bad_start_time"),
+            ({"run_end_utc": ""}, "NEG29_empty_end_time"),
+            ({"run_exit_code": 1}, "NEG29_nonzero_exit_code"),
+            ({"run_exit_code": None}, "NEG29_missing_exit_code"),
+            ({"driver_source_sha256": "xyz"}, "NEG29_bad_driver_sha")):
         try:
             build_certificate(_result(FRONT, 0.5, 4), eval_binding=_binding(**bad_over))
             check("NEG27_rejects_%s" % tag, False)

@@ -444,12 +444,15 @@ def _sha256_lf_file(path: str) -> str:
 
 
 def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
-                        out_dir: str, episodes: int = 2, max_steps: int = 32) -> dict:
+                        out_dir: str, episodes: int = 2, max_steps: int = 32,
+                        driver_source: str = None) -> dict:
     """The REAL evaluation CLI path (task §六), fail-closed end to end:
 
       --checkpoint        CC2 full_state.pkl (DIRECT pytree + manifest; NEG21-verified)
       --cc2_snapshot_root CC2 source snapshot root (bytes-bound; modules must import
                           from exactly there; NO RMT/GTrXL reimplementation in CC4)
+      --cc2_driver_source SHA-bound CC2 driver source (AST-literal-parsed for the
+                          frozen Cfg; real manifests carry config={} by design)
       --scenario          front_l2 | back_l2 | full | all
       --out               output dir (episode_records.jsonl, evaluation_result.json,
                           evaluation_certificate.json, SHA256SUMS)
@@ -459,11 +462,28 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
 
     Before any rollout BOTH frozen bank identities (FRONT+BACK) are re-verified in
     memory (verify_frozen_bank_identity; nothing written to disk, banks unmodified).
-    The certificate binds ACTUAL VALUES (NEG27): state_bank_hash, ordered state
+    The certificate binds ACTUAL VALUES (NEG27/NEG29): state_bank_hash, ordered state
     payload hashes, checkpoint file SHA, CC2 params SHA, checkpoint step, carry_mode,
     run_class, episode-records SHA, CC2 policy source SHA, evaluator source SHA,
-    predicate code SHA, observation shape (8335), action dim (43), params_unchanged.
+    predicate code SHA, observation shape (8335), action dim (43), params_unchanged,
+    driver_source_sha256, and REAL process provenance (pid / argv / start-end UTC /
+    exit code).
     """
+    # ANTI-POLLUTION GATE (handover §7): RMT16_POSTJAX_BINDING_SELFTEST=1 makes the
+    # CC2 driver exit rc=0 BEFORE training (false success). Refuse to bind ANY
+    # checkpoint while it is set — fail closed; never silently pop-and-continue.
+    hook = os.environ.get("RMT16_POSTJAX_BINDING_SELFTEST", "")
+    require(hook.strip() in ("", "0"),
+            "FAIL CLOSED (anti-pollution): RMT16_POSTJAX_BINDING_SELFTEST=%r is set; "
+            "this hook makes the CC2 driver exit rc=0 before training (false success). "
+            "Unset it before any real checkpoint binding." % hook)
+    # REAL process provenance for the certificate (NEG29): the actual child pid / argv
+    # / start time of this evaluation; end time + exit code are stamped at the end.
+    import datetime as _dt
+    run_start = _dt.datetime.now(_dt.timezone.utc)
+    process_pid = os.getpid()
+    process_argv = [str(a) for a in sys.argv] or ["<no-argv>"]
+
     import json
     import hashlib
     import numpy as np
@@ -490,6 +510,14 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
 
     # 1. CC2 policy source identity (byte-bound) + real module import from the root.
     modules, src_id = policy_adapter.load_cc2_policy_modules(cc2_snapshot_root)
+    # 1b. Frozen network hyperparameters from the SHA-bound driver SOURCE — real
+    #     manifests carry config={} BY DESIGN (Cfg is a class-attributes class). The
+    #     driver is AST-literal-parsed only: never executed, never guessed, never
+    #     defaulted; its LF-SHA must equal the frozen value (fail closed).
+    if driver_source is None:
+        driver_source = policy_adapter.DEFAULT_DRIVER_SOURCE
+    driver_cfg, driver_sha = policy_adapter.load_cfg_from_driver_source(
+        driver_source, policy_adapter.FROZEN_DRIVER_FILE_SHA256)
     # 2. CC2 checkpoint (REAL full_state.pkl format; NEG21 verified inside).
     params, params_sha, manifest, file_sha = ckpt.load_full_params_readonly(checkpoint_path)
     # 3. Canonical evaluation environment + frozen interface assertion.
@@ -499,20 +527,22 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
             % (entry["observation_shape"],))
     require(int(entry["action_count"]) == 43,
             "FAIL CLOSED: action count %d != frozen 43" % entry["action_count"])
-    # 4. Network + greedy policy built FROM the checkpoint manifest (carry_mode is
-    #    READ from the manifest, never chosen here; params stay read-only).
+    # 4. Network + greedy policy built from the SHA-bound driver Cfg, cross-checked
+    #    against the manifest (carry_mode is READ from the manifest, never chosen
+    #    here; params stay read-only).
     network, rmt_cfg, carry_mode = policy_adapter.build_network_from_manifest(
-        modules, manifest, entry["action_count"])
-    cfg = manifest["config"]
+        modules, manifest, entry["action_count"], driver_cfg)
     policy = policy_adapter.CC2RMT16Policy(
         modules, network, params, rmt_cfg, carry_mode,
-        cfg["window_mem"], cfg["num_heads"], cfg["num_layers"], cfg["embed_size"])
+        driver_cfg["window_mem"], driver_cfg["num_heads"],
+        driver_cfg["num_layers"], driver_cfg["embed_size"])
     # 5. Re-verify BOTH frozen bank identities before any real evaluation.
     frozen_bindings = {sc: mat.verify_frozen_bank_identity(sc) for sc in (FRONT, BACK)}
     rec_before = ckpt.make_cc2_checkpoint_record(
         params, manifest, file_sha, entry["observation_shape"],
         "canonical_craftax_action_set",
-        checkpoint_ref=os.path.abspath(checkpoint_path))
+        checkpoint_ref=os.path.abspath(checkpoint_path),
+        driver_source_sha256=driver_sha)
 
     # 6. Rollouts (params read-only; fresh real RMT+GTrXL state per episode).
     records_by_scenario, results_by_scenario = {}, {}
@@ -554,6 +584,10 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
     require(psha == mat.FROZEN_PREDICATE_CODE_SHA256,
             "FAIL CLOSED: predicate code SHA %s != frozen %s"
             % (psha[:16], mat.FROZEN_PREDICATE_CODE_SHA256[:16]))
+    # REAL process provenance (NEG29): end time + successful exit code, stamped after
+    # every rollout / NEG23 check passed and before the certificates are built.
+    run_end = _dt.datetime.now(_dt.timezone.utc)
+    run_exit_code = 0
     certs = {}
     for sc in scenarios:
         scaffolded = sc in (FRONT, BACK)
@@ -573,6 +607,12 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
             "cc2_policy_source_sha256": src_id["cc2_policy_source_sha256"],
             "evaluator_source_sha256": evaluator_sha,
             "predicate_code_sha256": psha,
+            "driver_source_sha256": driver_sha,
+            "process_pid": process_pid,
+            "process_argv": process_argv,
+            "run_start_utc": run_start.isoformat(timespec="seconds"),
+            "run_end_utc": run_end.isoformat(timespec="seconds"),
+            "run_exit_code": run_exit_code,
             "observation_shape": list(entry["observation_shape"]),
             "action_dim": int(entry["action_count"]),
             "params_unchanged": True,
@@ -711,6 +751,24 @@ def self_test() -> int:
     except (ckpt.FailClosed, FailClosed):
         check("NEG23_changed_params_rejected", True)
 
+    # ANTI-POLLUTION GATE (handover §7; pure, any host): run_interface_smoke must FAIL
+    # CLOSED while RMT16_POSTJAX_BINDING_SELFTEST is set (the hook makes the CC2 driver
+    # exit rc=0 before training = false success). The gate fires before any JAX import.
+    _hook = "RMT16_POSTJAX_BINDING_SELFTEST"
+    _prev = os.environ.get(_hook)
+    os.environ[_hook] = "1"
+    try:
+        try:
+            run_interface_smoke("<none>", "<none>", "all", "<none>")
+            check("selftest_hook_gate_fails_closed", False)
+        except FailClosed:
+            check("selftest_hook_gate_fails_closed", True)
+    finally:
+        if _prev is None:
+            os.environ.pop(_hook, None)
+        else:
+            os.environ[_hook] = _prev
+
     # REAL interface chain (JAX host only): canonical env + FRONT reset equivalence +
     # short NOOP rollouts through the record/classify/metrics chain (CHAIN check only).
     if ser.have_jax_craftax():
@@ -771,21 +829,25 @@ def main(argv=None) -> int:
         out = _opt("--out")
         if not checkpoint or not out:
             print("usage: tier3_evaluator.py --checkpoint <full_state.pkl> "
-                  "[--cc2_snapshot_root <PATH>] --scenario {front_l2,back_l2,full,all} "
+                  "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>] "
+                  "--scenario {front_l2,back_l2,full,all} "
                   "--out <DIR> --interface-smoke [--episodes 2] [--max-steps 32]")
             return 3
         import tier3_cc2_policy_adapter as policy_adapter
         root = _opt("--cc2_snapshot_root", policy_adapter._default_snapshot_root())
+        driver_src = _opt("--cc2_driver_source", policy_adapter.DEFAULT_DRIVER_SOURCE)
         summary = run_interface_smoke(
             checkpoint, root, _opt("--scenario", "all"), out,
             episodes=int(_opt("--episodes", "2")),
-            max_steps=int(_opt("--max-steps", "32")))
+            max_steps=int(_opt("--max-steps", "32")),
+            driver_source=driver_src)
         print("TIER3_INTERFACE_SMOKE_DONE (run_class=INTERFACE_SMOKE; "
               "performance_claim_authorized=false; params_unchanged=%s; out=%s)"
               % (summary["params_unchanged"], summary["out_dir"]))
         return 0
     print("usage: tier3_evaluator.py --self-test | --checkpoint <full_state.pkl> "
-          "[--cc2_snapshot_root <PATH>] --scenario {front_l2,back_l2,full,all} "
+          "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>] "
+          "--scenario {front_l2,back_l2,full,all} "
           "--out <DIR> --interface-smoke [--episodes N] [--max-steps M]")
     return 3
 

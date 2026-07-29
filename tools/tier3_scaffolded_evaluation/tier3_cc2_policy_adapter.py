@@ -22,6 +22,13 @@ carry_mode is read from the checkpoint manifest — never chosen here.
 Source identity: every required CC2 .py is hashed LF-normalized; the aggregate
 ``cc2_policy_source_sha256`` is bound into the evaluation certificate. A module that
 resolves from anywhere but the declared snapshot root -> fail closed.
+
+Config recovery: REAL CC2 manifests carry ``config == {}`` (Cfg is a class-attributes
+class, so ``vars(Cfg())`` is empty by design — verified on all 26 real checkpoints).
+The network hyperparameters are recovered by an AST-LITERAL parse of the SHA-bound
+driver source (``FROZEN_DRIVER_FILE_SHA256``) — never executed, never guessed, never
+defaulted — and cross-checked against any non-empty manifest config the pickle does
+carry (a clash fails closed).
 """
 from __future__ import annotations
 
@@ -47,11 +54,30 @@ REQUIRED_SYMBOLS = {
     "rmt16_memory": ("RMT16Config", "rmt16_init"),
     "rmt_memory_anchor": ("make_apply_eval_rmt", "make_update_fn", "rmt_step_forward"),
 }
-# manifest["config"] fields required to reconstruct the network EXACTLY as CC2 built it.
-REQUIRED_MANIFEST_CONFIG_FIELDS = (
+# Config fields required to reconstruct the network EXACTLY as CC2 built it.
+#
+# REAL-CC2 DISCOVERY (26 real checkpoints audited, both arms, steps 0..98304): on
+# every real full_state.pkl, manifest["config"] == {} — CC2's Cfg (driver lines
+# 303-309) is a class-ATTRIBUTES config class, so vars(Cfg()) is empty BY DESIGN and
+# save_ckpt writes config={k: v for k, v in vars(cfg).items()} == {}. The network
+# hyperparameters are therefore FROZEN IN THE DRIVER SOURCE, not the pickle. CC4
+# recovers them by an AST-LITERAL parse of the SHA-bound driver source (never
+# executing it, never guessing, never defaulting): see load_cfg_from_driver_source().
+REQUIRED_CFG_FIELDS = (
     "activation", "embed_size", "hidden_layers", "num_heads", "qkv_features",
     "num_layers", "gating", "gating_bias", "rmt_num_tokens", "window_mem", "num_steps")
+REQUIRED_MANIFEST_CONFIG_FIELDS = REQUIRED_CFG_FIELDS      # legacy alias
 CARRY_MODES = ("persistent", "reset128")
+
+# SHA-bound CC2 driver source: the ONLY authoritative place the frozen network
+# hyperparameters live (five-way identical LF-SHA: handover §3 / run-completion
+# addendum / launch report / local _cc2_stage copy / server deploy). AST-parsing
+# this file's ``class Cfg`` is how CC4 rebuilds the network WITHOUT guessing.
+FROZEN_DRIVER_FILE_SHA256 = (
+    "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc")
+DEFAULT_DRIVER_SOURCE = (
+    "D:/Projects/dicode-codex-director/orchestration/control/_cc2_stage/"
+    "train_rmt16_p2replay.py")
 
 
 class FailClosed(Exception):
@@ -123,24 +149,114 @@ def load_cc2_policy_modules(snapshot_root: str):
 
 
 # ---------------------------------------------------------------------------
-# Network / RMT config reconstruction FROM the checkpoint manifest
+# Network / RMT config reconstruction FROM the SHA-bound driver source
 # ---------------------------------------------------------------------------
-def build_network_from_manifest(modules: dict, manifest: dict, action_dim: int):
-    """Reconstruct ActorCriticTransformerRMT16 + RMT16Config EXACTLY as CC2 built them
-    (train_rmt16_p2replay.py lines 155-159 + 85-86), from manifest['config'].
-    Returns (network, rmt_cfg, carry_mode). Any missing field / bad carry_mode -> fail
-    closed. Nothing is trained or initialized here (params come from the checkpoint)."""
-    require(isinstance(manifest, dict) and isinstance(manifest.get("config"), dict),
-            "FAIL CLOSED: checkpoint manifest missing 'config' dict (needed to rebuild "
-            "the CC2 network exactly)")
-    cfg = manifest["config"]
-    missing = [f for f in REQUIRED_MANIFEST_CONFIG_FIELDS if f not in cfg]
+def load_cfg_from_driver_source(driver_path: str = DEFAULT_DRIVER_SOURCE,
+                                expected_sha256: str = FROZEN_DRIVER_FILE_SHA256):
+    """Recover the frozen CC2 network hyperparameters from the driver SOURCE.
+
+    REAL CC2 checkpoints carry manifest["config"] == {} (Cfg is a class-attributes
+    class; vars(Cfg()) is empty by design — verified on all 26 audited real
+    checkpoints). The hyperparameters live in the driver source's ``class Cfg``
+    (train_rmt16_p2replay.py lines 303-309). This function:
+
+      * requires the driver file to exist and its LF-normalized SHA256 to equal
+        ``expected_sha256`` (fail closed — a moved/edited driver is never trusted);
+      * ast.parse-es the source (NEVER executes it) and collects every class-level
+        literal assignment in ``class Cfg`` via ast.literal_eval (a non-literal
+        value fails closed — no guessing, no defaults);
+      * requires ALL REQUIRED_CFG_FIELDS to be present.
+
+    Returns (cfg_dict, driver_sha256). Pure stdlib — runs on ANY interpreter.
+    """
+    require(driver_path and os.path.isfile(driver_path),
+            "FAIL CLOSED: CC2 driver source missing (%r) — cannot rebuild the network "
+            "without the frozen hyperparameters (no guessing, no defaults)" % driver_path)
+    driver_sha = _sha256_lf_file(driver_path)
+    require(expected_sha256 is None or driver_sha == expected_sha256,
+            "FAIL CLOSED: CC2 driver source SHA256 %s != frozen/expected %s (a moved or "
+            "edited driver is never trusted)"
+            % (driver_sha[:16], str(expected_sha256)[:16]))
+    import ast
+    with open(driver_path, "r", encoding="utf-8") as fh:
+        src = fh.read()
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as exc:
+        raise FailClosed("FAIL CLOSED: CC2 driver source %r does not parse: %r"
+                         % (driver_path, exc))
+    cfg_cls = None
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "Cfg":
+            cfg_cls = node
+            break
+    require(cfg_cls is not None,
+            "FAIL CLOSED: CC2 driver source %r defines no top-level 'class Cfg'"
+            % driver_path)
+    cfg = {}
+    for stmt in cfg_cls.body:
+        if not isinstance(stmt, ast.Assign):
+            continue
+        if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+            continue
+        key = stmt.targets[0].id
+        try:
+            cfg[key] = ast.literal_eval(stmt.value)
+        except (ValueError, SyntaxError):
+            raise FailClosed(
+                "FAIL CLOSED: Cfg.%s in %r is not a literal constant (no guessing, no "
+                "defaults — the driver source must carry plain literals)"
+                % (key, driver_path))
+    missing = [f for f in REQUIRED_CFG_FIELDS if f not in cfg]
     require(not missing,
-            "FAIL CLOSED: checkpoint manifest config missing field(s) %s; cannot rebuild "
-            "the CC2 network exactly" % missing)
+            "FAIL CLOSED: driver source Cfg missing field(s) %s; cannot rebuild the CC2 "
+            "network exactly" % missing)
+    return cfg, driver_sha
+
+
+def build_network_from_manifest(modules: dict, manifest: dict, action_dim: int,
+                                cfg: dict):
+    """Reconstruct ActorCriticTransformerRMT16 + RMT16Config EXACTLY as CC2 built them
+    (train_rmt16_p2replay.py lines 712-716 + 320-321).
+
+    ``cfg`` comes from load_cfg_from_driver_source() (SHA-bound driver Cfg) — NOT from
+    the pickle, because real manifests carry config={} by design. Consistency gates
+    (fail closed):
+
+      * every REQUIRED_CFG_FIELDS field present in ``cfg``;
+      * carry_mode read from the manifest, in CARRY_MODES;
+      * a NON-EMPTY manifest["config"] must agree with the driver Cfg on every key it
+        carries ({} is the real observed state and passes; a clash is a tampered /
+        foreign checkpoint);
+      * manifest["phase4a_v2"]["segment_len"], when present, must equal cfg num_steps.
+
+    Returns (network, rmt_cfg, carry_mode). Nothing is trained or initialized here
+    (params come from the checkpoint)."""
+    require(isinstance(cfg, dict),
+            "FAIL CLOSED: build_network_from_manifest needs the driver-source cfg dict")
+    missing = [f for f in REQUIRED_CFG_FIELDS if f not in cfg]
+    require(not missing,
+            "FAIL CLOSED: driver cfg missing field(s) %s; cannot rebuild the CC2 network "
+            "exactly" % missing)
+    require(isinstance(manifest, dict),
+            "FAIL CLOSED: checkpoint manifest is not a dict")
     carry_mode = manifest.get("carry_mode")
     require(carry_mode in CARRY_MODES,
             "FAIL CLOSED: manifest carry_mode %r not in %s" % (carry_mode, CARRY_MODES))
+    mcfg = manifest.get("config")
+    if mcfg:
+        require(isinstance(mcfg, dict),
+                "FAIL CLOSED: manifest['config'] is present but not a dict")
+        clashes = {k: (mcfg[k], cfg[k]) for k in mcfg if k in cfg and mcfg[k] != cfg[k]}
+        require(not clashes,
+                "FAIL CLOSED: manifest config disagrees with the SHA-bound driver Cfg "
+                "(key: (manifest, driver)) %s — foreign / tampered checkpoint" % clashes)
+    p4 = manifest.get("phase4a_v2")
+    if isinstance(p4, dict) and p4.get("segment_len") is not None:
+        require(int(p4["segment_len"]) == int(cfg["num_steps"]),
+                "FAIL CLOSED: manifest phase4a_v2.segment_len %r != driver cfg num_steps "
+                "%r (RMT segment geometry mismatch)"
+                % (p4["segment_len"], cfg["num_steps"]))
     network = modules["network_rmt16"].ActorCriticTransformerRMT16(
         action_dim=int(action_dim), activation=cfg["activation"],
         encoder_size=cfg["embed_size"], hidden_layers=cfg["hidden_layers"],
@@ -222,14 +338,18 @@ def _default_snapshot_root() -> str:
 
 
 def _synthetic_manifest():
-    """CC2's frozen bakeoff+P2 config values (train Cfg, lines 68-75) as a manifest —
-    TEST-ONLY, clearly synthetic; a real run reads this from the checkpoint."""
+    """A manifest shaped EXACTLY like a REAL direct-98304 checkpoint manifest — TEST
+    ONLY, clearly synthetic. config={} mirrors reality (CC2 Cfg is a class-attributes
+    class, so save_ckpt writes an empty config dict BY DESIGN — verified on all 26
+    real checkpoints); replay_mode / phase4a_v2 provenance as CC2 stamps them. A real
+    run reads this from the checkpoint; hyperparameters come from the SHA-bound driver
+    source (load_cfg_from_driver_source), never from the pickle."""
     return {"params_sha256": "0" * 64, "step": -1, "arm": "RMT16-SYNTHETIC-SELFTEST",
-            "carry_mode": "persistent",
-            "config": {"activation": "relu", "embed_size": 256, "hidden_layers": 256,
-                       "num_heads": 8, "qkv_features": 256, "num_layers": 2,
-                       "gating": True, "gating_bias": 2.0, "window_mem": 128,
-                       "num_steps": 128, "rmt_num_tokens": 16}}
+            "carry_mode": "persistent", "replay_mode": "original_vtrace", "seed": 42,
+            "config": {},
+            "phase4a_v2": {"run_class": "selftest", "sequence_length": 129,
+                           "segment_len": 128, "crosses_boundary": True,
+                           "replay_mode": "original_vtrace"}}
 
 
 def self_test() -> int:
@@ -256,6 +376,33 @@ def self_test() -> int:
     except FailClosed:
         check("missing_cc2_files_rejected", True)
 
+    # Driver-source Cfg recovery is PURE STDLIB — runs on ANY interpreter. This is the
+    # ONLY place the frozen network hyperparameters live (real config={} by design).
+    cfg, driver_sha = load_cfg_from_driver_source(DEFAULT_DRIVER_SOURCE,
+                                                  FROZEN_DRIVER_FILE_SHA256)
+    check("driver_cfg_complete",
+          driver_sha == FROZEN_DRIVER_FILE_SHA256
+          and all(f in cfg for f in REQUIRED_CFG_FIELDS)
+          and cfg["activation"] == "relu" and cfg["embed_size"] == 256
+          and cfg["hidden_layers"] == 256 and cfg["num_heads"] == 8
+          and cfg["qkv_features"] == 256 and cfg["num_layers"] == 2
+          and cfg["gating"] is True and cfg["gating_bias"] == 2.0
+          and cfg["rmt_num_tokens"] == 16 and cfg["window_mem"] == 128
+          and cfg["num_steps"] == 128)
+    # A driver source whose SHA != the frozen/expected value fails closed.
+    try:
+        load_cfg_from_driver_source(DEFAULT_DRIVER_SOURCE, "0" * 64)
+        check("driver_wrong_expected_sha_rejected", False)
+    except FailClosed:
+        check("driver_wrong_expected_sha_rejected", True)
+    # A missing driver source fails closed (no guessing, no defaults).
+    try:
+        load_cfg_from_driver_source(os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "no_such_driver.py"))
+        check("driver_missing_source_rejected", False)
+    except FailClosed:
+        check("driver_missing_source_rejected", True)
+
     if ser.have_jax():
         import numpy as np
         import jax
@@ -264,26 +411,39 @@ def self_test() -> int:
         check("modules_loaded_from_root",
               set(modules.keys()) == set(REQUIRED_SYMBOLS.keys()))
         manifest = _synthetic_manifest()
-        network, rmt_cfg, carry = build_network_from_manifest(modules, manifest, 43)
+        check("synthetic_manifest_config_empty", manifest["config"] == {})
+        network, rmt_cfg, carry = build_network_from_manifest(modules, manifest, 43, cfg)
         check("network_built_carry_persistent", carry == "persistent")
-        # manifest config missing a field -> fail closed
+        # a NON-EMPTY manifest config clashing with the driver Cfg -> fail closed
         bad = _synthetic_manifest()
-        del bad["config"]["window_mem"]
+        bad["config"] = {"embed_size": 999}
         try:
-            build_network_from_manifest(modules, bad, 43)
-            check("missing_config_field_rejected", False)
+            build_network_from_manifest(modules, bad, 43, cfg)
+            check("config_driver_clash_rejected", False)
         except FailClosed:
-            check("missing_config_field_rejected", True)
+            check("config_driver_clash_rejected", True)
+        # a non-empty config that AGREES with the driver Cfg is accepted
+        agree = _synthetic_manifest()
+        agree["config"] = {"embed_size": cfg["embed_size"], "num_heads": cfg["num_heads"]}
+        build_network_from_manifest(modules, agree, 43, cfg)
+        check("config_driver_agreement_accepted", True)
+        # phase4a_v2 segment_len mismatching the driver cfg -> fail closed
+        badseg = _synthetic_manifest()
+        badseg["phase4a_v2"] = {"segment_len": 64}
+        try:
+            build_network_from_manifest(modules, badseg, 43, cfg)
+            check("phase4a_v2_segment_len_mismatch_rejected", False)
+        except FailClosed:
+            check("phase4a_v2_segment_len_mismatch_rejected", True)
         # bad carry_mode -> fail closed
         badc = _synthetic_manifest()
         badc["carry_mode"] = "sideways"
         try:
-            build_network_from_manifest(modules, badc, 43)
+            build_network_from_manifest(modules, badc, 43, cfg)
             check("bad_carry_mode_rejected", False)
         except FailClosed:
             check("bad_carry_mode_rejected", True)
         # RANDOM-INIT params via CC2's own init_all (NOT training; self-test only).
-        cfg = manifest["config"]
         rng = jax.random.PRNGKey(0)
         full = network.init(
             rng,

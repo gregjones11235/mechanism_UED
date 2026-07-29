@@ -163,16 +163,25 @@ def load_checkpoint_readonly(path: str):
 def load_full_params_readonly(path: str):
     """Load a CC2 ``full_state.pkl`` checkpoint READ-ONLY (REAL CC2 format).
 
-    CC2 writer contract (train_rmt16_p2replay.py ``save_ckpt``, lines 219-226)::
+    CC2 writer contract (train_rmt16_p2replay.py ``save_ckpt``, lines 940-977)::
 
         pickle.dump({"params": _to_np(params),          # DIRECT pytree, numpy leaves
                      "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
-                                  "carry_mode": args.carry_mode, "replay": args.replay,
-                                  ..., "config": {...}, "tag": tag}}, f, protocol=4)
+                                  "carry_mode": args.carry_mode,
+                                  "replay_mode": REPLAY_MODE,
+                                  "gpu_uuid": args.gpu_uuid, "seed": args.seed,
+                                  "config": {k: v for k, v in vars(cfg).items()},
+                                  "phase4a_v2": _phase4a_v2_manifest_fields(),
+                                  "tag": tag}}, f, protocol=4)
 
     i.e. ``d["params"]`` is the params pytree ITSELF (inner/apply convention, numpy
     leaves via ``tree_map(np.asarray, ...)``) — NOT a ``(leaves, treedef)`` pair.
     ``params = d["params"]`` (converted leaf-wise to jnp for apply).
+
+    NOTE (verified on all 26 real checkpoints): ``manifest["config"] == {}`` on every
+    real pickle — Cfg is a class-ATTRIBUTES config class, so ``vars(Cfg())`` is empty
+    BY DESIGN. The network hyperparameters are frozen in the driver SOURCE (see the
+    policy adapter's ``load_cfg_from_driver_source``), NOT in the pickle.
 
     The recomputed params SHA uses CC2's EXACT algorithm (``cc2_params_sha256``) and
     MUST equal ``manifest["params_sha256"]`` (NEG21 — fail closed on mismatch).
@@ -208,9 +217,18 @@ def load_full_params_readonly(path: str):
 
 
 def make_cc2_checkpoint_record(params, manifest, file_sha256, observation_shape,
-                               action_space_id, checkpoint_ref="<cc2_full_state.pkl>"):
+                               action_space_id, checkpoint_ref="<cc2_full_state.pkl>",
+                               driver_source_sha256=None):
     """READ-ONLY identity record for a REAL CC2 checkpoint. params_sha256 uses the
-    CC2 algorithm (== manifest declaration, verified at load); NEVER trainable."""
+    CC2 algorithm (== manifest declaration, verified at load); NEVER trainable.
+
+    Provenance keys mirror the REAL save_ckpt manifest: ``replay_mode`` (falls back
+    to the legacy ``replay`` key), ``run_class`` from ``phase4a_v2`` (e.g.
+    long_run_98304), and ``manifest_config_empty`` records the observed config={}
+    (Cfg is class-attributes — hyperparameters come from the SHA-bound driver source,
+    bound separately via ``driver_source_sha256``)."""
+    p4 = manifest.get("phase4a_v2")
+    run_class = p4.get("run_class") if isinstance(p4, dict) else None
     return {
         "schema": SCHEMA,
         "adapter_version": ADAPTER_VERSION,
@@ -221,6 +239,10 @@ def make_cc2_checkpoint_record(params, manifest, file_sha256, observation_shape,
         "checkpoint_file_sha256": file_sha256,
         "checkpoint_step": manifest.get("step"),
         "carry_mode": manifest.get("carry_mode"),
+        "replay_mode": manifest.get("replay_mode", manifest.get("replay")),
+        "run_class": run_class,
+        "driver_source_sha256": driver_source_sha256,
+        "manifest_config_empty": not bool(manifest.get("config")),
         "observation_shape": list(observation_shape),
         "action_space_id": action_space_id,
         "observation_schema": "canonical_craftax_symbolic",
@@ -302,19 +324,27 @@ def self_test() -> int:
                 pickle.dump({"params": cc2_params,
                              "manifest": {"params_sha256": sha_cc2, "step": 4096,
                                           "arm": "RMT16-Selftest", "carry_mode": "persistent",
+                                          "replay_mode": "original_vtrace", "seed": 42,
+                                          "phase4a_v2": {"run_class": "selftest",
+                                                         "segment_len": 128},
                                           "config": {}}}, fh, protocol=4)
             lp, lsha, lman, fsha = load_full_params_readonly(cp)
             check("cc2_format_roundtrip",
                   lsha == sha_cc2 and lman["step"] == 4096
                   and lman["carry_mode"] == "persistent" and len(fsha) == 64)
             rec = make_cc2_checkpoint_record(lp, lman, fsha, (8335,),
-                                             "canonical_craftax_action_set")
+                                             "canonical_craftax_action_set",
+                                             driver_source_sha256="1" * 64)
             check("cc2_record_binding",
                   rec["params_sha256"] == sha_cc2
                   and rec["declared_params_sha256"] == sha_cc2
                   and rec["checkpoint_file_sha256"] == fsha
                   and rec["checkpoint_step"] == 4096
                   and rec["carry_mode"] == "persistent"
+                  and rec["replay_mode"] == "original_vtrace"
+                  and rec["run_class"] == "selftest"
+                  and rec["driver_source_sha256"] == "1" * 64
+                  and rec["manifest_config_empty"] is True
                   and rec["trainable"] is False and rec["writable"] is False)
             # NEG21 on the REAL format: tampered declared SHA -> fail closed.
             with open(cp, "wb") as fh:

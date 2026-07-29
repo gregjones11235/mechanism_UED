@@ -2,7 +2,7 @@
   "cert_version": "tier3_evaluation_certificate/v1",
   "claims": [],
   "eval_binding": {
-    "_note": "present ONLY on certificates produced by a real evaluation run (REAL CLI); every field is an ACTUAL VALUE (NEG27 — never a hash label). 64-hex values below are documentation placeholders.",
+    "_note": "present ONLY on certificates produced by a real evaluation run (REAL CLI); every field is an ACTUAL VALUE (NEG27 — never a hash label; NEG29 — real process provenance: pid/argv/times/exit code/driver SHA). 64-hex values below are documentation placeholders.",
     "bank_kind": "FROZEN_SCAFFOLD_BANK",
     "state_bank_hash": "0000000000000000000000000000000000000000000000000000000000000000",
     "state_payload_hashes": [
@@ -17,6 +17,12 @@
     "cc2_policy_source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "evaluator_source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "process_pid": 12345,
+    "process_argv": ["python", "tier3_evaluator.py", "--interface-smoke"],
+    "run_start_utc": "2026-07-30T00:00:00+00:00",
+    "run_end_utc": "2026-07-30T00:05:00+00:00",
+    "run_exit_code": 0,
     "observation_shape": [8335],
     "action_dim": 43,
     "params_unchanged": true,
