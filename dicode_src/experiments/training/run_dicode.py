@@ -315,6 +315,15 @@ def main(config: DictConfig):
                 new_task_ids = _kept
             except Exception as e:
                 print(f"  [Preflight] ERROR (kept all, gate inactive!): {e}")
+        _bb = bool(config.get("skill_preflight", {}).get("batch_backfill", False))
+        if _bb:
+            _shortfall = (target_batch_size - 1) - len(new_task_ids) - len(sampled_from_archive)
+            if _shortfall > 0:
+                _extra = sample_tasks_for_training(gen_manager, config, _shortfall)
+                _seen = set(sampled_from_archive) | set(new_task_ids)
+                _add = [t for t in _extra if t not in _seen]
+                sampled_from_archive = sampled_from_archive + _add
+                print(f"  [batch-fill] ON: +{len(_add)}/{_shortfall} archive top-up after preflight")
         sampled_task_ids = new_task_ids + sampled_from_archive
 
         if not sampled_task_ids:
