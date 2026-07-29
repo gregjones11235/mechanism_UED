@@ -40,7 +40,7 @@ FAILCLOSED = (audit.FailClosed, pred.FailClosed, ser.FailClosed, builder.FailClo
               mat.FailClosed, ckpt.FailClosed, metrics.FailClosed, taxonomy.FailClosed,
               evaluator.FailClosed, certmod.FailClosed, ser.v3mat.FailClosed)
 
-KOBOLD = mat.SYNTHETIC_KOBOLD_TYPE_ID   # synthetic test type_id (real one is BLOCKED)
+KOBOLD = mat.SYNTHETIC_KOBOLD_TYPE_ID   # == resolved craftax==1.4.5 binding (RANGED type_id 3)
 
 
 def rejects(fn) -> bool:
@@ -347,6 +347,11 @@ def self_test() -> int:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    # On a JAX host the REAL materializer path mints live EnvStates, which imports
+    # minicraftax from the audited source tree (repo-relative, no absolute paths).
+    _src = str(audit.repo_root() / "dicode_src" / "src")
+    if _src not in sys.path:
+        sys.path.insert(0, _src)
     if "--json" in argv:
         results, n_fail = run_all()
         print(json.dumps({"fail": n_fail, "results": results,

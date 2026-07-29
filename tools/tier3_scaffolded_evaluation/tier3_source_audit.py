@@ -290,18 +290,108 @@ FRONT_FLOOR = 2          # canonical entry floor (dark corridor)
 BACK_FLOOR = 3           # kobold floor (boss/target area)
 CORRIDOR_EXIT_FLOOR = 3  # reaching floor 3 == exiting the floor-2 dark corridor
 
-# Things that genuinely require a craftax==1.4.5 host to bind exactly. These are
-# NOT guessed; downstream they surface as BLOCKED_SOURCE_SEMANTICS/BLOCKED_ENVIRONMENT.
+# Runtime-resolved craftax==1.4.5 bindings. Values below were resolved SYMBOLICALLY
+# from the installed craftax constants on this host (dedicated venv, jax==0.4.30 +
+# craftax==1.4.5, CPU) and cross-checked against live materialization (see the
+# resolution functions further down — they re-derive every integer from craftax
+# symbols at call time and fail closed if the host lacks craftax). Nothing here is
+# hard-coded into predicates: predicates still receive the Kobold type_id by
+# injection, and the resolvers below are the single injection source.
+CRAFTAX_RUNTIME_BINDINGS = {
+    "resolution_host": "jax==0.4.30 + craftax==1.4.5 (CPU), D:/cc4tmp/.tier3_ft_venv",
+    "achievement_count": 67,                    # len(craftax.craftax.constants.Achievement)
+    "defeat_kobold_achievement_index": 41,      # Achievement.DEFEAT_KOBOLD.value
+    "action_count": 43,                         # len(Action) == canonical discrete action space
+    "item_type": {"NONE": 0, "LADDER_DOWN": 2, "LADDER_UP": 3},
+    "mob_type": {"PASSIVE": 0, "MELEE": 1, "RANGED": 2, "PROJECTILE": 3},
+    # Kobold identity (previously BLOCKED_SOURCE_SEMANTICS, now RESOLVED):
+    #   Kobold is a RANGED-category mob with ranged type_id 3.
+    #   Proof: MOB_ACHIEVEMENT_MAP[MobType.RANGED.value, 3] == DEFEAT_KOBOLD (41),
+    #   and floor-3 natural ranged mob mapping is ranged type 3; MeleeMobType does
+    #   NOT exist in craftax 1.4.5 constants (earlier melee assumption was wrong).
+    "kobold": {"category": "ranged", "mob_type_value": 2, "type_id": 3},
+    # Canonical Kobold HP = MOB_TYPE_HEALTH_MAPPING[3, MobType.RANGED.value] = 8.0
+    # (rows=type_id, cols=MobType; spawn multiplies by task.mob_health_multiplier=1.0).
+    "kobold_canonical_max_health": 8.0,
+}
+
+# Residual items that remain opaque/by-design unenumerated (they are serialized
+# OPAQUELY by the V3 encoder, never re-derived field-by-field).
 CRAFTAX_DEPENDENT_BINDINGS = [
-    "Achievement.DEFEAT_KOBOLD integer index (achievements array is len(Achievement); index from craftax.craftax.constants.Achievement)",
-    "MeleeMobType / MobType value for KOBOLD (add_mob type_id; from craftax.craftax.constants)",
-    "ItemType.NONE integer value (used to remove the floor-2 up-ladder)",
-    "BlockType walkable set (for graph-distance traversability: PATH vs WALL vs DARKNESS vs ...)",
-    "craftax.Inventory full field list (nested in EnvState.inventory)",
-    "craftax.Mobs is imported from craftax.craftax.craftax_state (field list audited via WorldBuilder usage)",
-    "craftax.craftax.game_logic.get_distance_map (real distance-map primitive)",
-    "static_params.num_levels / map_size exact values",
+    "craftax.Inventory full field list (nested in EnvState.inventory; serialized opaquely by the V3 encoder)",
+    "craftax.Mobs full field list (imported from craftax.craftax.craftax_state; serialized opaquely)",
 ]
+
+
+def _require_craftax():
+    import importlib.util
+    if importlib.util.find_spec("craftax") is None:
+        raise FailClosed(
+            "FAIL CLOSED (BLOCKED_SOURCE_SEMANTICS): craftax not installed on this "
+            "interpreter; craftax enum bindings cannot be resolved here. Use the "
+            "authorized JAX+craftax==1.4.5 host.")
+
+
+def resolve_kobold_binding() -> dict:
+    """Symbolically resolve the Kobold binding from craftax constants (no hard-coding).
+
+    Scans MOB_ACHIEVEMENT_MAP for the UNIQUE ranged-class mob type_id whose defeat
+    achievement is Achievement.DEFEAT_KOBOLD, and reads its canonical max HP from
+    MOB_TYPE_HEALTH_MAPPING. Any ambiguity / absence -> FailClosed.
+    """
+    _require_craftax()
+    import numpy as np
+    from craftax.craftax.constants import (
+        Achievement, MobType, MOB_ACHIEVEMENT_MAP, MOB_TYPE_HEALTH_MAPPING)
+    dk = int(Achievement.DEFEAT_KOBOLD.value)
+    ranged_row = np.asarray(MOB_ACHIEVEMENT_MAP)[int(MobType.RANGED.value)]
+    hits = [int(t) for t in range(ranged_row.shape[0]) if int(ranged_row[t]) == dk]
+    if len(hits) != 1:
+        raise FailClosed(
+            "FAIL CLOSED (BLOCKED_SOURCE_SEMANTICS): expected exactly one ranged mob "
+            "type_id mapping to DEFEAT_KOBOLD(%d); got %r" % (dk, hits))
+    type_id = hits[0]
+    max_hp = float(np.asarray(MOB_TYPE_HEALTH_MAPPING)[type_id, int(MobType.RANGED.value)])
+    return {
+        "category": "ranged",
+        "mob_type_value": int(MobType.RANGED.value),
+        "type_id": type_id,
+        "defeat_kobold_achievement_index": dk,
+        "achievement_count": len(Achievement),
+        "canonical_max_health": max_hp,
+        "resolution": "MOB_ACHIEVEMENT_MAP[MobType.RANGED, type_id]==DEFEAT_KOBOLD; "
+                      "MOB_TYPE_HEALTH_MAPPING[type_id, MobType.RANGED]",
+    }
+
+
+def resolve_action_count() -> int:
+    _require_craftax()
+    from craftax.craftax.constants import Action
+    return len(Action)
+
+
+def resolve_walkable_blocktype_values() -> list:
+    """Resolve the land-creature walkable BlockType values from craftax sources.
+
+    Mirrors craftax's own movement predicate (game_logic.move_player ->
+    game_logic_utils.is_position_in_bounds_not_in_mob_not_colliding with
+    COLLISION_LAND_CREATURE=[False, True, True]): a tile is walkable iff it is NOT a
+    SOLID_BLOCK_MAPPING block and NOT WATER and NOT LAVA. Mob occupancy and bounds
+    are dynamic and handled separately by the evaluator's BFS (terrain mask only).
+    """
+    _require_craftax()
+    import numpy as np
+    from craftax.craftax.constants import SOLID_BLOCK_MAPPING, BlockType
+    solid = np.asarray(SOLID_BLOCK_MAPPING)
+    out = []
+    for b in BlockType:
+        v = int(b.value)
+        if bool(solid[v]):
+            continue
+        if b.name in ("WATER", "LAVA"):
+            continue
+        out.append(v)
+    return sorted(out)
 
 
 def resolve_source_path(role: str) -> Path:
@@ -362,6 +452,7 @@ def source_identity_doc() -> dict:
         "mobs_fields": [n for n, _ in MOBS_FIELDS],
         "legal_builder_api": LEGAL_BUILDER_API,
         "canonical_task_facts": CANONICAL_TASK_FACTS,
+        "craftax_runtime_bindings": CRAFTAX_RUNTIME_BINDINGS,
         "craftax_dependent_bindings": CRAFTAX_DEPENDENT_BINDINGS,
         "boundary_floors": {
             "FRONT_FLOOR": FRONT_FLOOR,
@@ -386,10 +477,22 @@ def _self_test() -> int:
     # EnvState must contain the fields the predicates rely on.
     names = {n for n, _ in ENVSTATE_TOP_FIELDS}
     for required in ["player_level", "player_health", "player_position", "achievements",
-                     "melee_mobs", "map", "item_map", "down_ladders", "up_ladders",
-                     "monsters_killed", "timestep", "inventory", "boss_progress"]:
+                     "melee_mobs", "ranged_mobs", "map", "item_map", "down_ladders",
+                     "up_ladders", "monsters_killed", "timestep", "inventory",
+                     "boss_progress"]:
         if required not in names:
             problems.append(f"EnvState missing required field: {required}")
+    # On a craftax host, re-derive the Kobold binding symbolically and require it to
+    # equal the frozen runtime binding (guards against silent craftax-version drift).
+    import importlib.util
+    if importlib.util.find_spec("craftax") is not None:
+        kb = resolve_kobold_binding()
+        kb_frozen = CRAFTAX_RUNTIME_BINDINGS["kobold"]
+        if (kb["category"] != kb_frozen["category"] or kb["type_id"] != kb_frozen["type_id"]
+                or kb["canonical_max_health"] != CRAFTAX_RUNTIME_BINDINGS["kobold_canonical_max_health"]
+                or kb["defeat_kobold_achievement_index"]
+                != CRAFTAX_RUNTIME_BINDINGS["defeat_kobold_achievement_index"]):
+            problems.append(f"craftax Kobold binding drifted from frozen values: {kb}")
     if problems:
         print("TIER3_SOURCE_AUDIT_SELF_TEST_FAIL")
         for p in problems:

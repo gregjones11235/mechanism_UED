@@ -104,14 +104,15 @@ def build_events():
         _event(
             "VALID_BACK_SCAFFOLD_START",
             "A valid BACK_L2 diagnostic start: on the kobold floor (player_level==3), "
-            "alive, timestep==0, a LIVE kobold present on floor 3 (melee mob with the "
-            "craftax Kobold type_id, mask=True, health>0), and DEFEAT_KOBOLD not "
-            "already achieved. The floor-2 corridor bottleneck is removed by construction.",
+            "alive, timestep==0, a LIVE kobold present on floor 3 (RANGED-category mob "
+            "with the craftax Kobold type_id — resolved binding: ranged type_id 3, "
+            "canonical max health 8.0; mask=True, health>0), and DEFEAT_KOBOLD false at "
+            "t0. The floor-2 corridor bottleneck is removed by construction.",
             ["player_level", "player_health", "timestep", "achievements",
-             "melee_mobs(position/health/mask/type_id)"],
+             "ranged_mobs(position/health/mask/type_id)"],
             "canonical_s4_task", True,
             ["player_level!=3", "player_health<=0", "timestep!=0",
-             "DEFEAT_KOBOLD already achieved (NEG15)",
+             "DEFEAT_KOBOLD already achieved at t0 (NEG15)",
              "no live Kobold on floor 3 (NEG16)"],
         ),
         _event(
@@ -122,7 +123,7 @@ def build_events():
         ),
         _event(
             "FRONT_HALF_PROGRESS",
-            "Dense NORMALIZED_CORRIDOR_PROGRESS in [0,1] computed by GRAPH_DISTANCE: "
+            "Dense GRAPH_DISTANCE_PROGRESS in [0,1] computed by GRAPH_DISTANCE: "
             "BFS shortest-path distance over an evaluator-only traversability mask "
             "derived from map[player_level]; progress = clip(1 - d(current,exit)/"
             "max(d(start,exit),1),0,1). exit = floor-2 down_ladder position. The "
@@ -136,12 +137,18 @@ def build_events():
         ),
         _event(
             "CORRIDOR_EXIT_REACHED",
-            "Frozen V1: the player has descended out of the floor-2 dark corridor, "
-            "i.e. player_level >= 3 (the kobold floor). REJECTED_ALTERNATIVE: "
+            "Per-state predicate: player_level >= 3 (the kobold floor). 收口 status = "
+            "PENDING_EQUIVALENCE_ALIAS: the FRONT_L2 PRIMARY event is the episode-level "
+            "FRONT_FLOOR_TRANSITION_REACHED (player level transitions 2 -> 3). This "
+            "per-state predicate is reported as 'corridor_exit_reached' but is NOT the "
+            "primary success metric until real-map evidence proves the floor transition "
+            "necessarily passes through the target corridor. REJECTED_ALTERNATIVE: "
             "'standing on the floor-2 down_ladder tile' (more granular, but the actual "
             "game event is the floor transition recorded by player_level).",
             ["player_level"], "canonical_s4_task", False,
-            ["missing player_level"],
+            ["missing player_level",
+             "episode transition True but corridor_exit_reached alias never True "
+             "(contradiction -> FailClosed)"],
         ),
         _event(
             "BACK_HALF_ENTERED",
@@ -151,31 +158,39 @@ def build_events():
         ),
         _event(
             "BOSS_AREA_REACHED",
-            "Frozen V1: the player is on the kobold/target floor (player_level==3); "
-            "the kobold IS the DEFEAT_KOBOLD target and lives on floor 3. "
-            "REJECTED_ALTERNATIVE: boss_progress>0 — REJECTED because boss_progress "
-            "drives the Necromancer boss-spawn mechanic (a different system), per the "
-            "audited achievement list and CANONICAL_TASK_FACTS.",
+            "Per-state predicate (vocabulary completeness only): player on the "
+            "kobold/target floor (player_level==3); the kobold IS the DEFEAT_KOBOLD "
+            "target and lives on floor 3. 收口: N/A for BACK_L2 — BACK_L2 identity is "
+            "BOSS_COMBAT_SCAFFOLDED (primary metric "
+            "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START); the BACK start is already on "
+            "floor 3 next to a live Kobold, so boss-area SEARCH is out of scope and the "
+            "metrics boss_area_reached / time_to_boss_area / BACK_BOSS_NOT_FOUND are "
+            "reported N/A, never as evidence. REJECTED_ALTERNATIVE: boss_progress>0 — "
+            "REJECTED because boss_progress drives the Necromancer boss-spawn mechanic "
+            "(a different system), per the audited achievement list and "
+            "CANONICAL_TASK_FACTS.",
             ["player_level", "boss_progress(rejected)"], "canonical_s4_task", True,
             ["missing player_level"],
         ),
         _event(
             "KOBOLD_ENGAGED",
-            "Frozen V1 per-state engagement proxy: a kobold on the player's floor has "
-            "an active attack_cooldown OR (via evaluator episode history) has taken "
-            "damage / dealt damage. Precise combat-contact is refined by the "
-            "kobold_damage_dealt / damage_received_after_engagement episode metrics.",
-            ["melee_mobs(type_id/attack_cooldown/health)", "player_level"],
+            "Frozen V1 per-state engagement proxy: a kobold (RANGED category, ranged "
+            "type_id 3) on the player's floor has an active attack_cooldown OR (via "
+            "evaluator episode history) has taken damage / dealt damage. Precise "
+            "combat-contact is refined by the kobold_damage_dealt / "
+            "damage_received_after_engagement episode metrics.",
+            ["ranged_mobs(type_id/attack_cooldown/health)", "player_level"],
             "game_mechanics", True,
-            ["missing melee_mobs", "kobold type_id unbound (needs craftax host)"],
+            ["missing ranged_mobs", "kobold type_id unbound (needs craftax host)"],
         ),
         _event(
             "DEFEAT_KOBOLD",
             "The DEFEAT_KOBOLD achievement is set: achievements[Achievement."
             "DEFEAT_KOBOLD.value] is true. The achievement NAME is resolved "
             "symbolically (the integer index is bound from craftax.craftax.constants "
-            "on a craftax==1.4.5 host; BLOCKED_ENVIRONMENT otherwise). This is the "
-            "FULL task primary metric and the BACK_L2 primary metric target.",
+            "on a craftax==1.4.5 host; resolved value 41). This is the FULL task "
+            "primary metric and the BACK_L2 primary metric "
+            "(P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START) target.",
             ["achievements"], "craftax_env", False,
             ["achievements array missing / wrong length",
              "Achievement.DEFEAT_KOBOLD index unbound (needs craftax host)"],
@@ -188,13 +203,29 @@ def build_events():
 
 
 FROZEN_V1_DEFINITIONS = {
+    "FRONT_PRIMARY_EVENT": "FRONT_FLOOR_TRANSITION_REACHED: episode-level success event — "
+        "player level transitions from FRONT_FLOOR (2) to CORRIDOR_EXIT_FLOOR (3)",
+    "FRONT_PRIMARY_METRIC": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+    "FRONT_DENSE_METRIC": "GRAPH_DISTANCE_PROGRESS",
     "FRONT_HALF_START_PREDICATE": "valid_front_scaffold_start: player_level==2 AND player_health>0 "
         "AND timestep==0 AND NOT corridor_exit_reached AND DEFEAT_KOBOLD not achieved",
     "FRONT_HALF_EXIT_PREDICATE": "corridor_exit_reached: player_level >= 3",
+    "CORRIDOR_EXIT_REACHED_STATUS": "PENDING_EQUIVALENCE_ALIAS — per-state predicate "
+        "(player_level >= 3) reported as 'corridor_exit_reached' but NOT the FRONT_L2 "
+        "primary metric until real-map evidence proves the floor transition necessarily "
+        "passes through the target corridor",
+    "BACK_IDENTITY": "BOSS_COMBAT_SCAFFOLDED — BACK_L2 evaluates combat against a live "
+        "Kobold on floor 3, NOT boss-area search",
+    "BACK_PRIMARY_METRIC": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+    "BACK_NA_METRICS": ["boss_area_reached", "time_to_boss_area", "BACK_BOSS_NOT_FOUND"],
     "BACK_HALF_START_PREDICATE": "valid_back_scaffold_start: player_level==3 AND player_health>0 AND "
-        "timestep==0 AND live_kobold_present(floor3) AND DEFEAT_KOBOLD not achieved",
-    "BOSS_AREA_PREDICATE": "boss_area_reached: player_level == 3",
-    "DEFEAT_KOBOLD_PREDICATE": "defeat_kobold: achievements[Achievement.DEFEAT_KOBOLD.value] == True",
+        "timestep==0 AND live_kobold_present(floor3, RANGED category, ranged type_id 3) AND "
+        "DEFEAT_KOBOLD false at t0",
+    "BOSS_AREA_PREDICATE": "boss_area_reached: player_level == 3 (N/A for BACK_L2; vocabulary only)",
+    "KOBOLD_BINDING": "RANGED category, ranged type_id 3, canonical max health 8.0 "
+        "(resolved from craftax==1.4.5 MOB_ACHIEVEMENT_MAP / MOB_TYPE_HEALTH_MAPPING)",
+    "DEFEAT_KOBOLD_PREDICATE": "defeat_kobold: achievements[Achievement.DEFEAT_KOBOLD.value] == True "
+        "(resolved index 41 on craftax==1.4.5)",
     "FRONT_PROGRESS_METHOD": "GRAPH_DISTANCE (BFS over evaluator-only traversability from map[player_level])",
     "progress_range": [0, 1],
     "progress_monotonicity_expected": False,
@@ -213,6 +244,11 @@ REJECTED_ALTERNATIVES = [
      "reason": "must resolve Achievement.DEFEAT_KOBOLD symbolically from craftax constants"},
     {"boundary": "FRONT progress", "rejected": "raw Manhattan distance / screen pixels / tile color",
      "reason": "not source-grounded; ignores walls/doors; can over-credit off-corridor positions"},
+    {"boundary": "BACK_L2 scope", "rejected": "BACK_L2 also evaluates boss-area search "
+     "(boss_area_reached / time_to_boss_area / BACK_BOSS_NOT_FOUND)",
+     "reason": "the BACK scaffold starts ALREADY on floor 3 next to a live Kobold; "
+               "boss-area search is not exercised by this start, so those metrics are N/A "
+               "and BACK_L2 identity is BOSS_COMBAT_SCAFFOLDED only"},
 ]
 
 

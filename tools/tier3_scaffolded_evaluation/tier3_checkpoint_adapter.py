@@ -119,15 +119,44 @@ def assert_evaluation_does_not_update_params(record_before: dict, record_after: 
 def load_checkpoint_readonly(path: str):
     """Read a checkpoint file's bytes (READ-ONLY) and return (sha256, nbytes).
 
-    Opens strictly 'rb'; nothing is written. A real JAX checkpoint would be unpickled
-    / unflattened on a JAX host — that path is BLOCKED_ENVIRONMENT here, but the
-    read-only SHA identity is fully exercisable on any file.
+    Opens strictly 'rb'; nothing is written. The read-only SHA identity is exercisable
+    on any file; unflattening a real params pytree additionally needs JAX (below).
     """
     require(path and os.path.isfile(path),
             "FAIL CLOSED: checkpoint path missing (%r)" % path)
     h = ser.v3mat.sha256_file(path)          # reuse V3 streaming file hash
     nbytes = os.path.getsize(path)
     return h, nbytes
+
+
+def load_full_params_readonly(path: str):
+    """Load a CC2 ``full_state.pkl`` checkpoint READ-ONLY and unflatten its params.
+
+    CC2 interface contract (eval_phase2_unified.py): the pickle carries
+    ``d["params"] = (leaves, treedef)`` and ``d["manifest"]["params_sha256"]`` (the
+    DECLARED identity). Params are rebuilt with
+    ``jax.tree_util.tree_unflatten(treedef, [jnp.asarray(l) for l in leaves])``.
+
+    Returns ``(params, recomputed_params_sha256, manifest, file_sha256)``. The caller
+    binds identity with assert_params_identity against manifest["params_sha256"]
+    (NEG21). Nothing is ever written, trained, or mutated here. Requires JAX
+    (BLOCKED_ENVIRONMENT otherwise).
+    """
+    require(ser.have_jax(),
+            "FAIL CLOSED (BLOCKED_ENVIRONMENT): loading a real params pytree requires JAX "
+            "(available=%s)" % ser.have_jax())
+    import pickle
+    import jax
+    import jax.numpy as jnp
+    file_sha, _nbytes = load_checkpoint_readonly(path)     # read-only 'rb' + streaming SHA
+    with open(path, "rb") as fh:
+        d = pickle.load(fh)
+    require(isinstance(d, dict) and "params" in d,
+            "FAIL CLOSED: %r is not a CC2 full_state.pkl (no 'params' entry)" % path)
+    leaves, treedef = d["params"]
+    params = jax.tree_util.tree_unflatten(treedef, [jnp.asarray(l) for l in leaves])
+    manifest = d.get("manifest") if isinstance(d.get("manifest"), dict) else {}
+    return params, params_sha256(params), manifest, file_sha
 
 
 # ---------------------------------------------------------------------------

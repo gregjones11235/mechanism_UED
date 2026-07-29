@@ -8,11 +8,16 @@ terminal condition holds with no defined precedence), the classifier FAILS CLOSE
 (NEG20) rather than silently picking one label. Silent mislabelling would corrupt the
 mechanism diagnosis, so ambiguity is an error, not a default.
 
-The taxonomy is scenario-aware:
+The taxonomy is scenario-aware (收口 fast-track):
   FULL  : SUCCESS_DEFEAT_KOBOLD / DIED_BEFORE_KOBOLD / TIMEOUT_NO_KOBOLD / INVALID_START
-  FRONT : EXIT_REACHED / DIED_IN_CORRIDOR / TIMEOUT_EXIT_NOT_FOUND / INVALID_START
+  FRONT : FRONT_FLOOR_TRANSITION_REACHED / DIED_IN_CORRIDOR / TIMEOUT_NO_TRANSITION /
+          INVALID_START   (classified off the episode-level front_floor_transition_reached;
+          corridor_exit_reached is a PENDING_EQUIVALENCE_ALIAS only — transition True with
+          alias explicitly False is a contradiction -> FailClosed)
   BACK  : SUCCESS_DEFEAT_KOBOLD / DIED_AFTER_ENGAGEMENT / DIED_BEFORE_ENGAGEMENT /
-          TIMEOUT_IN_BOSS_AREA / TIMEOUT_KOBOLD_NOT_FOUND / INVALID_START
+          TIMEOUT_COMBAT_NOT_WON / INVALID_START
+          (identity = BOSS_COMBAT_SCAFFOLDED; boss-area-search labels TIMEOUT_IN_BOSS_AREA /
+          TIMEOUT_KOBOLD_NOT_FOUND are REMOVED — boss_area_reached is N/A for BACK_L2)
 """
 from __future__ import annotations
 
@@ -32,11 +37,14 @@ BACK = "back_l2"
 INVALID_START = "INVALID_START"
 SUCCESS_DEFEAT_KOBOLD = "SUCCESS_DEFEAT_KOBOLD"
 
+FRONT_FLOOR_TRANSITION_REACHED = "FRONT_FLOOR_TRANSITION_REACHED"
+
 LABELS = {
     FULL: [SUCCESS_DEFEAT_KOBOLD, "DIED_BEFORE_KOBOLD", "TIMEOUT_NO_KOBOLD", INVALID_START],
-    FRONT: ["EXIT_REACHED", "DIED_IN_CORRIDOR", "TIMEOUT_EXIT_NOT_FOUND", INVALID_START],
+    FRONT: [FRONT_FLOOR_TRANSITION_REACHED, "DIED_IN_CORRIDOR", "TIMEOUT_NO_TRANSITION",
+            INVALID_START],
     BACK: [SUCCESS_DEFEAT_KOBOLD, "DIED_AFTER_ENGAGEMENT", "DIED_BEFORE_ENGAGEMENT",
-           "TIMEOUT_IN_BOSS_AREA", "TIMEOUT_KOBOLD_NOT_FOUND", INVALID_START],
+           "TIMEOUT_COMBAT_NOT_WON", INVALID_START],
 }
 
 
@@ -62,9 +70,16 @@ def _contradictions(ep) -> list:
         out.append("defeat_kobold AND timed_out both terminal")
     if died and timed_out:
         out.append("player_died AND timed_out both terminal")
-    # FRONT terminates at the corridor exit; a defeat signal there is contradictory.
-    if ep.get("scenario") == FRONT and ep.get("corridor_exit_reached") is True and defeat:
-        out.append("front_l2 reached exit AND defeat_kobold (front ends at exit)")
+    # FRONT terminates at the floor transition; a defeat signal there is contradictory.
+    if ep.get("scenario") == FRONT and ep.get("front_floor_transition_reached") is True and defeat:
+        out.append("front_l2 floor transition AND defeat_kobold (front ends at the transition)")
+    # FRONT alias guard: the episode-level transition cannot be True while the
+    # per-state corridor_exit_reached alias is explicitly recorded False (NEG20-style).
+    if (ep.get("scenario") == FRONT
+            and ep.get("front_floor_transition_reached") is True
+            and ep.get("corridor_exit_reached") is False):
+        out.append("front_l2 floor transition True but corridor_exit_reached alias False "
+                   "(PENDING_EQUIVALENCE_ALIAS contradiction)")
     return out
 
 
@@ -87,9 +102,9 @@ def classify_episode(ep: dict) -> dict:
     defeat = ep.get("defeat_kobold") is True
     died = ep.get("player_died") is True
     timed_out = ep.get("timed_out") is True
-    exit_reached = ep.get("corridor_exit_reached") is True
+    transition = ep.get("front_floor_transition_reached") is True
     engaged = ep.get("kobold_engaged") is True
-    boss_area = ep.get("boss_area_reached") is True
+    # boss_area_reached is N/A for BACK_L2 (BOSS_COMBAT_SCAFFOLDED) — not classified on.
 
     if scenario == FULL:
         if defeat:
@@ -101,32 +116,30 @@ def classify_episode(ep: dict) -> dict:
         else:
             label = None
     elif scenario == FRONT:
-        if exit_reached:
-            label = "EXIT_REACHED"
+        if transition:
+            label = FRONT_FLOOR_TRANSITION_REACHED
         elif died:
             label = "DIED_IN_CORRIDOR"
         elif timed_out:
-            label = "TIMEOUT_EXIT_NOT_FOUND"
+            label = "TIMEOUT_NO_TRANSITION"
         else:
             label = None
-    else:  # BACK
+    else:  # BACK — BOSS_COMBAT_SCAFFOLDED
         if defeat:
             label = SUCCESS_DEFEAT_KOBOLD
         elif died and engaged:
             label = "DIED_AFTER_ENGAGEMENT"
         elif died:
             label = "DIED_BEFORE_ENGAGEMENT"
-        elif timed_out and boss_area:
-            label = "TIMEOUT_IN_BOSS_AREA"
         elif timed_out:
-            label = "TIMEOUT_KOBOLD_NOT_FOUND"
+            label = "TIMEOUT_COMBAT_NOT_WON"
         else:
             label = None
 
     # Exactly one terminal condition must hold; none => ambiguous (no terminal signal).
     require(label is not None,
             "FAIL CLOSED (NEG20): episode has no terminal signal (none of defeat/died/timed_out/"
-            "exit set); cannot assign a label silently")
+            "floor-transition set); cannot assign a label silently")
     require(label in LABELS[scenario],
             "FAIL CLOSED: derived label %r not in scenario taxonomy %r" % (label, scenario))
     return {"label": label, "scenario": scenario,
@@ -138,8 +151,9 @@ def classify_episode(ep: dict) -> dict:
 # ---------------------------------------------------------------------------
 def _ep(scenario, **flags):
     e = {"scenario": scenario, "valid_start": True, "defeat_kobold": False,
-         "player_died": False, "timed_out": False, "corridor_exit_reached": False,
-         "kobold_engaged": False, "boss_area_reached": False}
+         "player_died": False, "timed_out": False,
+         "front_floor_transition_reached": False, "corridor_exit_reached": False,
+         "kobold_engaged": False}
     e.update(flags)
     return e
 
@@ -154,15 +168,18 @@ def self_test() -> int:
     check("full_success", classify_episode(_ep(FULL, defeat_kobold=True))["label"] == SUCCESS_DEFEAT_KOBOLD)
     check("full_died", classify_episode(_ep(FULL, player_died=True))["label"] == "DIED_BEFORE_KOBOLD")
     check("full_timeout", classify_episode(_ep(FULL, timed_out=True))["label"] == "TIMEOUT_NO_KOBOLD")
-    check("front_exit", classify_episode(_ep(FRONT, corridor_exit_reached=True))["label"] == "EXIT_REACHED")
+    check("front_transition",
+          classify_episode(_ep(FRONT, front_floor_transition_reached=True,
+                               corridor_exit_reached=True))["label"] == FRONT_FLOOR_TRANSITION_REACHED)
     check("front_died", classify_episode(_ep(FRONT, player_died=True))["label"] == "DIED_IN_CORRIDOR")
+    check("front_timeout", classify_episode(_ep(FRONT, timed_out=True))["label"] == "TIMEOUT_NO_TRANSITION")
     check("back_success", classify_episode(_ep(BACK, defeat_kobold=True))["label"] == "SUCCESS_DEFEAT_KOBOLD")
     check("back_died_after_engage",
           classify_episode(_ep(BACK, player_died=True, kobold_engaged=True))["label"] == "DIED_AFTER_ENGAGEMENT")
     check("back_died_before_engage",
           classify_episode(_ep(BACK, player_died=True))["label"] == "DIED_BEFORE_ENGAGEMENT")
-    check("back_timeout_boss_area",
-          classify_episode(_ep(BACK, timed_out=True, boss_area_reached=True))["label"] == "TIMEOUT_IN_BOSS_AREA")
+    check("back_timeout_combat_not_won",
+          classify_episode(_ep(BACK, timed_out=True))["label"] == "TIMEOUT_COMBAT_NOT_WON")
     check("invalid_start", classify_episode(_ep(FULL, valid_start=False))["label"] == INVALID_START)
     check("rule_version_recorded",
           classify_episode(_ep(FULL, defeat_kobold=True))["failure_rule_version"] == FAILURE_RULE_VERSION)
@@ -171,7 +188,9 @@ def self_test() -> int:
     for bad in [_ep(FULL, defeat_kobold=True, player_died=True),
                 _ep(FULL, defeat_kobold=True, timed_out=True),
                 _ep(FULL, player_died=True, timed_out=True),
-                _ep(FRONT, corridor_exit_reached=True, defeat_kobold=True),
+                _ep(FRONT, front_floor_transition_reached=True, defeat_kobold=True),
+                # alias contradiction: transition True but alias explicitly False
+                _ep(FRONT, front_floor_transition_reached=True, corridor_exit_reached=False),
                 _ep(FULL)]:                                  # no terminal signal at all
         try:
             classify_episode(bad)

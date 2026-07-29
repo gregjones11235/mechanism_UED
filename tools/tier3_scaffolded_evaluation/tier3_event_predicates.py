@@ -101,13 +101,21 @@ def _achieved(state: dict) -> set:
 # ---------------------------------------------------------------------------
 # Mob helpers (Kobold type_id is injected, never hard-coded)
 # ---------------------------------------------------------------------------
+# RESOLVED binding (craftax==1.4.5; see tier3_source_audit.resolve_kobold_binding):
+# the Kobold is a RANGED-category mob (ranged type_id 3; MOB_ACHIEVEMENT_MAP
+# [MobType.RANGED, 3] == DEFEAT_KOBOLD). The earlier "melee" assumption was WRONG —
+# MeleeMobType does not even exist in craftax 1.4.5 constants. Predicates still take
+# the type_id as a parameter; only the category is frozen here.
+KOBOLD_CATEGORY = "ranged"
+
+
 def live_mobs_on_floor(state: dict, floor: int):
     return [m for m in state.get("mobs", [])
             if m.get("mask") and m.get("level") == floor and float(m.get("health", 0)) > 0]
 
 
 def kobold_present(state: dict, kobold_type_id: int, floor: int | None = None) -> bool:
-    """True if a live Kobold (melee mob with the given type_id) exists.
+    """True if a live Kobold (RANGED-category mob with the given type_id) exists.
 
     floor=None => any floor (presence); else restrict to that floor.
     """
@@ -116,7 +124,7 @@ def kobold_present(state: dict, kobold_type_id: int, floor: int | None = None) -
             continue
         if int(m.get("type_id", -1)) != int(kobold_type_id):
             continue
-        if m.get("category") != "melee":
+        if m.get("category") != KOBOLD_CATEGORY:
             continue
         if floor is not None and m.get("level") != floor:
             continue
@@ -127,7 +135,7 @@ def kobold_present(state: dict, kobold_type_id: int, floor: int | None = None) -
 def kobold_max_health(state: dict, kobold_type_id: int, floor: int) -> float:
     hs = [float(m.get("health", 0)) for m in state.get("mobs", [])
           if m.get("mask") and int(m.get("type_id", -1)) == int(kobold_type_id)
-          and m.get("level") == floor and m.get("category") == "melee"]
+          and m.get("level") == floor and m.get("category") == KOBOLD_CATEGORY]
     return max(hs) if hs else 0.0
 
 
@@ -162,13 +170,37 @@ def valid_full_start(state: dict) -> bool:
     return True
 
 
+def front_floor_transition_reached(from_level: int, to_level: int,
+                                   start_floor: int = FRONT_FLOOR,
+                                   exit_floor: int = CORRIDOR_EXIT_FLOOR) -> bool:
+    """Frozen V1 FRONT_L2 PRIMARY event (episode-level, not per-state):
+    FRONT_FLOOR_TRANSITION_REACHED — the player level moved from the start floor
+    (2) to the exit floor (3) at some point during the episode.
+
+    Pure helper over two observed levels (the evaluator passes the recorded
+    start level and the final/peak level of the episode). success == player
+    level went 2 -> 3, i.e. `from_level <= start_floor and to_level >=
+    exit_floor` when the recorded start is exactly the scaffold start. Kept as
+    a pure function of the recorded levels so it stays JAX-free and unit
+    testable; the evaluator owns the episode history that supplies the levels.
+    """
+    return int(from_level) == int(start_floor) and int(to_level) >= int(exit_floor)
+
+
 def corridor_exit_reached(state: dict) -> bool:
-    """Frozen V1: the player has descended out of the floor-2 dark corridor.
+    """Per-state predicate: player_level >= CORRIDOR_EXIT_FLOOR (3).
 
     Source basis: player_level is the floor; the kobold is on floor 3, reached
-    by descending. Reaching floor >= CORRIDOR_EXIT_FLOOR (3) == exit reached.
-    REJECTED_ALTERNATIVE: 'standing on the floor-2 down_ladder tile' (more
-    granular but the actual game event is the floor transition).
+    by descending. REJECTED_ALTERNATIVE: 'standing on the floor-2 down_ladder
+    tile' (more granular but the actual game event is the floor transition).
+
+    收口 (fast-track): the FRONT_L2 PRIMARY event is the episode-level
+    `front_floor_transition_reached` (player level 2 -> 3). This per-state
+    predicate is retained ONLY as PENDING_EQUIVALENCE_ALIAS — it is reported as
+    `corridor_exit_reached` but must NOT be used as the primary success metric
+    until real-map evidence proves the floor transition necessarily passes
+    through the target corridor. An episode with transition=True but this alias
+    False at every recorded state is a contradiction -> FailClosed (taxonomy).
     """
     return int(state["player_level"]) >= CORRIDOR_EXIT_FLOOR
 
@@ -218,12 +250,21 @@ def back_half_entered(state: dict) -> bool:
 
 
 def boss_area_reached(state: dict) -> bool:
-    """Frozen V1: the player is on the kobold/target floor.
+    """Per-state predicate (kept for vocabulary completeness ONLY): player on
+    the kobold/target floor (player_level == BACK_FLOOR).
 
     Source basis: the kobold (target) is on floor 3 (BACK_FLOOR). REJECTED
     ALTERNATIVE: boss_progress > 0 — REJECTED because boss_progress drives the
     Necromancer boss-spawn mechanic, which is a different system from the
     DEFEAT_KOBOLD target (audit: CANONICAL_TASK_FACTS / achievements list).
+
+    收口 (fast-track): BACK_L2 identity is BOSS_COMBAT_SCAFFOLDED — it evaluates
+    combat against a live Kobold on floor 3 (primary metric
+    P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START). boss_area_reached,
+    time_to_boss_area and BACK_BOSS_NOT_FOUND are N/A for BACK_L2: the start is
+    ALREADY on floor 3 next to the Kobold, so "search for the boss area" is not
+    something this scaffold measures, and the scaffold must not claim to
+    evaluate it.
     """
     return int(state["player_level"]) == BACK_FLOOR
 
@@ -244,7 +285,7 @@ def kobold_engaged(state: dict, kobold_type_id: int) -> bool:
     floor = int(state["player_level"])
     engaged = False
     for m in state.get("mobs", []):
-        if not m.get("mask") or m.get("level") != floor or m.get("category") != "melee":
+        if not m.get("mask") or m.get("level") != floor or m.get("category") != KOBOLD_CATEGORY:
             continue
         if int(m.get("type_id", -1)) != int(kobold_type_id):
             continue
@@ -354,14 +395,14 @@ def _mk_state(**over):
     return s
 
 
-def _kobold(floor=BACK_FLOOR, health=5.0, type_id=7):
-    return {"category": "melee", "level": floor, "position": (8, 8),
+def _kobold(floor=BACK_FLOOR, health=8.0, type_id=3):
+    return {"category": KOBOLD_CATEGORY, "level": floor, "position": (8, 8),
             "health": health, "mask": True, "type_id": type_id, "attack_cooldown": 0}
 
 
 def self_test() -> int:
     problems = []
-    KOBOLD = 7
+    KOBOLD = 3  # craftax==1.4.5 resolved binding: Kobold = RANGED type_id 3 (see tier3_source_audit)
 
     def check(name, cond):
         if not cond:
@@ -393,6 +434,18 @@ def self_test() -> int:
     check("defeat_kobold", defeat_kobold(_mk_state(achieved={DEFEAT_KOBOLD})))
     check("kobold_present", kobold_present(back_ok, KOBOLD, floor=BACK_FLOOR))
     check("kobold_absent_wrong_type", not kobold_present(back_ok, KOBOLD + 1, floor=BACK_FLOOR))
+    # Kobold is RANGED (craftax 1.4.5): a same-type_id mob in a DIFFERENT category
+    # must NOT count as a Kobold.
+    melee_imp = _kobold(type_id=KOBOLD)
+    melee_imp["category"] = "melee"
+    check("kobold_category_is_ranged",
+          not kobold_present(_mk_state(player_level=BACK_FLOOR, mobs=[melee_imp]),
+                             KOBOLD, floor=BACK_FLOOR))
+    # FRONT_FLOOR_TRANSITION_REACHED — episode-level primary event (player level 2 -> 3)
+    check("front_transition_2to3", front_floor_transition_reached(2, 3))
+    check("front_transition_2to4", front_floor_transition_reached(2, 4))
+    check("front_transition_not_from3", not front_floor_transition_reached(3, 3))
+    check("front_transition_not_stay2", not front_floor_transition_reached(2, 2))
 
     # progress (GRAPH_DISTANCE) on a small grid
     # 5x5 grid, walkable row 2 fully open; start (2,0), exit (2,4) => d_start=4
@@ -430,7 +483,7 @@ def self_test() -> int:
         for p in problems:
             print("  -", p)
         return 1
-    print("TIER3_PREDICATES_SELF_TEST_PASS (checks=24)")
+    print("TIER3_PREDICATES_SELF_TEST_PASS (checks=29)")
     return 0
 
 

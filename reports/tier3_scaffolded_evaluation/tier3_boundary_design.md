@@ -4,7 +4,7 @@
 - 分支: `henry/tier3-scaffolded-evaluation`(基线 `7443aec`)
 - 权威定义机读文件: `schemas/tier3_boundary_schema_v1.json`(由 `tier3_boundary_schema.py --emit` 生成)
 - 谓词实现: `tools/tier3_scaffolded_evaluation/tier3_event_predicates.py`(`predicate_code_sha256` 绑定)
-- 状态: **PASS**(`tier3_boundary_schema.py --self-test` exit 0;events=10;谓词 self-test checks=24)
+- 状态: **PASS**(`tier3_boundary_schema.py --self-test` exit 0;events=10;谓词 self-test checks=29)
 
 ## 1. 设计原则
 
@@ -30,16 +30,17 @@ canonical Stage4 `generate_world`:`set_starting_floor(2)` + `set_monsters_killed
 |---|---|---|
 | valid_full_start | floor2 入场 & 存活 & timestep==0 & 未 DEFEAT_KOBOLD | player_level/health/timestep/achievements/inventory/item_map |
 | valid_front_scaffold_start (NEG14) | player_level==2 & 存活 & timestep==0 & 未过出口(<3) & 未 DEFEAT | player_level/health/timestep/achievements |
-| valid_back_scaffold_start (NEG15/16) | player_level==3 & 存活 & timestep==0 & **floor3 有活 Kobold** & 未 DEFEAT | + melee_mobs(position/health/mask/type_id) |
+| valid_back_scaffold_start (NEG15/16) | player_level==3 & 存活 & timestep==0 & **floor3 有活 Kobold**(RANGED type_id 3,HP 8.0) & 未 DEFEAT | + ranged_mobs(position/health/mask/type_id) |
 | front_half_entered | player_level==2 | player_level |
-| **corridor_exit_reached** | **player_level >= 3** | player_level |
+| **front_floor_transition_reached**(FRONT 主事件) | **from_level==2 & to_level>=3**(player level 2→3 转移) | player_level 转移 |
+| **corridor_exit_reached** | **player_level >= 3**;状态 = **PENDING_EQUIVALENCE_ALIAS**(真实地图证明楼层转移必经目标走廊之前,不定义成功;与主事件矛盾→FailClosed) | player_level |
 | back_half_entered | player_level==3 | player_level |
-| **boss_area_reached** | **player_level == 3** | player_level |
-| kobold_engaged | floor 上 Kobold 有 active attack_cooldown / 受伤记录(每态代理) | melee_mobs |
-| **defeat_kobold** | **achievements[Achievement.DEFEAT_KOBOLD.value]==True**(符号解析) | achievements |
-| front_half_progress | NORMALIZED_CORRIDOR_PROGRESS ∈[0,1],GRAPH_DISTANCE | player_position/map/down_ladders |
+| **boss_area_reached** | **player_level == 3**;BACK_L2 中为 **N/A**(仅保留于冻结词汇表,不作为 BACK 指标) | player_level |
+| kobold_engaged | floor 上 Kobold(RANGED 类)有 active attack_cooldown / 受伤记录(每态代理) | ranged_mobs |
+| **defeat_kobold** | **achievements[Achievement.DEFEAT_KOBOLD.value]==True**(符号解析,index=41) | achievements |
+| front_half_progress | GRAPH_DISTANCE_PROGRESS ∈[0,1],GRAPH_DISTANCE | player_position/map/down_ladders |
 
-## 4. FRONT 进度:dense metric = NORMALIZED_CORRIDOR_PROGRESS
+## 4. FRONT 进度:dense metric = GRAPH_DISTANCE_PROGRESS
 
 - 方法:**GRAPH_DISTANCE** — 评测器私有 traversability mask(由 `map[player_level]` + `BlockType` 可行走集导出)上做 BFS 最短路。
 - 出口 = floor-2 `down_ladders` 位置。
@@ -57,6 +58,7 @@ canonical Stage4 `generate_world`:`set_starting_floor(2)` + `set_monsters_killed
 | BOSS_AREA_REACHED | boss_progress > 0 | boss_progress 驱动 Necromancer 生成机制(另一系统),非 DEFEAT_KOBOLD 目标 |
 | DEFEAT_KOBOLD 检测 | 硬编码 achievement 整数索引 | 必须从 craftax constants 符号解析 Achievement.DEFEAT_KOBOLD |
 | FRONT 进度 | 曼哈顿距离 / 屏幕像素 / 瓦片颜色 | 非源码可证;忽略墙/门;会高估离廊位置 |
+| BACK_L2 身份 | 声称同时评估 Boss 区域搜索 | canonical FULL reset 在 floor 3 天然零 mobs,scaffold 必须显式加一只 Kobold;故 BACK_L2 只评 combat,`boss_area_reached`/`time_to_boss_area`/`BACK_BOSS_NOT_FOUND` 全部 N/A |
 
 ## 6. 科学边界(写入 schema 与所有 config)
 
@@ -67,7 +69,7 @@ canonical Stage4 `generate_world`:`set_starting_floor(2)` + `set_monsters_killed
 ## 7. 自检
 
 `python tools/tier3_scaffolded_evaluation/tier3_boundary_schema.py --self-test`
-→ `TIER3_BOUNDARY_SCHEMA_SELF_TEST_PASS (events=10, predicate_code_sha256=05ac6edcb7ba...)`,exit 0;并与已提交 `schemas/tier3_boundary_schema_v1.json` 做谓词 SHA 漂移校验。
+→ `TIER3_BOUNDARY_SCHEMA_SELF_TEST_PASS (events=10, predicate_code_sha256=a4fba86b054d...)`,exit 0;并与已提交 `schemas/tier3_boundary_schema_v1.json` 做谓词 SHA 漂移校验。
 
 ### 7.1 `predicate_code_sha256` 绑定基准(漂移修复,静态证据)
 
@@ -76,3 +78,11 @@ canonical Stage4 `generate_world`:`set_starting_floor(2)` + `set_monsters_killed
 - **根因与修复**:总控复审发现绑定漂移 —— 原 binder 对工作区**原始字节**取 SHA,而 `core.autocrlf=true` 下同一 clean 文件的工作区字节可为 LF 或 CRLF 两种合法形式(blob 恒为 LF):LF 形式 = `05ac6edc...`,CRLF 形式 = `d66fe614fb99278544865a87098c62caaa222c9fd8c47e4b97ca7d45429d5568`(即总控本机 CRLF 工作区复跑所测“当前 SHA”)。两者是**同一源码**(blob 未变,`a4075f8..HEAD` 谓词源码零改动)的行尾别名。修复:`predicate_code_sha256()` 在哈希前做 CRLF→LF 归一化,冻结值与任一 checkout 形式一致,漂移类问题收敛。
 - 验证:CRLF 字节归一化后的 SHA256 = `05ac6edc...` = 冻结值(即 CRLF 工作区上的自检重算必然命中冻结绑定)。
 - 注意:这是**绑定基准的确定性修复**,不改任何谓词语义、不改事件集、不改冻结边界定义;scaffold 评测科学边界(§6)不变。
+- **后续**:fast-track 语义收口对谓词源码做了合法编辑(新增 `front_floor_transition_reached` 纯函数、`corridor_exit_reached` 降为 PENDING_EQUIVALENCE_ALIAS、Kobold 绑定改 RANGED type_id 3),冻结值随之**合法更新**为 `a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c`(仍是 LF 归一化基准,11 处一致;事件集保持 10 个,无 schema 扩张)。`05ac6edc...` 作废。
+
+### 7.2 fast-track 语义收口记录(本轮)
+
+- **FRONT_L2**:主事件 = `FRONT_FLOOR_TRANSITION_REACHED`(player level 2→3);起点 = floor 2 合法 scaffold;primary metric = `P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START`;dense metric = `GRAPH_DISTANCE_PROGRESS`;`CORRIDOR_EXIT_REACHED` 仅为 **PENDING_EQUIVALENCE_ALIAS**,真实地图证明楼层转移必经目标走廊之前不定义成功;transition=True 且 alias 显式 False → FailClosed。
+- **BACK_L2**:identity = `BOSS_COMBAT_SCAFFOLDED`;起点 = floor 3 + 必须有 live Kobold(RANGED type_id 3,HP 8.0)+ t0 `DEFEAT_KOBOLD` 必须为 false;primary metric = `P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START`;`boss_area_reached`/`time_to_boss_area`/`BACK_BOSS_NOT_FOUND` 标记 **N/A**;不再声称 BACK_L2 评估 Boss 区域搜索。
+- **真实物化接口**(JAX + craftax==1.4.5 主机已就绪,证据见 Commit 2):canonical-rng 真实 FRONT/BACK state bank 物化、V3 payload hash、per-state + bank 级 field manifest、双独立 OS 进程一致性、canonical 环境合同断言(obs `(8335,)`、actions 43)、bank-state reset 与 canonical reset 叶级+obs 等价。
+- 事件词汇表、schema 文件数量、NEG 测试数量均**不变**(10 事件 / 26 NEG):只原地收口,禁止 schema 扩张。

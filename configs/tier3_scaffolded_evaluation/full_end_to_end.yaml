@@ -1,6 +1,7 @@
 # CC4 Tier3 decomposed evaluation — FULL_END_TO_END scenario contract (frozen V1).
 # Declarative spec consumed by tools/tier3_scaffolded_evaluation/tier3_evaluator.py.
-# STATUS this round: IMPLEMENTED_STATIC only. NOT executed (no Student run, no JAX host).
+# STATUS: canonical env interface re-verified on the JAX host (obs (8335,), 43 actions);
+# no formal evaluation run yet (chain smoke only; performance comparison forbidden here).
 schema: mechanism_UED.tier3_scenario_config/v1
 scenario: full
 identity_class: CANONICAL_S4_EVALUATION

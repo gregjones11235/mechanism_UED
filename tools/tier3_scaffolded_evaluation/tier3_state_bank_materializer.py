@@ -15,12 +15,25 @@ Two-process protocol (additive reuse of the CC4 V3 orchestration discipline):
   PROCESS_B (verify): independently reload the manifest, re-hash every state, re-run
       the boundary predicate, and FAIL CLOSED on ANY disagreement (compare_two_processes).
 
-MATERIALIZATION STATUS on this host: there is NO JAX / NO craftax, so REAL EnvState
-starts cannot be minted — real materialization is BLOCKED_ENVIRONMENT and the frozen
-FRONT_/BACK_SCAFFOLD_STATE_BANK_HASH stays NOT_MATERIALIZED. To exercise the protocol
-machinery here, PROCESS_A/B run over clearly-labeled SYNTHETIC normalized states; the
-manifest records ``states_are: SYNTHETIC_TEST_ONLY`` and ``hash_status: NOT_MATERIALIZED``
-so the self-test hash can NEVER be mistaken for a real bank.
+MATERIALIZATION MODES:
+  * REAL (JAX + craftax==1.4.5 host): PROCESS_A mints real EnvState pytrees via
+    builder.materialize_start (canonical WorldBuilder rng sequence), hashes each with
+    ser.envstate_payload_hash (V3 seed-free serializer), normalizes each with
+    builder.normalize_envstate and re-validates it against the frozen boundary
+    predicate. The manifest records ``states_are: REAL_ENVSTATE``,
+    ``hash_status: MATERIALIZED`` and a bank-level field manifest. PROCESS_B
+    re-materializes + re-hashes + re-validates every state independently.
+  * SYNTHETIC (no JAX): real materialization is BLOCKED_ENVIRONMENT and the frozen
+    FRONT_/BACK_SCAFFOLD_STATE_BANK_HASH stays NOT_MATERIALIZED. To exercise the
+    protocol machinery, PROCESS_A/B run over clearly-labeled SYNTHETIC normalized
+    states; the manifest records ``states_are: SYNTHETIC_TEST_ONLY`` and
+    ``hash_status: NOT_MATERIALIZED`` so the self-test hash can NEVER be mistaken
+    for a real bank.
+
+TWO INDEPENDENT OS PROCESSES: ``run_two_process_real`` spawns two fresh interpreters
+(``--materialize-real``), each minting the bank from the declared result-blind seed
+schedule, then compares ordered IDs / per-state payload hash / field manifest /
+state-bank hash and PROCESS_B-verifies both. Any disagreement -> FailClosed.
 """
 from __future__ import annotations
 
@@ -47,11 +60,12 @@ HASH_LABELS = {
 }
 GLOBAL_HASH_LABEL = "GLOBAL_WORLD_SET_HASH"   # NEVER used for a scaffold bank
 
-# A synthetic Kobold type_id for protocol self-tests ONLY. The REAL Kobold type_id is
-# BLOCKED_SOURCE_SEMANTICS (bound from craftax constants on a JAX host). This constant
-# is used solely to exercise the normalized-view predicates and is never claimed to be
-# the craftax value.
-SYNTHETIC_KOBOLD_TYPE_ID = 7
+# Kobold type_id used for the SYNTHETIC protocol self-test states. It equals the
+# RESOLVED craftax==1.4.5 binding (RANGED category, ranged type_id 3 — see
+# tier3_source_audit.CRAFTAX_RUNTIME_BINDINGS) so the synthetic path exercises the
+# exact same predicate semantics as the real path; the REAL path resolves the value
+# live from craftax constants (builder.resolve_kobold_type_id).
+SYNTHETIC_KOBOLD_TYPE_ID = 3
 
 
 class FailClosed(Exception):
@@ -131,7 +145,8 @@ def synthesize_front_start(seed: int) -> dict:
 
 
 def synthesize_back_start(seed: int, kobold_type_id: int = SYNTHETIC_KOBOLD_TYPE_ID) -> dict:
-    """A clearly-synthetic floor-3 normalized start with a LIVE kobold present."""
+    """A clearly-synthetic floor-3 normalized start with a LIVE Kobold present
+    (RANGED category, canonical max health 8.0 — mirrors the resolved binding)."""
     return {
         "_normalized": True,
         "_synthetic_test_state": True,
@@ -141,8 +156,9 @@ def synthesize_back_start(seed: int, kobold_type_id: int = SYNTHETIC_KOBOLD_TYPE
         "player_position": (2, 0),
         "timestep": 0,
         "achieved": set(),
-        "mobs": [{"category": "melee", "level": audit.BACK_FLOOR, "position": (2, 4),
-                  "health": 5.0, "mask": True, "type_id": int(kobold_type_id),
+        "mobs": [{"category": pred.KOBOLD_CATEGORY, "level": audit.BACK_FLOOR, "position": (2, 4),
+                  "health": float(audit.CRAFTAX_RUNTIME_BINDINGS["kobold_canonical_max_health"]),
+                  "mask": True, "type_id": int(kobold_type_id),
                   "attack_cooldown": 0}],
         "monsters_killed": {},
         "down_ladders": {},
@@ -237,38 +253,87 @@ def source_shas_for_bank() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# REAL per-state carrier (JAX host): mint -> V3 payload hash -> normalize -> validate
+# ---------------------------------------------------------------------------
+def _field_manifest_sha(paths: list) -> str:
+    return ser.sha256_bytes(("\n".join(paths)).encode("utf-8"))
+
+
+def real_state_entry(scenario: str, seed: int, kobold_type_id=None) -> dict:
+    """Mint ONE real start and return its evidence carrier:
+      state_payload_hash — V3 seed-free canonical serialization SHA256
+      field_manifest     — sorted V3 pytree leaf paths (the serialized field set)
+      field_manifest_sha256
+      normalized_view    — the JAX-free predicate view (for validation; not hashed here)
+    """
+    require(ser.have_jax_craftax(),
+            "FAIL CLOSED (BLOCKED_ENVIRONMENT): real state entry requires JAX+craftax")
+    state = builder.materialize_start(scenario, seed, kobold_type_id)
+    payload_hash, _payload, v3manifest = ser.envstate_payload_hash(state)
+    view = builder.normalize_envstate(state)
+    if scenario == FRONT:
+        view["floor2_up_ladder_removed"] = True   # materialize_start performs the removal
+    type_id = builder.resolve_kobold_type_id(kobold_type_id) if scenario == BACK else None
+    validate_start_against_predicate(scenario, view, type_id)
+    ser.assert_required_envstate_fields(view)
+    paths = sorted(str(m["path"]) for m in v3manifest)
+    return {
+        "state_payload_hash": payload_hash,
+        "field_manifest": paths,
+        "field_manifest_sha256": _field_manifest_sha(paths),
+        "normalized_view": view,
+    }
+
+
+def _synthetic_field_manifest(state: dict) -> list:
+    return sorted(str(k) for k in ser._canonicalize(state).keys())
+
+
+# ---------------------------------------------------------------------------
 # PROCESS_A / PROCESS_B
 # ---------------------------------------------------------------------------
 def process_a_materialize(scenario: str, n: int, kobold_type_id=None, base: int = 10_000,
                           stride: int = 1) -> dict:
     """Materialize + serialize + validate + hash ONE scenario's bank (PROCESS_A).
 
-    On this host states are SYNTHETIC (real materialization is BLOCKED_ENVIRONMENT);
-    the manifest is explicitly labelled so. On a JAX host the per-state payload hash
-    would come from ser.envstate_payload_hash(real_envstate).
+    REAL on a JAX+craftax host (real EnvState pytrees, V3 payload hashes, predicate
+    re-validation); SYNTHETIC and explicitly labelled otherwise.
     """
     spec = builder.build_spec(scenario)
     builder.validate_scaffold_legality(spec)
+    real = ser.have_jax_craftax()
     seeds = fixed_seed_schedule(scenario, n, base, stride)
     entries = []
+    field_manifest = None
     for seed in seeds:
-        if ser.have_jax_craftax():
-            # REAL path (JAX host): mint via WorldBuilder, then hash the real pytree.
-            state = builder.materialize_start(scenario, seed, kobold_type_id)
-            # (a JAX-side adapter would normalize `state` for predicate validation)
-            payload_hash = "REAL_JAX_HOST_PATH"   # replaced by ser.envstate_payload_hash(state)
-            synthetic = False
+        if real:
+            carrier = real_state_entry(scenario, seed, kobold_type_id)
+            if field_manifest is None:
+                field_manifest = carrier["field_manifest"]
+            entries.append({
+                "index": len(entries),
+                "seed": int(seed),
+                "state_payload_hash": carrier["state_payload_hash"],
+                "field_manifest_sha256": carrier["field_manifest_sha256"],
+                "synthetic": False,
+            })
         else:
             state = synthesize_start(scenario, seed, kobold_type_id)
             validate_start_against_predicate(scenario, state, kobold_type_id)
             payload_hash, _bytes = ser.normalized_payload_hash(state)
-            synthetic = True
-        entries.append({
-            "index": len(entries),
-            "seed": int(seed),
-            "state_payload_hash": payload_hash,
-            "synthetic": synthetic,
-        })
+            fm = _synthetic_field_manifest(state)
+            entries.append({
+                "index": len(entries),
+                "seed": int(seed),
+                "state_payload_hash": payload_hash,
+                "field_manifest_sha256": _field_manifest_sha(fm),
+                "synthetic": True,
+            })
+    # The serialized field set MUST be identical for every state in the bank.
+    fm_shas = {e["field_manifest_sha256"] for e in entries}
+    require(len(fm_shas) <= 1,
+            "FAIL CLOSED: field manifest differs across states in the same bank: %s"
+            % sorted(fm_shas))
     ordered_hashes = [e["state_payload_hash"] for e in entries]
     src = source_shas_for_bank()
     manifest = {
@@ -276,9 +341,9 @@ def process_a_materialize(scenario: str, n: int, kobold_type_id=None, base: int 
         "manifest_version": MANIFEST_VERSION,
         "scenario": scenario,
         "hash_label": HASH_LABELS[scenario],
-        "hash_status": "MATERIALIZED" if not (entries and entries[0]["synthetic"]) else "NOT_MATERIALIZED",
+        "hash_status": "MATERIALIZED" if real else "NOT_MATERIALIZED",
         "materialization_status": ser.environment_status(),
-        "states_are": "REAL_ENVSTATE" if ser.have_jax_craftax() else "SYNTHETIC_TEST_ONLY",
+        "states_are": "REAL_ENVSTATE" if real else "SYNTHETIC_TEST_ONLY",
         "common_state_bank_for_all_arms": True,
         "scaffolded_results_can_replace_full_task": False,
         "state_count": len(entries),
@@ -287,9 +352,14 @@ def process_a_materialize(scenario: str, n: int, kobold_type_id=None, base: int 
         "seeds": seeds,
         "source_shas": src,
         "boundary_predicate_version": pred.PREDICATE_VERSION,
+        "field_manifest": field_manifest,
+        "field_manifest_sha256": entries[0]["field_manifest_sha256"] if entries else None,
         "state_bank_hash": state_bank_hash(ordered_hashes, scenario, src),
         "entries": entries,
     }
+    if scenario == BACK:
+        manifest["resolved_kobold_type_id"] = (builder.resolve_kobold_type_id(kobold_type_id)
+                                               if real else SYNTHETIC_KOBOLD_TYPE_ID)
     assert_not_global_world_set_hash(manifest)
     assert_no_arm_partition(manifest)
     assert_selection_is_result_blind(manifest)
@@ -297,8 +367,9 @@ def process_a_materialize(scenario: str, n: int, kobold_type_id=None, base: int 
 
 
 def process_b_verify(manifest: dict, kobold_type_id=None) -> bool:
-    """Independently re-verify a manifest (PROCESS_B). Re-hash every state and re-run
-    the boundary predicate; FAIL CLOSED on any disagreement.
+    """Independently re-verify a manifest (PROCESS_B). Re-materialize + re-hash +
+    re-validate EVERY state (real on a JAX host, synthetic otherwise); FAIL CLOSED on
+    any disagreement.
     """
     scenario = manifest["scenario"]
     assert_not_global_world_set_hash(manifest)
@@ -311,10 +382,23 @@ def process_b_verify(manifest: dict, kobold_type_id=None) -> bool:
     require(fixed_seed_schedule(sched["scenario"], sched["n"], sched["seed_base"], sched["stride"])
             == manifest["seeds"],
             "FAIL CLOSED (PROCESS_B/NEG26): seeds not reproducible from schedule params")
+    real = manifest["states_are"] == "REAL_ENVSTATE"
+    if real:
+        require(ser.have_jax_craftax(),
+                "FAIL CLOSED (BLOCKED_ENVIRONMENT): manifest claims REAL_ENVSTATE but this "
+                "host cannot re-materialize (no JAX+craftax)")
     # Re-materialize + re-hash + re-validate each state independently.
     recomputed = []
     for e in manifest["entries"]:
-        if manifest["states_are"] == "SYNTHETIC_TEST_ONLY":
+        if real:
+            carrier = real_state_entry(scenario, e["seed"], kobold_type_id)
+            require(carrier["state_payload_hash"] == e["state_payload_hash"],
+                    "FAIL CLOSED (PROCESS_B): recomputed REAL payload hash != recorded "
+                    "for index %d (seed %d)" % (e["index"], e["seed"]))
+            require(carrier["field_manifest_sha256"] == e.get("field_manifest_sha256"),
+                    "FAIL CLOSED (PROCESS_B): field manifest drifted for index %d" % e["index"])
+            recomputed.append(carrier["state_payload_hash"])
+        else:
             state = synthesize_start(scenario, e["seed"], kobold_type_id)
             validate_start_against_predicate(scenario, state, kobold_type_id)
             ph, payload = ser.normalized_payload_hash(state)
@@ -322,32 +406,74 @@ def process_b_verify(manifest: dict, kobold_type_id=None) -> bool:
             require(ph == e["state_payload_hash"],
                     "FAIL CLOSED (PROCESS_B): recomputed hash != recorded for index %d" % e["index"])
             recomputed.append(ph)
-        else:
-            recomputed.append(e["state_payload_hash"])  # REAL path re-hashes on a JAX host
     src = source_shas_for_bank()
     require(state_bank_hash(recomputed, scenario, src) == manifest["state_bank_hash"],
             "FAIL CLOSED (PROCESS_B): state_bank_hash does not reproduce (order/tamper detected)")
+    if manifest.get("field_manifest_sha256") is not None:
+        require(all(e.get("field_manifest_sha256") == manifest["field_manifest_sha256"]
+                    for e in manifest["entries"]),
+                "FAIL CLOSED (PROCESS_B): per-entry field_manifest_sha256 != bank-level value")
     return True
 
 
 def compare_two_processes(a: dict, b: dict):
-    """Fail closed on ANY disagreement between two independent materializations."""
+    """Fail closed on ANY disagreement between two independent materializations:
+    ordered IDs (seeds/entries), per-state payload hashes, field manifest and the
+    state-bank hash itself."""
     for field in ("schema", "scenario", "hash_label", "state_count", "seeds",
                   "state_bank_hash", "source_shas", "boundary_predicate_version",
-                  "entries"):
+                  "field_manifest", "field_manifest_sha256", "entries"):
         require(a.get(field) == b.get(field),
                 "FAIL CLOSED: %s differs between the two independent processes" % field)
     return True
 
 
 def run_two_process(scenario: str, n: int, kobold_type_id=None) -> dict:
-    """Run PROCESS_A twice independently and compare, then PROCESS_B-verify both."""
+    """In-process two-run agreement (PROCESS_A twice + PROCESS_B both). Used by the
+    self-test; real deployment uses run_two_process_real (separate OS processes)."""
     a = process_a_materialize(scenario, n, kobold_type_id)
     b = process_a_materialize(scenario, n, kobold_type_id)
     compare_two_processes(a, b)
     process_b_verify(a, kobold_type_id)
     process_b_verify(b, kobold_type_id)
     return {"agreement": True, "manifest": a}
+
+
+def run_two_process_real(scenario: str, n: int, outdir: str, kobold_type_id=None) -> dict:
+    """TWO INDEPENDENT OS PROCESSES: spawn fresh interpreters that each mint the bank
+    via --materialize-real, then compare + PROCESS_B-verify both manifests here."""
+    import subprocess
+    require(ser.have_jax_craftax(),
+            "FAIL CLOSED (BLOCKED_ENVIRONMENT): real two-process materialization requires "
+            "JAX+craftax (jax=%s, craftax=%s)" % (ser.have_jax(), ser.have_craftax()))
+    os.makedirs(outdir, exist_ok=True)
+    script = os.path.abspath(__file__)
+    manifest_paths = []
+    for tag in ("a", "b"):
+        out = os.path.join(outdir, "manifest_%s_%s.json" % (tag, scenario))
+        cmd = [sys.executable, script, "--materialize-real", "--scenario", scenario,
+               "--n", str(n), "--out", out]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        require(proc.returncode == 0,
+                "FAIL CLOSED: --materialize-real process %s exited %d; stderr tail: %s"
+                % (tag, proc.returncode, (proc.stderr or "")[-2000:]))
+        manifest_paths.append(out)
+    with open(manifest_paths[0], "r", encoding="utf-8") as fh:
+        a = json.load(fh)
+    with open(manifest_paths[1], "r", encoding="utf-8") as fh:
+        b = json.load(fh)
+    compare_two_processes(a, b)
+    process_b_verify(a, kobold_type_id)
+    process_b_verify(b, kobold_type_id)
+    return {
+        "two_process_agreement": True,
+        "scenario": scenario,
+        "hash_label": a["hash_label"],
+        "state_bank_hash": a["state_bank_hash"],
+        "field_manifest_sha256": a["field_manifest_sha256"],
+        "state_count": a["state_count"],
+        "manifest_paths": manifest_paths,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -365,13 +491,28 @@ def self_test() -> int:
             problems.append(name)
 
     # Two-process agreement + PROCESS_B verification for both scenarios.
-    front = run_two_process(FRONT, 4)
-    back = run_two_process(BACK, 4, SYNTHETIC_KOBOLD_TYPE_ID)
+    # On a JAX host this exercises the REAL path (n=2 to bound mint cost ≈16 mints);
+    # without JAX it exercises the labelled SYNTHETIC protocol path (n=4).
+    real = ser.have_jax_craftax()
+    n_self = 2 if real else 4
+    front = run_two_process(FRONT, n_self)
+    back = run_two_process(BACK, n_self, SYNTHETIC_KOBOLD_TYPE_ID)
     check("front_two_process_agreement", front["agreement"] is True)
     check("back_two_process_agreement", back["agreement"] is True)
     check("front_label_not_global", front["manifest"]["hash_label"] == HASH_LABELS[FRONT])
     check("back_label_not_global", back["manifest"]["hash_label"] == HASH_LABELS[BACK])
-    check("front_status_not_materialized", front["manifest"]["hash_status"] == "NOT_MATERIALIZED")
+    if real:
+        check("front_hash_status_materialized", front["manifest"]["hash_status"] == "MATERIALIZED")
+        check("front_states_are_real", front["manifest"]["states_are"] == "REAL_ENVSTATE")
+        check("back_states_are_real", back["manifest"]["states_are"] == "REAL_ENVSTATE")
+        check("bank_field_manifest_present",
+              isinstance(front["manifest"]["field_manifest"], list)
+              and len(front["manifest"]["field_manifest"]) > 0)
+        check("back_resolved_kobold_type_id",
+              back["manifest"].get("resolved_kobold_type_id")
+              == audit.CRAFTAX_RUNTIME_BINDINGS["kobold"]["type_id"])
+    else:
+        check("front_status_not_materialized", front["manifest"]["hash_status"] == "NOT_MATERIALIZED")
 
     # NEG06: reordering states changes the bank hash.
     m = front["manifest"]
@@ -424,21 +565,57 @@ def self_test() -> int:
         for p in problems:
             print("  -", p)
         return 1
+    status = "MATERIALIZED" if ser.have_jax_craftax() else "NOT_MATERIALIZED"
     print("TIER3_STATE_BANK_MATERIALIZER_SELF_TEST_PASS (scenarios=2, two_process=agree, "
-          "hash_status=NOT_MATERIALIZED, env=%s)" % ser.environment_status())
+          "hash_status=%s, env=%s)" % (status, ser.environment_status()))
     return 0
+
+
+def _opt_value(argv, flag, default=None):
+    if flag in argv:
+        return argv[argv.index(flag) + 1]
+    return default
 
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    # Real materialization imports minicraftax, which lives under <repo>/dicode_src/src
+    # (audited relpaths). Make it importable for fresh subprocess interpreters too.
+    _src = str(audit.repo_root() / "dicode_src" / "src")
+    if os.path.isdir(_src) and _src not in sys.path:
+        sys.path.insert(0, _src)
     if "--self-test" in argv:
         return self_test()
+    if "--materialize-real" in argv:
+        scenario = _opt_value(argv, "--scenario", FRONT)
+        n = int(_opt_value(argv, "--n", "4"))
+        out = _opt_value(argv, "--out")
+        require(out is not None, "FAIL CLOSED: --materialize-real requires --out <path>")
+        manifest = process_a_materialize(scenario, n)
+        require(manifest["states_are"] == "REAL_ENVSTATE",
+                "FAIL CLOSED (BLOCKED_ENVIRONMENT): --materialize-real requires JAX+craftax")
+        with open(out, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(manifest, fh, indent=2, ensure_ascii=False, sort_keys=True)
+            fh.write("\n")
+        print("materialized REAL %s bank (n=%d) -> %s | %s=%s"
+              % (scenario, n, out, manifest["hash_label"], manifest["state_bank_hash"]))
+        return 0
+    if "--two-process-real" in argv:
+        scenario = _opt_value(argv, "--scenario", FRONT)
+        n = int(_opt_value(argv, "--n", "4"))
+        outdir = _opt_value(argv, "--outdir")
+        require(outdir is not None, "FAIL CLOSED: --two-process-real requires --outdir <dir>")
+        summary = run_two_process_real(scenario, n, outdir)
+        print(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
     if "--json" in argv:
         scenario = BACK if "--back" in argv else FRONT
         print(json.dumps(process_a_materialize(scenario, 4),
                          indent=2, ensure_ascii=False, sort_keys=True))
         return 0
-    print("usage: tier3_state_bank_materializer.py --self-test | --json [--back]")
+    print("usage: tier3_state_bank_materializer.py --self-test | --json [--back] | "
+          "--materialize-real --scenario <front_l2|back_l2> --n <N> --out <path> | "
+          "--two-process-real --scenario <front_l2|back_l2> --n <N> --outdir <dir>")
     return 3
 
 

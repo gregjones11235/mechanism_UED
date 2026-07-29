@@ -60,17 +60,19 @@
       "action_space": "canonical_craftax_action_set (UNCHANGED)",
       "boss_floor": 3,
       "boundary_predicates": {
-        "boss_area": "boss_area_reached",
+        "boss_area": "boss_area_reached (N/A for BACK_L2 ¡ª vocabulary only; see na_metrics)",
         "defeat": "defeat_kobold",
+        "engaged": "kobold_engaged",
         "start": "valid_back_scaffold_start"
       },
       "builder": {
         "calls": [
-          "WorldBuilder(rng, static_params, params)",
+          "r, _r = jax.random.split(world_rng); WorldBuilder(_r, static_params, params)  # canonical rng sequence",
           "set_starting_floor(3)",
           "set_player_inventory(<canonical starting kit>)",
-          "add_mob(3, 'melee', KOBOLD_TYPE_ID, position, health=-1.0)  # live kobold on the target floor",
-          "build(rng)"
+          "mob_rng = jax.random.fold_in(r, 0xBAC)",
+          "add_mobs_randomly_near(mob_rng, 3, 'ranged', KOBOLD_TYPE_ID, 1, target_pos=player_position, min_dist=2, max_dist=5)  # LIVE Kobold near the player",
+          "state = build(r)"
         ],
         "mechanism": "WorldBuilder (minicraftax.world_builder; repo-native scaffolding)",
         "starting_inventory": {
@@ -89,9 +91,9 @@
       },
       "dense_metric": "none",
       "forbid_defeat_kobold_at_start": true,
-      "identity_class": "TIER3_BACK_DIAGNOSTIC_SCAFFOLD",
-      "keeps": "boss/kobold search, engagement, combat, survival, DEFEAT_KOBOLD",
-      "kobold_type_id_binding": "BLOCKED_SOURCE_SEMANTICS (MeleeMobType/MobType KOBOLD from craftax==1.4.5 host)",
+      "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+      "keeps": "kobold engagement, combat, survival, DEFEAT_KOBOLD",
+      "kobold_type_id_binding": "RESOLVED (craftax==1.4.5): RANGED category, ranged type_id 3, canonical max health 8.0 (MOB_ACHIEVEMENT_MAP[MobType.RANGED, 3] == DEFEAT_KOBOLD; MOB_TYPE_HEALTH_MAPPING[3, MobType.RANGED])",
       "legality": {
         "common_state_bank_for_all_arms": true,
         "no_arm_specific_state": true,
@@ -103,10 +105,16 @@
         "same_action_space": true,
         "same_observation_schema": true
       },
+      "na_metrics": [
+        "boss_area_reached",
+        "time_to_boss_area",
+        "BACK_BOSS_NOT_FOUND"
+      ],
+      "na_reason": "the BACK start is ALREADY on floor 3 next to a live Kobold; boss-area search is not exercised, so BACK_L2 must not claim to evaluate it",
       "observation_schema": "canonical_craftax_symbolic (UNCHANGED)",
       "primary_metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
       "purpose": "MECHANISM_DIAGNOSIS_ONLY",
-      "removes": "the floor-2 dark corridor bottleneck",
+      "removes": "the floor-2 dark corridor bottleneck and boss-area search (start is already on floor 3)",
       "require_live_kobold_at_start": true,
       "scaffolded_results_can_replace_full_task": false,
       "scenario": "back_l2",
@@ -117,17 +125,18 @@
     "front_l2": {
       "action_space": "canonical_craftax_action_set (UNCHANGED)",
       "boundary_predicates": {
-        "exit": "corridor_exit_reached",
+        "exit_alias": "corridor_exit_reached (PENDING_EQUIVALENCE_ALIAS: reported but NOT the primary metric until real-map evidence proves the floor transition necessarily passes through the target corridor)",
+        "primary_event": "front_floor_transition_reached (episode-level: player level 2 -> 3)",
         "start": "valid_front_scaffold_start"
       },
       "builder": {
         "calls": [
-          "WorldBuilder(rng, static_params, params)",
+          "r, _r = jax.random.split(world_rng); WorldBuilder(_r, static_params, params)  # canonical rng sequence",
           "set_starting_floor(2)",
           "set_monsters_killed(2, 8)",
           "set_player_inventory(<canonical starting kit>)",
-          "build(rng)",
-          "item_map.at[2, up_ladder].set(ItemType.NONE.value)  # canonical floor-2 up-ladder removal"
+          "state = build(r)",
+          "state.replace(item_map=state.item_map.at[2, up_ladder].set(ItemType.NONE.value))  # canonical floor-2 up-ladder removal"
         ],
         "floor2_up_ladder_removed": true,
         "mechanism": "WorldBuilder (minicraftax.world_builder; repo-native scaffolding)",
@@ -148,10 +157,10 @@
         },
         "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
       },
-      "dense_metric": "NORMALIZED_CORRIDOR_PROGRESS",
+      "dense_metric": "GRAPH_DISTANCE_PROGRESS",
       "exit_floor": 3,
       "identity_class": "TIER3_FRONT_DIAGNOSTIC_SCAFFOLD",
-      "keeps": "floor-2 DARK corridor navigation, multi-mob survival, exit search",
+      "keeps": "floor-2 DARK corridor navigation, multi-mob survival, floor transition to floor 3",
       "legality": {
         "common_state_bank_for_all_arms": true,
         "no_arm_specific_state": true,
@@ -164,7 +173,8 @@
         "same_observation_schema": true
       },
       "observation_schema": "canonical_craftax_symbolic (UNCHANGED)",
-      "primary_metric": "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START",
+      "primary_event": "FRONT_FLOOR_TRANSITION_REACHED (player level 2 -> 3)",
+      "primary_metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
       "purpose": "MECHANISM_DIAGNOSIS_ONLY",
       "removes": "upstream resource preparation and dungeon entry (floors 0-1)",
       "scaffolded_results_can_replace_full_task": false,

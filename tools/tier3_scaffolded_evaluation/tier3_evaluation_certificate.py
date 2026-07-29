@@ -134,7 +134,7 @@ def build_certificate(evaluation_result: dict, state_bank_hash_label: str = None
         "identity_class": evaluation_result.get("contract", {}).get("observation_schema") and {
             FULL: "CANONICAL_S4_EVALUATION",
             FRONT: "TIER3_FRONT_DIAGNOSTIC_SCAFFOLD",
-            BACK: "TIER3_BACK_DIAGNOSTIC_SCAFFOLD",
+            BACK: "BOSS_COMBAT_SCAFFOLDED",   # 收口: combat only; boss-area search is N/A
         }[scenario],
         "headline_metric": primary["metric"],
         "headline_metric_value": primary["value"],

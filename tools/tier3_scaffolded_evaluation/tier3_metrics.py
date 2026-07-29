@@ -6,11 +6,14 @@ CONDITIONAL on a valid scaffold start and are for MECHANISM DIAGNOSIS ONLY — t
 never replace the full-task DEFEAT_KOBOLD_SR (scaffolded_results_can_replace_full_task
 = false). Dense progress is not a success substitute.
 
-Frozen primary / dense metrics:
-  FULL   : DEFEAT_KOBOLD_SR                              = P(defeat | valid_full_start)
-  FRONT  : P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START     = P(exit    | valid_front_start)
-           dense NORMALIZED_CORRIDOR_PROGRESS in [0,1]   (graph-distance; see predicates)
-  BACK   : P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START        = P(defeat | valid_back_start)
+Frozen primary / dense metrics (收口 fast-track):
+  FULL   : DEFEAT_KOBOLD_SR                                        = P(defeat | valid_full_start)
+  FRONT  : P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START      = P(player level 2->3 | valid_front_start)
+           dense GRAPH_DISTANCE_PROGRESS in [0,1]                  (graph-distance; see predicates)
+           (corridor_exit_reached is reported only as PENDING_EQUIVALENCE_ALIAS, never primary)
+  BACK   : identity = BOSS_COMBAT_SCAFFOLDED
+           P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START                  = P(defeat | valid_back_start)
+           boss_area_reached / time_to_boss_area / BACK_BOSS_NOT_FOUND are N/A (search not exercised)
 
 All estimators are pure ratios over validated episode records; an episode without a
 valid_start flag is rejected upstream by the evaluator (NEG19).
@@ -31,9 +34,11 @@ FRONT = "front_l2"
 BACK = "back_l2"
 
 FULL_PRIMARY_METRIC = "DEFEAT_KOBOLD_SR"
-FRONT_PRIMARY_METRIC = "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START"
-FRONT_DENSE_METRIC = "NORMALIZED_CORRIDOR_PROGRESS"
+FRONT_PRIMARY_METRIC = "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START"
+FRONT_DENSE_METRIC = "GRAPH_DISTANCE_PROGRESS"
 BACK_PRIMARY_METRIC = "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START"
+BACK_IDENTITY = "BOSS_COMBAT_SCAFFOLDED"
+BACK_NA_METRICS = ["boss_area_reached", "time_to_boss_area", "BACK_BOSS_NOT_FOUND"]
 
 PRIMARY_METRIC = {
     FULL: FULL_PRIMARY_METRIC,
@@ -76,7 +81,8 @@ def compute_primary_metric(scenario, episodes):
     if scenario == FULL:
         successes = sum(1 for e in valid if e.get("defeat_kobold") is True)
     elif scenario == FRONT:
-        successes = sum(1 for e in valid if e.get("corridor_exit_reached") is True)
+        # Episode-level primary event: player level transitioned 2 -> 3.
+        successes = sum(1 for e in valid if e.get("front_floor_transition_reached") is True)
     elif scenario == BACK:
         successes = sum(1 for e in valid if e.get("defeat_kobold") is True)
     else:
@@ -93,14 +99,14 @@ def compute_primary_metric(scenario, episodes):
 
 
 def compute_dense_progress(scenario, episodes):
-    """Mean NORMALIZED_CORRIDOR_PROGRESS over valid FRONT starts (front only)."""
+    """Mean GRAPH_DISTANCE_PROGRESS (max over the episode) over valid FRONT starts."""
     if scenario != FRONT:
         return {"metric": FRONT_DENSE_METRIC, "scenario": scenario,
                 "value": None, "note": "dense progress defined for front_l2 only"}
     valid = _valid_episodes(FRONT, episodes)
     vals = []
     for e in valid:
-        p = e.get("normalized_corridor_progress")
+        p = e.get("graph_distance_progress")
         if p is not None:
             vals.append(assert_progress_in_range(p))
     return {
@@ -118,13 +124,19 @@ def compute_dense_progress(scenario, episodes):
 def summarize(scenario, episodes):
     primary = compute_primary_metric(scenario, episodes)
     dense = compute_dense_progress(scenario, episodes)
-    return {
+    out = {
         "schema": SCHEMA,
         "scenario": scenario,
         "primary": primary,
         "dense": dense,
         "scaffolded_results_can_replace_full_task": False,
     }
+    if scenario == BACK:
+        out["identity_class"] = BACK_IDENTITY
+        out["na_metrics"] = list(BACK_NA_METRICS)
+        out["na_reason"] = ("BACK start is already on floor 3 next to a live Kobold; "
+                            "boss-area search is not exercised by this scaffold")
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -132,8 +144,8 @@ def summarize(scenario, episodes):
 # ---------------------------------------------------------------------------
 def _ep(scenario, valid_start, **flags):
     e = {"scenario": scenario, "valid_start": valid_start,
-         "corridor_exit_reached": False, "defeat_kobold": False,
-         "normalized_corridor_progress": None}
+         "front_floor_transition_reached": False, "corridor_exit_reached": False,
+         "defeat_kobold": False, "graph_distance_progress": None}
     e.update(flags)
     return e
 
@@ -152,25 +164,29 @@ def self_test() -> int:
     check("full_primary_1_of_2", fp["value"] == 0.5 and fp["valid_starts"] == 2)
     check("full_metric_name", fp["metric"] == FULL_PRIMARY_METRIC)
 
-    # FRONT: 2/4 exit; dense progress mean over scored valid starts.
-    front = [_ep(FRONT, True, corridor_exit_reached=True, normalized_corridor_progress=1.0),
-             _ep(FRONT, True, corridor_exit_reached=True, normalized_corridor_progress=0.8),
-             _ep(FRONT, True, corridor_exit_reached=False, normalized_corridor_progress=0.2),
-             _ep(FRONT, True, corridor_exit_reached=False, normalized_corridor_progress=0.0),
-             _ep(FRONT, False, corridor_exit_reached=True)]
+    # FRONT: 2/4 floor transitions; dense progress mean over scored valid starts.
+    front = [_ep(FRONT, True, front_floor_transition_reached=True, graph_distance_progress=1.0),
+             _ep(FRONT, True, front_floor_transition_reached=True, graph_distance_progress=0.8),
+             _ep(FRONT, True, front_floor_transition_reached=False, graph_distance_progress=0.2),
+             _ep(FRONT, True, front_floor_transition_reached=False, graph_distance_progress=0.0),
+             _ep(FRONT, False, front_floor_transition_reached=True)]
     frp = compute_primary_metric(FRONT, front)
     check("front_primary_2_of_4", frp["value"] == 0.5 and frp["valid_starts"] == 4)
     check("front_metric_name", frp["metric"] == FRONT_PRIMARY_METRIC)
     frd = compute_dense_progress(FRONT, front)
     check("front_dense_mean", abs(frd["value"] - 0.5) < 1e-9)
+    check("front_dense_metric_name", frd["metric"] == FRONT_DENSE_METRIC)
     check("front_dense_not_success_substitute", frd["is_success_substitute"] is False)
 
-    # BACK: 1/3 defeat.
+    # BACK: 1/3 defeat; summary carries BOSS_COMBAT_SCAFFOLDED identity + N/A metrics.
     back = [_ep(BACK, True, defeat_kobold=True), _ep(BACK, True, defeat_kobold=False),
             _ep(BACK, True, defeat_kobold=False)]
     bp = compute_primary_metric(BACK, back)
     check("back_primary_1_of_3", abs(bp["value"] - 1 / 3) < 1e-9 and bp["valid_starts"] == 3)
     check("back_metric_name", bp["metric"] == BACK_PRIMARY_METRIC)
+    bs = summarize(BACK, back)
+    check("back_identity_boss_combat_scaffolded", bs.get("identity_class") == BACK_IDENTITY)
+    check("back_na_metrics", bs.get("na_metrics") == BACK_NA_METRICS)
 
     # No valid starts -> value undefined (None), never faked.
     check("empty_undefined", compute_primary_metric(FRONT, [])["value"] is None)

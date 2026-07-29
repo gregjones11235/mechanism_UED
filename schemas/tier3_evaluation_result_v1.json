@@ -13,7 +13,7 @@
   "metrics": {
     "dense": {
       "is_success_substitute": false,
-      "metric": "NORMALIZED_CORRIDOR_PROGRESS",
+      "metric": "GRAPH_DISTANCE_PROGRESS",
       "monotonicity_guaranteed": false,
       "range": [
         0,
@@ -27,7 +27,7 @@
     "primary": {
       "conditional_on": "valid_start",
       "diagnostic_only": true,
-      "metric": "P_CORRIDOR_EXIT_REACHED_GIVEN_VALID_START",
+      "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
       "scenario": "front_l2",
       "successes": 1,
       "valid_starts": 3,
@@ -44,8 +44,8 @@
   "schema": "mechanism_UED.tier3_evaluation_result/v1",
   "terminal_label_counts": {
     "DIED_IN_CORRIDOR": 1,
-    "EXIT_REACHED": 1,
-    "TIMEOUT_EXIT_NOT_FOUND": 1
+    "FRONT_FLOOR_TRANSITION_REACHED": 1,
+    "TIMEOUT_NO_TRANSITION": 1
   },
   "valid_start_count": 3
 }
