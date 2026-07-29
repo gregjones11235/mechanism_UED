@@ -60,6 +60,29 @@ HASH_LABELS = {
 }
 GLOBAL_HASH_LABEL = "GLOBAL_WORLD_SET_HASH"   # NEVER used for a scaffold bank
 
+# ---------------------------------------------------------------------------
+# FROZEN real-evaluation bank identities (fast-track Commit 2 evidence; n=8,
+# seed_base=10_000, stride=1). These are VALUE BINDINGS, not labels: before any
+# real evaluation the bank is re-materialized and compared against them; ANY
+# mismatch fails closed (verify_frozen_bank_identity). The banks themselves are
+# frozen and must NOT be re-materialized onto disk / modified.
+# ---------------------------------------------------------------------------
+FROZEN_FRONT_STATE_BANK_HASH = ("21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0ef"
+                                "bec9b947e275d687")
+FROZEN_BACK_STATE_BANK_HASH = ("c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa"
+                               "2d5ab775431f2566")
+FROZEN_FIELD_MANIFEST_SHA256 = ("615d4be4df22115e4ac520718076860bf9def636a46806f5"
+                                "a2948be21456ee07")
+FROZEN_PREDICATE_CODE_SHA256 = ("a4fba86b054d20412fc1df2c79e7000d66b0525decb1801f"
+                                "a474ee7fb0d25b4c")
+FROZEN_BANK_HASH = {FRONT: FROZEN_FRONT_STATE_BANK_HASH,
+                    BACK: FROZEN_BACK_STATE_BANK_HASH}
+FROZEN_BANK_N = 8
+FROZEN_SEED_BASE = 10_000
+FROZEN_SEED_STRIDE = 1
+FROZEN_CANONICAL_TASK_SHA256 = ("45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c"
+                                "683d80454e4d824d")
+
 # Kobold type_id used for the SYNTHETIC protocol self-test states. It equals the
 # RESOLVED craftax==1.4.5 binding (RANGED category, ranged type_id 3 — see
 # tier3_source_audit.CRAFTAX_RUNTIME_BINDINGS) so the synthetic path exercises the
@@ -414,6 +437,139 @@ def process_b_verify(manifest: dict, kobold_type_id=None) -> bool:
                     for e in manifest["entries"]),
                 "FAIL CLOSED (PROCESS_B): per-entry field_manifest_sha256 != bank-level value")
     return True
+
+
+# ---------------------------------------------------------------------------
+# FROZEN bank identity verification (required before ANY real evaluation)
+# ---------------------------------------------------------------------------
+def check_frozen_manifest_bindings(scenario: str, manifest: dict) -> dict:
+    """PURE value-binding comparison of a REAL manifest against the frozen identities
+    (no environment interaction beyond source-file hashing; runnable on any host).
+    Fail closed on ANY drift. Returns the certificate-binding record (verified=True
+    plus every bound value, including the ORDER-SENSITIVE ordered payload hashes).
+
+    Bound values: scenario, REAL_ENVSTATE/MATERIALIZED status, hash_label (and never
+    the GLOBAL_WORLD_SET_HASH label), state_bank_hash, field_manifest_sha256,
+    state_count, the exact result-blind seed schedule, every per-entry field
+    manifest SHA, REAL (non-synthetic) entries only, the order-sensitive bank-hash
+    recomputation, source_shas, boundary predicate code SHA and the canonical
+    Stage4 task source SHA.
+    """
+    import tier3_boundary_schema as bnd
+    require(scenario in FROZEN_BANK_HASH,
+            "FAIL CLOSED: no frozen bank identity for scenario %r (expected FRONT/BACK)"
+            % scenario)
+    require(isinstance(manifest, dict),
+            "FAIL CLOSED: frozen manifest binding requires a manifest dict")
+    require(manifest.get("scenario") == scenario,
+            "FAIL CLOSED: manifest scenario %r != requested %r"
+            % (manifest.get("scenario"), scenario))
+    require(manifest.get("states_are") == "REAL_ENVSTATE"
+            and manifest.get("hash_status") == "MATERIALIZED",
+            "FAIL CLOSED: frozen bank identity requires a REAL_ENVSTATE/MATERIALIZED "
+            "manifest (got states_are=%r, hash_status=%r)"
+            % (manifest.get("states_are"), manifest.get("hash_status")))
+    # Hash label binding (and NEG24: never the GLOBAL label).
+    require(manifest.get("hash_label") == HASH_LABELS[scenario],
+            "FAIL CLOSED: %s hash_label %r != %r"
+            % (scenario, manifest.get("hash_label"), HASH_LABELS[scenario]))
+    require(manifest.get("hash_label") != GLOBAL_HASH_LABEL,
+            "FAIL CLOSED (NEG24): scaffold bank must never carry the GLOBAL_WORLD_SET_HASH label")
+    # Frozen VALUE bindings.
+    require(manifest.get("state_bank_hash") == FROZEN_BANK_HASH[scenario],
+            "FAIL CLOSED: %s state_bank_hash %s != FROZEN %s (bank identity drifted)"
+            % (scenario, str(manifest.get("state_bank_hash"))[:16],
+               FROZEN_BANK_HASH[scenario][:16]))
+    require(manifest.get("field_manifest_sha256") == FROZEN_FIELD_MANIFEST_SHA256,
+            "FAIL CLOSED: %s field_manifest_sha256 %s != FROZEN %s"
+            % (scenario, str(manifest.get("field_manifest_sha256"))[:16],
+               FROZEN_FIELD_MANIFEST_SHA256[:16]))
+    require(manifest.get("state_count") == FROZEN_BANK_N,
+            "FAIL CLOSED: %s state_count %r != FROZEN %d"
+            % (scenario, manifest.get("state_count"), FROZEN_BANK_N))
+    # Frozen result-blind seed schedule.
+    seeds = fixed_seed_schedule(scenario, FROZEN_BANK_N, FROZEN_SEED_BASE, FROZEN_SEED_STRIDE)
+    require(manifest.get("seeds") == seeds,
+            "FAIL CLOSED: %s seeds %r != frozen schedule %r"
+            % (scenario, manifest.get("seeds"), seeds))
+    sched = manifest.get("seed_schedule_params") or {}
+    require(sched.get("n") == FROZEN_BANK_N and sched.get("seed_base") == FROZEN_SEED_BASE
+            and sched.get("stride") == FROZEN_SEED_STRIDE and sched.get("scenario") == scenario,
+            "FAIL CLOSED: %s seed_schedule_params %r != frozen (n=%d, base=%d, stride=%d)"
+            % (scenario, sched, FROZEN_BANK_N, FROZEN_SEED_BASE, FROZEN_SEED_STRIDE))
+    # Per-entry bindings: REAL entries only, frozen field manifest, 64-hex payload hash.
+    entries = manifest.get("entries") or []
+    require(len(entries) == FROZEN_BANK_N,
+            "FAIL CLOSED: %s has %d entries != FROZEN %d"
+            % (scenario, len(entries), FROZEN_BANK_N))
+    for e in entries:
+        require(e.get("synthetic") is False,
+                "FAIL CLOSED: %s entry %d is SYNTHETIC; frozen bank must be REAL_ENVSTATE"
+                % (scenario, e.get("index")))
+        require(e.get("field_manifest_sha256") == FROZEN_FIELD_MANIFEST_SHA256,
+                "FAIL CLOSED: %s entry %d field manifest drifted" % (scenario, e.get("index")))
+        ph = e.get("state_payload_hash") or ""
+        require(isinstance(ph, str) and len(ph) == 64,
+                "FAIL CLOSED: %s entry %d has no valid 64-hex payload hash"
+                % (scenario, e.get("index")))
+    # ORDER-SENSITIVE recomputation of the bank hash from the ordered payload hashes.
+    ordered = [e["state_payload_hash"] for e in entries]
+    require(state_bank_hash(ordered, scenario, source_shas_for_bank())
+            == FROZEN_BANK_HASH[scenario],
+            "FAIL CLOSED: %s ordered payload hashes do not recompute the FROZEN bank hash "
+            "(order / payload tamper detected)" % scenario)
+    # Source-code identity bindings.
+    require(manifest.get("source_shas") == source_shas_for_bank(),
+            "FAIL CLOSED: %s source_shas drifted from the audited source binding" % scenario)
+    psha = bnd.predicate_code_sha256()
+    require(psha == FROZEN_PREDICATE_CODE_SHA256,
+            "FAIL CLOSED: boundary predicate code sha256 %s != FROZEN %s"
+            % (psha[:16], FROZEN_PREDICATE_CODE_SHA256[:16]))
+    require(manifest.get("boundary_predicate_version") == pred.PREDICATE_VERSION,
+            "FAIL CLOSED: boundary_predicate_version %r != %r"
+            % (manifest.get("boundary_predicate_version"), pred.PREDICATE_VERSION))
+    canonical = builder.verify_canonical_task_source(FROZEN_CANONICAL_TASK_SHA256)   # NEG03
+    require(canonical.get("sha256") == FROZEN_CANONICAL_TASK_SHA256,
+            "FAIL CLOSED: canonical task source SHA %s != FROZEN %s"
+            % (str(canonical.get("sha256"))[:16], FROZEN_CANONICAL_TASK_SHA256[:16]))
+    return {
+        "verified": True,
+        "scenario": scenario,
+        "hash_label": HASH_LABELS[scenario],
+        "state_bank_hash": manifest["state_bank_hash"],
+        "state_count": FROZEN_BANK_N,
+        "seeds": seeds,
+        "ordered_payload_hashes": ordered,
+        "field_manifest_sha256": manifest["field_manifest_sha256"],
+        "predicate_code_sha256": psha,
+        "canonical_task_sha256": canonical["sha256"],
+        "source_shas": manifest["source_shas"],
+        "boundary_predicate_version": pred.PREDICATE_VERSION,
+    }
+
+
+def verify_frozen_bank_identity(scenario: str, manifest: dict = None) -> dict:
+    """Re-verify a bank against the FROZEN identities and fail closed on ANY drift.
+
+    This is RUNTIME IDENTITY VERIFICATION, not re-materialization: nothing is
+    written to disk and the frozen banks are not modified. With ``manifest=None``
+    the bank is re-minted IN MEMORY from the frozen result-blind schedule
+    (n=8, base=10_000, stride=1) and compared; a caller may instead pass an
+    already-minted REAL manifest, which is verified the same way. On top of the
+    pure value bindings (check_frozen_manifest_bindings) a PROCESS_B
+    re-verification of the manifest is run as the final independence gate.
+    Requires JAX+craftax (BLOCKED_ENVIRONMENT otherwise).
+    """
+    require(ser.have_jax_craftax(),
+            "FAIL CLOSED (BLOCKED_ENVIRONMENT): frozen bank identity verification requires "
+            "JAX+craftax real materialization (jax=%s, craftax=%s)"
+            % (ser.have_jax(), ser.have_craftax()))
+    if manifest is None:
+        manifest = process_a_materialize(scenario, FROZEN_BANK_N,
+                                         base=FROZEN_SEED_BASE, stride=FROZEN_SEED_STRIDE)
+    binding = check_frozen_manifest_bindings(scenario, manifest)
+    process_b_verify(manifest)
+    return binding
 
 
 def compare_two_processes(a: dict, b: dict):

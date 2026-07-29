@@ -1,6 +1,27 @@
 {
   "cert_version": "tier3_evaluation_certificate/v1",
   "claims": [],
+  "eval_binding": {
+    "_note": "present ONLY on certificates produced by a real evaluation run (REAL CLI); every field is an ACTUAL VALUE (NEG27 — never a hash label). 64-hex values below are documentation placeholders.",
+    "bank_kind": "FROZEN_SCAFFOLD_BANK",
+    "state_bank_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "state_payload_hashes": [
+      "0000000000000000000000000000000000000000000000000000000000000000"
+    ],
+    "checkpoint_file_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "cc2_params_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "checkpoint_step": 4096,
+    "carry_mode": "persistent",
+    "run_class": "INTERFACE_SMOKE",
+    "episode_records_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "cc2_policy_source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "evaluator_source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "observation_shape": [8335],
+    "action_dim": 43,
+    "params_unchanged": true,
+    "performance_claim_authorized": false
+  },
   "failure_rule_version": "tier3_failure_rules/v1",
   "headline_metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
   "headline_metric_achieved": null,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CC4 Tier3 — negative tests (§十七 NEG01–NEG26).
+"""CC4 Tier3 — negative tests (§十七 NEG01–NEG28).
 
 Each negative test constructs an INVALID input and asserts the corresponding guard
 REJECTS it (fail-closed). A test PASSES when the rejection is correctly detected;
@@ -7,7 +7,7 @@ the suite requirement is FAIL=0 (no negative test silently accepts a violation).
 BLOCKED is allowed only with a documented environment-capability absence — never a
 fake PASS.
 
-Coverage (all 26 implemented; FAIL=0 required):
+Coverage (all 28 implemented; FAIL=0 required):
   NEG01-NEG18  boundary / builder / state-bank / predicate level
   NEG19        episode missing valid_start (evaluator)
   NEG20        ambiguous termination silently labelled (failure taxonomy)
@@ -15,6 +15,8 @@ Coverage (all 26 implemented; FAIL=0 required):
   NEG24        scaffold hash must never be the GLOBAL_WORLD_SET_HASH (materializer/cert)
   NEG25        scaffold result claims full-task success (certificate)
   NEG26        state/sample selection must be blind to Student performance (materializer)
+  NEG27        certificate eval_binding must carry real VALUES, never labels (certificate)
+  NEG28        tampered frozen bank manifest fails closed (materializer, pure compare)
 """
 from __future__ import annotations
 
@@ -277,6 +279,97 @@ def neg25():
     return rejects(lambda: certmod.build_certificate(result, claims=claims))
 
 
+def neg27():
+    """Certificate eval_binding with a hash LABEL / missing value instead of a real
+    64-hex SHA value (or wrong interface / params changed) -> fail."""
+    result = {
+        "scenario": mat.FRONT,
+        "contract": {"observation_schema": "canonical_craftax_symbolic"},
+        "metrics": {"primary": {"metric": metrics.FRONT_PRIMARY_METRIC, "value": 0.5,
+                                "valid_starts": 4}},
+        "failure_rule_version": taxonomy.FAILURE_RULE_VERSION,
+        "terminal_label_counts": {},
+        "rollout_status": "BLOCKED_ENVIRONMENT",
+    }
+    binding = {
+        "state_bank_hash": "FRONT_SCAFFOLD_STATE_BANK_HASH",   # a LABEL, not a SHA value
+        "state_payload_hashes": ["a" * 64],
+        "checkpoint_file_sha256": "b" * 64,
+        "cc2_params_sha256": "c" * 64,
+        "checkpoint_step": 4096,
+        "carry_mode": "persistent",
+        "run_class": "INTERFACE_SMOKE",
+        "episode_records_sha256": "d" * 64,
+        "cc2_policy_source_sha256": "e" * 64,
+        "evaluator_source_sha256": "f" * 64,
+        "predicate_code_sha256": "0" * 64,
+        "observation_shape": [8335],
+        "action_dim": 43,
+        "params_unchanged": True,
+        "performance_claim_authorized": False,
+    }
+    label_rejected = rejects(
+        lambda: certmod.build_certificate(result, eval_binding=dict(binding)))
+    empty = dict(binding)
+    empty["state_bank_hash"] = "a" * 64
+    empty["checkpoint_file_sha256"] = None                       # missing value
+    missing_rejected = rejects(
+        lambda: certmod.build_certificate(result, eval_binding=empty))
+    changed = dict(binding)
+    changed["state_bank_hash"] = "a" * 64
+    changed["params_unchanged"] = False                          # params mutated
+    changed_rejected = rejects(
+        lambda: certmod.build_certificate(result, eval_binding=changed))
+    return label_rejected and missing_rejected and changed_rejected
+
+
+def _fake_real_manifest(scenario, n=8):
+    """A manifest shaped EXACTLY like a REAL bank with every frozen binding correct
+    EXCEPT the per-entry payload hashes (which are fabricated 64-hex values, so the
+    order-sensitive bank-hash recomputation cannot match the frozen hash). Pure /
+    host-independent; used by NEG28."""
+    seeds = mat.fixed_seed_schedule(scenario, n, mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE)
+    entries = [{"index": i, "seed": int(seeds[i]),
+                "state_payload_hash": ("%064x" % (i + 1)),
+                "field_manifest_sha256": mat.FROZEN_FIELD_MANIFEST_SHA256,
+                "synthetic": False} for i in range(n)]
+    return {
+        "schema": mat.SCHEMA,
+        "scenario": scenario,
+        "hash_label": mat.HASH_LABELS[scenario],
+        "hash_status": "MATERIALIZED",
+        "states_are": "REAL_ENVSTATE",
+        "state_count": n,
+        "seed_schedule_params": {"scenario": scenario, "n": n,
+                                 "seed_base": mat.FROZEN_SEED_BASE,
+                                 "stride": mat.FROZEN_SEED_STRIDE},
+        "seeds": seeds,
+        "source_shas": mat.source_shas_for_bank(),
+        "boundary_predicate_version": pred.PREDICATE_VERSION,
+        "field_manifest_sha256": mat.FROZEN_FIELD_MANIFEST_SHA256,
+        "state_bank_hash": mat.FROZEN_BANK_HASH[scenario],
+        "entries": entries,
+    }
+
+
+def neg28():
+    """Tampered frozen bank manifest -> fail closed (pure comparison; any host).
+
+    Three independent tamper paths: (a) fabricated per-entry payload hashes cannot
+    recompute the frozen bank hash (order-sensitive), (b) a declared state_bank_hash
+    different from the frozen value is rejected, (c) a shifted seed schedule breaks
+    the result-blind binding."""
+    m = _fake_real_manifest(mat.FRONT)
+    payload_tamper_rejected = rejects(lambda: mat.check_frozen_manifest_bindings(mat.FRONT, m))
+    m2 = _fake_real_manifest(mat.FRONT)
+    m2["state_bank_hash"] = "0" * 64
+    bankhash_tamper_rejected = rejects(lambda: mat.check_frozen_manifest_bindings(mat.FRONT, m2))
+    m3 = _fake_real_manifest(mat.BACK)
+    m3["seeds"] = [s + 1 for s in m3["seeds"]]
+    seed_tamper_rejected = rejects(lambda: mat.check_frozen_manifest_bindings(mat.BACK, m3))
+    return payload_tamper_rejected and bankhash_tamper_rejected and seed_tamper_rejected
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -307,6 +400,8 @@ NEG_TESTS = [
     ("NEG24", "scaffold hash used as GLOBAL_WORLD_SET_HASH", neg24),
     ("NEG25", "scaffold result claims full-task success", neg25),
     ("NEG26", "result-based state/sample selection", neg26),
+    ("NEG27", "certificate eval_binding label / missing value / params changed", neg27),
+    ("NEG28", "tampered frozen bank manifest (payload / hash / seeds)", neg28),
 ]
 
 # All 26 NEG tests are implemented (NEG19-23/25 landed with the Commit-3 modules).
@@ -340,7 +435,7 @@ def self_test() -> int:
     if n_fail != 0:
         print("TIER3_NEGATIVE_TESTS_FAIL (FAIL=%d/%d implemented)" % (n_fail, implemented))
         return 1
-    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/26, pending_commit3=%d)"
+    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/28, pending_commit3=%d)"
           % (implemented, pending))
     return 0
 

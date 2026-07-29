@@ -49,14 +49,94 @@ FORBIDDEN_OVERCLAIMS = {
     "REPLAY_SCIENTIFIC_GAIN",
 }
 
+# REAL certificate bindings (task §五): a certificate that records an evaluation
+# must bind ACTUAL VALUES for every field below — a hash LABEL or an omitted value
+# fails closed (NEG27). These are the interface + provenance facts that make the
+# certificate auditable against the frozen Tier3 contract.
+EVAL_BINDING_REQUIRED_FIELDS = (
+    "state_bank_hash", "state_payload_hashes", "checkpoint_file_sha256",
+    "cc2_params_sha256", "checkpoint_step", "carry_mode", "run_class",
+    "episode_records_sha256", "cc2_policy_source_sha256", "evaluator_source_sha256",
+    "predicate_code_sha256", "observation_shape", "action_dim", "params_unchanged",
+    "performance_claim_authorized",
+)
+EVAL_BINDING_SHA_FIELDS = (
+    "state_bank_hash", "checkpoint_file_sha256", "cc2_params_sha256",
+    "episode_records_sha256", "cc2_policy_source_sha256", "evaluator_source_sha256",
+    "predicate_code_sha256",
+)
+FROZEN_OBSERVATION_SHAPE = [8335]      # canonical S4 symbolic obs (unchanged)
+FROZEN_ACTION_DIM = 43                 # canonical craftax action set (unchanged)
+RUN_CLASSES = ("INTERFACE_SMOKE", "FORMAL_EVALUATION")
+
 
 class FailClosed(Exception):
-    """Hard stop on over-claiming / hash mislabelling."""
+    """Hard stop on over-claiming / hash mislabelling / incomplete binding."""
 
 
 def require(cond, msg):
     if not cond:
         raise FailClosed(msg)
+
+
+def _is_sha256_hex(v) -> bool:
+    return (isinstance(v, str) and len(v) == 64
+            and all(c in "0123456789abcdef" for c in v))
+
+
+# ---------------------------------------------------------------------------
+# NEG27: REAL certificate value binding (never just hash labels)
+# ---------------------------------------------------------------------------
+def assert_eval_binding_complete(cert: dict) -> dict:
+    """NEG27: a certificate carrying an evaluation binding must bind ACTUAL VALUES
+    for every EVAL_BINDING_REQUIRED_FIELDS field. Missing / empty values, hash
+    LABELS in place of 64-hex SHAs, a non-frozen observation/action interface,
+    params_unchanged != True, or an unknown run_class all fail closed.
+
+    Extra enforcement: run_class=INTERFACE_SMOKE can NEVER authorize a performance
+    claim (performance_claim_authorized must be False).
+    """
+    binding = cert.get("eval_binding")
+    require(isinstance(binding, dict),
+            "FAIL CLOSED (NEG27): certificate has no eval_binding dict — a real "
+            "evaluation certificate must bind actual values, not labels")
+    missing = []
+    for f in EVAL_BINDING_REQUIRED_FIELDS:
+        v = binding.get(f)
+        if v is None or v == "" or v == [] or v == {}:
+            missing.append(f)
+    require(not missing,
+            "FAIL CLOSED (NEG27): eval_binding missing / empty field(s) %s — actual "
+            "values required, hash labels are not enough" % missing)
+    for f in EVAL_BINDING_SHA_FIELDS:
+        require(_is_sha256_hex(binding[f]),
+                "FAIL CLOSED (NEG27): eval_binding.%s = %r is not a 64-hex sha256 VALUE "
+                "(a label or truncated hash is forbidden)" % (f, binding[f]))
+    require(isinstance(binding["state_payload_hashes"], list)
+            and all(_is_sha256_hex(h) for h in binding["state_payload_hashes"]),
+            "FAIL CLOSED (NEG27): state_payload_hashes must be an ordered list of "
+            "64-hex sha256 values")
+    require(list(binding["observation_shape"]) == FROZEN_OBSERVATION_SHAPE,
+            "FAIL CLOSED (NEG27): eval_binding observation_shape %s != frozen %s "
+            "(observation interface changed)"
+            % (binding["observation_shape"], FROZEN_OBSERVATION_SHAPE))
+    require(int(binding["action_dim"]) == FROZEN_ACTION_DIM,
+            "FAIL CLOSED (NEG27): eval_binding action_dim %r != frozen %d "
+            "(action interface changed)" % (binding["action_dim"], FROZEN_ACTION_DIM))
+    require(binding["params_unchanged"] is True,
+            "FAIL CLOSED (NEG27/NEG23): eval_binding params_unchanged must be exactly "
+            "True (params SHA identical before/after evaluation)")
+    require(binding["carry_mode"] in ("persistent", "reset128"),
+            "FAIL CLOSED (NEG27): eval_binding carry_mode %r not in (persistent, reset128)"
+            % binding["carry_mode"])
+    require(binding["run_class"] in RUN_CLASSES,
+            "FAIL CLOSED (NEG27): eval_binding run_class %r not in %s"
+            % (binding["run_class"], RUN_CLASSES))
+    require(binding["performance_claim_authorized"] is False
+            or binding["run_class"] == "FORMAL_EVALUATION",
+            "FAIL CLOSED (NEG27): run_class=INTERFACE_SMOKE can never authorize a "
+            "performance claim")
+    return binding
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +204,7 @@ def honest_status_labels(has_real_rollout: bool, has_student_data: bool) -> dict
 
 def build_certificate(evaluation_result: dict, state_bank_hash_label: str = None,
                       claims=None, has_real_rollout: bool = False,
-                      has_student_data: bool = False) -> dict:
+                      has_student_data: bool = False, eval_binding: dict = None) -> dict:
     scenario = evaluation_result["scenario"]
     primary = evaluation_result["metrics"]["primary"]
     cert = {
@@ -152,8 +232,12 @@ def build_certificate(evaluation_result: dict, state_bank_hash_label: str = None
         "status_labels": honest_status_labels(has_real_rollout, has_student_data),
         "source_audit_schema": audit.SCHEMA,
     }
+    if eval_binding is not None:
+        cert["eval_binding"] = eval_binding
     assert_scaffold_hash_not_global(cert)          # NEG24
     assert_scaffold_does_not_claim_full_success(cert)   # NEG25
+    if eval_binding is not None:
+        assert_eval_binding_complete(cert)         # NEG27 (real value binding)
     return cert
 
 
@@ -222,6 +306,54 @@ def self_test() -> int:
     # A FULL certificate MAY use the GLOBAL label and full-task metric.
     fc = build_certificate(_result(FULL, 0.25, 8), has_real_rollout=False)
     check("full_cert_global_label_ok", fc["state_bank_hash_label"] == GLOBAL_HASH_LABEL)
+
+    # ---- NEG27: REAL value binding (actual SHAs, never labels) ----
+    def _binding(**over):
+        b = {
+            "state_bank_hash": "2" + "a" * 63,
+            "state_payload_hashes": ["b" * 64, "c" * 64],
+            "checkpoint_file_sha256": "d" * 64,
+            "cc2_params_sha256": "e" * 64,
+            "checkpoint_step": 4096,
+            "carry_mode": "persistent",
+            "run_class": "INTERFACE_SMOKE",
+            "episode_records_sha256": "f" * 64,
+            "cc2_policy_source_sha256": "0" * 64,
+            "evaluator_source_sha256": "1" * 64,
+            "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801f"
+                                     "a474ee7fb0d25b4c",
+            "observation_shape": [8335],
+            "action_dim": 43,
+            "params_unchanged": True,
+            "performance_claim_authorized": False,
+        }
+        b.update(over)
+        return b
+
+    cb = build_certificate(_result(FRONT, 0.5, 4), eval_binding=_binding())
+    check("NEG27_complete_binding_accepted", cb["eval_binding"]["params_unchanged"] is True)
+    for bad_over, tag in (
+            ({"state_bank_hash": "FRONT_SCAFFOLD_STATE_BANK_HASH"}, "label_not_sha"),
+            ({"checkpoint_file_sha256": None}, "missing_value"),
+            ({"state_payload_hashes": []}, "empty_payload_hashes"),
+            ({"observation_shape": [67, 7, 7]}, "wrong_obs_shape"),
+            ({"action_dim": 42}, "wrong_action_dim"),
+            ({"params_unchanged": False}, "params_changed"),
+            ({"run_class": "SMOKE_BUT_PERFORMANCE"}, "bad_run_class"),
+            ({"performance_claim_authorized": True}, "smoke_claims_performance"),
+            ({"carry_mode": "sideways"}, "bad_carry_mode")):
+        try:
+            build_certificate(_result(FRONT, 0.5, 4), eval_binding=_binding(**bad_over))
+            check("NEG27_rejects_%s" % tag, False)
+        except FailClosed:
+            check("NEG27_rejects_%s" % tag, True)
+    # A FORMAL_EVALUATION run class MAY (only if separately authorized) carry
+    # performance_claim_authorized=True — the completeness gate still passes.
+    formal = build_certificate(_result(FRONT, 0.5, 4),
+                               eval_binding=_binding(run_class="FORMAL_EVALUATION",
+                                                     performance_claim_authorized=True))
+    check("NEG27_formal_class_binding_ok",
+          formal["eval_binding"]["run_class"] == "FORMAL_EVALUATION")
 
     if problems:
         print("TIER3_EVALUATION_CERTIFICATE_SELF_TEST_FAIL")

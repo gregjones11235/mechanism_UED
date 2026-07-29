@@ -271,16 +271,36 @@ def assert_front_reset_equivalence(entry, rng_seed: int = 0) -> dict:
             "action_count": entry["action_count"], "rng_seed": int(rng_seed)}
 
 
-def _front_walkable_grid(start_state):
+def _front_walkable_grid(start_state, view):
     """Evaluator-only STATIC walkable mask for the front floor: map[FRONT_FLOOR] cells
     whose BlockType is in the resolved craftax land-creature walkable set (SOLID_BLOCK
     / WATER / LAVA excluded, exactly as game_logic.move_player collides). Dynamic mob
     obstruction is deliberately excluded — the frozen dense metric is graph distance
-    over map topology."""
+    over map topology.
+
+    LADDER_TILE_TRANSIT rule (explicit, auditable — the ONLY exception to the static
+    BlockType mask): the floor-2 down_ladder (the corridor exit) and up_ladder tile
+    positions from the normalized view are OR-ed into the mask. Inter-floor transit
+    tiles are positions the player legally occupies while changing floors; treating
+    them as valid progress nodes keeps graph-distance progress well-defined at the
+    exact transition tiles regardless of their underlying BlockType. A ladder
+    position off the map grid fails closed (broken start state)."""
     import numpy as np
     walk_values = {int(v) for v in audit.resolve_walkable_blocktype_values()}
     m = np.asarray(start_state.map)[audit.FRONT_FLOOR]
-    return [[bool(int(b) in walk_values) for b in row] for row in m]
+    rows = len(m)
+    cols = len(m[0]) if rows else 0
+    grid = [[bool(int(b) in walk_values) for b in row] for row in m]
+    for key in ("down_ladders", "up_ladders"):
+        pos = (view.get(key) or {}).get(audit.FRONT_FLOOR)
+        if pos is None:
+            continue
+        r, c = int(pos[0]), int(pos[1])
+        require(0 <= r < rows and 0 <= c < cols,
+                "FAIL CLOSED: FRONT %s transit tile (%d,%d) is off-grid (%dx%d) — "
+                "broken scaffold start" % (key, r, c, rows, cols))
+        grid[r][c] = True                       # LADDER_TILE_TRANSIT
+    return grid
 
 
 def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_seed,
@@ -340,7 +360,7 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
                                               float(m["health"]))
     walkable = exit_pos = None
     if scenario == FRONT:
-        walkable = _front_walkable_grid(start_state)
+        walkable = _front_walkable_grid(start_state, view)
         exit_pos = view["down_ladders"].get(audit.FRONT_FLOOR)
 
     rng = jax.random.PRNGKey(int(rng_seed))
@@ -373,15 +393,21 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
                         engaged = True
                     if int(cd[slot]) > 0:
                         engaged = True
-        if scenario == FRONT and exit_pos is not None:
+        if (scenario == FRONT and exit_pos is not None
+                and lvl == audit.FRONT_FLOOR and max_level < audit.CORRIDOR_EXIT_FLOOR):
+            # FAIL CLOSED (no swallowing): NEG18 start->exit unreachable, off-grid or
+            # non-walkable player position raise pred.FailClosed, which propagates
+            # out of the rollout and aborts the evaluation — never silently skipped.
+            # Computed ONLY while the player is on the front floor (a floor-1
+            # excursion carries floor-1 coordinates that are meaningless on the
+            # floor-2 grid), and STOPS permanently once the player has reached the
+            # exit floor (floor 3): floor-2 graph distance is undefined there, so the
+            # frozen dense metric freezes at the transition.
             pos = (int(np.asarray(state.player_position)[0]),
                    int(np.asarray(state.player_position)[1]))
-            try:
-                p = pred.normalized_corridor_progress({"player_position": pos},
-                                                      walkable, start_pos, exit_pos)
-                max_progress = max(max_progress, p)
-            except pred.FailClosed:
-                pass      # transiently off the static walkable set (e.g. on a ladder)
+            p = pred.normalized_corridor_progress({"player_position": pos},
+                                                  walkable, start_pos, exit_pos)
+            max_progress = max(max_progress, p)
         env_done = bool(np.asarray(done))
         if defeated or died or env_done:
             break
@@ -399,6 +425,214 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
         "graph_distance_progress": float(max_progress) if scenario == FRONT else None,
     })
     return rec
+
+
+# ---------------------------------------------------------------------------
+# REAL CLI — interface smoke bound to a real CC2 checkpoint + policy adapter
+# ---------------------------------------------------------------------------
+# Deterministic canonical-reset rng seeds for the FULL interface smoke (FULL starts
+# are canonical S4 resets; FRONT/BACK starts come from the frozen bank schedule).
+FULL_SMOKE_SEED_BASE = 42
+SCENARIO_ALIASES = {"front_l2": FRONT, "back_l2": BACK, "full": FULL, "all": "all"}
+
+
+def _sha256_lf_file(path: str) -> str:
+    """LF-normalized SHA256 of a source file (EOL-independent source identity)."""
+    import hashlib
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
+                        out_dir: str, episodes: int = 2, max_steps: int = 32) -> dict:
+    """The REAL evaluation CLI path (task §六), fail-closed end to end:
+
+      --checkpoint        CC2 full_state.pkl (DIRECT pytree + manifest; NEG21-verified)
+      --cc2_snapshot_root CC2 source snapshot root (bytes-bound; modules must import
+                          from exactly there; NO RMT/GTrXL reimplementation in CC4)
+      --scenario          front_l2 | back_l2 | full | all
+      --out               output dir (episode_records.jsonl, evaluation_result.json,
+                          evaluation_certificate.json, SHA256SUMS)
+      --interface-smoke   run_class=INTERFACE_SMOKE, max_steps<=32 default,
+                          performance_claim_authorized=False ALWAYS (no performance
+                          numbers, no arm comparison — chain verification only)
+
+    Before any rollout BOTH frozen bank identities (FRONT+BACK) are re-verified in
+    memory (verify_frozen_bank_identity; nothing written to disk, banks unmodified).
+    The certificate binds ACTUAL VALUES (NEG27): state_bank_hash, ordered state
+    payload hashes, checkpoint file SHA, CC2 params SHA, checkpoint step, carry_mode,
+    run_class, episode-records SHA, CC2 policy source SHA, evaluator source SHA,
+    predicate code SHA, observation shape (8335), action dim (43), params_unchanged.
+    """
+    import json
+    import hashlib
+    import numpy as np
+    import jax
+    import tier3_state_bank_materializer as mat
+    import tier3_boundary_schema as bnd
+    import tier3_cc2_policy_adapter as policy_adapter
+    import tier3_evaluation_certificate as certmod
+
+    require(ser.have_jax_craftax(),
+            "FAIL CLOSED (BLOCKED_ENVIRONMENT): the real CLI requires JAX+craftax "
+            "(jax=%s, craftax=%s)" % (ser.have_jax(), ser.have_craftax()))
+    require(scenario in SCENARIO_ALIASES,
+            "FAIL CLOSED: --scenario %r not in %s" % (scenario, sorted(SCENARIO_ALIASES)))
+    scenarios = [FULL, FRONT, BACK] if SCENARIO_ALIASES[scenario] == "all" \
+        else [SCENARIO_ALIASES[scenario]]
+    require(1 <= int(episodes) <= mat.FROZEN_BANK_N,
+            "FAIL CLOSED: --episodes %r outside [1, %d]" % (episodes, mat.FROZEN_BANK_N))
+    episodes = int(episodes)
+    require(1 <= int(max_steps) <= MAX_TIMESTEPS,
+            "FAIL CLOSED: --max-steps %r outside [1, %d]" % (max_steps, MAX_TIMESTEPS))
+    max_steps = int(max_steps)
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 1. CC2 policy source identity (byte-bound) + real module import from the root.
+    modules, src_id = policy_adapter.load_cc2_policy_modules(cc2_snapshot_root)
+    # 2. CC2 checkpoint (REAL full_state.pkl format; NEG21 verified inside).
+    params, params_sha, manifest, file_sha = ckpt.load_full_params_readonly(checkpoint_path)
+    # 3. Canonical evaluation environment + frozen interface assertion.
+    entry = make_canonical_env()
+    require(tuple(entry["observation_shape"]) == (8335,),
+            "FAIL CLOSED: observation shape %s != frozen (8335,)"
+            % (entry["observation_shape"],))
+    require(int(entry["action_count"]) == 43,
+            "FAIL CLOSED: action count %d != frozen 43" % entry["action_count"])
+    # 4. Network + greedy policy built FROM the checkpoint manifest (carry_mode is
+    #    READ from the manifest, never chosen here; params stay read-only).
+    network, rmt_cfg, carry_mode = policy_adapter.build_network_from_manifest(
+        modules, manifest, entry["action_count"])
+    cfg = manifest["config"]
+    policy = policy_adapter.CC2RMT16Policy(
+        modules, network, params, rmt_cfg, carry_mode,
+        cfg["window_mem"], cfg["num_heads"], cfg["num_layers"], cfg["embed_size"])
+    # 5. Re-verify BOTH frozen bank identities before any real evaluation.
+    frozen_bindings = {sc: mat.verify_frozen_bank_identity(sc) for sc in (FRONT, BACK)}
+    rec_before = ckpt.make_cc2_checkpoint_record(
+        params, manifest, file_sha, entry["observation_shape"],
+        "canonical_craftax_action_set",
+        checkpoint_ref=os.path.abspath(checkpoint_path))
+
+    # 6. Rollouts (params read-only; fresh real RMT+GTrXL state per episode).
+    records_by_scenario, results_by_scenario = {}, {}
+    for sc in scenarios:
+        seeds = ([FULL_SMOKE_SEED_BASE + i for i in range(episodes)] if sc == FULL
+                 else mat.fixed_seed_schedule(sc, mat.FROZEN_BANK_N,
+                                              mat.FROZEN_SEED_BASE,
+                                              mat.FROZEN_SEED_STRIDE)[:episodes])
+        eps = []
+        for i, seed in enumerate(seeds):
+            policy.reset()
+            if sc == FULL:
+                _obs0, start_state = entry["envns"].reset_env(
+                    jax.random.PRNGKey(int(seed)), entry["ctor"], 0,
+                    entry["task_embeddings"])
+            else:
+                start_state = builder.materialize_start(sc, int(seed))
+            eps.append(rollout_episode(entry, start_state, sc, policy,
+                                       "%s-ep%d" % (sc, i), int(seed),
+                                       max_steps=max_steps))
+        lines = [json.dumps(r, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+                 for r in eps]
+        records_by_scenario[sc] = {
+            "seeds": [int(s) for s in seeds],
+            "episode_records": eps,
+            "episode_records_sha256": hashlib.sha256(
+                ("\n".join(lines) + "\n").encode("utf-8")).hexdigest(),
+        }
+        results_by_scenario[sc] = evaluate(sc, eps)
+
+    # 7. NEG23: params byte-identical after every rollout.
+    rec_after = dict(rec_before)
+    rec_after["params_sha256"] = ckpt.cc2_params_sha256(params)
+    ckpt.assert_evaluation_does_not_update_params(rec_before, rec_after)
+
+    # 8. Certificates with REAL value bindings (NEG27).
+    evaluator_sha = _sha256_lf_file(os.path.abspath(__file__))
+    psha = bnd.predicate_code_sha256()
+    require(psha == mat.FROZEN_PREDICATE_CODE_SHA256,
+            "FAIL CLOSED: predicate code SHA %s != frozen %s"
+            % (psha[:16], mat.FROZEN_PREDICATE_CODE_SHA256[:16]))
+    certs = {}
+    for sc in scenarios:
+        scaffolded = sc in (FRONT, BACK)
+        binding = {
+            "bank_kind": "FROZEN_SCAFFOLD_BANK" if scaffolded else "CANONICAL_RESET_SEEDS",
+            "state_bank_hash": (frozen_bindings[sc]["state_bank_hash"] if scaffolded
+                                else frozen_bindings[FRONT]["canonical_task_sha256"]),
+            "state_payload_hashes": (frozen_bindings[sc]["ordered_payload_hashes"]
+                                     if scaffolded
+                                     else [frozen_bindings[FRONT]["canonical_task_sha256"]]),
+            "checkpoint_file_sha256": file_sha,
+            "cc2_params_sha256": params_sha,
+            "checkpoint_step": manifest.get("step"),
+            "carry_mode": carry_mode,
+            "run_class": "INTERFACE_SMOKE",
+            "episode_records_sha256": records_by_scenario[sc]["episode_records_sha256"],
+            "cc2_policy_source_sha256": src_id["cc2_policy_source_sha256"],
+            "evaluator_source_sha256": evaluator_sha,
+            "predicate_code_sha256": psha,
+            "observation_shape": list(entry["observation_shape"]),
+            "action_dim": int(entry["action_count"]),
+            "params_unchanged": True,
+            "performance_claim_authorized": False,
+        }
+        label = ("FRONT_SCAFFOLD_STATE_BANK_HASH" if sc == FRONT
+                 else "BACK_SCAFFOLD_STATE_BANK_HASH" if sc == BACK
+                 else "CANONICAL_TASK_RESET_CONTRACT")
+        certs[sc] = certmod.build_certificate(
+            results_by_scenario[sc], state_bank_hash_label=label,
+            claims=["INTERFACE_SMOKE_ONLY"], has_real_rollout=True,
+            has_student_data=False, eval_binding=binding)
+
+    # 9. Deterministic artifacts + SHA256SUMS.
+    jl = os.path.join(out_dir, "episode_records.jsonl")
+    with open(jl, "w", encoding="utf-8", newline="\n") as fh:
+        for sc in scenarios:
+            for r in records_by_scenario[sc]["episode_records"]:
+                fh.write(json.dumps(r, sort_keys=True, ensure_ascii=False,
+                                    separators=(",", ":")) + "\n")
+    result_doc = {
+        "schema": SCHEMA, "run_class": "INTERFACE_SMOKE",
+        "performance_claim_authorized": False,
+        "max_steps": max_steps, "episodes_per_scenario": episodes,
+        "scenario_alias": scenario,
+        "checkpoint": rec_before,
+        "cc2_policy_source": src_id,
+        "frozen_bank_bindings": frozen_bindings,
+        "results": results_by_scenario,
+        "episode_records_by_scenario": {
+            sc: {"seeds": records_by_scenario[sc]["seeds"],
+                 "episode_records_sha256": records_by_scenario[sc]["episode_records_sha256"]}
+            for sc in scenarios},
+    }
+    with open(os.path.join(out_dir, "evaluation_result.json"), "w",
+              encoding="utf-8", newline="\n") as fh:
+        json.dump(result_doc, fh, indent=2, sort_keys=True, ensure_ascii=False)
+        fh.write("\n")
+    with open(os.path.join(out_dir, "evaluation_certificate.json"), "w",
+              encoding="utf-8", newline="\n") as fh:
+        json.dump(certs, fh, indent=2, sort_keys=True, ensure_ascii=False)
+        fh.write("\n")
+    sums = {}
+    for name in ("episode_records.jsonl", "evaluation_result.json",
+                 "evaluation_certificate.json"):
+        with open(os.path.join(out_dir, name), "rb") as fh:
+            sums[name] = hashlib.sha256(fh.read()).hexdigest()
+    with open(os.path.join(out_dir, "SHA256SUMS"), "w", encoding="utf-8",
+              newline="\n") as fh:
+        for name in sorted(sums):
+            fh.write("%s  %s\n" % (sums[name], name))
+
+    for sc in scenarios:
+        res = results_by_scenario[sc]
+        print("  [%s] episodes=%d valid_start=%d/%d labels=%s"
+              % (sc, res["episode_count"], res["valid_start_count"],
+                 res["episode_count"], res["terminal_label_counts"]))
+    return {"run_class": "INTERFACE_SMOKE", "scenarios": scenarios,
+            "out_dir": os.path.abspath(out_dir),
+            "params_unchanged": True, "performance_claim_authorized": False}
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +758,35 @@ def main(argv=None) -> int:
         sys.path.insert(0, _src)
     if "--self-test" in argv:
         return self_test()
-    print("usage: tier3_evaluator.py --self-test")
+
+    def _opt(flag, default=None):
+        if flag in argv:
+            i = argv.index(flag)
+            if i + 1 < len(argv):
+                return argv[i + 1]
+        return default
+
+    if "--interface-smoke" in argv:
+        checkpoint = _opt("--checkpoint")
+        out = _opt("--out")
+        if not checkpoint or not out:
+            print("usage: tier3_evaluator.py --checkpoint <full_state.pkl> "
+                  "[--cc2_snapshot_root <PATH>] --scenario {front_l2,back_l2,full,all} "
+                  "--out <DIR> --interface-smoke [--episodes 2] [--max-steps 32]")
+            return 3
+        import tier3_cc2_policy_adapter as policy_adapter
+        root = _opt("--cc2_snapshot_root", policy_adapter._default_snapshot_root())
+        summary = run_interface_smoke(
+            checkpoint, root, _opt("--scenario", "all"), out,
+            episodes=int(_opt("--episodes", "2")),
+            max_steps=int(_opt("--max-steps", "32")))
+        print("TIER3_INTERFACE_SMOKE_DONE (run_class=INTERFACE_SMOKE; "
+              "performance_claim_authorized=false; params_unchanged=%s; out=%s)"
+              % (summary["params_unchanged"], summary["out_dir"]))
+        return 0
+    print("usage: tier3_evaluator.py --self-test | --checkpoint <full_state.pkl> "
+          "[--cc2_snapshot_root <PATH>] --scenario {front_l2,back_l2,full,all} "
+          "--out <DIR> --interface-smoke [--episodes N] [--max-steps M]")
     return 3
 
 
