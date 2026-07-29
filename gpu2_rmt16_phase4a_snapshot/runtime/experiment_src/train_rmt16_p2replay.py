@@ -70,6 +70,21 @@ ap.add_argument("--run_root", default=None,
 ap.add_argument("--total_updates", type=int, default=12)     # 12 * 2048 = 24576
 ap.add_argument("--seed", type=int, default=42)
 ap.add_argument("--save_every", type=int, default=2)         # updates between saves (2 => every 4096)
+# ---- Phase4A-direct-98304 (§一.2 / §二 / §三 / §六): run CLASS (NON-scientific management) ----
+# formal_vtrace (DEFAULT) = the pre-registered formal Carry experiment; the ONLY class whose
+# exit gate requires the replay horizon and the ONLY class authorized for a scientific claim.
+# engineering_smoke = 4096-step (total_updates=2) correctness smoke; replay horizon NOT required
+# for exit PASS (replay_update_count==0 / REPLAY_HORIZON_NOT_REACHED does NOT block the 98k run).
+# long_run_98304 = 98304-step (total_updates=48) single-seed long horizon; no performance
+# early-stop (§六). The run CLASS is bound to the config's top-level run_management block PRE-JAX
+# (RTC.validate_run_class_binding) and recorded in the certificate; the frozen scientific protocol
+# itself is unchanged across all three classes.
+ap.add_argument("--run_class", default="formal_vtrace",
+                choices=["formal_vtrace", "engineering_smoke", "long_run_98304"],
+                help="run management class (NOT a scientific variable): formal_vtrace (formal "
+                     "Carry experiment; replay horizon required for exit PASS; claim-authorized) "
+                     "| engineering_smoke (4096-step correctness smoke; horizon NOT required) | "
+                     "long_run_98304 (98304-step single-seed long run; no performance early-stop).")
 # Phase4A probe (CC2 directive 2/3 + addendum): reachability probe + A/B no-perturbation gate.
 ap.add_argument("--probe", action="store_true",
                 help="L512 reachability probe: record-only, fixed full horizon, replay learner+hindsight OFF")
@@ -115,6 +130,10 @@ RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256 = None
 # launch-status (non-null length-64 hex once a certificate has been written).
 RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256 = None
 EXECUTED_PROTOCOL_IDENTITY = None
+# Phase4A-direct-98304 (§一.2): the run_class management identity bound PRE-JAX from the config's
+# run_management block. None for formal_vtrace (no run_management block -> certificate stays
+# byte-identical to V2.4); a bound record for engineering_smoke / long_run_98304.
+RUN_CLASS_IDENTITY = None
 # Phase4A-v2.4 (§八): the DECLARED protocol definition + the EFFECTIVE protocol definition
 # (declared + executed learner/sampler source identity + executed RNG identity) and its stable
 # SHA256. Bound BEFORE the certificate reaches PASS (§六 ordering); None on non-formal runs.
@@ -127,14 +146,33 @@ try:
         FORMAL_CONFIG_RECORD = RTC.load_formal_config(args.formal_config)
         RTC.validate_arm_binding(FORMAL_CONFIG_RECORD, args.carry_mode, replay_mode=REPLAY_MODE)
         # §三 canonical formal-config PATH + CONTENT identity (frozen pre-registration).
-        FORMAL_CONFIG_IDENTITY = FID.verify_formal_config_identity(
-            args.snapshot_root, args.carry_mode, FORMAL_CONFIG_RECORD)
+        # Phase4A-direct-98304 (§一.3): formal_vtrace uses the FROZEN formal identity (file SHA +
+        # scientific SHA pinned to the two canonical YAMLs). engineering_smoke / long_run_98304 use
+        # the NON-frozen engineering identity: SAME path anti-copy protection, but the content is
+        # bound by SELF-CONSISTENCY + the runtime deep_diff (their engineering budget legitimately
+        # differs from the frozen formal SHAs). The frozen spec still binds every non-budget
+        # scientific constant in all three classes.
+        if args.run_class == "formal_vtrace":
+            FORMAL_CONFIG_IDENTITY = FID.verify_formal_config_identity(
+                args.snapshot_root, args.carry_mode, FORMAL_CONFIG_RECORD)
+        else:
+            FORMAL_CONFIG_IDENTITY = FID.verify_engineering_config_identity(
+                args.snapshot_root, args.carry_mode, FORMAL_CONFIG_RECORD, args.run_class)
         # §四 fail-closed runtime_assignment (completeness + 4-way arm + exact gpu + strict
         # realpath out_dir anchored at --run_root; the v2.2 suffix match is gone).
         RUNTIME_ASSIGNMENT_RECORD = RTC.validate_runtime_assignment(
             FORMAL_CONFIG_RECORD["config"],
             cli_carry=args.carry_mode, cli_gpu=args.gpu_uuid, cli_out=args.out,
             run_root=args.run_root)
+        # Phase4A-direct-98304 (§一.2): bind the run CLASS to the config's run_management block
+        # PRE-JAX. formal_vtrace -> None (no block; certificate stays byte-identical to V2.4);
+        # engineering_smoke / long_run_98304 -> a fail-closed bound record (run_class must match
+        # the block; interruption_policy must be RESTART_FROM_STEP0; §七). This is a MANAGEMENT
+        # binding only — it never touches scientific_config, so the deep_diff scientific gate and
+        # the frozen spec are unaffected.
+        RUN_CLASS_IDENTITY = (
+            None if args.run_class == "formal_vtrace"
+            else RTC.validate_run_class_binding(FORMAL_CONFIG_RECORD["config"], args.run_class))
         # §五.2 FULL scientific binding PRE-JAX (Phase4A-v2.4 §三.1: ACTUAL CLI BINDING): start
         # from the frozen pure-Python spec (single source of truth; no jax needed), then
         # OVERRIDE the seven CLI-facing keys with the ACTUAL command-line values, so the
@@ -158,6 +196,7 @@ try:
             FORMAL_CONFIG_RECORD, _PREJAX_SCIENTIFIC,
             formal_identity_record=FORMAL_CONFIG_IDENTITY,
             assignment_record=RUNTIME_ASSIGNMENT_RECORD,
+            run_class_identity=RUN_CLASS_IDENTITY,
             checkpoint_identity=RTC.build_checkpoint_identity(args.ckpt17500),
             frozen_spec_sha256=FSPEC.FROZEN_SPEC_SHA256,
             cli_args={k: v for k, v in vars(args).items()},
@@ -816,7 +855,10 @@ def _phase4a_v2_manifest_fields():
         hindsight=bool(REPLAY_USES_HINDSIGHT),
         awr=bool(REPLAY_USES_HINDSIGHT),
         w_original_vtrace=float(RL.W_ORIGINAL_VTRACE),
-        allow_full_p2_legacy=bool(args.allow_full_p2_legacy))
+        allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
+        # Phase4A-direct-98304 (§一.2): the run management class recorded in every checkpoint
+        # manifest (NON-scientific provenance; formal_vtrace / engineering_smoke / long_run_98304).
+        run_class=args.run_class)
     # Phase4A-v2.1 (§三.2): policy-lag GATE identity. For original_vtrace this records
     # policy_lag_gate_active=false / max_policy_lag=null / off_policy_correction=vtrace; the
     # V-trace importance correction stays active, only an ADDITIONAL hard lag gate is absent.
@@ -1303,19 +1345,31 @@ RMT_READ_PATH_ACTIVE = bool(read_ever_nonzero and mem_on_off_ever_nonzero)  # ca
 READ_BRANCH_CONNECTED = bool(read_conn_ever_nonzero)                         # synthetic-token connectivity
 _carried_final_maxabs = float(np.max(np.abs(np.asarray(rmt_state["mem_tokens"]))))
 REPLAY_HORIZON_REACHED = bool(replay_update_success_count > 0)
+# Phase4A-direct-98304 (§四 / §六): the replay horizon is a PASS requirement ONLY for the formal
+# run class. engineering_smoke (4096 steps) and long_run_98304 do NOT require a replay update to
+# exit PASS — at 4096 steps the 512-anchor horizon is structurally unreachable, so
+# replay_update_count==0 / REPLAY_HORIZON_NOT_REACHED must NOT block the run (and must NOT block
+# the conditional 98k launch; §五). The CORRECTNESS gates (carry/boundary + read branch + finite
+# gtrxl window) stay REQUIRED for every class. When correctness holds but the horizon is not
+# reached under a non-formal class, the arm exits PASS with ARM_STATUS=PASS_REPLAY_HORIZON_NOT_REACHED.
+REPLAY_HORIZON_REQUIRED_FOR_PASS = bool(args.run_class == "formal_vtrace")
 if args.carry_mode == "persistent":
     # Persistent: write->carry->read connected; cross-boundary carry NON-ZERO; read affects output >=1.
     CARRY_NONZERO = bool(persistent_carry_nonzero_all and _carried_final_maxabs > 0.0)
     READ_AFFECTS_OUTPUT = bool(RMT_READ_PATH_ACTIVE or READ_BRANCH_CONNECTED)
     PERSISTENT_READ_DEFECT = bool(CARRY_NONZERO and (not READ_AFFECTS_OUTPUT))
-    ARM_GATES_PASS = bool(REPLAY_HORIZON_REACHED and CARRY_NONZERO and RMT_READ_PATH_ACTIVE
-                          and READ_BRANCH_CONNECTED and gtrxl_window_finite_all)
+    _PERSISTENT_CORRECTNESS_OK = bool(CARRY_NONZERO and RMT_READ_PATH_ACTIVE
+                                      and READ_BRANCH_CONNECTED and gtrxl_window_finite_all)
+    ARM_GATES_PASS = bool(_PERSISTENT_CORRECTNESS_OK
+                          and (REPLAY_HORIZON_REACHED or not REPLAY_HORIZON_REQUIRED_FOR_PASS))
     if PERSISTENT_READ_DEFECT:
         ARM_STATUS = "RMT_READ_PATH_ENGINEERING_DEFECT"
-    elif not REPLAY_HORIZON_REACHED:
+    elif not REPLAY_HORIZON_REACHED and REPLAY_HORIZON_REQUIRED_FOR_PASS:
         ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
-    elif ARM_GATES_PASS:
+    elif ARM_GATES_PASS and REPLAY_HORIZON_REACHED:
         ARM_STATUS = "PASS"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
     else:
         ARM_STATUS = "FAIL"
 else:  # reset128 -- cross-boundary long-term carry read NOT required; read branch MUST be connected.
@@ -1324,16 +1378,20 @@ else:  # reset128 -- cross-boundary long-term carry read NOT required; read bran
     # (b) defect: read branch NEVER connected -> RMT_RESET128_READ_PATH_ENGINEERING_DEFECT.
     BOUNDARY_CLEAR = bool(reset128_boundary_clear_all and _carried_final_maxabs == 0.0)
     RESET128_READ_DEFECT = bool(not READ_BRANCH_CONNECTED)
-    ARM_GATES_PASS = bool(REPLAY_HORIZON_REACHED and BOUNDARY_CLEAR and READ_BRANCH_CONNECTED
-                          and gtrxl_window_finite_all)
+    _RESET128_CORRECTNESS_OK = bool(BOUNDARY_CLEAR and READ_BRANCH_CONNECTED
+                                    and gtrxl_window_finite_all)
+    ARM_GATES_PASS = bool(_RESET128_CORRECTNESS_OK
+                          and (REPLAY_HORIZON_REACHED or not REPLAY_HORIZON_REQUIRED_FOR_PASS))
     if RESET128_READ_DEFECT:
         ARM_STATUS = "RMT_RESET128_READ_PATH_ENGINEERING_DEFECT"
     elif not BOUNDARY_CLEAR:
         ARM_STATUS = "RESET128_BOUNDARY_CLEAR_FAILED"
-    elif not REPLAY_HORIZON_REACHED:
+    elif not REPLAY_HORIZON_REACHED and REPLAY_HORIZON_REQUIRED_FOR_PASS:
         ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
-    elif ARM_GATES_PASS:
+    elif ARM_GATES_PASS and REPLAY_HORIZON_REACHED:
         ARM_STATUS = "PASS"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
     else:
         ARM_STATUS = "FAIL"
 print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
@@ -1358,6 +1416,12 @@ if REPLAY_MODE in ("off", "original_vtrace"):
 # certificate + the four-way label split (phase4a_v2.replay_labels); it does NOT self-declare
 # MATCHED_REPLAY_EXPOSURE=PASS (no two-arm run this round -> NOT_RUN).
 summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
+               # Phase4A-direct-98304 (§一.2): the run management class + its bound identity
+               # (NON-scientific; None on formal_vtrace). Recorded so the smoke PASS evaluation
+               # (§四) and the conditional 98k launch (§五) can key off the run class directly.
+               run_class=args.run_class,
+               run_class_identity=RUN_CLASS_IDENTITY,
+               replay_horizon_required_for_pass=REPLAY_HORIZON_REQUIRED_FOR_PASS,
                total_updates=args.total_updates, global_step=args.total_updates * STEPS_PER_UPDATE,
                final_params_sha256=_params_sha(params), base_sha256=base_sha,
                accepted_policy_updates=accepted_policy_updates,

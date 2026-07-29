@@ -528,7 +528,7 @@ def validate_runtime_against_formal_config(formal_record, runtime_scientific_con
 
     return dict(
         schema=SCHEMA,
-        certificate_version="phase4a_v2.2",
+        certificate_version="phase4a_v2.4",
         formal_config_path=formal_record.get("path"),
         formal_config_realpath=formal_record.get("realpath"),
         formal_config_file_sha256=formal_record.get("file_sha256"),
@@ -603,7 +603,12 @@ def certificate_shas_record(certificate, *, certificate_file_sha256=None,
 #      FAIL (anything else, incl. checkpoint error). The FAIL finalize OVERWRITES the on-disk
 #      certificate, so NO stale PASS/PENDING survives a failure, and the driver exits nonzero.
 
-CERTIFICATE_VERSION = "phase4a_v2.3"
+# Phase4A-direct-98304 (§一.1): the ACTIVE runtime certificate version is unified to
+# phase4a_v2.4. The v2.4 round bumped the evidence LABELS to phase4a_v2.4 but left this code
+# constant at phase4a_v2.3; this closes that gap so every certificate the driver writes (formal
+# + engineering smoke + direct 98304 long run) carries certificate_version=phase4a_v2.4. No gate
+# asserts the value (only the key's presence in certificate_shas_record), so this is gate-safe.
+CERTIFICATE_VERSION = "phase4a_v2.4"
 CERTIFICATE_STATUS_PENDING = "PENDING_CHECKPOINT_IDENTITY"
 CERTIFICATE_STATUS_PASS = "PASS"
 CERTIFICATE_STATUS_FAIL = "FAIL"
@@ -626,13 +631,101 @@ CHECKPOINT_FAILURE_STAGES = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Phase4A-direct-98304 (§一.2 / §二 / §三) — run_class binding (NON-scientific management layer)
+# ---------------------------------------------------------------------------
+# The director split the Phase4A work into three run CLASSES that share ONE frozen scientific
+# protocol but differ in ENGINEERING budget + claim authority:
+#   * formal_vtrace      — the pre-registered formal Carry experiment (total_updates=12; the
+#                          ONLY class authorized for a scientific claim). The two FORMAL YAMLs
+#                          carry NO run_management block, so this class binds to an empty
+#                          identity and its certificate stays byte-identical to V2.4.
+#   * engineering_smoke  — a 4096-step (total_updates=2) correctness smoke; scientific_claim_
+#                          authorized=false; replay horizon NOT required for exit PASS.
+#   * long_run_98304     — a 98304-step (total_updates=48) single-seed long horizon; scientific
+#                          claim NOT authorized here; a provisional strong-student selection is
+#                          permitted (can_select_provisional_strong_student=true).
+# run_class / total_env_steps / scientific_claim_authorized / screening_class / can_select_*
+# live in a NEW top-level YAML `run_management:` block — OUTSIDE scientific_config, so the GATE-14
+# univariate diff and the deep_diff scientific binding are untouched. The budget fields that DO
+# enter scientific_config (total_updates / save_every) are declared per-config and bound through
+# the existing ACTUAL-CLI pre-JAX path, so an engineering budget reconciles WITHOUT weakening the
+# formal protocol or the frozen spec.
+
+RUN_CLASSES = ("formal_vtrace", "engineering_smoke", "long_run_98304")
+
+# Fields a NON-formal run_management block MUST declare (fail closed). formal_vtrace carries no
+# block at all, so it is exempt (validated as an empty identity).
+REQUIRED_RUN_MANAGEMENT_FIELDS = (
+    "run_class",
+    "total_env_steps",
+    "interruption_policy",
+    "scientific_claim_authorized",
+)
+
+
+def validate_run_class_binding(config, run_class):
+    """§一.2 fail closed: bind the ACTUAL --run_class to the config's `run_management` block.
+
+    * run_class MUST be one of RUN_CLASSES (else RUN_CLASS_INVALID).
+    * formal_vtrace: the config MUST carry NO run_management block (the two formal YAMLs are
+      byte-identical and un-managed); returns an empty identity. A stray run_management block on
+      a formal_vtrace launch is a fail-closed conflict (RUN_CLASS_FORMAL_HAS_MANAGEMENT_BLOCK).
+    * engineering_smoke / long_run_98304: the config MUST carry a run_management block whose
+      run_class equals the CLI run_class and that declares every REQUIRED_RUN_MANAGEMENT_FIELD
+      (else RUN_CLASS_MANAGEMENT_INCOMPLETE / RUN_CLASS_MANAGEMENT_MISMATCH). interruption_policy
+      MUST be RESTART_FROM_STEP0 (Exact Resume is NOT verified this round; §七). Returns the bound
+      identity record (run_class_binding=PASS)."""
+    if run_class not in RUN_CLASSES:
+        raise ValueError(
+            f"RUN_CLASS_INVALID: run_class={run_class!r} not in {RUN_CLASSES}.")
+    rm = config.get("run_management") if isinstance(config, dict) else None
+    if run_class == "formal_vtrace":
+        if rm not in (None, {}):
+            raise ValueError(
+                "RUN_CLASS_FORMAL_HAS_MANAGEMENT_BLOCK: run_class=formal_vtrace requires NO "
+                "run_management block (the formal YAMLs are byte-identical and un-managed); "
+                f"found {rm!r}.")
+        return dict(run_class_binding="PASS", run_class="formal_vtrace",
+                    run_management_present=False)
+    if not isinstance(rm, dict) or not rm:
+        raise ValueError(
+            f"RUN_CLASS_MANAGEMENT_INCOMPLETE: run_class={run_class!r} requires a non-empty "
+            "top-level run_management block in the config YAML.")
+    missing = [k for k in REQUIRED_RUN_MANAGEMENT_FIELDS if k not in rm]
+    if missing:
+        raise ValueError(
+            f"RUN_CLASS_MANAGEMENT_INCOMPLETE: run_management missing required field(s) "
+            f"{missing}; required={list(REQUIRED_RUN_MANAGEMENT_FIELDS)}.")
+    if rm.get("run_class") != run_class:
+        raise ValueError(
+            f"RUN_CLASS_MANAGEMENT_MISMATCH: run_management.run_class={rm.get('run_class')!r} "
+            f"!= --run_class={run_class!r}.")
+    if rm.get("interruption_policy") != "RESTART_FROM_STEP0":
+        raise ValueError(
+            f"RUN_CLASS_INTERRUPTION_POLICY_INVALID: interruption_policy="
+            f"{rm.get('interruption_policy')!r} != 'RESTART_FROM_STEP0' (Exact Resume is NOT "
+            "verified this round; any interruption restarts from step0; §七).")
+    return dict(run_class_binding="PASS", run_class=run_class,
+                run_management_present=True,
+                total_env_steps=rm.get("total_env_steps"),
+                interruption_policy=rm.get("interruption_policy"),
+                scientific_claim_authorized=bool(rm.get("scientific_claim_authorized")),
+                screening_class=rm.get("screening_class"),
+                can_select_strong_student=bool(rm.get("can_select_strong_student", False)),
+                can_select_provisional_strong_student=bool(
+                    rm.get("can_select_provisional_strong_student", False)))
+
+
+
 def build_precheck_certificate(formal_record, runtime_scientific_config, *,
                                formal_identity_record=None,
                                assignment_record=None,
                                checkpoint_identity=None,
                                frozen_spec_sha256=None,
                                cli_args=None, runtime_constants=None,
-                               snapshot_root=None, run_root=None):
+                               snapshot_root=None, run_root=None,
+                               run_class_identity=None):
     """§五.2/§六.1 the PRE-JAX precheck certificate. Binds, all before `import jax`:
       * formal_config_identity (§三: canonical path + file SHA + scientific SHA),
       * the FULL scientific_config (formal YAML vs the runtime scientific config built from the
@@ -694,7 +787,7 @@ def build_precheck_certificate(formal_record, runtime_scientific_config, *,
                 "FORMAL_CONFIG_IDENTITY_MISMATCH: canonical formal-config identity did not PASS "
                 "(§三 path + content identity is REQUIRED for the precheck certificate).")
 
-    return dict(
+    cert = dict(
         schema=SCHEMA,
         certificate_version=CERTIFICATE_VERSION,
         certificate_status=status,
@@ -719,6 +812,13 @@ def build_precheck_certificate(formal_record, runtime_scientific_config, *,
         runtime_constants=dict(runtime_constants or {}),
         checkpoint_identity=ci,
         validation_errors=validation_errors)
+    # Phase4A-direct-98304 (§一.2): bind the run_class identity ONLY for non-formal runs. The
+    # field is ADDED only when run_class_identity is not None, so a formal_vtrace launch (which
+    # passes None) produces a certificate byte-identical to V2.4 — the formal evidence path is
+    # untouched while smoke / long-run certificates carry their management-layer identity.
+    if run_class_identity is not None:
+        cert["run_class_identity"] = dict(run_class_identity)
+    return cert
 
 
 def finalize_certificate(precheck_certificate, checkpoint_identity=None, *,

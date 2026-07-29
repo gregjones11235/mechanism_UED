@@ -199,6 +199,98 @@ def verify_formal_config_identity(snapshot_root, arm, formal_record):
     return merged
 
 
+# ---------------------------------------------------------------------------
+# Phase4A-direct-98304 (§一.3/§二/§三) — ENGINEERING run-config identity (NON-frozen)
+# ---------------------------------------------------------------------------
+# The engineering smoke (4096) and direct 98304 long-run configs are NOT part of the frozen
+# formal pre-registration: their scientific_config declares an ENGINEERING budget (total_updates
+# =2 / 48), so their file SHA and scientific SHA legitimately differ from the two frozen formal
+# YAMLs and MUST NOT be compared against FORMAL_CONFIG_IDENTITIES. They still get the SAME path
+# anti-tamper protection as the formal path (realpath under the EXECUTING snapshot root; no
+# individual-file copy / symlink escape / `..` traversal), and their content is bound by
+# SELF-CONSISTENCY (the driver's deep_diff compares the YAML scientific_config against the runtime
+# scientific config built from the frozen spec + the ACTUAL CLI; the frozen spec still binds every
+# non-budget scientific constant). The returned record carries formal_config_identity="PASS" so the
+# precheck certificate's formal-identity gate is satisfied, PLUS engineering_config_identity="PASS"
+# and the recomputed (non-frozen) SHAs for the evidence trail.
+
+ENGINEERING_CONFIG_RELATIVE_PATHS = {
+    ("engineering_smoke", "persistent"): "configs/rmt16_phase4a_smoke_persistent.yaml",
+    ("engineering_smoke", "reset128"): "configs/rmt16_phase4a_smoke_reset128.yaml",
+    ("long_run_98304", "persistent"): "configs/rmt16_phase4a_long98304_persistent.yaml",
+    ("long_run_98304", "reset128"): "configs/rmt16_phase4a_long98304_reset128.yaml",
+}
+
+
+def verify_engineering_config_identity(snapshot_root, arm, formal_record, run_class):
+    """§一.3 fail closed: canonical PATH identity (same anti-copy protection as the formal path)
+    + SELF-CONSISTENT content binding for an engineering run config. NO frozen-formal SHA
+    comparison (the engineering budget legitimately differs). Returns a record carrying
+    formal_config_identity="PASS" (so the precheck certificate's identity gate is met) +
+    engineering_config_identity="PASS" + the recomputed file/scientific SHAs."""
+    key = (run_class, arm)
+    rel = ENGINEERING_CONFIG_RELATIVE_PATHS.get(key)
+    if rel is None:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_UNKNOWN: no canonical engineering config for "
+            f"run_class={run_class!r} arm={arm!r}; known={sorted(ENGINEERING_CONFIG_RELATIVE_PATHS)}")
+    if not formal_record:
+        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no config loaded.")
+    # (a) the declared --snapshot_root must equal the executing module's derived root (same rule
+    #     as the formal path — the CLI may not point at a snapshot other than the executing code).
+    derived = derived_snapshot_root()
+    declared = os.path.realpath(str(snapshot_root)) if snapshot_root else None
+    if declared != derived:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_PATH_IDENTITY_MISMATCH: declared --snapshot_root realpath="
+            f"{declared!r} != the executing code's derived snapshot root={derived!r}.")
+    # (b) the config realpath must equal realpath(snapshot_root / canonical engineering path).
+    expected = os.path.realpath(os.path.join(snapshot_root, rel))
+    actual = os.path.realpath(formal_record.get("path"))
+    if actual != expected:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_PATH_IDENTITY_MISMATCH: config realpath={actual!r} != canonical "
+            f"engineering path={expected!r} (run_class={run_class!r}, arm={arm!r}). An individual "
+            "copied file, symlink escape or '..' traversal is rejected.")
+    # (c) content self-consistency: schema/arm/replay_mode structural checks + recomputed SHAs
+    #     (recorded, NOT compared to any frozen constant; the runtime deep_diff binds the values).
+    cfg = formal_record.get("config")
+    if not isinstance(cfg, dict):
+        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no config mapping.")
+    if cfg.get("schema") != SCHEMA:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: schema={cfg.get('schema')!r} != {SCHEMA!r}")
+    if cfg.get("arm") != arm:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: arm={cfg.get('arm')!r} != {arm!r}")
+    sci = cfg.get("scientific_config")
+    if not isinstance(sci, dict):
+        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no scientific_config block.")
+    if sci.get("replay_mode") != "original_vtrace":
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: replay_mode={sci.get('replay_mode')!r} != "
+            "'original_vtrace' (engineering runs keep the original-goal V-trace protocol).")
+    if sci.get("carry_mode") != arm:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: scientific_config.carry_mode="
+            f"{sci.get('carry_mode')!r} != arm={arm!r}")
+    return dict(
+        formal_config_identity="PASS",
+        engineering_config_identity="PASS",
+        run_class=run_class,
+        arm=arm,
+        relative_path=rel,
+        expected_realpath=expected,
+        actual_realpath=actual,
+        formal_config_path_identity=FORMAL_CONFIG_PATH_IDENTITY_LABEL,
+        formal_config_snapshot_relocation=FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL,
+        declared_snapshot_root_realpath=declared,
+        derived_snapshot_root_realpath=derived,
+        file_sha256=formal_record.get("file_sha256"),
+        scientific_config_sha256=RTC.scientific_config_sha256(sci),
+        frozen_formal_sha_compared=False)
+
+
 def self_test():
     import tempfile
     import shutil

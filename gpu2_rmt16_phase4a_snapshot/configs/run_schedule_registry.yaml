@@ -1,0 +1,67 @@
+# ============================================================================
+# Phase4A-direct-98304 (§一.5) — run SCHEDULING registry (NON-scientific).
+# ============================================================================
+# This file is a SCHEDULING ledger only. It is NOT loaded by the driver or by any gate, and it
+# never enters scientific_config. Its purpose is to record, in one place, which configs are
+# scheduled this round WITHOUT touching the bytes of the frozen formal YAMLs (which must stay
+# BYTE-IDENTICAL — their file SHA / scientific SHA are pinned by phase4a_v2_formal_identity).
+#
+# DIRECTOR POLICY CHANGE (this round): the independent 24576-step screening is CANCELED, and
+# Exact Resume is NOT a gate for the first long run. The 98304 long run is launched DIRECTLY once
+# the 4096 engineering smoke passes all correctness gates. 24576 env steps (update 12 of the 98304
+# run) is ONLY an ordinary intermediate checkpoint — NOT an independent experiment, NOT a stop
+# gate, NOT a model-selection gate (§六).
+# ============================================================================
+
+schema: rmt16_phase4a_run_schedule_registry_v1
+interruption_policy_default: RESTART_FROM_STEP0   # §七: Exact Resume NOT verified this round
+exact_resume_verified: false
+
+entries:
+  # ---- FORMAL pre-registration: kept BYTE-IDENTICAL, but NOT scheduled this round ----
+  - config: rmt16_phase4a_v2_persistent.yaml
+    arm: persistent
+    run_class: formal_vtrace
+    total_env_steps: 24576
+    scheduling_status: DEPRECATED_NOT_SCHEDULED
+    scientific_claim_authorized: true
+    reason: "Independent 24576 screening CANCELED by the director; superseded by the direct 98304 long run. Kept byte-identical as the frozen formal pre-registration (file/scientific SHA pinned)."
+  - config: rmt16_phase4a_v2_reset128.yaml
+    arm: reset128
+    run_class: formal_vtrace
+    total_env_steps: 24576
+    scheduling_status: DEPRECATED_NOT_SCHEDULED
+    scientific_claim_authorized: true
+    reason: "Independent 24576 screening CANCELED by the director; superseded by the direct 98304 long run. Kept byte-identical as the frozen formal pre-registration (file/scientific SHA pinned)."
+
+  # ---- ENGINEERING smoke: scheduled; gates the conditional 98k launch ----
+  - config: rmt16_phase4a_smoke_persistent.yaml
+    arm: persistent
+    run_class: engineering_smoke
+    total_env_steps: 4096
+    scheduling_status: SCHEDULED_SMOKE_GATE
+    scientific_claim_authorized: false
+  - config: rmt16_phase4a_smoke_reset128.yaml
+    arm: reset128
+    run_class: engineering_smoke
+    total_env_steps: 4096
+    scheduling_status: SCHEDULED_SMOKE_GATE
+    scientific_claim_authorized: false
+
+  # ---- DIRECT 98304 long run: scheduled CONDITIONAL on smoke PASS (§五) ----
+  - config: rmt16_phase4a_long98304_persistent.yaml
+    arm: persistent
+    run_class: long_run_98304
+    total_env_steps: 98304
+    scheduling_status: SCHEDULED_CONDITIONAL_ON_SMOKE_PASS
+    scientific_claim_authorized: false
+    screening_class: LONG_HORIZON_SINGLE_SEED
+    can_select_provisional_strong_student: true
+  - config: rmt16_phase4a_long98304_reset128.yaml
+    arm: reset128
+    run_class: long_run_98304
+    total_env_steps: 98304
+    scheduling_status: SCHEDULED_CONDITIONAL_ON_SMOKE_PASS
+    scientific_claim_authorized: false
+    screening_class: LONG_HORIZON_SINGLE_SEED
+    can_select_provisional_strong_student: true
