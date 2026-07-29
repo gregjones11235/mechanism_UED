@@ -200,34 +200,131 @@ def verify_formal_config_identity(snapshot_root, arm, formal_record):
 
 
 # ---------------------------------------------------------------------------
-# Phase4A-direct-98304 (§一.3/§二/§三) — ENGINEERING run-config identity (NON-frozen)
+# Phase4A-direct-98304 (§一.3/§二/§三) — ENGINEERING run-config identity (CONTENT-FROZEN)
 # ---------------------------------------------------------------------------
-# The engineering smoke (4096) and direct 98304 long-run configs are NOT part of the frozen
-# formal pre-registration: their scientific_config declares an ENGINEERING budget (total_updates
-# =2 / 48), so their file SHA and scientific SHA legitimately differ from the two frozen formal
-# YAMLs and MUST NOT be compared against FORMAL_CONFIG_IDENTITIES. They still get the SAME path
-# anti-tamper protection as the formal path (realpath under the EXECUTING snapshot root; no
-# individual-file copy / symlink escape / `..` traversal), and their content is bound by
-# SELF-CONSISTENCY (the driver's deep_diff compares the YAML scientific_config against the runtime
-# scientific config built from the frozen spec + the ACTUAL CLI; the frozen spec still binds every
-# non-budget scientific constant). The returned record carries formal_config_identity="PASS" so the
-# precheck certificate's formal-identity gate is satisfied, PLUS engineering_config_identity="PASS"
-# and the recomputed (non-frozen) SHAs for the evidence trail.
+# The engineering smoke (4096) and direct 98304 long-run configs are NOT part of the frozen FORMAL
+# pre-registration: their scientific_config declares an ENGINEERING budget (total_updates=2 / 48),
+# so their file SHA and scientific SHA legitimately differ from the two frozen formal YAMLs and are
+# NOT compared against FORMAL_CONFIG_IDENTITIES. INSTEAD — Phase4A-direct-98304 hotfix (§二) — each
+# of the four engineering configs is frozen to ITS OWN file_sha256 + scientific_config_sha256
+# (computed from the real committed files, never hand-guessed; see --self-test re-derivation). They
+# get the SAME path anti-tamper protection as the formal path (realpath under the EXECUTING snapshot
+# root; no individual-file copy / symlink escape / `..` traversal) AND a CONTENT identity check:
+# actual file SHA == frozen file SHA AND actual scientific SHA == frozen scientific SHA, else
+# ENGINEERING_CONFIG_CONTENT_IDENTITY_MISMATCH. So a comment-only edit (file bytes change) FAILS,
+# and editing the YAML while syncing the CLI (scientific bytes change) ALSO FAILS — the engineering
+# content identity is frozen, not merely self-consistent. The driver's post-JAX deep_diff STILL
+# binds the values to the frozen spec + the actual CLI (the frozen spec binds every non-budget
+# scientific constant). The returned record carries formal_config_identity="PASS" (so the precheck
+# certificate's formal-identity gate is satisfied) PLUS engineering_config_identity="PASS",
+# engineering_content_identity="PASS", and the frozen + actual SHAs for the evidence trail.
 
-ENGINEERING_CONFIG_RELATIVE_PATHS = {
-    ("engineering_smoke", "persistent"): "configs/rmt16_phase4a_smoke_persistent.yaml",
-    ("engineering_smoke", "reset128"): "configs/rmt16_phase4a_smoke_reset128.yaml",
-    ("long_run_98304", "persistent"): "configs/rmt16_phase4a_long98304_persistent.yaml",
-    ("long_run_98304", "reset128"): "configs/rmt16_phase4a_long98304_reset128.yaml",
+ENGINEERING_CONFIG_IDENTITIES = {
+    ("engineering_smoke", "persistent"): {
+        "relative_path": "configs/rmt16_phase4a_smoke_persistent.yaml",
+        "file_sha256": "c35627fc09ae9062e52add7ff0befd2d752361030fcf8bad6d1aef01dc000202",
+        "scientific_config_sha256":
+            "02207e60d2dc8dc509fd236e8869fd944ff46e9c82f7b85901e505cbc38eef6a",
+        "schema": SCHEMA, "carry_mode": "persistent", "replay_mode": "original_vtrace",
+    },
+    ("engineering_smoke", "reset128"): {
+        "relative_path": "configs/rmt16_phase4a_smoke_reset128.yaml",
+        "file_sha256": "b07aad0c91e4c88c0ef4918d21163fcbbaff40887154b68a5b4653ecb8d546ac",
+        "scientific_config_sha256":
+            "50bbcf49074b2c2260522e0a1f3dae346db9db762e8bd43e34d660edbf0d53e4",
+        "schema": SCHEMA, "carry_mode": "reset128", "replay_mode": "original_vtrace",
+    },
+    ("long_run_98304", "persistent"): {
+        "relative_path": "configs/rmt16_phase4a_long98304_persistent.yaml",
+        "file_sha256": "992445eefa30042dc043ed8c5403568e016c6db3f416eaa0564b12a01ba9109b",
+        "scientific_config_sha256":
+            "1dffdf09cb741c6a3f933071f1d83e58a4ec40c49dbad4fa8c4c616c3fb03092",
+        "schema": SCHEMA, "carry_mode": "persistent", "replay_mode": "original_vtrace",
+    },
+    ("long_run_98304", "reset128"): {
+        "relative_path": "configs/rmt16_phase4a_long98304_reset128.yaml",
+        "file_sha256": "923940cf2a87b41149bc6275e27741fd45aea5f548cc7d464c912e10921f1e92",
+        "scientific_config_sha256":
+            "140a535c786f02c0a2bb0124629f04558bd821fe80c6d5939a95083efe412693",
+        "schema": SCHEMA, "carry_mode": "reset128", "replay_mode": "original_vtrace",
+    },
 }
+
+# Derived (single source of truth = ENGINEERING_CONFIG_IDENTITIES). Kept for the canonical-path
+# lookup and for any external consumer that referenced the previous mapping.
+ENGINEERING_CONFIG_RELATIVE_PATHS = {
+    _k: _v["relative_path"] for _k, _v in ENGINEERING_CONFIG_IDENTITIES.items()
+}
+
+
+def verify_engineering_config_content_identity(formal_record, run_class, arm):
+    """Phase4A-direct-98304 hotfix (§二) fail closed: structural self-consistency (schema/arm/
+    replay_mode/carry_mode) PLUS CONTENT IDENTITY for an engineering run config — the actual file
+    SHA and the actual scientific_config canonical SHA MUST equal the FROZEN engineering values for
+    this (run_class, arm). A comment-only edit changes the file bytes -> FAIL; editing the YAML and
+    syncing the CLI changes the scientific bytes -> ALSO FAIL. The frozen FORMAL SHAs are NOT
+    compared here (the engineering budget legitimately differs). Split out from the path check so
+    the content gate is unit-testable on its own (mirrors verify_formal_config_content_identity)."""
+    key = (run_class, arm)
+    ident = ENGINEERING_CONFIG_IDENTITIES.get(key)
+    if ident is None:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_UNKNOWN: no canonical engineering config for "
+            f"run_class={run_class!r} arm={arm!r}; "
+            f"known={sorted(ENGINEERING_CONFIG_IDENTITIES)}")
+    if not formal_record or not isinstance(formal_record.get("config"), dict):
+        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no config loaded.")
+    cfg = formal_record["config"]
+    if cfg.get("schema") != SCHEMA:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: schema={cfg.get('schema')!r} != {SCHEMA!r}")
+    if cfg.get("arm") != arm:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: arm={cfg.get('arm')!r} != {arm!r}")
+    sci = cfg.get("scientific_config")
+    if not isinstance(sci, dict):
+        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no scientific_config block.")
+    if sci.get("replay_mode") != "original_vtrace":
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: replay_mode={sci.get('replay_mode')!r} != "
+            "'original_vtrace' (engineering runs keep the original-goal V-trace protocol).")
+    if sci.get("carry_mode") != arm:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: scientific_config.carry_mode="
+            f"{sci.get('carry_mode')!r} != arm={arm!r}")
+    actual_file_sha = formal_record.get("file_sha256")
+    if actual_file_sha != ident["file_sha256"]:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_CONTENT_IDENTITY_MISMATCH: engineering config file_sha256="
+            f"{actual_file_sha} != frozen {ident['file_sha256']} (run_class={run_class!r}, "
+            f"arm={arm!r}, path={formal_record.get('path')!r}). Any byte change — even comments "
+            "or key reordering — is rejected; the four engineering configs are content-frozen.")
+    actual_sci_sha = RTC.scientific_config_sha256(sci)
+    if actual_sci_sha != ident["scientific_config_sha256"]:
+        raise ValueError(
+            f"ENGINEERING_CONFIG_CONTENT_IDENTITY_MISMATCH: engineering scientific_config "
+            f"canonical sha256={actual_sci_sha} != frozen {ident['scientific_config_sha256']} "
+            f"(run_class={run_class!r}, arm={arm!r}). Editing the YAML and syncing the CLI still "
+            "fails: the engineering content identity is frozen, not merely self-consistent.")
+    return dict(
+        engineering_content_identity="PASS",
+        run_class=run_class,
+        arm=arm,
+        relative_path=ident["relative_path"],
+        file_sha256=actual_file_sha,
+        scientific_config_sha256=actual_sci_sha,
+        frozen_file_sha256=ident["file_sha256"],
+        frozen_scientific_config_sha256=ident["scientific_config_sha256"],
+        frozen_engineering_sha_compared=True,
+        frozen_formal_sha_compared=False)
 
 
 def verify_engineering_config_identity(snapshot_root, arm, formal_record, run_class):
     """§一.3 fail closed: canonical PATH identity (same anti-copy protection as the formal path)
-    + SELF-CONSISTENT content binding for an engineering run config. NO frozen-formal SHA
-    comparison (the engineering budget legitimately differs). Returns a record carrying
-    formal_config_identity="PASS" (so the precheck certificate's identity gate is met) +
-    engineering_config_identity="PASS" + the recomputed file/scientific SHAs."""
+    + the §二 CONTENT identity (verify_engineering_config_content_identity). Returns a record
+    carrying formal_config_identity="PASS" (so the precheck certificate's identity gate is met) +
+    engineering_config_identity="PASS" + engineering_content_identity="PASS" + the frozen + actual
+    file/scientific SHAs."""
     key = (run_class, arm)
     rel = ENGINEERING_CONFIG_RELATIVE_PATHS.get(key)
     if rel is None:
@@ -252,43 +349,19 @@ def verify_engineering_config_identity(snapshot_root, arm, formal_record, run_cl
             f"ENGINEERING_CONFIG_PATH_IDENTITY_MISMATCH: config realpath={actual!r} != canonical "
             f"engineering path={expected!r} (run_class={run_class!r}, arm={arm!r}). An individual "
             "copied file, symlink escape or '..' traversal is rejected.")
-    # (c) content self-consistency: schema/arm/replay_mode structural checks + recomputed SHAs
-    #     (recorded, NOT compared to any frozen constant; the runtime deep_diff binds the values).
-    cfg = formal_record.get("config")
-    if not isinstance(cfg, dict):
-        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no config mapping.")
-    if cfg.get("schema") != SCHEMA:
-        raise ValueError(
-            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: schema={cfg.get('schema')!r} != {SCHEMA!r}")
-    if cfg.get("arm") != arm:
-        raise ValueError(
-            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: arm={cfg.get('arm')!r} != {arm!r}")
-    sci = cfg.get("scientific_config")
-    if not isinstance(sci, dict):
-        raise ValueError("ENGINEERING_CONFIG_IDENTITY_MISMATCH: no scientific_config block.")
-    if sci.get("replay_mode") != "original_vtrace":
-        raise ValueError(
-            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: replay_mode={sci.get('replay_mode')!r} != "
-            "'original_vtrace' (engineering runs keep the original-goal V-trace protocol).")
-    if sci.get("carry_mode") != arm:
-        raise ValueError(
-            f"ENGINEERING_CONFIG_IDENTITY_MISMATCH: scientific_config.carry_mode="
-            f"{sci.get('carry_mode')!r} != arm={arm!r}")
-    return dict(
+    # (c)+(d) structural self-consistency + frozen CONTENT identity (§二).
+    content_rec = verify_engineering_config_content_identity(formal_record, run_class, arm)
+    merged = dict(
         formal_config_identity="PASS",
         engineering_config_identity="PASS",
-        run_class=run_class,
-        arm=arm,
-        relative_path=rel,
         expected_realpath=expected,
         actual_realpath=actual,
         formal_config_path_identity=FORMAL_CONFIG_PATH_IDENTITY_LABEL,
         formal_config_snapshot_relocation=FORMAL_CONFIG_SNAPSHOT_RELOCATION_LABEL,
         declared_snapshot_root_realpath=declared,
-        derived_snapshot_root_realpath=derived,
-        file_sha256=formal_record.get("file_sha256"),
-        scientific_config_sha256=RTC.scientific_config_sha256(sci),
-        frozen_formal_sha_compared=False)
+        derived_snapshot_root_realpath=derived)
+    merged.update(content_rec)
+    return merged
 
 
 def self_test():
@@ -319,6 +392,70 @@ def self_test():
                 "scientific_config_sha256"]:
             rederive_ok = False; print(f"    [{arm}] scientific SHA drift", flush=True)
     check("frozen SHAs re-derived from real files match the constants", rederive_ok)
+
+    # (0b) Phase4A-direct-98304 hotfix (§二): the four frozen ENGINEERING SHAs must also re-derive
+    #      from the real committed files (no hand-guessing).
+    eng_rederive_ok = True
+    for key, eident in ENGINEERING_CONFIG_IDENTITIES.items():
+        p = os.path.join(snap, eident["relative_path"])
+        raw = open(p, "rb").read()
+        import yaml as _yaml
+        ecfg = _yaml.safe_load(raw.decode("utf-8"))
+        if _sha256_bytes(raw) != eident["file_sha256"]:
+            eng_rederive_ok = False
+            print(f"    [{key}] engineering file SHA drift", flush=True)
+        if RTC.scientific_config_sha256(ecfg["scientific_config"]) != eident[
+                "scientific_config_sha256"]:
+            eng_rederive_ok = False
+            print(f"    [{key}] engineering scientific SHA drift", flush=True)
+    check("frozen ENGINEERING SHAs re-derived from real files match the constants", eng_rederive_ok)
+
+    # (0c-e) Phase4A-direct-98304 hotfix (§二): the engineering CONTENT gate. Canonical record
+    #        PASSES; a comment-only edit (file bytes change) FAILS; a value edit synced to the CLI
+    #        (scientific bytes change) ALSO FAILS.
+    import tempfile as _tf, shutil as _sh
+    eng_tmp = _tf.mkdtemp(prefix="p4a_eng_fid_")
+    try:
+        eng_canon = os.path.join(snap, "configs", "rmt16_phase4a_smoke_persistent.yaml")
+        rec0 = RTC.load_formal_config(eng_canon)
+        try:
+            crec = verify_engineering_config_content_identity(
+                rec0, "engineering_smoke", "persistent")
+            check("(0c) canonical engineering config -> content PASS",
+                  crec["engineering_content_identity"] == "PASS"
+                  and crec["frozen_engineering_sha_compared"] is True)
+        except ValueError as e:
+            check("(0c) canonical engineering config -> content PASS", False, str(e)[:120])
+        # comment-only edit -> file SHA changes, scientific unchanged -> FAIL on file SHA
+        commented = "# engineering comment that changes file bytes only\n" + open(
+            eng_canon, encoding="utf-8").read()
+        cpath = os.path.join(eng_tmp, "smoke_persistent_commented.yaml")
+        with open(cpath, "w", encoding="utf-8") as f:
+            f.write(commented)
+        try:
+            verify_engineering_config_content_identity(
+                RTC.load_formal_config(cpath), "engineering_smoke", "persistent")
+            check("(0d) comment-only edit -> FAIL file identity", False, "no raise")
+        except ValueError as e:
+            check("(0d) comment-only edit -> FAIL file identity",
+                  "ENGINEERING_CONFIG_CONTENT_IDENTITY_MISMATCH" in str(e)
+                  and "file_sha256" in str(e))
+        # value edit (total_updates 2 -> 3) -> scientific SHA changes -> FAIL on scientific SHA
+        edited = open(eng_canon, encoding="utf-8").read().replace(
+            "total_updates: 2", "total_updates: 3")
+        epath = os.path.join(eng_tmp, "smoke_persistent_tu3.yaml")
+        with open(epath, "w", encoding="utf-8") as f:
+            f.write(edited)
+        try:
+            verify_engineering_config_content_identity(
+                RTC.load_formal_config(epath), "engineering_smoke", "persistent")
+            check("(0e) value edit (CLI-synced) -> FAIL scientific identity", False, "no raise")
+        except ValueError as e:
+            check("(0e) value edit (CLI-synced) -> FAIL scientific identity",
+                  "ENGINEERING_CONFIG_CONTENT_IDENTITY_MISMATCH" in str(e))
+    finally:
+        _sh.rmtree(eng_tmp, ignore_errors=True)
+
 
     canon = os.path.join(snap, "configs", "rmt16_phase4a_v2_persistent.yaml")
     tmp = tempfile.mkdtemp(prefix="p4av23_fid_")

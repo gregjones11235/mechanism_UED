@@ -328,9 +328,12 @@ STEPS_PER_UPDATE = cfg.num_envs * cfg.num_steps     # 2048
 # ANCHOR_INTERVAL / MIN_SEQUENCE_LENGTH / RL.W_ORIGINAL_VTRACE) and BEFORE env build / network
 # init / checkpoint load / training. The pre-JAX precheck certificate already bound the formal
 # YAML to the FROZEN pure-Python spec (§五.2). Here the runtime scientific config is rebuilt from
-# the REAL imported objects and diffed against the frozen spec: any drift =>
+# the REAL imported objects and diffed against the EXPECTED imported config (the frozen spec with
+# the seven CLI-facing keys — incl. the actual executed budget total_updates/save_every — overridden
+# by the ACTUAL command-line values; Phase4A-direct-98304 hotfix §一): any drift =>
 # IMPORTED_RUNTIME_CONSTANTS_MISMATCH (the finalized FAIL certificate is written and the driver
-# exits). By transitivity: formal YAML == frozen spec == REAL executing constants.
+# exits). By transitivity: formal YAML == frozen spec (+ actual CLI budget) == REAL executing
+# constants. The frozen spec still binds EVERY non-budget scientific constant in all run classes.
 # Then the replay protocol's EXECUTED source identity is bound via inspect on the real imported
 # learner + sampler (§八; NOT string declarations) and reconciled with the declared labels.
 if FORMAL_CONFIG_RECORD is not None:
@@ -380,11 +383,45 @@ if FORMAL_CONFIG_RECORD is not None:
         net_num_layers=int(cfg.num_layers), net_gating=bool(cfg.gating),
         net_gating_bias=float(cfg.gating_bias), net_window_mem=int(cfg.window_mem),
         net_rmt_num_tokens=int(cfg.rmt_num_tokens))
-    _FROZEN_SCIENTIFIC = RTC.build_runtime_scientific_config(
-        **FSPEC.build_kwargs(args.carry_mode))
+    # Phase4A-direct-98304 hotfix (§一): the EXPECTED imported scientific config is built from the
+    # frozen spec (the single source of truth for every NON-CLI scientific constant) with the SEVEN
+    # CLI-facing keys overridden by the ACTUAL command-line values — the SAME construction as the
+    # pre-JAX block above (§五.2). Comparing THIS against the config rebuilt from the REAL imported
+    # objects means: formal_vtrace still binds 12/2; engineering_smoke correctly accepts 2/2;
+    # long_run_98304 correctly accepts 48/4; and any OTHER (non-budget) constant drift between the
+    # frozen spec and the real imported objects STILL fails closed below. NO diff field is filtered
+    # or ignored — the full deep_diff is evaluated exactly as before; only the EXPECTED side now
+    # carries the actual executed budget instead of the frozen formal budget.
+    _expected_imported_kwargs = FSPEC.build_kwargs(args.carry_mode)
+    _expected_imported_kwargs.update(
+        carry_mode=args.carry_mode,
+        replay_mode=REPLAY_MODE,
+        allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
+        sequence_length=int(args.sequence_length),
+        seed=int(args.seed),
+        total_updates=int(args.total_updates),
+        save_every=int(args.save_every))
+    _EXPECTED_IMPORTED_SCIENTIFIC = RTC.build_runtime_scientific_config(
+        **_expected_imported_kwargs)
     _IMPORTED_CONSTANTS_DRIFT = RTC.deep_diff(
-        RTC.canonical_scientific_config(_FROZEN_SCIENTIFIC),
+        RTC.canonical_scientific_config(_EXPECTED_IMPORTED_SCIENTIFIC),
         RTC.canonical_scientific_config(_imported_scientific))
+    # Phase4A-direct-98304 hotfix (§四 regression): CPU self-test hook. When the env var is set the
+    # driver exits HERE — immediately after the post-JAX binding is computed and BEFORE env build /
+    # ckpt load / training — so the binding can be regression-tested under JAX_PLATFORMS=cpu with
+    # NO training. The launchers never set this var, so production runs are completely unaffected.
+    if os.environ.get("RMT16_POSTJAX_BINDING_SELFTEST") == "1":
+        if _IMPORTED_CONSTANTS_DRIFT:
+            _selftest_drift = " | ".join(
+                f"{d['path']}: expected={d['formal']!r} imported={d['runtime']!r} ({d['kind']})"
+                for d in _IMPORTED_CONSTANTS_DRIFT)
+            print("POSTJAX_BINDING_SELFTEST=FAIL run_class=" + str(args.run_class)
+                  + " drift: " + _selftest_drift, flush=True)
+            raise SystemExit(3)
+        print("POSTJAX_BINDING_SELFTEST=PASS imported_constants_match=True run_class="
+              + str(args.run_class) + " total_updates=" + str(int(args.total_updates))
+              + " save_every=" + str(int(args.save_every)), flush=True)
+        raise SystemExit(0)
     if _IMPORTED_CONSTANTS_DRIFT:
         _drift_msg = " | ".join(
             f"{d['path']}: frozen={d['formal']!r} imported={d['runtime']!r} ({d['kind']})"
