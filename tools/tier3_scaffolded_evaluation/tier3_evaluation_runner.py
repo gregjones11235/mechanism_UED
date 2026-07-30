@@ -59,6 +59,7 @@ RUN_STATUS_ENGINE_FAILED = "ENGINE_FAILED"
 RUN_STATUS_FINALIZE_FAILED = "FINALIZE_FAILED"
 RUN_CLASSES = {
     "performance": "PROVISIONAL_STRONG_STUDENT_SELECTION",
+    "round1": "ROUND1_SCREENING",
     "smoke": "INTERFACE_SMOKE",
 }
 
@@ -150,21 +151,46 @@ def run_child(engine_argv: list, cwd: str) -> dict:
 def build_engine_argv(mode: str, arm: str, checkpoint: str, contract: str,
                       out_tmp: str, scenario: str = "all", episodes: int = None,
                       max_steps: int = None, cc2_snapshot_root: str = None,
-                      cc2_driver_source: str = None, python: str = None) -> list:
+                      cc2_driver_source: str = None, python: str = None,
+                      frozen_bank_artifacts: str = None,
+                      screening_full_seeds: int = None,
+                      screening_bank_indices: list = None) -> list:
     """The child argv, with paths RELATIVE to the repo root (cwd=repo root at spawn
-    time) so committed provenance never rests on local absolute D: paths."""
+    time) so committed provenance never rests on local absolute D: paths. Formal
+    modes (performance / round1) REQUIRE the serialized frozen bank artifact
+    directory (GPU_REGENERATION_DISABLED, 总控 §一.7)."""
     require(mode in RUN_CLASSES, "FAIL CLOSED: runner mode %r not in %s"
             % (mode, sorted(RUN_CLASSES)))
     require(arm in ("persistent", "reset128"),
             "FAIL CLOSED: --arm %r not in (persistent, reset128)" % arm)
+    if mode in ("performance", "round1"):
+        require(frozen_bank_artifacts,
+                "FAIL CLOSED (GPU_REGENERATION_DISABLED): runner mode %r requires a "
+                "serialized frozen bank artifact directory (--frozen-bank-artifacts)"
+                % mode)
     repo = str(audit.repo_root())
     py = python or sys.executable
+    mode_flag = {"performance": "--performance-evaluation",
+                 "round1": "--round1-screening",
+                 "smoke": "--interface-smoke"}[mode]
     argv = [py, "-u", "tools/tier3_scaffolded_evaluation/tier3_evaluator.py",
-            "--performance-evaluation" if mode == "performance" else "--interface-smoke",
+            mode_flag,
             "--checkpoint", os.path.relpath(checkpoint, repo),
             "--checkpoint-contract", os.path.relpath(contract, repo),
             "--arm", arm,
             "--out", os.path.relpath(out_tmp, repo)]
+    if mode in ("performance", "round1"):
+        argv += ["--frozen-bank-artifacts",
+                 os.path.relpath(frozen_bank_artifacts, repo)]
+    if mode == "round1":
+        # 总控 §四: defaults = FULL prefix 8 (200000..200007) + bank indices 0,5.
+        argv += ["--screening-full-seeds",
+                 str(int(screening_full_seeds if screening_full_seeds is not None
+                         else 8))]
+        idx = (list(screening_bank_indices) if screening_bank_indices is not None
+               else [0, 5])
+        argv += ["--screening-bank-indices",
+                 ",".join(str(int(i)) for i in idx)]
     if mode == "smoke":
         argv += ["--scenario", str(scenario)]
         if episodes is not None:
@@ -286,7 +312,8 @@ def _write_json(path: str, doc: dict):
 
 def _record_failure(out_dir: str, provenance: dict, arm: str, run_class: str,
                     checkpoint_contract_sha256: str, status: str, reason: str,
-                    push_status: str = "NOT_PUSHED_AT_RUN_TIME") -> str:
+                    push_status: str = "NOT_PUSHED_AT_RUN_TIME",
+                    extra_status: dict = None) -> str:
     """Write a FAIL run_status.json into the FINAL dir (created if needed). The temp
     dir is never promoted on this path — no PASS certificate can exist. The FULL
     provenance set (总控 §三) is bound on the failure path too."""
@@ -295,6 +322,8 @@ def _record_failure(out_dir: str, provenance: dict, arm: str, run_class: str,
                          checkpoint_contract_sha256, out_dir,
                          temp_dir_promoted=False, sha256sums_verified=False,
                          reason=reason, push_status=push_status)
+    if extra_status:
+        doc.update(extra_status)
     p = os.path.join(out_dir, "run_status.json")
     _write_json(p, doc)
     return p
@@ -363,11 +392,19 @@ def evaluate_arm(arm: str, checkpoint: str, contract: str, out_dir: str,
                  mode: str = "performance", scenario: str = "all",
                  episodes: int = None, max_steps: int = None,
                  cc2_snapshot_root: str = None, cc2_driver_source: str = None,
-                 push_status: str = "NOT_PUSHED_AT_RUN_TIME") -> int:
+                 push_status: str = "NOT_PUSHED_AT_RUN_TIME",
+                 frozen_bank_artifacts: str = None,
+                 screening_full_seeds: int = None,
+                 screening_bank_indices: list = None,
+                 extra_status: dict = None) -> int:
     """Run ONE arm through the parent/child runner (task §二/§四/§十). Sequential by
-    contract: never spawn two JAX evaluators at once. `push_status` records the
-    remote-push outcome at run time (总控 §三; e.g. BLOCKED_NETWORK — not a code
-    failure) into every run_status written on this path."""
+    contract: never spawn two JAX evaluators at once (总控 §四 authorizes TWO-GPU
+    PARALLEL arms for Round 1 — that parallelism is two SEPARATE runner processes
+    with fully isolated resources per arm, never two children of one runner).
+    `push_status` records the remote-push outcome at run time (总控 §三; e.g.
+    BLOCKED_NETWORK — not a code failure) into every run_status written on this
+    path; `extra_status` merges run-mode record fields (screening schedule /
+    artifact dir) into that same run_status."""
     require(arm in ("persistent", "reset128"),
             "FAIL CLOSED: --arm %r not in (persistent, reset128)" % arm)
     require(mode in RUN_CLASSES, "FAIL CLOSED: runner mode %r not in %s"
@@ -389,7 +426,10 @@ def evaluate_arm(arm: str, checkpoint: str, contract: str, out_dir: str,
                              scenario=scenario, episodes=episodes,
                              max_steps=max_steps,
                              cc2_snapshot_root=cc2_snapshot_root,
-                             cc2_driver_source=cc2_driver_source)
+                             cc2_driver_source=cc2_driver_source,
+                             frozen_bank_artifacts=frozen_bank_artifacts,
+                             screening_full_seeds=screening_full_seeds,
+                             screening_bank_indices=screening_bank_indices)
     repo = str(audit.repo_root())
     print("RUNNER: spawning engine child (arm=%s, run_class=%s, cwd=%s)"
           % (arm, run_class, repo), flush=True)
@@ -406,7 +446,8 @@ def evaluate_arm(arm: str, checkpoint: str, contract: str, out_dir: str,
                         RUN_STATUS_ENGINE_FAILED,
                         "engine child exited with literal code %d (no PASS "
                         "certificate emitted; temp dir not promoted)"
-                        % prov["literal_exit_code"], push_status=push_status)
+                        % prov["literal_exit_code"], push_status=push_status,
+                        extra_status=extra_status)
         print("RUNNER: ENGINE_FAILED (arm=%s literal_exit_code=%d) — temp dir %s "
               "NOT promoted" % (arm, prov["literal_exit_code"], tmp), flush=True)
         return 1
@@ -417,15 +458,17 @@ def evaluate_arm(arm: str, checkpoint: str, contract: str, out_dir: str,
     except (FailClosed, certmod.FailClosed) as exc:
         _record_failure(out_dir, prov, arm, run_class, contract_sha,
                         RUN_STATUS_FINALIZE_FAILED, str(exc)[:500],
-                        push_status=push_status)
+                        push_status=push_status, extra_status=extra_status)
         print("RUNNER: FINALIZE_FAILED (arm=%s): %s" % (arm, exc), flush=True)
         return 2
 
-    _write_json(os.path.join(tmp, "run_status.json"),
-                run_status_doc(RUN_STATUS_FINALIZED_PASS, arm, run_class, prov,
-                               contract_sha, out_dir, temp_dir_promoted=False,
-                               sha256sums_verified=False,
-                               push_status=push_status))
+    status_doc = run_status_doc(RUN_STATUS_FINALIZED_PASS, arm, run_class, prov,
+                                contract_sha, out_dir, temp_dir_promoted=False,
+                                sha256sums_verified=False,
+                                push_status=push_status)
+    if extra_status:
+        status_doc.update(extra_status)
+    _write_json(os.path.join(tmp, "run_status.json"), status_doc)
     write_sha256sums(tmp)
     for name in SUMMED_FILES + ("SHA256SUMS",):
         _fsync_best_effort(os.path.join(tmp, name))
@@ -565,6 +608,19 @@ def self_test() -> int:
             "scientific_claim_authorized": False,
             "single_training_seed": True,
             "provisional_selection_only": True,
+            # 总控 §一.8: the helper's binding is a PROVISIONAL (formal) scaffold
+            # certificate — its frozen bank must be a serialized artifact.
+            "bank_kind": "FROZEN_SCAFFOLD_BANK",
+            "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+            "bank_regenerated_on_eval_device": False,
+            "artifact_file_sha256": "a" * 64,
+            "loaded_content_sha256": "2" + "a" * 63,     # == state_bank_hash
+            "device_provenance": {
+                "mint": {"python_version": "3.11.15", "jax_version": "0.4.30",
+                         "jax_default_backend": "cpu"},
+                "load": {"python_version": "3.11.15", "jax_version": "0.4.30",
+                         "jax_default_backend": "gpu"},
+            },
         }
         b.update(over)
         return b
@@ -697,6 +753,36 @@ def self_test() -> int:
               and len(ok["evaluator_source_sha256"]) == 64
               and len(ok["evaluation_runner_source_sha256"]) == 64)
 
+    # g) Runner mode plumbing (总控 §一.7/§四): the round1 child argv carries the
+    #    --round1-screening flag, the screening schedule flags, and the artifact
+    #    directory; BOTH formal modes without artifacts fail closed.
+    av = build_engine_argv("round1", "persistent", "ckpt.pkl", "contract.json",
+                           "out.inprogress", frozen_bank_artifacts="arts",
+                           screening_full_seeds=8, screening_bank_indices=[0, 5])
+    check("round1_argv_flags",
+          "--round1-screening" in av
+          and "--frozen-bank-artifacts" in av
+          and "--screening-full-seeds" in av
+          and av[av.index("--screening-full-seeds") + 1] == "8"
+          and "--screening-bank-indices" in av
+          and av[av.index("--screening-bank-indices") + 1] == "0,5")
+    check("round1_argv_defaults",
+          "--screening-full-seeds" in build_engine_argv(
+              "round1", "persistent", "ckpt.pkl", "contract.json",
+              "out.inprogress", frozen_bank_artifacts="arts"))
+    try:
+        build_engine_argv("round1", "persistent", "ckpt.pkl", "contract.json",
+                          "out.inprogress")
+        check("round1_requires_artifacts_runner", False)
+    except FailClosed:
+        check("round1_requires_artifacts_runner", True)
+    try:
+        build_engine_argv("performance", "persistent", "ckpt.pkl", "contract.json",
+                          "out.inprogress")
+        check("performance_requires_artifacts_runner", False)
+    except FailClosed:
+        check("performance_requires_artifacts_runner", True)
+
     if problems:
         print("TIER3_EVALUATION_RUNNER_SELF_TEST_FAIL")
         for p in problems:
@@ -721,19 +807,29 @@ def main(argv=None) -> int:
 
     perf = "--performance-evaluation" in argv
     smoke = "--interface-smoke" in argv
-    if perf == smoke:                       # neither / both → usage error
+    round1 = "--round1-screening" in argv
+    if int(perf) + int(smoke) + int(round1) != 1:     # exactly one → usage error
         print("usage: tier3_evaluation_runner.py --self-test\n"
               "       tier3_evaluation_runner.py --performance-evaluation "
               "--arm {persistent|reset128} --checkpoint <full_state.pkl> "
-              "--checkpoint-contract <PATH> --out <DIR> "
-              "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>]\n"
+              "--checkpoint-contract <PATH> --frozen-bank-artifacts <DIR> "
+              "--out <DIR> [--cc2_snapshot_root <PATH>] "
+              "[--cc2_driver_source <PATH>] [--push-status <STATUS>]\n"
+              "       tier3_evaluation_runner.py --round1-screening "
+              "--arm {persistent|reset128} --checkpoint <full_state.pkl> "
+              "--checkpoint-contract <PATH> --frozen-bank-artifacts <DIR> "
+              "--out <DIR> [--screening-full-seeds N] "
+              "[--screening-bank-indices i,j] [--cc2_snapshot_root <PATH>] "
+              "[--cc2_driver_source <PATH>] [--push-status <STATUS>]\n"
               "       tier3_evaluation_runner.py --interface-smoke "
               "--arm {persistent|reset128} --checkpoint <full_state.pkl> "
               "--checkpoint-contract <PATH> --out <DIR> "
               "[--scenario {front_l2,back_l2,full,all}] [--episodes N] "
               "[--max-steps M] [--cc2_snapshot_root <PATH>] "
               "[--cc2_driver_source <PATH>] [--push-status <STATUS>]\n"
-              "(--performance-evaluation and --interface-smoke are mutually exclusive;\n"
+              "(the three run modes are mutually exclusive; the formal modes\n"
+              " --performance-evaluation / --round1-screening REQUIRE\n"
+              " --frozen-bank-artifacts — GPU_REGENERATION_DISABLED;\n"
               " --push-status records the remote-push outcome, e.g. BLOCKED_NETWORK /\n"
               " PUSHED / NOT_PUSHED_AT_RUN_TIME — default NOT_PUSHED_AT_RUN_TIME)")
         return 3
@@ -745,16 +841,41 @@ def main(argv=None) -> int:
         print("FAIL CLOSED (usage): --arm, --checkpoint, --checkpoint-contract and "
               "--out are required")
         return 3
+    mode = "performance" if perf else "round1" if round1 else "smoke"
+    artifacts = _opt("--frozen-bank-artifacts")
+    if mode in ("performance", "round1") and not artifacts:
+        print("FAIL CLOSED (usage): --%s requires --frozen-bank-artifacts <DIR> "
+              "(GPU_REGENERATION_DISABLED)"
+              % ("performance-evaluation" if perf else "round1-screening"))
+        return 3
+    screening_full_seeds = screening_bank_indices = extra = None
+    if round1:
+        screening_full_seeds = int(_opt("--screening-full-seeds", "8"))
+        screening_bank_indices = [int(x) for x in
+                                  _opt("--screening-bank-indices", "0,5").split(",")
+                                  if x.strip() != ""]
+        extra = {"screening": {"round": 1,
+                               "full_seeds": screening_full_seeds,
+                               "bank_indices": list(screening_bank_indices)},
+                 "frozen_bank_artifacts": _repo_relative_or_raw(artifacts),
+                 "strong_student_selection_authorized": False,
+                 "scientific_superiority_claim": False}
+    elif perf and artifacts:
+        extra = {"frozen_bank_artifacts": _repo_relative_or_raw(artifacts)}
     try:
         return evaluate_arm(
             arm, checkpoint, contract, out,
-            mode="performance" if perf else "smoke",
+            mode=mode,
             scenario=_opt("--scenario", "all"),
             episodes=int(_opt("--episodes")) if _opt("--episodes") else None,
             max_steps=int(_opt("--max-steps")) if _opt("--max-steps") else None,
             cc2_snapshot_root=_opt("--cc2_snapshot_root"),
             cc2_driver_source=_opt("--cc2_driver_source"),
-            push_status=_opt("--push-status", "NOT_PUSHED_AT_RUN_TIME"))
+            push_status=_opt("--push-status", "NOT_PUSHED_AT_RUN_TIME"),
+            frozen_bank_artifacts=artifacts,
+            screening_full_seeds=screening_full_seeds,
+            screening_bank_indices=screening_bank_indices,
+            extra_status=extra)
     except (FailClosed, certmod.FailClosed, contractmod.FailClosed,
             evaluator.FailClosed) as exc:
         print(str(exc))

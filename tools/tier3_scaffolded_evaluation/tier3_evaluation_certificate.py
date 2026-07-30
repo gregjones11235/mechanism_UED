@@ -131,14 +131,15 @@ FROZEN_OBSERVATION_SHAPE = [8335]      # canonical S4 symbolic obs (unchanged)
 FROZEN_ACTION_DIM = 43                 # canonical craftax action set (unchanged)
 FROZEN_ACTION_MODE = "greedy_argmax"   # the one frozen action mode (task §五/§六)
 RUN_CLASSES = ("INTERFACE_SMOKE", "FORMAL_EVALUATION",
-               "PROVISIONAL_STRONG_STUDENT_SELECTION")
+               "PROVISIONAL_STRONG_STUDENT_SELECTION", "ROUND1_SCREENING")
 CONTRACT_ARMS = ("persistent", "reset128")
 # Frozen held-out performance-evaluation start schedule (task §七).
 PERF_FULL_SEED_BASE = 200_000
 PERF_FULL_N = 64
 VERSION_FIELDS = ("python_version", "jax_version", "jaxlib_version", "numpy_version",
                   "flax_version", "craftax_version")
-CERT_MODES = ("synthetic", "interface_smoke", "performance_evaluation")
+CERT_MODES = ("synthetic", "interface_smoke", "performance_evaluation",
+              "round1_screening")
 STUDENT_STATE_KEYS = ("student_checkpoint_loaded", "student_policy_rollout_executed",
                       "performance_evaluation_executed", "scientific_claim_authorized")
 
@@ -226,8 +227,14 @@ def _assert_common_binding(binding: dict, sha_fields):
         require(binding["max_timesteps"] == 4096,
                 "FAIL CLOSED (NEG27): PROVISIONAL_STRONG_STUDENT_SELECTION max_timesteps "
                 "%r != frozen 4096" % binding["max_timesteps"])
+    if binding["run_class"] == "ROUND1_SCREENING":
+        require(binding["max_timesteps"] == 4096,
+                "FAIL CLOSED (NEG27): ROUND1_SCREENING max_timesteps %r != frozen 4096 "
+                "(总控 §四: every Round 1 screening episode runs under the full cap)"
+                % binding["max_timesteps"])
     _assert_seed_schedule(binding["evaluation_seed_schedule"], binding["run_class"])
     _assert_state_entry_ids(binding["state_entry_ids"], binding["run_class"])
+    _assert_bank_provenance(binding)               # 总控 §一.8
     # ---- actual runtime environment versions (task §五) ----
     for f in VERSION_FIELDS:
         require(isinstance(binding[f], str) and binding[f],
@@ -296,6 +303,63 @@ def _assert_seed_schedule(sched, run_class):
                     BACK, mat.FROZEN_BANK_N, mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE),
                 "FAIL CLOSED (NEG27): PROVISIONAL back seeds != frozen bank schedule "
                 "(all %d BACK states, each exactly once)" % mat.FROZEN_BANK_N)
+    if run_class == "ROUND1_SCREENING":
+        # 总控 §四: the Round 1 schedule must be a DECLARED SUBSET of the frozen
+        # provisional schedule — FULL = a PREFIX of the frozen 64 held-out seeds;
+        # FRONT/BACK = frozen bank states at strictly-ascending unique bank_indices —
+        # with the frozen PARENT schedule embedded (screening_of_frozen_schedule), so
+        # the certificate proves subset-purity against the frozen values.
+        missing = [sc for sc in known if sc not in sched]
+        require(not missing,
+                "FAIL CLOSED (NEG43): ROUND1_SCREENING evaluation_seed_schedule missing "
+                "scenario(s) %s (both arms run all three scenarios on an identical "
+                "declared subset)" % missing)
+        for sc, want_kind in ((FULL, "canonical_reset_seeds_screening_prefix"),
+                              (FRONT, "frozen_bank_state_screening_subset"),
+                              (BACK, "frozen_bank_state_screening_subset")):
+            e = sched[sc]
+            require(e.get("kind") == want_kind,
+                    "FAIL CLOSED (NEG43): ROUND1 schedule.%s.kind %r != %r"
+                    % (sc, e.get("kind"), want_kind))
+            parent = e.get("screening_of_frozen_schedule")
+            require(isinstance(parent, list) and parent
+                    and all(isinstance(s, int) and not isinstance(s, bool)
+                            for s in parent),
+                    "FAIL CLOSED (NEG44): ROUND1 schedule.%s missing "
+                    "screening_of_frozen_schedule (the frozen parent schedule must be "
+                    "embedded so subset-purity is auditable)" % sc)
+            seeds = e["seeds"]
+            if sc == FULL:
+                full_parent = [PERF_FULL_SEED_BASE + i for i in range(PERF_FULL_N)]
+                require(parent == full_parent,
+                        "FAIL CLOSED (NEG44): ROUND1 FULL screening_of_frozen_schedule "
+                        "!= the frozen held-out schedule %d..%d"
+                        % (PERF_FULL_SEED_BASE, PERF_FULL_SEED_BASE + PERF_FULL_N - 1))
+                n = len(seeds)
+                require(1 <= n <= PERF_FULL_N and seeds == parent[:n],
+                        "FAIL CLOSED (NEG43): ROUND1 FULL seeds %s... are not a prefix "
+                        "of the frozen held-out schedule" % (seeds[:3],))
+            else:
+                parent_want = mat.fixed_seed_schedule(
+                    sc, mat.FROZEN_BANK_N, mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE)
+                require(parent == parent_want,
+                        "FAIL CLOSED (NEG44): ROUND1 %s screening_of_frozen_schedule "
+                        "!= the frozen %d-state bank schedule" % (sc, mat.FROZEN_BANK_N))
+                idx = e.get("bank_indices")
+                require(isinstance(idx, list) and idx
+                        and all(isinstance(i, int) and not isinstance(i, bool)
+                                for i in idx),
+                        "FAIL CLOSED (NEG45): ROUND1 %s bank_indices missing / not a "
+                        "non-empty list of ints" % sc)
+                require(idx == sorted(idx) and len(set(idx)) == len(idx),
+                        "FAIL CLOSED (NEG45): ROUND1 %s bank_indices %r must be "
+                        "strictly ascending and unique" % (sc, idx))
+                require(all(0 <= i < mat.FROZEN_BANK_N for i in idx),
+                        "FAIL CLOSED (NEG45): ROUND1 %s bank_indices %r outside "
+                        "[0, %d)" % (sc, idx, mat.FROZEN_BANK_N))
+                require(seeds == [parent[i] for i in idx],
+                        "FAIL CLOSED (NEG45): ROUND1 %s seeds %r != the frozen bank "
+                        "states at indices %r" % (sc, seeds, idx))
 
 
 def _assert_state_entry_ids(sei, run_class):
@@ -331,6 +395,120 @@ def _assert_state_entry_ids(sei, run_class):
         require(len(sei[BACK]) == mat.FROZEN_BANK_N,
                 "FAIL CLOSED (NEG27): PROVISIONAL state_entry_ids.back_l2 has %d "
                 "entries != %d" % (len(sei[BACK]), mat.FROZEN_BANK_N))
+    if run_class == "ROUND1_SCREENING":
+        # 总控 §四: all three scenarios present; FULL ids name held-out seeds
+        # (<=64); scaffold ids name FROZEN bank positions (in [0, FROZEN_BANK_N)),
+        # never the screening run.
+        missing = [sc for sc in known if sc not in sei]
+        require(not missing,
+                "FAIL CLOSED (NEG43): ROUND1 state_entry_ids missing scenario(s) %s"
+                % missing)
+        require(1 <= len(sei[FULL]) <= PERF_FULL_N
+                and all(isinstance(x, str) and x.startswith("full-seed")
+                        for x in sei[FULL]),
+                "FAIL CLOSED (NEG43): ROUND1 full entry ids %r must be <=%d "
+                "'full-seed<N>' ids" % (sei[FULL][:3], PERF_FULL_N))
+        for sc in (FRONT, BACK):
+            prefix = "%s-bank" % sc
+            pos = []
+            for x in sei[sc]:
+                require(isinstance(x, str) and x.startswith(prefix),
+                        "FAIL CLOSED (NEG43): ROUND1 %s entry id %r does not name a "
+                        "frozen bank state ('%s<index>')" % (sc, x, prefix))
+                pos.append(int(x[len(prefix):]))
+            require(1 <= len(pos) <= mat.FROZEN_BANK_N
+                    and all(0 <= p < mat.FROZEN_BANK_N for p in pos),
+                    "FAIL CLOSED (NEG43): ROUND1 %s entry ids %r reference positions "
+                    "outside the frozen %d-state bank" % (sc, sei[sc], mat.FROZEN_BANK_N))
+
+
+def _assert_bank_provenance(binding: dict):
+    """总控 §一.8 bank provenance gate (conditional on bank_kind; deliberately NOT in
+    ENGINE_BINDING_REQUIRED_FIELDS — FULL-scenario certificates carry no artifact
+    SHAs, so a global missing-check would fail them).
+
+    Scaffold banks (FRONT/BACK) must have been loaded as an immutable serialized
+    ARTIFACT (bank_source=FROZEN_SERIALIZED_ARTIFACT,
+    bank_regenerated_on_eval_device=False, artifact_file_sha256 +
+    loaded_content_sha256 bound, and the loaded content must canonicalize to the
+    bound frozen state_bank_hash) — or, for INTERFACE_SMOKE ONLY, re-minted in
+    memory (REGENERATED_IN_MEMORY). Canonical reset seeds (FULL) are generated
+    on the eval device by construction and carry no artifact SHAs."""
+    bank_kind = binding.get("bank_kind")
+    require(bank_kind in ("FROZEN_SCAFFOLD_BANK", "CANONICAL_RESET_SEEDS"),
+            "FAIL CLOSED (NEG47): eval_binding.bank_kind %r not in "
+            "(FROZEN_SCAFFOLD_BANK, CANONICAL_RESET_SEEDS)" % (bank_kind,))
+    require("bank_source" in binding,
+            "FAIL CLOSED (NEG49): eval_binding.bank_source missing (总控 §一.8: bank "
+            "provenance must be bound)")
+    require("device_provenance" in binding,
+            "FAIL CLOSED (NEG49): eval_binding.device_provenance missing (总控 §一.8: "
+            "device provenance must be bound)")
+    dev = binding["device_provenance"]
+    require(isinstance(dev, dict) and dev,
+            "FAIL CLOSED (NEG49): eval_binding.device_provenance %r is not a "
+            "non-empty dict" % (dev,))
+    if bank_kind == "CANONICAL_RESET_SEEDS":
+        require(binding["bank_source"] == "CANONICAL_RESET_SEEDS",
+                "FAIL CLOSED (NEG47): bank_kind=CANONICAL_RESET_SEEDS requires "
+                "bank_source=CANONICAL_RESET_SEEDS (got %r)"
+                % (binding["bank_source"],))
+        require(binding.get("bank_regenerated_on_eval_device") is True,
+                "FAIL CLOSED (NEG47): canonical reset seeds are generated on the eval "
+                "device; bank_regenerated_on_eval_device must be exactly True")
+        require(binding.get("artifact_file_sha256") is None
+                and binding.get("loaded_content_sha256") is None,
+                "FAIL CLOSED (NEG48): canonical reset seeds carry no artifact SHAs "
+                "(artifact_file_sha256 / loaded_content_sha256 must be null)")
+        require(isinstance(dev.get("eval_device"), dict) and dev["eval_device"],
+                "FAIL CLOSED (NEG49): CANONICAL_RESET_SEEDS device_provenance must "
+                "carry a non-empty 'eval_device' identity dict")
+        return
+    # ---- FROZEN_SCAFFOLD_BANK ----
+    src = binding["bank_source"]
+    require(src in ("FROZEN_SERIALIZED_ARTIFACT", "REGENERATED_IN_MEMORY"),
+            "FAIL CLOSED (NEG46): bank_kind=FROZEN_SCAFFOLD_BANK bank_source %r not in "
+            "(FROZEN_SERIALIZED_ARTIFACT, REGENERATED_IN_MEMORY)" % (src,))
+    if src == "FROZEN_SERIALIZED_ARTIFACT":
+        require(binding.get("bank_regenerated_on_eval_device") is False,
+                "FAIL CLOSED (NEG46): bank_source=FROZEN_SERIALIZED_ARTIFACT requires "
+                "bank_regenerated_on_eval_device to be exactly False (the bank "
+                "generator must never run on the evaluation device; 总控 §一.7)")
+        require("artifact_file_sha256" in binding
+                and _is_sha256_hex(binding["artifact_file_sha256"]),
+                "FAIL CLOSED (NEG48): eval_binding.artifact_file_sha256 %r is not a "
+                "64-hex sha256 value" % (binding.get("artifact_file_sha256"),))
+        require("loaded_content_sha256" in binding
+                and _is_sha256_hex(binding["loaded_content_sha256"]),
+                "FAIL CLOSED (NEG48): eval_binding.loaded_content_sha256 %r is not a "
+                "64-hex sha256 value" % (binding.get("loaded_content_sha256"),))
+        require(binding["loaded_content_sha256"] == binding["state_bank_hash"],
+                "FAIL CLOSED (NEG46): loaded_content_sha256 %s... != bound "
+                "state_bank_hash %s... (the loaded artifact must canonicalize to the "
+                "frozen bank hash)"
+                % (str(binding["loaded_content_sha256"])[:16],
+                   str(binding["state_bank_hash"])[:16]))
+        require(isinstance(dev.get("mint"), dict) and dev["mint"]
+                and isinstance(dev.get("load"), dict) and dev["load"],
+                "FAIL CLOSED (NEG49): FROZEN_SERIALIZED_ARTIFACT device_provenance "
+                "must carry non-empty 'mint' and 'load' identity dicts")
+    else:   # REGENERATED_IN_MEMORY — chain verification only, never a formal binding
+        require(binding["run_class"] == "INTERFACE_SMOKE",
+                "FAIL CLOSED (NEG46): bank_source=REGENERATED_IN_MEMORY is permitted "
+                "ONLY for run_class=INTERFACE_SMOKE (formal evaluation must load the "
+                "serialized artifact; got run_class=%r)" % (binding["run_class"],))
+        require(binding.get("bank_regenerated_on_eval_device") is True,
+                "FAIL CLOSED (NEG46): bank_source=REGENERATED_IN_MEMORY requires "
+                "bank_regenerated_on_eval_device to be exactly True")
+        require(binding.get("artifact_file_sha256") is None
+                and binding.get("loaded_content_sha256") is None,
+                "FAIL CLOSED (NEG48): an in-memory regenerated bank carries no "
+                "artifact SHAs (artifact_file_sha256 / loaded_content_sha256 must "
+                "be null)")
+        require(isinstance(dev.get("mint"), dict) and dev["mint"]
+                and isinstance(dev.get("load"), dict) and dev["load"],
+                "FAIL CLOSED (NEG49): REGENERATED_IN_MEMORY device_provenance must "
+                "carry non-empty 'mint' and 'load' identity dicts")
 
 
 def _assert_no_legacy_self_declared_provenance(binding: dict):
@@ -475,6 +653,7 @@ def honest_status_labels(has_real_rollout: bool, student_state: dict, mode: str)
         "REAL_CRAFTAX_SCAFFOLD_TEST": "TESTED_REAL_ENV_RESET" if has_real_rollout else "BLOCKED_ENVIRONMENT",
         "REAL_STUDENT_INTERFACE_SMOKE": "EXECUTED" if mode == "interface_smoke" else "NOT_RUN",
         "REAL_STUDENT_PERFORMANCE_EVALUATION": "EXECUTED" if mode == "performance_evaluation" else "NOT_RUN",
+        "REAL_STUDENT_ROUND1_SCREENING": "EXECUTED" if mode == "round1_screening" else "NOT_RUN",
         "FORMAL_SCIENTIFIC_CLAIM": "NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
         "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
         "FRONT_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED" if has_real_rollout else "NOT_MATERIALIZED",
@@ -679,6 +858,25 @@ def self_test() -> int:
     check("full_cert_global_label_ok", fc["state_bank_hash_label"] == GLOBAL_HASH_LABEL)
 
     # ---- NEG27: REAL value binding (actual SHAs, never labels) ----
+    # 总控 §一.8 bank provenance for a FORMAL scaffold certificate: the frozen bank
+    # loaded from a serialized artifact (regeneration forbidden on the eval device).
+    _ARTIFACT_PROV = {
+        "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+        "bank_regenerated_on_eval_device": False,
+        "artifact_file_sha256": "a" * 64,
+        "loaded_content_sha256": "2" + "a" * 63,        # == state_bank_hash
+        "device_provenance": {
+            "mint": {"python_version": "3.11.15", "jax_version": "0.4.30",
+                     "jaxlib_version": "0.4.30", "numpy_version": "1.26.4",
+                     "flax_version": "0.8.5", "craftax_version": "1.4.5",
+                     "jax_default_backend": "cpu"},
+            "load": {"python_version": "3.11.15", "jax_version": "0.4.30",
+                     "jaxlib_version": "0.4.30", "numpy_version": "1.26.4",
+                     "flax_version": "0.8.5", "craftax_version": "1.4.5",
+                     "jax_default_backend": "gpu"},
+        },
+    }
+
     def _engine_binding(**over):
         b = {
             "state_bank_hash": "2" + "a" * 63,
@@ -723,6 +921,20 @@ def self_test() -> int:
             "scientific_claim_authorized": False,
             "single_training_seed": True,
             "provisional_selection_only": True,
+            # 总控 §一.8 bank provenance — the helper's default binding is a FRONT
+            # INTERFACE_SMOKE certificate, where in-memory regeneration is the ONLY
+            # permitted bank source (chain check; never a formal binding).
+            "bank_kind": "FROZEN_SCAFFOLD_BANK",
+            "bank_source": "REGENERATED_IN_MEMORY",
+            "bank_regenerated_on_eval_device": True,
+            "artifact_file_sha256": None,
+            "loaded_content_sha256": None,
+            "device_provenance": {
+                "mint": {"python_version": "3.11.9", "jax_version": "0.4.30",
+                         "jax_default_backend": "cpu"},
+                "load": {"python_version": "3.11.9", "jax_version": "0.4.30",
+                         "jax_default_backend": "cpu"},
+            },
         }
         b.update(over)
         return b
@@ -846,7 +1058,8 @@ def self_test() -> int:
     prov = _engine_binding(run_class="PROVISIONAL_STRONG_STUDENT_SELECTION",
                            max_timesteps=4096,
                            evaluation_seed_schedule=prov_sched,
-                           state_entry_ids=prov_ids)
+                           state_entry_ids=prov_ids,
+                           **_ARTIFACT_PROV)
     cp = build_certificate(_result(FRONT, 0.5, 8), eval_binding=prov)
     check("provisional_frozen_schedule_accepted",
           cp["eval_binding"]["run_class"] == "PROVISIONAL_STRONG_STUDENT_SELECTION")
@@ -859,7 +1072,8 @@ def self_test() -> int:
                               run_class="PROVISIONAL_STRONG_STUDENT_SELECTION",
                               max_timesteps=4096,
                               evaluation_seed_schedule=drifted,
-                              state_entry_ids=prov_ids))
+                              state_entry_ids=prov_ids,
+                              **_ARTIFACT_PROV))
         check("provisional_shifted_schedule_rejected", False)
     except FailClosed:
         check("provisional_shifted_schedule_rejected", True)
@@ -869,17 +1083,166 @@ def self_test() -> int:
                               run_class="PROVISIONAL_STRONG_STUDENT_SELECTION",
                               max_timesteps=2048,
                               evaluation_seed_schedule=prov_sched,
-                              state_entry_ids=prov_ids))
+                              state_entry_ids=prov_ids,
+                              **_ARTIFACT_PROV))
         check("provisional_wrong_max_timesteps_rejected", False)
     except FailClosed:
         check("provisional_wrong_max_timesteps_rejected", True)
     # A FORMAL_EVALUATION run class MAY (only if separately authorized) carry
     # performance_claim_authorized=True — the completeness gate still passes.
     formal = build_certificate(_result(FRONT, 0.5, 4),
-                               eval_binding=_engine_binding(run_class="FORMAL_EVALUATION",
-                                                            performance_claim_authorized=True))
+                               eval_binding=_engine_binding(
+                                   run_class="FORMAL_EVALUATION",
+                                   performance_claim_authorized=True,
+                                   **_ARTIFACT_PROV))
     check("NEG27_formal_class_binding_ok",
           formal["eval_binding"]["run_class"] == "FORMAL_EVALUATION")
+
+    # ---- ROUND1_SCREENING (总控 §四): the screening schedule must be a declared
+    # SUBSET of the frozen schedule (embedded parent); drift / wrong cap /
+    # non-artifact banks are rejected ----
+    round1_sched = {
+        FULL: {"kind": "canonical_reset_seeds_screening_prefix",
+               "screening_of_frozen_schedule": [200000 + i for i in range(64)],
+               "count": 8, "seeds": [200000 + i for i in range(8)]},
+        FRONT: {"kind": "frozen_bank_state_screening_subset",
+                "screening_of_frozen_schedule": [10000 + i for i in range(8)],
+                "bank_indices": [0, 5], "count": 2, "seeds": [10000, 10005]},
+        BACK: {"kind": "frozen_bank_state_screening_subset",
+               "screening_of_frozen_schedule": [1010000 + i for i in range(8)],
+               "bank_indices": [0, 5], "count": 2, "seeds": [1010000, 1010005]},
+    }
+    round1_ids = {FULL: ["full-seed%d" % (200000 + i) for i in range(8)],
+                  FRONT: ["front_l2-bank0", "front_l2-bank5"],
+                  BACK: ["back_l2-bank0", "back_l2-bank5"]}
+    r1 = build_certificate(_result(FRONT, 0.5, 2),
+                           eval_binding=_engine_binding(
+                               run_class="ROUND1_SCREENING", max_timesteps=4096,
+                               evaluation_seed_schedule=round1_sched,
+                               state_entry_ids=round1_ids,
+                               **_ARTIFACT_PROV),
+                           mode="round1_screening")
+    check("round1_screening_binding_accepted",
+          r1["eval_binding"]["run_class"] == "ROUND1_SCREENING"
+          and r1["status_labels"]["REAL_STUDENT_ROUND1_SCREENING"] == "EXECUTED"
+          and r1["status_labels"]["REAL_STUDENT_PERFORMANCE_EVALUATION"] == "NOT_RUN"
+          and r1["eval_binding"]["bank_source"] == "FROZEN_SERIALIZED_ARTIFACT")
+    # NEG43: shifted FULL prefix rejected.
+    shifted = {k: dict(v) for k, v in round1_sched.items()}
+    shifted[FULL] = dict(shifted[FULL])
+    shifted[FULL]["seeds"] = [200001 + i for i in range(8)]
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=4096,
+                              evaluation_seed_schedule=shifted,
+                              state_entry_ids=round1_ids, **_ARTIFACT_PROV))
+        check("NEG43_round1_shifted_prefix_rejected", False)
+    except FailClosed:
+        check("NEG43_round1_shifted_prefix_rejected", True)
+    # NEG45: non-ascending bank indices rejected.
+    bad_idx = {k: dict(v) for k, v in round1_sched.items()}
+    bad_idx[FRONT] = dict(bad_idx[FRONT])
+    bad_idx[FRONT]["bank_indices"] = [5, 0]
+    bad_idx[FRONT]["seeds"] = [10005, 10000]
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=4096,
+                              evaluation_seed_schedule=bad_idx,
+                              state_entry_ids=round1_ids, **_ARTIFACT_PROV))
+        check("NEG45_round1_nonascending_indices_rejected", False)
+    except FailClosed:
+        check("NEG45_round1_nonascending_indices_rejected", True)
+    # NEG44: missing embedded frozen parent schedule rejected.
+    no_parent = {k: dict(v) for k, v in round1_sched.items()}
+    no_parent[BACK] = dict(no_parent[BACK])
+    del no_parent[BACK]["screening_of_frozen_schedule"]
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=4096,
+                              evaluation_seed_schedule=no_parent,
+                              state_entry_ids=round1_ids, **_ARTIFACT_PROV))
+        check("NEG44_round1_missing_parent_rejected", False)
+    except FailClosed:
+        check("NEG44_round1_missing_parent_rejected", True)
+    # ROUND1 under the wrong (shortened) cap rejected.
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=32,
+                              evaluation_seed_schedule=round1_sched,
+                              state_entry_ids=round1_ids, **_ARTIFACT_PROV))
+        check("round1_wrong_max_timesteps_rejected", False)
+    except FailClosed:
+        check("round1_wrong_max_timesteps_rejected", True)
+    # NEG46: a FORMAL class with an in-memory regenerated bank rejected.
+    try:
+        build_certificate(_result(FRONT, 0.5, 8),
+                          eval_binding=_engine_binding(
+                              run_class="PROVISIONAL_STRONG_STUDENT_SELECTION",
+                              max_timesteps=4096,
+                              evaluation_seed_schedule=prov_sched,
+                              state_entry_ids=prov_ids))   # REGENERATED_IN_MEMORY
+        check("NEG46_formal_inmemory_bank_rejected", False)
+    except FailClosed:
+        check("NEG46_formal_inmemory_bank_rejected", True)
+    # NEG46: artifact provenance whose loaded content != bound bank hash rejected.
+    bad_loaded = dict(_ARTIFACT_PROV)
+    bad_loaded["loaded_content_sha256"] = "3" + "a" * 63
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=4096,
+                              evaluation_seed_schedule=round1_sched,
+                              state_entry_ids=round1_ids, **bad_loaded))
+        check("NEG46_loaded_content_mismatch_rejected", False)
+    except FailClosed:
+        check("NEG46_loaded_content_mismatch_rejected", True)
+    # NEG46: regeneration-true together with an artifact source rejected.
+    regen_true = dict(_ARTIFACT_PROV)
+    regen_true["bank_regenerated_on_eval_device"] = True
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=4096,
+                              evaluation_seed_schedule=round1_sched,
+                              state_entry_ids=round1_ids, **regen_true))
+        check("NEG46_artifact_regen_true_rejected", False)
+    except FailClosed:
+        check("NEG46_artifact_regen_true_rejected", True)
+    # NEG47: canonical reset seeds may not masquerade as an artifact source.
+    try:
+        build_certificate(_result(FULL, 0.25, 8),
+                          eval_binding=_engine_binding(
+                              bank_kind="CANONICAL_RESET_SEEDS",
+                              **dict(_ARTIFACT_PROV)))
+        check("NEG47_canonical_kind_artifact_source_rejected", False)
+    except FailClosed:
+        check("NEG47_canonical_kind_artifact_source_rejected", True)
+    # NEG48: a non-hex artifact file SHA rejected.
+    bad_file_sha = dict(_ARTIFACT_PROV)
+    bad_file_sha["artifact_file_sha256"] = "not-a-sha"
+    try:
+        build_certificate(_result(FRONT, 0.5, 2),
+                          eval_binding=_engine_binding(
+                              run_class="ROUND1_SCREENING", max_timesteps=4096,
+                              evaluation_seed_schedule=round1_sched,
+                              state_entry_ids=round1_ids, **bad_file_sha))
+        check("NEG48_nonhex_artifact_sha_rejected", False)
+    except FailClosed:
+        check("NEG48_nonhex_artifact_sha_rejected", True)
+    # NEG49: missing bank_source / device_provenance rejected.
+    for miss_over, tag in (({"bank_source": None}, "NEG49_missing_bank_source"),
+                           ({"device_provenance": {}}, "NEG49_empty_device_provenance")):
+        nb = _engine_binding()
+        nb.update(miss_over)
+        try:
+            build_certificate(_result(FRONT, 0.5, 4), eval_binding=nb)
+            check("%s_rejected" % tag, False)
+        except FailClosed:
+            check("%s_rejected" % tag, True)
 
     if problems:
         print("TIER3_EVALUATION_CERTIFICATE_SELF_TEST_FAIL")

@@ -4,7 +4,19 @@
              "NO_SCIENTIFIC_SUPERIORITY_CLAIM"],
   "eval_binding": {
     "_note": "TWO-STAGE BINDING (task §二). ENGINE-STAGE certificates (written by tier3_evaluator.py) carry every field EXCEPT the exit-provenance block and must NOT contain any of them (NEG37). The RUNNER (tier3_evaluation_runner.py) injects the exit-provenance block below ONLY after wait()-ing on the engine child and reading its LITERAL exit code, then runs full verification (NEG29). Legacy self-declared fields (run_exit_code / process_pid / process_argv / run_start_utc / run_end_utc) are FORBIDDEN in every binding. 64-hex values below are documentation placeholders.",
+    "_run_class_note": "run_class ∈ {INTERFACE_SMOKE, PERFORMANCE_EVALUATION, PROVISIONAL_STRONG_STUDENT_SELECTION, FORMAL_EVALUATION, ROUND1_SCREENING}. ROUND1_SCREENING (总控 §四): a declared screening SUBSET of the frozen schedule — FULL seeds 200000..200007 (prefix of the frozen 64), FRONT/BACK frozen bank indices (0,5), max_timesteps=4096; it NEVER authorizes strong-student selection or scientific superiority claims.",
     "bank_kind": "FROZEN_SCAFFOLD_BANK",
+    "_bank_provenance_note": "BANK PROVENANCE (总控 §一.8; NEG46-NEG49). Conditional on bank_kind. (a) bank_kind=FROZEN_SCAFFOLD_BANK (FRONT/BACK): bank_source=FROZEN_SERIALIZED_ARTIFACT for EVERY formal run class — the bank was minted ONCE on a pinned CPU venv, serialized to an immutable artifact (tier3_frozen_bank_artifacts.py), loaded read-only on the eval device, converted back to host NumPy, and its canonical_content_sha256 recomputed: bank_regenerated_on_eval_device must be exactly false, artifact_file_sha256 + loaded_content_sha256 must be 64-hex, and loaded_content_sha256 must EQUAL state_bank_hash (the loaded states canonicalize to the frozen bank hash); device_provenance must carry non-empty 'mint' and 'load' identity dicts. bank_source=REGENERATED_IN_MEMORY is permitted ONLY for run_class=INTERFACE_SMOKE (chain verification, never a formal binding): bank_regenerated_on_eval_device=true, both artifact SHAs null. (b) bank_kind=CANONICAL_RESET_SEEDS (FULL): bank_source=CANONICAL_RESET_SEEDS, bank_regenerated_on_eval_device=true, both artifact SHAs null, device_provenance={'eval_device': {...}}. The bank generator must NEVER run during formal evaluation (GPU_REGENERATION_DISABLED).",
+    "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+    "bank_regenerated_on_eval_device": false,
+    "artifact_file_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "loaded_content_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "device_provenance": {
+      "mint": {"python_version": "3.11.15", "jax_version": "0.4.30",
+               "jax_default_backend": "cpu"},
+      "load": {"python_version": "3.11.15", "jax_version": "0.4.30",
+               "jax_default_backend": "gpu"}
+    },
     "state_bank_hash": "0000000000000000000000000000000000000000000000000000000000000000",
     "state_payload_hashes": [
       "0000000000000000000000000000000000000000000000000000000000000000"
@@ -24,7 +36,7 @@
     "action_mode": "greedy_argmax",
     "max_timesteps": 4096,
     "evaluation_seed_schedule": {
-      "_note": "task §七 frozen schedule; identical for BOTH arms. full = 64 held-out canonical reset seeds 200000..200063; front_l2/back_l2 = all 8 frozen bank states each exactly once.",
+      "_note": "task §七 frozen schedule; identical for BOTH arms. full = 64 held-out canonical reset seeds 200000..200063; front_l2/back_l2 = all 8 frozen bank states each exactly once. ROUND1_SCREENING bindings carry a declared subset instead: full kind=canonical_reset_seeds_screening_prefix (seeds = prefix of the frozen 64, screening_of_frozen_schedule = the full 64), front_l2/back_l2 kind=frozen_bank_state_screening_subset (bank_indices strictly ascending in [0,8), seeds = the frozen bank states at those indices, screening_of_frozen_schedule = the frozen 8-seed schedule). NEG43-NEG45.",
       "full": {"kind": "canonical_reset_seeds_held_out", "base": 200000, "count": 64,
                "seeds": ["...200000..200063..."]},
       "front_l2": {"kind": "frozen_bank_state_each_once", "seed_base": 10000, "stride": 1,
@@ -94,6 +106,7 @@
     "REAL_CRAFTAX_SCAFFOLD_TEST": "TESTED_REAL_ENV_RESET",
     "REAL_STUDENT_INTERFACE_SMOKE": "NOT_RUN",
     "REAL_STUDENT_PERFORMANCE_EVALUATION": "EXECUTED",
+    "REAL_STUDENT_ROUND1_SCREENING": "NOT_RUN",
     "SCAFFOLDED_RESULTS_CAN_REPLACE_FULL_TASK": false,
     "SCAFFOLD_BUILDER": "IMPLEMENTED_STATIC",
     "STATE_BANK_MATERIALIZER": "TESTED_SYNTHETIC"

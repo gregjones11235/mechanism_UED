@@ -161,6 +161,37 @@ def evaluate(scenario: str, episodes: list, checkpoint_record: dict = None,
 # REAL environment interface (JAX + craftax host; FAILS CLOSED otherwise)
 # ---------------------------------------------------------------------------
 _ENV_CACHE = {}
+_JIT_CACHE = {}
+
+
+def _jit_step(entry):
+    """Cached jitted env step for the rollout EXECUTION PATH ONLY (总控 §二).
+
+    Wraps the EXISTING envns.step_env call verbatim — identical args, identical
+    return 5-tuple, traced ONCE per canonical env entry. It changes none of: the
+    policy action rule (still eager host-side greedy_argmax), the episode horizon,
+    observation preprocessing, memory carry/reset semantics, the FULL/FRONT/BACK
+    metrics, or the rng seed stream. Never used to batch-splice hidden states
+    across candidates."""
+    key = ("step", id(entry))
+    if key not in _JIT_CACHE:
+        import jax
+        envns, ctor, table = entry["envns"], entry["ctor"], entry["task_embeddings"]
+        _JIT_CACHE[key] = jax.jit(
+            lambda sk, st, a: envns.step_env(sk, st, a, ctor, table))
+    return _JIT_CACHE[key]
+
+
+def _jit_reset(entry):
+    """Cached jitted FULL canonical reset (总控 §二): wraps the existing
+    envns.reset_env call verbatim; traced once."""
+    key = ("reset", id(entry))
+    if key not in _JIT_CACHE:
+        import jax
+        envns, ctor, table = entry["envns"], entry["ctor"], entry["task_embeddings"]
+        _JIT_CACHE[key] = jax.jit(
+            lambda rng_key: envns.reset_env(rng_key, ctor, 0, table))
+    return _JIT_CACHE[key]
 
 
 def make_canonical_env():
@@ -343,6 +374,7 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
         "front_floor_transition_reached": False, "corridor_exit_reached": False,
         "defeat_kobold": False, "player_died": False, "timed_out": False,
         "kobold_engaged": False, "timesteps": 0, "graph_distance_progress": None,
+        "action_sequence": [],
     }
     if not valid_start:
         return rec                                    # INVALID_START; zero steps
@@ -363,13 +395,16 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
         walkable = _front_walkable_grid(start_state, view)
         exit_pos = view["down_ladders"].get(audit.FRONT_FLOOR)
 
+    step_fn = _jit_step(entry)                       # 总控 §二: rollout execution path
+    actions = []
     rng = jax.random.PRNGKey(int(rng_seed))
     max_level, max_progress, steps = start_level, 0.0, 0
     defeated = died = alias_seen = engaged = env_done = False
     for _ in range(steps_cap):
         action = int(policy_fn(obs, state))
+        actions.append(action)
         rng, sk = jax.random.split(rng)
-        obs, state, _rew, done, _info = envns.step_env(sk, state, action, ctor, table)
+        obs, state, _rew, done, _info = step_fn(sk, state, action)
         steps += 1
         lvl = int(np.asarray(state.player_level))
         max_level = max(max_level, lvl)
@@ -423,6 +458,7 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
         "kobold_engaged": bool(engaged),
         "timesteps": steps,
         "graph_distance_progress": float(max_progress) if scenario == FRONT else None,
+        "action_sequence": list(actions),
     })
     return rec
 
@@ -440,6 +476,7 @@ SCENARIO_ALIASES = {"front_l2": FRONT, "back_l2": BACK, "full": FULL, "all": "al
 # claim. FORMAL_EVALUATION remains certificate-side only (multi-seed; not this round).
 RUN_CLASS_SMOKE = "INTERFACE_SMOKE"
 RUN_CLASS_PROVISIONAL = "PROVISIONAL_STRONG_STUDENT_SELECTION"
+RUN_CLASS_ROUND1 = "ROUND1_SCREENING"
 
 # Frozen held-out FULL start seeds for the provisional selection evaluation (task §七):
 # 64 canonical reset seeds 200000..200063 — never used by training, never overlapping
@@ -478,11 +515,62 @@ def performance_start_schedule() -> dict:
     }
 
 
-def state_entry_ids_for(scenario: str, seeds: list) -> list:
-    """Stable, scenario-qualified entry ids for one scenario's seed list."""
+def screening_start_schedule(full_seeds: int = 8, bank_indices=(0, 5)) -> dict:
+    """The Round 1 screening start schedule (总控 §四): a DECLARED SUBSET of the
+    frozen provisional-selection schedule — FULL = the FIRST `full_seeds` of the
+    frozen 64 held-out seeds 200000..200063; FRONT_L2/BACK_L2 = the frozen bank
+    states at the given bank_indices (each in [0, FROZEN_BANK_N), strictly
+    ascending, unique). Pure; depends on no arm / checkpoint / result; BOTH arms
+    MUST consume the identical return value. This does NOT continue the old
+    80-episode profile and authorizes NO Strong Student selection and NO
+    scientific-superiority claim (总控 §四)."""
+    import tier3_state_bank_materializer as mat
+    full_seeds = int(full_seeds)
+    require(1 <= full_seeds <= PERF_FULL_N,
+            "FAIL CLOSED: screening full_seeds %d outside [1, %d]"
+            % (full_seeds, PERF_FULL_N))
+    idx = [int(i) for i in bank_indices]
+    require(idx, "FAIL CLOSED: screening bank_indices must be non-empty")
+    require(all(0 <= i < mat.FROZEN_BANK_N for i in idx),
+            "FAIL CLOSED: screening bank_indices %r outside [0, %d)"
+            % (idx, mat.FROZEN_BANK_N))
+    require(len(set(idx)) == len(idx),
+            "FAIL CLOSED: screening bank_indices %r contain duplicates" % idx)
+    require(idx == sorted(idx),
+            "FAIL CLOSED: screening bank_indices %r are not strictly ascending" % idx)
+    front_all = mat.fixed_seed_schedule(FRONT, mat.FROZEN_BANK_N,
+                                        mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE)
+    back_all = mat.fixed_seed_schedule(BACK, mat.FROZEN_BANK_N,
+                                       mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE)
+    return {
+        FULL: {"kind": "canonical_reset_seeds_screening_prefix",
+               "screening_of_frozen_schedule": list(PERF_FULL_SEEDS),
+               "count": full_seeds, "seeds": list(PERF_FULL_SEEDS[:full_seeds])},
+        FRONT: {"kind": "frozen_bank_state_screening_subset",
+                "screening_of_frozen_schedule": list(front_all),
+                "bank_indices": list(idx), "count": len(idx),
+                "seeds": [int(front_all[i]) for i in idx]},
+        BACK: {"kind": "frozen_bank_state_screening_subset",
+               "screening_of_frozen_schedule": list(back_all),
+               "bank_indices": list(idx), "count": len(idx),
+               "seeds": [int(back_all[i]) for i in idx]},
+    }
+
+
+def state_entry_ids_for(scenario: str, seeds: list, bank_indices=None) -> list:
+    """Stable, scenario-qualified entry ids for one scenario's seed list. For
+    scaffold scenarios, bank_indices (a screening subset) selects the FROZEN bank
+    POSITION in the id — the id names the frozen bank state, never the screening
+    run, so identical states carry identical ids across arms."""
     if scenario == FULL:
         return ["full-seed%d" % int(s) for s in seeds]
-    return ["%s-bank%d" % (scenario, i) for i in range(len(seeds))]
+    if bank_indices is None:
+        return ["%s-bank%d" % (scenario, i) for i in range(len(seeds))]
+    idx = [int(i) for i in bank_indices]
+    require(len(idx) == len(seeds),
+            "FAIL CLOSED: bank_indices %r length != seeds length %d"
+            % (idx, len(seeds)))
+    return ["%s-bank%d" % (scenario, i) for i in idx]
 
 
 def assert_output_dir_fresh(out_dir: str):
@@ -528,6 +616,17 @@ def _runtime_versions() -> dict:
     return out
 
 
+def _eval_device_identity() -> dict:
+    """The actual evaluation-DEVICE identity for certificate device provenance
+    (总控 §一.8): the pinned runtime versions plus the JAX backend and devices the
+    evaluation actually ran on."""
+    import jax
+    out = dict(_runtime_versions())
+    out["jax_default_backend"] = str(jax.default_backend())
+    out["jax_devices"] = repr(jax.devices())
+    return out
+
+
 def _git_commit_head() -> str:
     """The evaluator repo HEAD (40-hex) at run time — binds the certificate to the
     exact evaluated code revision. Fails closed if git is unavailable."""
@@ -550,17 +649,29 @@ def _git_commit_head() -> str:
 def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
                    out_dir: str, run_class: str, contract_path: str = None,
                    arm: str = None, episodes: int = 2, max_steps: int = None,
-                   driver_source: str = None) -> dict:
-    """The REAL evaluation engine (task §一/§五/§六/§七), fail-closed end to end.
+                   driver_source: str = None, frozen_bank_artifacts: str = None,
+                   screening: dict = None) -> dict:
+    """The REAL evaluation engine (task §一/§五/§六/§七 + 总控六条边界), fail-closed
+    end to end.
 
-    Two run classes share ONE frozen contract (greedy_argmax, max_timesteps<=4096,
-    canonical obs 8335 / 43 actions):
+    Three run classes share ONE frozen contract (greedy_argmax,
+    max_timesteps<=4096, canonical obs 8335 / 43 actions):
 
       * INTERFACE_SMOKE            — chain verification only (short caps);
       * PROVISIONAL_STRONG_STUDENT_SELECTION — the frozen provisional selection
         evaluation: FULL = 64 held-out canonical reset seeds 200000..200063,
         FRONT_L2/BACK_L2 = all 8 frozen bank states each exactly once, every episode
         under the full 4096-step cap. Both arms consume the IDENTICAL schedule.
+      * ROUND1_SCREENING (总控 §四) — a declared SUBSET of the frozen schedule
+        (FULL prefix of N held-out seeds + FRONT/BACK frozen bank states at
+        screening bank_indices), every episode under the full 4096-step cap;
+        authorizes NO Strong Student selection and NO scientific-superiority
+        claim.
+
+    Formal run classes (PROVISIONAL / ROUND1) LOAD the frozen banks read-only
+    from a serialized frozen bank ARTIFACT (frozen_bank_artifacts=<DIR>; minted
+    once on the pinned CPU backend) — the bank generator is NEVER called during
+    a formal evaluation (GPU_REGENERATION_DISABLED, 总控 §一.7).
 
     Gates, in order (each fail closed, each before any binding):
       0. anti-pollution hook gate (handover §7; fires before any JAX import)
@@ -586,10 +697,21 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
             "FAIL CLOSED (anti-pollution): RMT16_POSTJAX_BINDING_SELFTEST=%r is set; "
             "this hook makes the CC2 driver exit rc=0 before training (false success). "
             "Unset it before any real checkpoint binding." % hook)
-    require(run_class in (RUN_CLASS_SMOKE, RUN_CLASS_PROVISIONAL),
-            "FAIL CLOSED: run_class %r not in (%s, %s)"
-            % (run_class, RUN_CLASS_SMOKE, RUN_CLASS_PROVISIONAL))
+    require(run_class in (RUN_CLASS_SMOKE, RUN_CLASS_PROVISIONAL, RUN_CLASS_ROUND1),
+            "FAIL CLOSED: run_class %r not in (%s, %s, %s)"
+            % (run_class, RUN_CLASS_SMOKE, RUN_CLASS_PROVISIONAL, RUN_CLASS_ROUND1))
     is_perf = run_class == RUN_CLASS_PROVISIONAL
+    is_screening = run_class == RUN_CLASS_ROUND1
+    formal = is_perf or is_screening
+
+    # §一.7 (GPU_REGENERATION_DISABLED): a formal evaluation may NOT regenerate the
+    # frozen banks — it must load a serialized frozen bank ARTIFACT (minted once on
+    # the pinned CPU backend). This gate fires before any output / JAX work.
+    require(not formal or frozen_bank_artifacts,
+            "FAIL CLOSED (GPU_REGENERATION_DISABLED): formal evaluation "
+            "(run_class=%s) requires a serialized frozen bank artifact "
+            "(--frozen-bank-artifacts <DIR>); regenerating the frozen banks on the "
+            "evaluation device is forbidden" % run_class)
 
     # 1. Output freshness (task §四).
     assert_output_dir_fresh(out_dir)
@@ -598,6 +720,7 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
     import hashlib
     import numpy as np
     import jax
+    import jax.numpy as jnp
     import tier3_state_bank_materializer as mat
     import tier3_boundary_schema as bnd
     import tier3_cc2_policy_adapter as policy_adapter
@@ -608,11 +731,25 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
             "FAIL CLOSED (BLOCKED_ENVIRONMENT): the real CLI requires JAX+craftax "
             "(jax=%s, craftax=%s)" % (ser.have_jax(), ser.have_craftax()))
 
-    # 2. Frozen start schedule (task §七). Performance: the frozen held-out schedule;
-    #    smoke: a short prefix of the same deterministic schedules.
+    # 2. Frozen start schedule (task §七 / 总控 §四). Performance: the frozen held-out
+    #    schedule; screening: a declared subset of it; smoke: a short prefix of the
+    #    same deterministic schedules.
     if is_perf:
         scenarios = [FULL, FRONT, BACK]
         schedule = performance_start_schedule()
+        max_steps = MAX_TIMESTEPS
+    elif is_screening:
+        # Round 1 screening (总控 §四): FULL = prefix of the frozen 64 held-out seeds;
+        # FRONT/BACK = frozen bank states at the screening bank_indices; every
+        # episode under the full 4096-step cap. Both arms consume the IDENTICAL
+        # declared subset; NO Strong Student / superiority claim is authorized.
+        require(isinstance(screening, dict) and "full_seeds" in screening
+                and "bank_indices" in screening,
+                "FAIL CLOSED: ROUND1_SCREENING requires a screening dict "
+                "{full_seeds, bank_indices}")
+        scenarios = [FULL, FRONT, BACK]
+        schedule = screening_start_schedule(screening["full_seeds"],
+                                            screening["bank_indices"])
         max_steps = MAX_TIMESTEPS
     else:
         require(scenario in SCENARIO_ALIASES,
@@ -684,8 +821,23 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
         modules, network, params, rmt_cfg, carry_mode,
         driver_cfg["window_mem"], driver_cfg["num_heads"],
         driver_cfg["num_layers"], driver_cfg["embed_size"])
-    # 7. Re-verify BOTH frozen bank identities before any real evaluation.
-    frozen_bindings = {sc: mat.verify_frozen_bank_identity(sc) for sc in (FRONT, BACK)}
+    # 7. Frozen bank identity before any real evaluation. When an artifact directory
+    #    is supplied, BOTH banks are loaded READ-ONLY from the serialized artifacts
+    #    (总控 §一: the loader recomputes the canonical content hash on the host and
+    #    fails closed on any mismatch). The bank generator is NEVER called on that
+    #    path (GPU_REGENERATION_DISABLED). In-memory re-minting remains permitted
+    #    ONLY for the interface smoke (chain check; never a formal binding).
+    if frozen_bank_artifacts:
+        import tier3_frozen_bank_artifacts as art
+        frozen_bindings = {sc: art.load_bank(sc, frozen_bank_artifacts)
+                           for sc in (FRONT, BACK)}
+    else:
+        require(run_class == RUN_CLASS_SMOKE,
+                "FAIL CLOSED (GPU_REGENERATION_DISABLED): run_class=%s requires a "
+                "serialized frozen bank artifact; in-memory bank regeneration is "
+                "permitted only for INTERFACE_SMOKE" % run_class)
+        frozen_bindings = {sc: mat.verify_frozen_bank_identity(sc)
+                           for sc in (FRONT, BACK)}
     rec_before = ckpt.make_cc2_checkpoint_record(
         params, manifest, file_sha, entry["observation_shape"],
         "canonical_craftax_action_set",
@@ -695,21 +847,37 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
     # 8. Rollouts (params read-only; fresh real RMT+GTrXL state per episode; the
     #    frozen schedule is consumed exactly — a scaffold state is never repeated to
     #    fake more samples).
+    reset_fn = _jit_reset(entry)                     # 总控 §二: FULL reset path
     records_by_scenario, results_by_scenario = {}, {}
     for sc in scenarios:
         seeds = [int(s) for s in schedule[sc]["seeds"]]
-        entry_ids = state_entry_ids_for(sc, seeds)
+        bank_indices = schedule[sc].get("bank_indices")
+        entry_ids = state_entry_ids_for(sc, seeds, bank_indices)
         eps = []
         for i, seed in enumerate(seeds):
             policy.reset()
             if sc == FULL:
-                _obs0, start_state = entry["envns"].reset_env(
-                    jax.random.PRNGKey(int(seed)), entry["ctor"], 0,
-                    entry["task_embeddings"])
+                _obs0, start_state = reset_fn(jax.random.PRNGKey(int(seed)))
+            elif frozen_bindings[sc].get("bank_source") == "FROZEN_SERIALIZED_ARTIFACT":
+                # Artifact mode (总控 §一.4/§一.7): read-only load of the frozen bank
+                # state, host NumPy -> device; the bank generator is NEVER called
+                # during a formal evaluation.
+                idx = int(bank_indices[i]) if bank_indices is not None else i
+                start_state = jax.tree.map(jnp.asarray,
+                                           frozen_bindings[sc]["states"][idx])
             else:
+                require(run_class == RUN_CLASS_SMOKE,
+                        "FAIL CLOSED (GPU_REGENERATION_DISABLED): scaffold starts for "
+                        "run_class=%s must come from the frozen bank artifact"
+                        % run_class)
                 start_state = builder.materialize_start(sc, int(seed))
             rec = rollout_episode(entry, start_state, sc, policy, entry_ids[i],
                                   int(seed), max_steps=max_steps)
+            # §三: canonical episode-record SHA — computed over the record BEFORE
+            # the field is added; cross-GPU determinism preflight compares these.
+            rec["episode_record_sha256"] = hashlib.sha256(
+                json.dumps(rec, sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":")).encode("utf-8")).hexdigest()
             eps.append(rec)
             print("  [%s %d/%d %s seed=%d] steps=%d defeat=%s died=%s "
                   "transition=%s engaged=%s"
@@ -743,16 +911,20 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
     versions = _runtime_versions()
     git_commit = _git_commit_head()
     entry_ids_by_scenario = {sc: state_entry_ids_for(
-        sc, [int(s) for s in schedule[sc]["seeds"]]) for sc in scenarios}
-    mode_label = "performance_evaluation" if is_perf else "interface_smoke"
+        sc, [int(s) for s in schedule[sc]["seeds"]],
+        schedule[sc].get("bank_indices")) for sc in scenarios}
+    mode_label = ("performance_evaluation" if is_perf
+                  else "round1_screening" if is_screening else "interface_smoke")
     student_state = {
         "student_checkpoint_loaded": True,
         "student_policy_rollout_executed": True,
         "performance_evaluation_executed": bool(is_perf),
         "scientific_claim_authorized": False,
     }
-    claims = (["PROVISIONAL_SELECTION_ONLY", "SINGLE_TRAINING_SEED",
-               "NO_SCIENTIFIC_SUPERIORITY_CLAIM"] if is_perf
+    claims = (["ROUND1_SCREENING_ONLY", "NO_STRONG_STUDENT_SELECTION",
+               "NO_SCIENTIFIC_SUPERIORITY_CLAIM"] if is_screening
+              else ["PROVISIONAL_SELECTION_ONLY", "SINGLE_TRAINING_SEED",
+                    "NO_SCIENTIFIC_SUPERIORITY_CLAIM"] if is_perf
               else ["INTERFACE_SMOKE_ONLY"])
     certs = {}
     for sc in scenarios:
@@ -795,6 +967,36 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
             "params_unchanged": True,
             "performance_claim_authorized": False,
         }
+        # §一.8 bank provenance (asserted certificate-side by
+        # _assert_bank_provenance; conditional on bank_kind so FULL-scenario
+        # certificates, which carry no artifact SHAs, still finalize):
+        if scaffolded:
+            fb = frozen_bindings[sc]
+            if fb.get("bank_source") == "FROZEN_SERIALIZED_ARTIFACT":
+                binding.update({
+                    "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+                    "bank_regenerated_on_eval_device": False,
+                    "artifact_file_sha256": fb["artifact_file_sha256"],
+                    "loaded_content_sha256": fb["loaded_content_sha256"],
+                    "device_provenance": fb["device_provenance"],
+                })
+            else:
+                dev = _eval_device_identity()
+                binding.update({
+                    "bank_source": "REGENERATED_IN_MEMORY",
+                    "bank_regenerated_on_eval_device": True,
+                    "artifact_file_sha256": None,
+                    "loaded_content_sha256": None,
+                    "device_provenance": {"mint": dev, "load": dev},
+                })
+        else:
+            binding.update({
+                "bank_source": "CANONICAL_RESET_SEEDS",
+                "bank_regenerated_on_eval_device": True,
+                "artifact_file_sha256": None,
+                "loaded_content_sha256": None,
+                "device_provenance": {"eval_device": _eval_device_identity()},
+            })
         label = ("FRONT_SCAFFOLD_STATE_BANK_HASH" if sc == FRONT
                  else "BACK_SCAFFOLD_STATE_BANK_HASH" if sc == BACK
                  else "CANONICAL_TASK_RESET_CONTRACT")
@@ -829,13 +1031,34 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
         "evaluator_git_commit": git_commit,
         "checkpoint": rec_before,
         "cc2_policy_source": src_id,
-        "frozen_bank_bindings": frozen_bindings,
+        # JSON-safe projection (the artifact bindings carry live state arrays
+        # under "states"; those never enter the result document).
+        "frozen_bank_bindings": {sc: {k: v for k, v in frozen_bindings[sc].items()
+                                      if k != "states"}
+                                 for sc in frozen_bindings},
         "results": results_by_scenario,
         "episode_records_by_scenario": {
             sc: {"seeds": records_by_scenario[sc]["seeds"],
                  "episode_records_sha256": records_by_scenario[sc]["episode_records_sha256"]}
             for sc in scenarios},
     }
+    if is_screening:
+        result_doc["screening"] = {
+            "round": 1,
+            "full_seeds": int(screening["full_seeds"]),
+            "bank_indices": [int(i) for i in screening["bank_indices"]],
+            "strong_student_selection_authorized": False,
+            "scientific_superiority_claim": False,
+        }
+    if frozen_bank_artifacts:
+        result_doc["frozen_bank_artifacts"] = {
+            "dir": os.path.abspath(frozen_bank_artifacts),
+            "bank_regenerated_on_eval_device": False,
+            "front_artifact_file_sha256": frozen_bindings[FRONT].get("artifact_file_sha256"),
+            "front_loaded_content_sha256": frozen_bindings[FRONT].get("loaded_content_sha256"),
+            "back_artifact_file_sha256": frozen_bindings[BACK].get("artifact_file_sha256"),
+            "back_loaded_content_sha256": frozen_bindings[BACK].get("loaded_content_sha256"),
+        }
     with open(os.path.join(out_dir, "evaluation_result.json"), "w",
               encoding="utf-8", newline="\n") as fh:
         json.dump(result_doc, fh, indent=2, sort_keys=True, ensure_ascii=False)
@@ -871,14 +1094,41 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
 
 def run_performance_evaluation(checkpoint_path: str, cc2_snapshot_root: str,
                                out_dir: str, contract_path: str, arm: str,
-                               driver_source: str = None) -> dict:
+                               driver_source: str = None,
+                               frozen_bank_artifacts: str = None) -> dict:
     """The frozen PROVISIONAL_STRONG_STUDENT_SELECTION evaluation (task §六): greedy
     argmax, max_timesteps=4096, FULL 64 held-out seeds 200000..200063 + FRONT/BACK
     all 8 frozen bank states each once, performance_evaluation_executed=true,
-    scientific_claim_authorized=false, provisional_selection_only=true."""
+    scientific_claim_authorized=false, provisional_selection_only=true. Requires
+    the frozen banks as a serialized artifact (GPU_REGENERATION_DISABLED)."""
     return run_evaluation(checkpoint_path, cc2_snapshot_root, "all", out_dir,
                           RUN_CLASS_PROVISIONAL, contract_path=contract_path, arm=arm,
-                          driver_source=driver_source)
+                          driver_source=driver_source,
+                          frozen_bank_artifacts=frozen_bank_artifacts)
+
+
+def run_round1_screening(checkpoint_path: str, cc2_snapshot_root: str,
+                         out_dir: str, contract_path: str, arm: str,
+                         frozen_bank_artifacts: str,
+                         screening_full_seeds: int = 8,
+                         screening_bank_indices=(0, 5),
+                         driver_source: str = None) -> dict:
+    """The Round 1 screening evaluation (总控 §四): greedy argmax,
+    max_timesteps=4096, FULL = the FIRST `screening_full_seeds` of the frozen 64
+    held-out seeds (200000..200007 by default) + FRONT/BACK = the frozen bank
+    states at `screening_bank_indices` (default 0,5) — 12 episodes per arm under
+    the defaults — with the frozen banks loaded READ-ONLY from serialized
+    artifacts (GPU_REGENERATION_DISABLED). Both arms consume the IDENTICAL
+    declared subset of the frozen schedule. This run class authorizes NO Strong
+    Student selection and NO scientific-superiority claim, and does NOT continue
+    the old 80-episode profile."""
+    return run_evaluation(checkpoint_path, cc2_snapshot_root, "all", out_dir,
+                          RUN_CLASS_ROUND1, contract_path=contract_path, arm=arm,
+                          driver_source=driver_source,
+                          frozen_bank_artifacts=frozen_bank_artifacts,
+                          screening={"full_seeds": int(screening_full_seeds),
+                                     "bank_indices": [int(i)
+                                                      for i in screening_bank_indices]})
 
 
 # ---------------------------------------------------------------------------
@@ -889,7 +1139,8 @@ def _ep(scenario, eid, valid_start, **flags):
          "terminal_label": "", "front_floor_transition_reached": False,
          "corridor_exit_reached": False, "defeat_kobold": False,
          "player_died": False, "timed_out": False, "timesteps": 10,
-         "kobold_engaged": False, "graph_distance_progress": None}
+         "kobold_engaged": False, "graph_distance_progress": None,
+         "action_sequence": []}
     e.update(flags)
     return e
 
@@ -979,6 +1230,50 @@ def self_test() -> int:
     check("entry_ids_bank",
           state_entry_ids_for(FRONT, [10000]) == ["front_l2-bank0"])
 
+    # Round 1 screening (总控 §四) pure gates: the screening schedule is a DECLARED
+    # SUBSET of the frozen provisional schedule — FULL = prefix of the frozen 64
+    # held-out seeds; FRONT/BACK = frozen bank states at screening bank_indices —
+    # identical for both arms, with entry ids naming the frozen bank positions.
+    scr = screening_start_schedule(8, (0, 5))
+    check("screening_full_prefix",
+          scr[FULL]["seeds"] == [200000 + i for i in range(8)]
+          and scr[FULL]["count"] == 8
+          and scr[FULL]["kind"] == "canonical_reset_seeds_screening_prefix"
+          and scr[FULL]["screening_of_frozen_schedule"] == PERF_FULL_SEEDS)
+    check("screening_front_subset",
+          scr[FRONT]["seeds"] == [10000, 10005]
+          and scr[FRONT]["bank_indices"] == [0, 5]
+          and scr[FRONT]["kind"] == "frozen_bank_state_screening_subset"
+          and scr[FRONT]["screening_of_frozen_schedule"]
+          == [10000 + i for i in range(8)])
+    check("screening_back_subset",
+          scr[BACK]["seeds"] == [1010000, 1010005]
+          and scr[BACK]["bank_indices"] == [0, 5]
+          and scr[BACK]["screening_of_frozen_schedule"]
+          == [1010000 + i for i in range(8)])
+    check("screening_arm_identical", screening_start_schedule(8, (0, 5)) == scr)
+    check("entry_ids_bank_screening",
+          state_entry_ids_for(FRONT, [10000, 10005], (0, 5))
+          == ["front_l2-bank0", "front_l2-bank5"])
+    _bad_screenings = (
+        lambda: screening_start_schedule(0, (0, 5)),      # FULL count < 1
+        lambda: screening_start_schedule(65, (0, 5)),     # FULL count > 64
+        lambda: screening_start_schedule(8, ()),          # empty indices
+        lambda: screening_start_schedule(8, (5, 0)),      # non-ascending
+        lambda: screening_start_schedule(8, (0, 0)),      # duplicate
+        lambda: screening_start_schedule(8, (-1, 5)),     # below range
+        lambda: screening_start_schedule(8, (0, 8)),      # above range
+    )
+    for _fn in _bad_screenings:
+        try:
+            _fn()
+            check("screening_bad_schedule_rejected", False)
+            break
+        except FailClosed:
+            pass
+    else:
+        check("screening_bad_schedule_rejected", True)
+
     # task §四 pure gates (any host): output freshness — a missing or empty dir is
     # fresh; a non-empty dir or a file path is rejected (no rm -rf / overwrite).
     import tempfile
@@ -1003,12 +1298,26 @@ def self_test() -> int:
         except FailClosed:
             check("NEG39_path_is_file_rejected", True)
 
-    # run_class gate (pure): only the two frozen run classes are accepted.
+    # run_class gate (pure): only the three frozen run classes are accepted.
     try:
         run_evaluation("<none>", "<none>", "all", "<none>", "SMOKE_BUT_PERFORMANCE")
         check("bad_run_class_rejected", False)
     except FailClosed:
         check("bad_run_class_rejected", True)
+
+    # §一.7 gate (pure): a FORMAL run class without a serialized frozen bank artifact
+    # FAILS CLOSED (GPU_REGENERATION_DISABLED) — before any output / JAX work.
+    try:
+        run_evaluation("<none>", "<none>", "all", "<none>", RUN_CLASS_ROUND1,
+                       screening={"full_seeds": 8, "bank_indices": [0, 5]})
+        check("round1_requires_artifacts", False)
+    except FailClosed:
+        check("round1_requires_artifacts", True)
+    try:
+        run_evaluation("<none>", "<none>", "all", "<none>", RUN_CLASS_PROVISIONAL)
+        check("provisional_requires_artifacts", False)
+    except FailClosed:
+        check("provisional_requires_artifacts", True)
 
     # ANTI-POLLUTION GATE (handover §7; pure, any host): run_interface_smoke must FAIL
     # CLOSED while RMT16_POSTJAX_BINDING_SELFTEST is set (the hook makes the CC2 driver
@@ -1046,6 +1355,10 @@ def self_test() -> int:
                                 max_steps=16)
         check("front_rollout_valid_start", rec_f["valid_start"] is True)
         check("front_rollout_stepped", 1 <= rec_f["timesteps"] <= 16)
+        check("front_rollout_action_sequence",
+              isinstance(rec_f["action_sequence"], list)
+              and len(rec_f["action_sequence"]) == rec_f["timesteps"]
+              and all(isinstance(a, int) for a in rec_f["action_sequence"]))
         back_bank = builder.materialize_start(BACK, 0)
         rec_b = rollout_episode(entry, back_bank, BACK, policy, "smoke-back", 7,
                                 max_steps=16)
@@ -1083,21 +1396,29 @@ def main(argv=None) -> int:
                 return argv[i + 1]
         return default
 
-    # task §六: the two entry points are MUTUALLY EXCLUSIVE; neither / both -> usage.
+    # task §六 / 总控 §四: the three entry points are MUTUALLY EXCLUSIVE; anything
+    # but exactly one -> usage.
     smoke = "--interface-smoke" in argv
     perf = "--performance-evaluation" in argv
-    if smoke == perf:
+    round1 = "--round1-screening" in argv
+    if int(smoke) + int(perf) + int(round1) != 1:
         print("usage: tier3_evaluator.py --self-test\n"
               "       tier3_evaluator.py --interface-smoke --checkpoint <full_state.pkl> "
               "--checkpoint-contract <PATH> --arm {persistent|reset128} "
               "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>] "
               "[--scenario {front_l2,back_l2,full,all}] --out <DIR> "
-              "[--episodes N] [--max-steps M]\n"
+              "[--episodes N] [--max-steps M] [--frozen-bank-artifacts <DIR>]\n"
               "       tier3_evaluator.py --performance-evaluation "
               "--checkpoint <full_state.pkl> --checkpoint-contract <PATH> "
               "--arm {persistent|reset128} [--cc2_snapshot_root <PATH>] "
-              "[--cc2_driver_source <PATH>] --out <DIR>\n"
-              "(--interface-smoke and --performance-evaluation are mutually exclusive)")
+              "[--cc2_driver_source <PATH>] --frozen-bank-artifacts <DIR> --out <DIR>\n"
+              "       tier3_evaluator.py --round1-screening "
+              "--checkpoint <full_state.pkl> --checkpoint-contract <PATH> "
+              "--arm {persistent|reset128} [--cc2_snapshot_root <PATH>] "
+              "[--cc2_driver_source <PATH>] --frozen-bank-artifacts <DIR> "
+              "[--screening-full-seeds N] [--screening-bank-indices i,j] --out <DIR>\n"
+              "(--interface-smoke / --performance-evaluation / --round1-screening are "
+              "mutually exclusive; formal classes REQUIRE --frozen-bank-artifacts)")
         return 3
     checkpoint = _opt("--checkpoint")
     contract = _opt("--checkpoint-contract")
@@ -1110,15 +1431,42 @@ def main(argv=None) -> int:
     import tier3_cc2_policy_adapter as policy_adapter
     root = _opt("--cc2_snapshot_root", policy_adapter._default_snapshot_root())
     driver_src = _opt("--cc2_driver_source", policy_adapter.DEFAULT_DRIVER_SOURCE)
+    artifacts = _opt("--frozen-bank-artifacts")
     if perf:
+        if not artifacts:
+            print("FAIL CLOSED (usage): --performance-evaluation requires "
+                  "--frozen-bank-artifacts <DIR> (GPU_REGENERATION_DISABLED)")
+            return 3
         summary = run_performance_evaluation(checkpoint, root, out, contract, arm,
-                                             driver_source=driver_src)
+                                             driver_source=driver_src,
+                                             frozen_bank_artifacts=artifacts)
         print("TIER3_PERFORMANCE_EVALUATION_DONE "
               "(run_class=PROVISIONAL_STRONG_STUDENT_SELECTION; arm=%s; "
               "checkpoint_contract_sha256=%s; action_mode=greedy_argmax; "
               "max_timesteps=4096; scientific_claim_authorized=false; "
               "provisional_selection_only=true; params_unchanged=%s; out=%s)"
               % (arm, summary["checkpoint_contract_sha256"],
+                 summary["params_unchanged"], summary["out_dir"]))
+        return 0
+    if round1:
+        if not artifacts:
+            print("FAIL CLOSED (usage): --round1-screening requires "
+                  "--frozen-bank-artifacts <DIR> (GPU_REGENERATION_DISABLED)")
+            return 3
+        full_n = int(_opt("--screening-full-seeds", "8"))
+        idx_raw = _opt("--screening-bank-indices", "0,5")
+        bank_idx = [int(x) for x in idx_raw.split(",") if x.strip() != ""]
+        summary = run_round1_screening(checkpoint, root, out, contract, arm,
+                                       artifacts, screening_full_seeds=full_n,
+                                       screening_bank_indices=bank_idx,
+                                       driver_source=driver_src)
+        print("TIER3_ROUND1_SCREENING_DONE "
+              "(run_class=ROUND1_SCREENING; arm=%s; "
+              "checkpoint_contract_sha256=%s; action_mode=greedy_argmax; "
+              "max_timesteps=4096; screening_full_seeds=%d; "
+              "screening_bank_indices=%s; strong_student_selection_authorized=false; "
+              "scientific_superiority_claim=false; params_unchanged=%s; out=%s)"
+              % (arm, summary["checkpoint_contract_sha256"], full_n, bank_idx,
                  summary["params_unchanged"], summary["out_dir"]))
         return 0
     summary = run_interface_smoke(

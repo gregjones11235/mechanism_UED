@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CC4 Tier3 — negative tests (§十七 NEG01–NEG42).
+"""CC4 Tier3 — negative tests (§十七 NEG01–NEG49).
 
 Each negative test constructs an INVALID input and asserts the corresponding guard
 REJECTS it (fail-closed). A test PASSES when the rejection is correctly detected;
@@ -7,7 +7,7 @@ the suite requirement is FAIL=0 (no negative test silently accepts a violation).
 BLOCKED is allowed only with a documented environment-capability absence — never a
 fake PASS.
 
-Coverage (all 42 implemented; FAIL=0 required):
+Coverage (all 49 implemented; FAIL=0 required):
   NEG01-NEG18  boundary / builder / state-bank / predicate level
   NEG19        episode missing valid_start (evaluator)
   NEG20        ambiguous termination silently labelled (failure taxonomy)
@@ -32,6 +32,23 @@ Coverage (all 42 implemented; FAIL=0 required):
   NEG40        split Student status labels correct; old ambiguous key gone (certificate)
   NEG41        both arms' frozen start schedules identical; drift rejected (evaluator)
   NEG42        carry-mode comparison rule fixed/recomputable + fixed scope fields + forbidden selection vocabulary rejected (selection)
+  NEG43        ROUND1 screening schedule must be a declared subset of the frozen
+               schedule (FULL prefix / FRONT/BACK bank indices); shifts rejected (总控 §四)
+  NEG44        ROUND1 screening must embed the frozen PARENT schedule it screens from;
+               dropped / tampered parent rejected (总控 §四)
+  NEG45        ROUND1 bank_indices strictly ascending / unique / in [0,8); seeds must
+               be the frozen bank states at exactly those indices (总控 §四)
+  NEG46        scaffold bank provenance honesty: formal class with an in-memory
+               regenerated bank rejected; loaded content != frozen bank hash rejected;
+               regeneration=true + artifact source rejected; unknown bank_source
+               rejected (总控 §一.7/§一.8)
+  NEG47        bank_kind / bank_source cross-binding: canonical reset seeds may not
+               masquerade as an artifact source (or vice versa); unknown bank_kind
+               rejected (总控 §一.8)
+  NEG48        artifact SHAs must be 64-hex where required and null where forbidden
+               (canonical reset seeds / in-memory banks carry none) (总控 §一.8)
+  NEG49        bank_source / device_provenance must be bound; empty provenance or a
+               missing 'mint'/'load' identity dict rejected (总控 §一.8)
 """
 from __future__ import annotations
 
@@ -356,9 +373,49 @@ def _engine_binding(**over):
         "scientific_claim_authorized": False,
         "single_training_seed": True,
         "provisional_selection_only": True,
+        # 总控 §一.8 bank provenance. The default helper is an INTERFACE_SMOKE
+        # binding, whose scaffold bank may (only here) be re-minted in memory —
+        # every FORMAL-class NEG binding overrides this with _ARTIFACT_PROV.
+        "bank_kind": "FROZEN_SCAFFOLD_BANK",
+        "bank_source": "REGENERATED_IN_MEMORY",
+        "bank_regenerated_on_eval_device": True,
+        "artifact_file_sha256": None,
+        "loaded_content_sha256": None,
+        "device_provenance": {
+            "mint": {"python_version": "3.11.9", "jax_version": "0.4.30",
+                     "jaxlib_version": "0.4.30", "numpy_version": "1.26.4",
+                     "flax_version": "0.8.5", "craftax_version": "1.4.5",
+                     "jax_default_backend": "cpu"},
+            "load": {"python_version": "3.11.9", "jax_version": "0.4.30",
+                     "jaxlib_version": "0.4.30", "numpy_version": "1.26.4",
+                     "flax_version": "0.8.5", "craftax_version": "1.4.5",
+                     "jax_default_backend": "cpu"},
+        },
     }
     b.update(over)
     return b
+
+
+# 总控 §一.8: the FROZEN_SERIALIZED_ARTIFACT provenance every formal-class NEG
+# binding must carry. loaded_content_sha256 equals the helper's bound
+# state_bank_hash ("2" + "a"*63) — exactly what the artifact loader produces
+# when the loaded states canonicalize to the frozen bank hash.
+_ARTIFACT_PROV = {
+    "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+    "bank_regenerated_on_eval_device": False,
+    "artifact_file_sha256": "a" * 64,
+    "loaded_content_sha256": "2" + "a" * 63,
+    "device_provenance": {
+        "mint": {"python_version": "3.11.15", "jax_version": "0.4.30",
+                 "jaxlib_version": "0.4.30", "numpy_version": "1.26.4",
+                 "flax_version": "0.8.5", "craftax_version": "1.4.5",
+                 "jax_default_backend": "cpu"},
+        "load": {"python_version": "3.11.15", "jax_version": "0.4.30",
+                 "jaxlib_version": "0.4.30", "numpy_version": "1.26.4",
+                 "flax_version": "0.8.5", "craftax_version": "1.4.5",
+                 "jax_default_backend": "gpu"},
+    },
+}
 
 
 def _exit_binding(**over):
@@ -676,7 +733,8 @@ def neg41():
     prov = _engine_binding(run_class="PROVISIONAL_STRONG_STUDENT_SELECTION",
                            max_timesteps=4096,
                            evaluation_seed_schedule=shifted,
-                           state_entry_ids=_prov_entry_ids())
+                           state_entry_ids=_prov_entry_ids(),
+                           **_ARTIFACT_PROV)   # 总控 §一.8 formal provenance
     drift_rejected = rejects(lambda: certmod.build_certificate(
         _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
         eval_binding=prov))
@@ -725,6 +783,185 @@ def neg42():
 
 
 # ---------------------------------------------------------------------------
+# NEG43–NEG49 (总控 ruling: frozen-bank artifacts + Round 1 screening)
+# ---------------------------------------------------------------------------
+def _round1_sched_ids():
+    """The ROUND1 screening schedule exactly as the evaluator declares it
+    (FULL 8-seed prefix of the frozen 64; FRONT/BACK bank indices 0,5) plus the
+    matching state_entry_ids (总控 §四)."""
+    sched = evaluator.screening_start_schedule(8, (0, 5))
+    ids = {metrics.FULL: ["full-seed%d" % s for s in sched[metrics.FULL]["seeds"]],
+           metrics.FRONT: ["front_l2-bank0", "front_l2-bank5"],
+           metrics.BACK: ["back_l2-bank0", "back_l2-bank5"]}
+    return sched, ids
+
+
+def _round1_binding(sched, ids, **over):
+    return _engine_binding(run_class="ROUND1_SCREENING", max_timesteps=4096,
+                           evaluation_seed_schedule=sched,
+                           state_entry_ids=ids, **over)
+
+
+def neg43():
+    """ROUND1 screening schedule purity (总控 §四): a declared subset of the frozen
+    schedule (FULL 8-seed prefix; FRONT/BACK bank indices 0,5) is accepted by the
+    certificate; a shifted FULL prefix or a dropped scenario is rejected."""
+    sched, ids = _round1_sched_ids()
+    accepted = not rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids, **_ARTIFACT_PROV)))
+    shifted = json.loads(json.dumps(sched))
+    shifted[metrics.FULL]["seeds"] = [200001 + i for i in range(8)]
+    shifted_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(shifted, ids, **_ARTIFACT_PROV)))
+    missing = json.loads(json.dumps(sched))
+    del missing[metrics.BACK]
+    missing_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(missing, ids, **_ARTIFACT_PROV)))
+    return accepted and shifted_rejected and missing_rejected
+
+
+def neg44():
+    """ROUND1 screening must embed the frozen PARENT schedule it screens from
+    (screening_of_frozen_schedule); a subset with the parent dropped or tampered
+    is rejected (总控 §四)."""
+    sched, ids = _round1_sched_ids()
+    no_parent = json.loads(json.dumps(sched))
+    del no_parent[metrics.BACK]["screening_of_frozen_schedule"]
+    dropped_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(no_parent, ids, **_ARTIFACT_PROV)))
+    tampered = json.loads(json.dumps(sched))
+    tampered[metrics.FRONT]["screening_of_frozen_schedule"] = [10001 + i
+                                                               for i in range(8)]
+    tampered_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(tampered, ids, **_ARTIFACT_PROV)))
+    return dropped_rejected and tampered_rejected
+
+
+def neg45():
+    """ROUND1 FRONT/BACK bank_indices must be strictly ascending, unique and
+    within [0,8), and the seeds the frozen bank states at exactly those indices
+    (总控 §四)."""
+    for bad in ((5, 0), (0, 0), (-1, 5), (0, 8)):
+        if not rejects(lambda bad=bad: evaluator.screening_start_schedule(8, bad)):
+            return False
+    sched, ids = _round1_sched_ids()
+    bad = json.loads(json.dumps(sched))
+    bad[metrics.FRONT]["bank_indices"] = [5, 0]
+    bad[metrics.FRONT]["seeds"] = [10005, 10000]   # consistent with the bad indices
+    return rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(bad, ids, **_ARTIFACT_PROV)))
+
+
+def neg46():
+    """Scaffold bank provenance honesty (总控 §一.7/§一.8): a formal run class whose
+    scaffold bank was regenerated in memory is rejected; artifact provenance whose
+    loaded content does not canonicalize to the bound frozen bank hash is
+    rejected; regeneration=true together with an artifact source is rejected; an
+    unknown bank_source value is rejected."""
+    sched, ids = _round1_sched_ids()
+    inmemory_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids)))   # default REGENERATED_IN_MEMORY
+    mismatch = dict(_ARTIFACT_PROV)
+    mismatch["loaded_content_sha256"] = "3" + "a" * 63
+    mismatch_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids, **mismatch)))
+    regen = dict(_ARTIFACT_PROV)
+    regen["bank_regenerated_on_eval_device"] = True
+    regen_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids, **regen)))
+    bad_source_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(bank_source="GPU_REGENERATED")))
+    return (inmemory_rejected and mismatch_rejected and regen_rejected
+            and bad_source_rejected)
+
+
+def neg47():
+    """bank_kind / bank_source cross-binding (总控 §一.8): canonical reset seeds may
+    not masquerade as an artifact source; canonical reset seeds must declare
+    regeneration on the eval device; an unknown bank_kind is rejected."""
+    cross_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(bank_kind="CANONICAL_RESET_SEEDS",
+                                     **_ARTIFACT_PROV)))
+    regen_false_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(
+            bank_kind="CANONICAL_RESET_SEEDS",
+            bank_source="CANONICAL_RESET_SEEDS",
+            bank_regenerated_on_eval_device=False,
+            artifact_file_sha256=None,
+            loaded_content_sha256=None,
+            device_provenance={"eval_device": {"jax_default_backend": "gpu"}})))
+    bad_kind_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(bank_kind="SOMETHING_ELSE")))
+    return cross_rejected and regen_false_rejected and bad_kind_rejected
+
+
+def neg48():
+    """Artifact SHAs must be 64-hex values exactly where required, and null
+    exactly where forbidden (总控 §一.8): non-hex artifact SHAs are rejected;
+    canonical reset seeds and in-memory regenerated banks may carry no artifact
+    SHAs at all."""
+    sched, ids = _round1_sched_ids()
+    bad_file = dict(_ARTIFACT_PROV)
+    bad_file["artifact_file_sha256"] = "xyz"
+    file_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids, **bad_file)))
+    bad_loaded = dict(_ARTIFACT_PROV)
+    bad_loaded["loaded_content_sha256"] = "z" * 64
+    loaded_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids, **bad_loaded)))
+    canonical_shas_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(
+            bank_kind="CANONICAL_RESET_SEEDS",
+            bank_source="CANONICAL_RESET_SEEDS",
+            bank_regenerated_on_eval_device=True,
+            artifact_file_sha256="a" * 64,
+            loaded_content_sha256="2" + "a" * 63,
+            device_provenance={"eval_device": {"jax_default_backend": "gpu"}})))
+    inmemory_shas_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(artifact_file_sha256="a" * 64)))
+    return (file_rejected and loaded_rejected and canonical_shas_rejected
+            and inmemory_shas_rejected)
+
+
+def neg49():
+    """bank_source / device_provenance must be bound (总控 §一.8): a missing
+    bank_source, an empty device_provenance, and an artifact binding missing the
+    'mint' or 'load' identity dict are all rejected."""
+    sched, ids = _round1_sched_ids()
+    no_source = _engine_binding()
+    del no_source["bank_source"]
+    source_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=no_source))
+    empty_dev_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(device_provenance={})))
+    no_mint = dict(_ARTIFACT_PROV)
+    no_mint["device_provenance"] = {"load": {"jax_default_backend": "gpu"}}
+    no_mint_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_round1_binding(sched, ids, **no_mint)))
+    return source_rejected and empty_dev_rejected and no_mint_rejected
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 NEG_TESTS = [
@@ -770,10 +1007,18 @@ NEG_TESTS = [
     ("NEG40", "split Student status labels; ambiguous key removed", neg40),
     ("NEG41", "both arms' frozen start schedules identical; drift rejected", neg41),
     ("NEG42", "comparison rule fixed + scope fields + forbidden vocab rejected", neg42),
+    ("NEG43", "ROUND1 screening schedule subset purity (shift/drop rejected)", neg43),
+    ("NEG44", "ROUND1 embedded frozen parent schedule required", neg44),
+    ("NEG45", "ROUND1 bank_indices ascending/unique/in-range + seed match", neg45),
+    ("NEG46", "scaffold bank provenance honesty (in-memory formal rejected)", neg46),
+    ("NEG47", "bank_kind / bank_source cross-binding", neg47),
+    ("NEG48", "artifact SHA 64-hex where required / null where forbidden", neg48),
+    ("NEG49", "bank_source / device_provenance must be bound", neg49),
 ]
 
-# All 42 NEG tests are implemented (NEG30-42 land with the frozen final-98304
-# checkpoint contract + runner provenance + provisional selection work).
+# All 49 NEG tests are implemented (NEG30-42 landed with the frozen final-98304
+# checkpoint contract + runner provenance + provisional selection work; NEG43-49
+# land with the frozen-bank artifact protocol + Round 1 screening, 总控 ruling).
 PENDING_COMMIT_3 = []
 
 
@@ -804,7 +1049,7 @@ def self_test() -> int:
     if n_fail != 0:
         print("TIER3_NEGATIVE_TESTS_FAIL (FAIL=%d/%d implemented)" % (n_fail, implemented))
         return 1
-    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/42, pending_commit3=%d)"
+    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/49, pending_commit3=%d)"
           % (implemented, pending))
     return 0
 
