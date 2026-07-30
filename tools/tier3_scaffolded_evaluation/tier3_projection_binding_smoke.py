@@ -66,9 +66,11 @@ BINDING_SCHEMA = "mechanism_UED.common_evaluator_binding/v2"
 PROJECTION_RECORD_SCHEMA = "mechanism_UED.projection_binding_record/v1"
 READY_V2_SCHEMA = "mechanism_UED.projection_ready/v2"
 
-# Files inside common/ that are deliberately NOT covered by SHA256SUMS (the
-# READY marker is sums-excluded by construction — 57/57 must stay untouched).
-COMMON_SUMS_EXCLUDED = {"COMMON_EVALUATOR_READY.json"}
+# Files inside common/ that are deliberately NOT listed inside SHA256SUMS:
+# the sums file never lists itself (its own byte SHA is bound separately as
+# FROZEN_SHA256SUMS_SHA256 and verified above), and the READY marker is
+# sums-excluded by construction — 57/57 must stay untouched.
+COMMON_SUMS_EXCLUDED = {"SHA256SUMS", "COMMON_EVALUATOR_READY.json"}
 SKIP_DIR_NAMES = {"__pycache__"}
 
 
