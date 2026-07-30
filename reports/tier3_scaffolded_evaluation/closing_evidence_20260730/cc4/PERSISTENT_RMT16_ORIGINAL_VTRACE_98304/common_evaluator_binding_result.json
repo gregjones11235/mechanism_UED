@@ -1,0 +1,44 @@
+{
+  "arm": "persistent",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+  "common_references": {
+    "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+    "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0"
+  },
+  "common_references_detail": {
+    "back_bank_matches_frozen_historical_identity": true,
+    "common_evaluator_matches_manifest": true,
+    "common_runner_matches_manifest": true,
+    "environment_lock_matches_manifest": true,
+    "evaluation_profile_matches_manifest": true,
+    "front_bank_matches_frozen_historical_identity": true,
+    "full_profile_ready": true,
+    "metric_schema_matches_manifest": true
+  },
+  "common_references_verified": true,
+  "common_root": "/home/oseasy/student_pool_v1/common",
+  "formal_eval_binding": "PASS",
+  "generated_at_utc": "2026-07-30T14:36:40.754786+00:00",
+  "interface_smoke_exit_code": 0,
+  "interface_smoke_files": {
+    "episode_records.jsonl": "ad80c6e932d15c14fced99b95636ddeaba3409f4a2b5efcb747516c940ffadde",
+    "evaluation_certificate.json": "bca08d53db6495946a8f830750ebc717a9c144fec38656bd1b3bb45426d9c252",
+    "evaluation_result.json": "0891abd2f400cbd95f42a098381f4c7b14f49c371c0c1f535e55282537816136"
+  },
+  "interface_smoke_status": "PASS",
+  "memory_contract_smoke_status": "PASS",
+  "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+  "performance_claim_authorized": false,
+  "run_class": "INTERFACE_SMOKE",
+  "schema": "mechanism_UED.common_evaluator_binding/v1",
+  "scientific_superiority_claim": false,
+  "sha_evidence_present": true,
+  "strong_student_selection_authorized": false
+}

@@ -1,0 +1,911 @@
+{
+  "artifact_version": "tier3_frozen_bank_artifact/v1",
+  "bank_kind": "FROZEN_SCAFFOLD_BANK",
+  "bank_manifest": {
+    "boundary_predicate_version": "tier3_predicates/v1",
+    "common_state_bank_for_all_arms": true,
+    "entries": [
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 0,
+        "seed": 10000,
+        "state_payload_hash": "840bfe92efe00b5e26f184e9eef55a3023d014cba4f82f6b3d5bb2c14793866d",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 1,
+        "seed": 10001,
+        "state_payload_hash": "95ceca2147416bd6a145cc8d0993f3e79c71fa3834702152e1b29f0d495156e9",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 2,
+        "seed": 10002,
+        "state_payload_hash": "8d0c8bd590efef2281d662fa218109dee76bf6c31cdf40144651ee9586b0e568",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 3,
+        "seed": 10003,
+        "state_payload_hash": "7445af0705118a6edc2ee8b705f5d663627d2f542404fdd9902fb041985a3c1a",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 4,
+        "seed": 10004,
+        "state_payload_hash": "e43b55f06a77391c29d7b67b930aa53d1837af70404173d3facce3ebd634c559",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 5,
+        "seed": 10005,
+        "state_payload_hash": "bf6446f06ae8d6e5b99878bc2b722b07a430d1d72b14aa976956699021c4e46b",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 6,
+        "seed": 10006,
+        "state_payload_hash": "0dd0dfa9dee1e7d8a5a1fc9c59c3bfe9c883ffd6b61b989adb76dd887dac5251",
+        "synthetic": false
+      },
+      {
+        "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+        "index": 7,
+        "seed": 10007,
+        "state_payload_hash": "8255c12a21ab3307b756aca09d791411ed9007c2fa584cc67d99ad9ad441d008",
+        "synthetic": false
+      }
+    ],
+    "field_manifest": [
+      "achievements",
+      "armour_enchantments",
+      "boss_progress",
+      "boss_timesteps_to_spawn_this_round",
+      "bow_enchantment",
+      "chests_opened",
+      "down_ladders",
+      "growing_plants_age",
+      "growing_plants_mask",
+      "growing_plants_positions",
+      "inventory.armour",
+      "inventory.books",
+      "inventory.diamond",
+      "inventory.potions",
+      "inventory.ruby",
+      "inventory.sapphire",
+      "item_map",
+      "learned_spells",
+      "light_level",
+      "light_map",
+      "map",
+      "melee_mobs.attack_cooldown",
+      "melee_mobs.health",
+      "melee_mobs.mask",
+      "melee_mobs.position",
+      "melee_mobs.type_id",
+      "mob_map",
+      "mob_projectile_directions",
+      "mob_projectiles.attack_cooldown",
+      "mob_projectiles.health",
+      "mob_projectiles.mask",
+      "mob_projectiles.position",
+      "mob_projectiles.type_id",
+      "monsters_killed",
+      "passive_mobs.attack_cooldown",
+      "passive_mobs.health",
+      "passive_mobs.mask",
+      "passive_mobs.position",
+      "passive_mobs.type_id",
+      "player_dexterity",
+      "player_direction",
+      "player_drink",
+      "player_energy",
+      "player_fatigue",
+      "player_food",
+      "player_health",
+      "player_hunger",
+      "player_intelligence",
+      "player_level",
+      "player_mana",
+      "player_position",
+      "player_projectile_directions",
+      "player_projectiles.attack_cooldown",
+      "player_projectiles.health",
+      "player_projectiles.mask",
+      "player_projectiles.position",
+      "player_projectiles.type_id",
+      "player_recover",
+      "player_recover_mana",
+      "player_strength",
+      "player_thirst",
+      "player_xp",
+      "potion_mapping",
+      "ranged_mobs.attack_cooldown",
+      "ranged_mobs.health",
+      "ranged_mobs.mask",
+      "ranged_mobs.position",
+      "ranged_mobs.type_id",
+      "running_original_return",
+      "state_rng",
+      "sword_enchantment",
+      "timestep",
+      "up_ladders"
+    ],
+    "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+    "hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+    "hash_status": "MATERIALIZED",
+    "manifest_version": "tier3_state_manifest/v1",
+    "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "front_l2",
+    "schema": "mechanism_UED.tier3_state_manifest/v1",
+    "seed_schedule_params": {
+      "n": 8,
+      "scenario": "front_l2",
+      "seed_base": 10000,
+      "stride": 1
+    },
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007
+    ],
+    "source_shas": {
+      "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+    },
+    "state_bank_hash": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "state_count": 8,
+    "state_order": "0..7 ascending (ORDER-SENSITIVE)",
+    "states_are": "REAL_ENVSTATE"
+  },
+  "canonical_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+  "frozen_bank_hash": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+  "frozen_bindings_verified_at_serialization": {
+    "boundary_predicate_version": "tier3_predicates/v1",
+    "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+    "hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+    "ordered_payload_hashes": [
+      "840bfe92efe00b5e26f184e9eef55a3023d014cba4f82f6b3d5bb2c14793866d",
+      "95ceca2147416bd6a145cc8d0993f3e79c71fa3834702152e1b29f0d495156e9",
+      "8d0c8bd590efef2281d662fa218109dee76bf6c31cdf40144651ee9586b0e568",
+      "7445af0705118a6edc2ee8b705f5d663627d2f542404fdd9902fb041985a3c1a",
+      "e43b55f06a77391c29d7b67b930aa53d1837af70404173d3facce3ebd634c559",
+      "bf6446f06ae8d6e5b99878bc2b722b07a430d1d72b14aa976956699021c4e46b",
+      "0dd0dfa9dee1e7d8a5a1fc9c59c3bfe9c883ffd6b61b989adb76dd887dac5251",
+      "8255c12a21ab3307b756aca09d791411ed9007c2fa584cc67d99ad9ad441d008"
+    ],
+    "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "scenario": "front_l2",
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007
+    ],
+    "source_shas": {
+      "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+    },
+    "state_bank_hash": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "state_count": 8,
+    "verified": true
+  },
+  "frozen_constants": {
+    "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+    "n": 8,
+    "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "seed_base": 10000,
+    "seed_stride": 1
+  },
+  "generation_at_utc": "2026-07-30T14:09:00+00:00",
+  "generation_git_commit": "ba029ab778180a6fcc11c2d4dae99bc092674cda",
+  "generator_source_shas": {
+    "boundary_schema_sha256": "d6b2f742b950d4ebbd8d0ae1f209839442e1a04cbaa35980dfe626b2b290eed1",
+    "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "event_predicates_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "frozen_bank_artifacts_sha256": "147333d44387da02d8f265ca8f2315fffb4dbe0e810443cfa6da718124d0313e",
+    "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "scaffold_builder_sha256": "0eff98282f886611876e795a3c7a05183d74e73414d539d976ebfa1695739ecf",
+    "source_audit_sha256": "c0186cc20eddd2345985723233aa5c9c70ea5690566bf6832f95390325203b7a",
+    "state_bank_materializer_sha256": "132170b7323dc2f1d7d9c5974a9b5d9e91309125110a48f6d5b1bc9d396367e7",
+    "state_serializer_sha256": "0ef7c65217d1ed8b5af9998608a22fef975f6c7beb97291b130283b12c555c90",
+    "v3_serializer_sha256": "75f64325dff4b06a3027363a3b609a22adce2a231631f143be9c3eb03b5b3d75",
+    "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+  },
+  "hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+  "leaf_count": 98,
+  "leaf_schema": [
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        48,
+        48
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        48,
+        48
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9,
+        48,
+        48
+      ]
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": [
+        9,
+        48,
+        48
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "b",
+      "kind": "py_bool",
+      "shape": []
+    },
+    {
+      "dtype": "b",
+      "kind": "py_bool",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        4
+      ]
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        6
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3,
+        2
+      ]
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3,
+        2
+      ]
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        2,
+        2
+      ]
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": [
+        9,
+        2
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3,
+        2
+      ]
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3,
+        2
+      ]
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        9,
+        3,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        10,
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        10
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        10
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        6
+      ]
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": [
+        4
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "bool",
+      "kind": "array",
+      "shape": [
+        67
+      ]
+    },
+    {
+      "dtype": "uint32",
+      "kind": "array",
+      "shape": [
+        2
+      ]
+    },
+    {
+      "dtype": "int32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "float32",
+      "kind": "array",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "f",
+      "kind": "py_float",
+      "shape": []
+    },
+    {
+      "dtype": "i",
+      "kind": "py_int",
+      "shape": []
+    }
+  ],
+  "per_state_payload_hashes": [
+    "840bfe92efe00b5e26f184e9eef55a3023d014cba4f82f6b3d5bb2c14793866d",
+    "95ceca2147416bd6a145cc8d0993f3e79c71fa3834702152e1b29f0d495156e9",
+    "8d0c8bd590efef2281d662fa218109dee76bf6c31cdf40144651ee9586b0e568",
+    "7445af0705118a6edc2ee8b705f5d663627d2f542404fdd9902fb041985a3c1a",
+    "e43b55f06a77391c29d7b67b930aa53d1837af70404173d3facce3ebd634c559",
+    "bf6446f06ae8d6e5b99878bc2b722b07a430d1d72b14aa976956699021c4e46b",
+    "0dd0dfa9dee1e7d8a5a1fc9c59c3bfe9c883ffd6b61b989adb76dd887dac5251",
+    "8255c12a21ab3307b756aca09d791411ed9007c2fa584cc67d99ad9ad441d008"
+  ],
+  "pinned_env_identity": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "cpu",
+    "jax_devices": "[CpuDevice(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "platform_machine": "x86_64",
+    "platform_system": "Linux",
+    "python_version": "3.11.15"
+  },
+  "scenario": "front_l2",
+  "schema": "mechanism_UED.tier3_frozen_bank_artifact/v1",
+  "seeds": [
+    10000,
+    10001,
+    10002,
+    10003,
+    10004,
+    10005,
+    10006,
+    10007
+  ],
+  "state_count": 8,
+  "state_ids": [
+    "front_l2-bank0",
+    "front_l2-bank1",
+    "front_l2-bank2",
+    "front_l2-bank3",
+    "front_l2-bank4",
+    "front_l2-bank5",
+    "front_l2-bank6",
+    "front_l2-bank7"
+  ],
+  "states_npz_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+  "treedef_sha256": "b648215756e700b4b7605845f1876a6584729a35ec92eae33132c679e0d67032"
+}

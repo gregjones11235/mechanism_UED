@@ -1,0 +1,40 @@
+# CC4 STUDENT POOL — COMMON EVALUATOR CLI TEMPLATE (closing contract S2)
+# All evaluation semantics are owned by the common evaluator. Candidate runtimes
+# expose only the ABI. This round authorizes INTERFACE_SMOKE binding ONLY — the
+# formal 6-student pool ranking must NOT be started by CC4.
+#
+# Environment: pinned venv python; CC4 may use ONLY GPU2/GPU3 (GPU0/GPU1 banned).
+
+# 0. entry-point binding identities (full SHAs bound at assembly)
+python /home/oseasy/student_pool_v1/common/common_evaluator.py --binding-identity
+python /home/oseasy/student_pool_v1/common/common_runner.py --binding-identity
+
+# 1. candidate runtime metadata through the common runner (ABI)
+python /home/oseasy/student_pool_v1/common/common_runner.py --metadata CAPSULE_ROOT/checkpoint_contract.json
+
+# 2. INTERFACE_SMOKE binding per candidate (FRONT/BACK/FULL, max_steps=32,
+#    frozen banks loaded READ-ONLY from the common artifacts)
+python /home/oseasy/student_pool_v1/common/common_evaluator.py --interface-smoke \
+    --checkpoint <PKL> --checkpoint-contract <repo>/configs/tier3_cc2_final98304_checkpoint_contract_v1.json \
+    --arm <persistent|reset128> \
+    --scenario all --episodes 1 --max-steps 32 \
+    --frozen-bank-artifacts /home/oseasy/student_pool_v1/common/frozen_bank_artifacts \
+    --out CAPSULE_ROOT/interface_smoke_out
+
+# 3. cross-GPU determinism preflight (SAME Persistent checkpoint, two idle GPUs)
+CUDA_VISIBLE_DEVICES=2 python tools/tier3_scaffolded_evaluation/tier3_cross_gpu_preflight.py \
+    --run --checkpoint <PERSISTENT_PKL> \
+    --frozen-bank-artifacts /home/oseasy/student_pool_v1/common/frozen_bank_artifacts --out preflight_gpu2.json
+CUDA_VISIBLE_DEVICES=3 python tools/tier3_scaffolded_evaluation/tier3_cross_gpu_preflight.py \
+    --run --checkpoint <PERSISTENT_PKL> \
+    --frozen-bank-artifacts /home/oseasy/student_pool_v1/common/frozen_bank_artifacts --out preflight_gpu3.json
+python tools/tier3_scaffolded_evaluation/tier3_cross_gpu_preflight.py \
+    --compare preflight_gpu2.json preflight_gpu3.json \
+    --out /home/oseasy/student_pool_v1/common/cross_gpu_preflight_certificate.json
+
+# 4. verify the frozen artifact directory at any time
+sha256sum -c /home/oseasy/student_pool_v1/common/SHA256SUMS   (run from /home/oseasy/student_pool_v1/common)
+
+# PROHIBITED this round: starting the formal pool ranking, any training run, D052,
+# ablations, GPU bank regeneration, inventing FULL seeds, touching other owners'
+# runtimes. FORMAL_POOL_EVALUATION_STARTED must stay false.

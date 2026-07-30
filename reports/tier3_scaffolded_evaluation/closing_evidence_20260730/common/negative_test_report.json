@@ -1,0 +1,304 @@
+{
+  "fail": 0,
+  "generated_at_utc": "2026-07-30T14:25:10.464074+00:00",
+  "pending_commit3": [],
+  "results": [
+    {
+      "description": "boundary source SHA mismatch",
+      "id": "NEG01",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "builder source realpath/SHA mismatch",
+      "id": "NEG02",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "canonical task source SHA mismatch",
+      "id": "NEG03",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "missing required EnvState field",
+      "id": "NEG04",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "state payload hash tampered",
+      "id": "NEG05",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "state bank order changed -> hash changes",
+      "id": "NEG06",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "per-arm (Persistent vs Reset128) state bank",
+      "id": "NEG07",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "arm-specific scaffold metadata",
+      "id": "NEG08",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "extra observation field / schema change",
+      "id": "NEG09",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "action space changed",
+      "id": "NEG10",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "hidden boss direction injected",
+      "id": "NEG11",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "invalid inventory value",
+      "id": "NEG12",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "invalid player position",
+      "id": "NEG13",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "front start already beyond exit",
+      "id": "NEG14",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "back start already DEFEAT_KOBOLD",
+      "id": "NEG15",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "back state has no live Kobold",
+      "id": "NEG16",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "progress always within [0,1]",
+      "id": "NEG17",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "unreachable exit without blocked label",
+      "id": "NEG18",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "episode missing valid_start",
+      "id": "NEG19",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "ambiguous termination silently labelled",
+      "id": "NEG20",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "checkpoint params SHA mismatch",
+      "id": "NEG21",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "checkpoint observation shape mismatch",
+      "id": "NEG22",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "evaluation tries to update params",
+      "id": "NEG23",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "scaffold hash used as GLOBAL_WORLD_SET_HASH",
+      "id": "NEG24",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "scaffold result claims full-task success",
+      "id": "NEG25",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "result-based state/sample selection",
+      "id": "NEG26",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "certificate eval_binding label / missing value / params changed",
+      "id": "NEG27",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "tampered frozen bank manifest (payload / hash / seeds)",
+      "id": "NEG28",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "finalized certificate runner provenance missing/invalid",
+      "id": "NEG29",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "wrong final checkpoint file SHA vs frozen contract",
+      "id": "NEG30",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "wrong final params SHA vs frozen contract",
+      "id": "NEG31",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "step-8192 checkpoint impersonating final 98304",
+      "id": "NEG32",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "wrong arm name / carry_mode / cross-arm file SHA",
+      "id": "NEG33",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "wrong replay_mode vs frozen contract",
+      "id": "NEG34",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "wrong seed / run_class vs frozen contract",
+      "id": "NEG35",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "wrong base_checkpoint_params_sha256 vs frozen contract",
+      "id": "NEG36",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "self-declared / legacy exit code never accepted",
+      "id": "NEG37",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "engine cert without literal runner provenance never finalizes",
+      "id": "NEG38",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "non-empty / file output dir rejected (freshness gate)",
+      "id": "NEG39",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "split Student status labels; ambiguous key removed",
+      "id": "NEG40",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "both arms' frozen start schedules identical; drift rejected",
+      "id": "NEG41",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "comparison rule fixed + scope fields + forbidden vocab rejected",
+      "id": "NEG42",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "ROUND1 screening schedule subset purity (shift/drop rejected)",
+      "id": "NEG43",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "ROUND1 embedded frozen parent schedule required",
+      "id": "NEG44",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "ROUND1 bank_indices ascending/unique/in-range + seed match",
+      "id": "NEG45",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "scaffold bank provenance honesty (in-memory formal rejected)",
+      "id": "NEG46",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "bank_kind / bank_source cross-binding",
+      "id": "NEG47",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "artifact SHA 64-hex where required / null where forbidden",
+      "id": "NEG48",
+      "rejected_correctly": true,
+      "status": "PASS"
+    },
+    {
+      "description": "bank_source / device_provenance must be bound",
+      "id": "NEG49",
+      "rejected_correctly": true,
+      "status": "PASS"
+    }
+  ],
+  "schema": "mechanism_UED.pool_common_assembly/v1",
+  "tool_exit_code": 0,
+  "tool_stdout_tail": "  \"description\": \"result-based state/sample selection\",\n      \"id\": \"NEG26\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"certificate eval_binding label / missing value / params changed\",\n      \"id\": \"NEG27\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"tampered frozen bank manifest (payload / hash / seeds)\",\n      \"id\": \"NEG28\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"finalized certificate runner provenance missing/invalid\",\n      \"id\": \"NEG29\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"wrong final checkpoint file SHA vs frozen contract\",\n      \"id\": \"NEG30\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"wrong final params SHA vs frozen contract\",\n      \"id\": \"NEG31\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"step-8192 checkpoint impersonating final 98304\",\n      \"id\": \"NEG32\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"wrong arm name / carry_mode / cross-arm file SHA\",\n      \"id\": \"NEG33\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"wrong replay_mode vs frozen contract\",\n      \"id\": \"NEG34\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"wrong seed / run_class vs frozen contract\",\n      \"id\": \"NEG35\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"wrong base_checkpoint_params_sha256 vs frozen contract\",\n      \"id\": \"NEG36\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"self-declared / legacy exit code never accepted\",\n      \"id\": \"NEG37\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"engine cert without literal runner provenance never finalizes\",\n      \"id\": \"NEG38\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"non-empty / file output dir rejected (freshness gate)\",\n      \"id\": \"NEG39\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"split Student status labels; ambiguous key removed\",\n      \"id\": \"NEG40\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"both arms' frozen start schedules identical; drift rejected\",\n      \"id\": \"NEG41\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"comparison rule fixed + scope fields + forbidden vocab rejected\",\n      \"id\": \"NEG42\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"ROUND1 screening schedule subset purity (shift/drop rejected)\",\n      \"id\": \"NEG43\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"ROUND1 embedded frozen parent schedule required\",\n      \"id\": \"NEG44\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"ROUND1 bank_indices ascending/unique/in-range + seed match\",\n      \"id\": \"NEG45\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"scaffold bank provenance honesty (in-memory formal rejected)\",\n      \"id\": \"NEG46\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"bank_kind / bank_source cross-binding\",\n      \"id\": \"NEG47\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"artifact SHA 64-hex where required / null where forbidden\",\n      \"id\": \"NEG48\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    },\n    {\n      \"description\": \"bank_source / device_provenance must be bound\",\n      \"id\": \"NEG49\",\n      \"rejected_correctly\": true,\n      \"status\": \"PASS\"\n    }\n  ]\n}\n"
+}

@@ -1,0 +1,24 @@
+{
+  "READY": true,
+  "arm": "persistent",
+  "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+  "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+  "common_evaluator_binding_formal": "PASS",
+  "gates": {
+    "checkpoint_sha256_verified": "PASS",
+    "common_artifact_sha_refs_verified": "PASS",
+    "formal_eval_binding": "PASS",
+    "identity_status": "PASS",
+    "immutable": "PASS",
+    "interface_smoke_status": "PASS",
+    "memory_contract_smoke_status": "PASS",
+    "params_sha256_verified": "PASS"
+  },
+  "generated_at_utc": "2026-07-30T14:36:40.756141+00:00",
+  "immutable": true,
+  "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+  "schema": "mechanism_UED.candidate_ready/v1",
+  "sha256sums_sha256": "0409fb2f211fad236d6fd4b4ef4d2d8da6e32a03ddc814de329c44f02e630c4f"
+}

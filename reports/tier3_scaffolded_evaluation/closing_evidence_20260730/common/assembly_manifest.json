@@ -1,0 +1,434 @@
+{
+  "FULL_PROFILE_READY": true,
+  "abi_doc_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+  "assembler_source_sha256": "d69868ecf73e907d02b9c2edffb5f55768f8494aa107938881eb7dc92be32571",
+  "bank_identity": {
+    "back_l2": {
+      "artifact_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "canonical_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+      "frozen_historical_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "ordered_payload_sha256": "f573a89d1dd8f638f61db2df1e748d85e40f1e65a49c46c92e66f90a088f3a45",
+      "pinned_env_identity": {
+        "craftax_version": "1.4.5",
+        "flax_version": "0.8.5",
+        "jax_default_backend": "cpu",
+        "jax_devices": "[CpuDevice(id=0)]",
+        "jax_version": "0.4.30",
+        "jaxlib_version": "0.4.30",
+        "numpy_version": "1.26.4",
+        "platform_machine": "x86_64",
+        "platform_system": "Linux",
+        "python_version": "3.11.15"
+      },
+      "seeds": [
+        1010000,
+        1010001,
+        1010002,
+        1010003,
+        1010004,
+        1010005,
+        1010006,
+        1010007
+      ],
+      "state_count": 8
+    },
+    "front_l2": {
+      "artifact_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "canonical_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+      "frozen_historical_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "ordered_payload_sha256": "44162a112884dd3a8bc5fb2583f7bea640eb2c48e83ca974b794d3259a927768",
+      "pinned_env_identity": {
+        "craftax_version": "1.4.5",
+        "flax_version": "0.8.5",
+        "jax_default_backend": "cpu",
+        "jax_devices": "[CpuDevice(id=0)]",
+        "jax_version": "0.4.30",
+        "jaxlib_version": "0.4.30",
+        "numpy_version": "1.26.4",
+        "platform_machine": "x86_64",
+        "platform_system": "Linux",
+        "python_version": "3.11.15"
+      },
+      "seeds": [
+        10000,
+        10001,
+        10002,
+        10003,
+        10004,
+        10005,
+        10006,
+        10007
+      ],
+      "state_count": 8
+    }
+  },
+  "common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+  "common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+  "engine_module_sha256": {
+    "__init__.py": "c6cc896d227cb3cd5f9fa0ba856064514ef56c274c88b79db98f15ffa353e5c5",
+    "tier3_boundary_schema.py": "d6b2f742b950d4ebbd8d0ae1f209839442e1a04cbaa35980dfe626b2b290eed1",
+    "tier3_candidate_runtime.py": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+    "tier3_cc2_policy_adapter.py": "bdd268ffc1bab6f5ce0a150a813d96cfe1788476396a334fb4b65f2796a85317",
+    "tier3_checkpoint_adapter.py": "1de4ef9f15df1257f53cc9a9c78984729872742c856ecef0aabc97656d4774b0",
+    "tier3_checkpoint_contract.py": "3a0e57840f40a5ccfbb36784b1126dcbd9ddaceb2e9ee3aba4e368fdc064372b",
+    "tier3_cross_gpu_preflight.py": "3028934c108ca6a609f34d190eec385580fa8f6b357b140e00a70fd4a069341d",
+    "tier3_evaluation_certificate.py": "d41076f3ad00d64807f5106c5e91a16c68e8ee393a19c3c8e04e76d4253bb09f",
+    "tier3_evaluation_profile.py": "b81eea8e2dac6e86a5720f696f89db21a84d9d23c1dbc98988c8e957475e52d6",
+    "tier3_evaluation_runner.py": "155dd15ff4adc9c670c49ee0283a4ffa0c2984017569ec600a44d028ad364fff",
+    "tier3_evaluator.py": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+    "tier3_event_predicates.py": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+    "tier3_failure_taxonomy.py": "929056d985e7c0738ee6f8ecbfe7ec640024cc6f0112c5fe6152a4e2d92f52c6",
+    "tier3_frozen_bank_artifacts.py": "147333d44387da02d8f265ca8f2315fffb4dbe0e810443cfa6da718124d0313e",
+    "tier3_metrics.py": "1e8fc33fc3d51fdaa429d8e8f7037c48e01c2cc46ec716569885dacb328f4c16",
+    "tier3_negative_tests.py": "60d4eaf0758e2120b945a02ade2f502c779851f618c8fa16a612dddcc8324fe9",
+    "tier3_pool_capsule.py": "64b83e7622583c121decc7880616fce77bf05b9c5284df37ae28699845f5f591",
+    "tier3_pool_common_assembly.py": "d69868ecf73e907d02b9c2edffb5f55768f8494aa107938881eb7dc92be32571",
+    "tier3_provisional_selection.py": "f695738d6264006e030ce486c9f17a5a01a052e3f926d6705eb2842c97856292",
+    "tier3_scaffold_builder.py": "0eff98282f886611876e795a3c7a05183d74e73414d539d976ebfa1695739ecf",
+    "tier3_self_test.py": "5e689c64d2ba6eba76d1895b0a9be42fd43e451b74376a903d251a88546db42f",
+    "tier3_source_audit.py": "c0186cc20eddd2345985723233aa5c9c70ea5690566bf6832f95390325203b7a",
+    "tier3_state_bank_materializer.py": "132170b7323dc2f1d7d9c5974a9b5d9e91309125110a48f6d5b1bc9d396367e7",
+    "tier3_state_serializer.py": "0ef7c65217d1ed8b5af9998608a22fef975f6c7beb97291b130283b12c555c90"
+  },
+  "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+  "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+  "file_map": [
+    {
+      "common_path": "evaluation_profile.json",
+      "sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/configs/tier3_evaluation_profile_v1.json"
+    },
+    {
+      "common_path": "metric_schema.json",
+      "sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_metric_schema_v1.json"
+    },
+    {
+      "common_path": "candidate_runtime_abi.md",
+      "sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/reports/tier3_scaffolded_evaluation/candidate_runtime_abi.md"
+    },
+    {
+      "common_path": "evaluator/__init__.py",
+      "sha256": "c6cc896d227cb3cd5f9fa0ba856064514ef56c274c88b79db98f15ffa353e5c5",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/__init__.py"
+    },
+    {
+      "common_path": "evaluator/tier3_boundary_schema.py",
+      "sha256": "d6b2f742b950d4ebbd8d0ae1f209839442e1a04cbaa35980dfe626b2b290eed1",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_boundary_schema.py"
+    },
+    {
+      "common_path": "evaluator/tier3_candidate_runtime.py",
+      "sha256": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_candidate_runtime.py"
+    },
+    {
+      "common_path": "evaluator/tier3_cc2_policy_adapter.py",
+      "sha256": "bdd268ffc1bab6f5ce0a150a813d96cfe1788476396a334fb4b65f2796a85317",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_cc2_policy_adapter.py"
+    },
+    {
+      "common_path": "evaluator/tier3_checkpoint_adapter.py",
+      "sha256": "1de4ef9f15df1257f53cc9a9c78984729872742c856ecef0aabc97656d4774b0",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_checkpoint_adapter.py"
+    },
+    {
+      "common_path": "evaluator/tier3_checkpoint_contract.py",
+      "sha256": "3a0e57840f40a5ccfbb36784b1126dcbd9ddaceb2e9ee3aba4e368fdc064372b",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_checkpoint_contract.py"
+    },
+    {
+      "common_path": "evaluator/tier3_cross_gpu_preflight.py",
+      "sha256": "3028934c108ca6a609f34d190eec385580fa8f6b357b140e00a70fd4a069341d",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_cross_gpu_preflight.py"
+    },
+    {
+      "common_path": "evaluator/tier3_evaluation_certificate.py",
+      "sha256": "d41076f3ad00d64807f5106c5e91a16c68e8ee393a19c3c8e04e76d4253bb09f",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluation_certificate.py"
+    },
+    {
+      "common_path": "evaluator/tier3_evaluation_profile.py",
+      "sha256": "b81eea8e2dac6e86a5720f696f89db21a84d9d23c1dbc98988c8e957475e52d6",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluation_profile.py"
+    },
+    {
+      "common_path": "evaluator/tier3_evaluation_runner.py",
+      "sha256": "155dd15ff4adc9c670c49ee0283a4ffa0c2984017569ec600a44d028ad364fff",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluation_runner.py"
+    },
+    {
+      "common_path": "evaluator/tier3_evaluator.py",
+      "sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluator.py"
+    },
+    {
+      "common_path": "evaluator/tier3_event_predicates.py",
+      "sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_event_predicates.py"
+    },
+    {
+      "common_path": "evaluator/tier3_failure_taxonomy.py",
+      "sha256": "929056d985e7c0738ee6f8ecbfe7ec640024cc6f0112c5fe6152a4e2d92f52c6",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_failure_taxonomy.py"
+    },
+    {
+      "common_path": "evaluator/tier3_frozen_bank_artifacts.py",
+      "sha256": "147333d44387da02d8f265ca8f2315fffb4dbe0e810443cfa6da718124d0313e",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_frozen_bank_artifacts.py"
+    },
+    {
+      "common_path": "evaluator/tier3_metrics.py",
+      "sha256": "1e8fc33fc3d51fdaa429d8e8f7037c48e01c2cc46ec716569885dacb328f4c16",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_metrics.py"
+    },
+    {
+      "common_path": "evaluator/tier3_negative_tests.py",
+      "sha256": "60d4eaf0758e2120b945a02ade2f502c779851f618c8fa16a612dddcc8324fe9",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_negative_tests.py"
+    },
+    {
+      "common_path": "evaluator/tier3_pool_capsule.py",
+      "sha256": "64b83e7622583c121decc7880616fce77bf05b9c5284df37ae28699845f5f591",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_pool_capsule.py"
+    },
+    {
+      "common_path": "evaluator/tier3_pool_common_assembly.py",
+      "sha256": "d69868ecf73e907d02b9c2edffb5f55768f8494aa107938881eb7dc92be32571",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_pool_common_assembly.py"
+    },
+    {
+      "common_path": "evaluator/tier3_provisional_selection.py",
+      "sha256": "f695738d6264006e030ce486c9f17a5a01a052e3f926d6705eb2842c97856292",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_provisional_selection.py"
+    },
+    {
+      "common_path": "evaluator/tier3_scaffold_builder.py",
+      "sha256": "0eff98282f886611876e795a3c7a05183d74e73414d539d976ebfa1695739ecf",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_scaffold_builder.py"
+    },
+    {
+      "common_path": "evaluator/tier3_self_test.py",
+      "sha256": "5e689c64d2ba6eba76d1895b0a9be42fd43e451b74376a903d251a88546db42f",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_self_test.py"
+    },
+    {
+      "common_path": "evaluator/tier3_source_audit.py",
+      "sha256": "c0186cc20eddd2345985723233aa5c9c70ea5690566bf6832f95390325203b7a",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_source_audit.py"
+    },
+    {
+      "common_path": "evaluator/tier3_state_bank_materializer.py",
+      "sha256": "132170b7323dc2f1d7d9c5974a9b5d9e91309125110a48f6d5b1bc9d396367e7",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_state_bank_materializer.py"
+    },
+    {
+      "common_path": "evaluator/tier3_state_serializer.py",
+      "sha256": "0ef7c65217d1ed8b5af9998608a22fef975f6c7beb97291b130283b12c555c90",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_state_serializer.py"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_boundary_schema_v1.json",
+      "sha256": "9419abeef4b6ca3f78a7d48fe8961006e93968615fce2eabbec2db79e8445029",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_boundary_schema_v1.json"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_episode_record_v1.json",
+      "sha256": "8631aa535069d6f6a10f96d89b7f552f00f22f4d3d2fbfe3ec2f585120dfcd5a",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_episode_record_v1.json"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_evaluation_certificate_v1.json",
+      "sha256": "41e24960e26320b91a712899f81f503971f6cec17d9ec9657af41533b6c3e4b5",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_evaluation_certificate_v1.json"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_evaluation_result_v1.json",
+      "sha256": "417dd16876dd6996ce33dd675f41ae4cca6334c0f841595f1da9c232fe26aaf6",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_evaluation_result_v1.json"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_metric_schema_v1.json",
+      "sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_metric_schema_v1.json"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_scaffold_spec_v1.json",
+      "sha256": "6417dc22b02fb512ba12823ce903d9bd48cc75f10aa6ba58ce5d662e94abb19f",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_scaffold_spec_v1.json"
+    },
+    {
+      "common_path": "evaluator_schemas/tier3_state_manifest_v1.json",
+      "sha256": "54c997ba2a0b65ee1d2869bb080b3a503ac16ddbde19de0b3c4c062e79bb6296",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/schemas/tier3_state_manifest_v1.json"
+    },
+    {
+      "common_path": "evaluator_configs/tier3_cc2_final98304_checkpoint_contract_v1.json",
+      "sha256": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/configs/tier3_cc2_final98304_checkpoint_contract_v1.json"
+    },
+    {
+      "common_path": "evaluator_configs/tier3_evaluation_profile_v1.json",
+      "sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/configs/tier3_evaluation_profile_v1.json"
+    },
+    {
+      "common_path": "frozen_bank_artifacts/front_l2/states.npz",
+      "sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/front_l2/states.npz"
+    },
+    {
+      "common_path": "frozen_bank_artifacts/front_l2/manifest.json",
+      "sha256": "58d9b0069a37d1f6b100d6ab32deeac410e7d7d92158ce2c2c417f234bf1eeb5",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/front_l2/manifest.json"
+    },
+    {
+      "common_path": "frozen_bank_artifacts/front_l2/SHA256SUMS",
+      "sha256": "57cfb13bcea319599cdec8d25aa7da1816f1f94dd8396a5e5ba9b4da2c0f2b17",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/front_l2/SHA256SUMS"
+    },
+    {
+      "common_path": "front_bank_states.npz",
+      "sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/front_l2/states.npz"
+    },
+    {
+      "common_path": "front_bank_manifest.json",
+      "sha256": "58d9b0069a37d1f6b100d6ab32deeac410e7d7d92158ce2c2c417f234bf1eeb5",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/front_l2/manifest.json"
+    },
+    {
+      "common_path": "frozen_bank_artifacts/back_l2/states.npz",
+      "sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/back_l2/states.npz"
+    },
+    {
+      "common_path": "frozen_bank_artifacts/back_l2/manifest.json",
+      "sha256": "018cf7086129a61f789c605556ed111a3035c572b0f1662042a48af46f9c70de",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/back_l2/manifest.json"
+    },
+    {
+      "common_path": "frozen_bank_artifacts/back_l2/SHA256SUMS",
+      "sha256": "3491b1bc4ba393d903f69dd136254c7acd58f68fa061a33b8842b67c04fd3f39",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/back_l2/SHA256SUMS"
+    },
+    {
+      "common_path": "back_bank_states.npz",
+      "sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/back_l2/states.npz"
+    },
+    {
+      "common_path": "back_bank_manifest.json",
+      "sha256": "018cf7086129a61f789c605556ed111a3035c572b0f1662042a48af46f9c70de",
+      "source_path": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts/back_l2/manifest.json"
+    },
+    {
+      "common_path": "environment_lock.json",
+      "sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "common_evaluator.py",
+      "sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "common_runner.py",
+      "sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "CLI_TEMPLATE.txt",
+      "sha256": "5d12361ee9791ac8c32a2af332bc50fa615f253d288660cd6fa737f245b442cd",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "negative_test_report.json",
+      "sha256": "bc42ee6a4b743e1dc7c011b4ff9aba46c7f2bb772b30148e400d6810545ddd6e",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "statuses/evaluator_self_test.json",
+      "sha256": "e21e8f93ea6698ff3a7bb227f7bad25d7d1ac9c4233d92497a409b1b8e5964c1",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "statuses/abi_self_test.json",
+      "sha256": "1f383728e57558210e71cd9225ccdd70b8783f4b304448cd42e9dba8f0435344",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "statuses/metrics_self_test.json",
+      "sha256": "cd6120e438ac4cfd2b7060f5a930c77d8565dcbd92a28ef176f3767bccf63b6e",
+      "source_path": "(generated)"
+    },
+    {
+      "common_path": "statuses/bank_identity.json",
+      "sha256": "9aae3e514738a320c78be0bbeba6878b9347c040f8be3003384ddde643fa29cd",
+      "source_path": "(generated)"
+    }
+  ],
+  "frozen_bank_artifacts_source": "/home/oseasy/cc4_tier3_eval_20260730/frozen_bank_artifacts",
+  "generated_at_utc": "2026-07-30T14:27:35.978819+00:00",
+  "git_commit_head": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+  "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+  "repo_root": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+  "schema": "mechanism_UED.pool_common_assembly/v1"
+}

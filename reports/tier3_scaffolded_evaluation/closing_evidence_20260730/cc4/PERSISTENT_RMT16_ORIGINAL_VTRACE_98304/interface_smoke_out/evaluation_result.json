@@ -1,0 +1,425 @@
+{
+  "cc2_policy_source": {
+    "adapter_version": "tier3_cc2_policy_adapter/v1",
+    "cc2_policy_source_sha256": "31c1092c037577c56ba0eba9d51ea40cc6a97210bbcbc98fe047762daed2f46f",
+    "files": {
+      "memory_anchor.py": "49ac6241dac2df48654c625f71caec0545d9e37766816ffd763acd155343f8fe",
+      "network_rmt16.py": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
+      "rmt16_memory.py": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
+      "rmt_memory_anchor.py": "92c56b6375878e789fae2fddee0bf5a4fef25ad4eec83e67ab8c91ec65ea68e8"
+    },
+    "schema": "mechanism_UED.tier3_cc2_policy_adapter/v1",
+    "snapshot_root": "/home/oseasy/cc4_tier3_eval_20260730/repo/experiments/henry_dicode_student_upgrade/13_rmt16_phase4a/raw_sources/home/oseasy/experiments/rmt16_replay_phase4a/src"
+  },
+  "checkpoint": {
+    "action_space_id": "canonical_craftax_action_set",
+    "adapter_version": "tier3_checkpoint_adapter/v1",
+    "carry_mode": "persistent",
+    "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+    "checkpoint_ref": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl",
+    "checkpoint_step": 98304,
+    "declared_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "manifest_config_empty": true,
+    "observation_schema": "canonical_craftax_symbolic",
+    "observation_shape": [
+      8335
+    ],
+    "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "replay_mode": "original_vtrace",
+    "run_class": "long_run_98304",
+    "schema": "mechanism_UED.tier3_checkpoint_identity/v1",
+    "trainable": false,
+    "trained_by": "RMT16-Persistent-OrigVtrace",
+    "writable": false
+  },
+  "checkpoint_contract": {
+    "arm": "persistent",
+    "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+    "verified": true
+  },
+  "episode_records_by_scenario": {
+    "back_l2": {
+      "episode_records_sha256": "fd78ab209be94e186b11b0e088ab83d9e6c3886eebba7a20d0dd749118e96c18",
+      "seeds": [
+        1010000
+      ]
+    },
+    "front_l2": {
+      "episode_records_sha256": "5c7d64de901e418794149e8b136f63453f50e70f61a71bc25a00498e84e3ca7f",
+      "seeds": [
+        10000
+      ]
+    },
+    "full": {
+      "episode_records_sha256": "b93b379d06eb0f337843e790a0f61a52c710012cdceed95576cf08311619abb4",
+      "seeds": [
+        42
+      ]
+    }
+  },
+  "evaluation_seed_schedule": {
+    "back_l2": {
+      "count": 1,
+      "kind": "frozen_bank_state_smoke",
+      "seeds": [
+        1010000
+      ]
+    },
+    "front_l2": {
+      "count": 1,
+      "kind": "frozen_bank_state_smoke",
+      "seeds": [
+        10000
+      ]
+    },
+    "full": {
+      "count": 1,
+      "kind": "canonical_reset_seeds_smoke",
+      "seeds": [
+        42
+      ]
+    }
+  },
+  "evaluator_git_commit": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+  "frozen_bank_artifacts": {
+    "back_artifact_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+    "back_loaded_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "bank_regenerated_on_eval_device": false,
+    "dir": "/home/oseasy/student_pool_v1/common/frozen_bank_artifacts",
+    "front_artifact_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+    "front_loaded_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687"
+  },
+  "frozen_bank_bindings": {
+    "back_l2": {
+      "artifact_dir": "/home/oseasy/student_pool_v1/common/frozen_bank_artifacts/back_l2",
+      "artifact_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "artifact_manifest_sha256": "018cf7086129a61f789c605556ed111a3035c572b0f1662042a48af46f9c70de",
+      "bank_regenerated_on_eval_device": false,
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "boundary_predicate_version": "tier3_predicates/v1",
+      "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+      "hash_label": "BACK_SCAFFOLD_STATE_BANK_HASH",
+      "loaded_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "ordered_payload_hashes": [
+        "51cc71ca6267de891cf8d8f0362dd79e197cb0c034534c2f7c202f64246562f0",
+        "4e6e01398046b59ed49bda84defa4d3be905ee79b038d72a189ac027f25f25a6",
+        "af5c1302002cd2d402db82a5203522c40ce35679acae5de7f4f86d9628389f84",
+        "fa42185788d1fc02829cc5565c3506450666d75403bf85424713e30dfb390ba2",
+        "9837030ab0a1575ae1f7722846beca71f630575f8d6a23e0c784ccf3f84bcaa3",
+        "6357943d3df06820d8886bbef26975308cab1430015e23a1852686f70b15d3b9",
+        "600740f087824785a1b63803fb135c75284c2e0e566f70874dd765375069790e",
+        "b8e46e74905276eb562468cdfac011b08768fd461a8231f4d37084c9f14dab5a"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "scenario": "back_l2",
+      "seeds": [
+        1010000,
+        1010001,
+        1010002,
+        1010003,
+        1010004,
+        1010005,
+        1010006,
+        1010007
+      ],
+      "source_shas": {
+        "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+        "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+      },
+      "state_bank_hash": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "state_count": 8,
+      "verified": true
+    },
+    "front_l2": {
+      "artifact_dir": "/home/oseasy/student_pool_v1/common/frozen_bank_artifacts/front_l2",
+      "artifact_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "artifact_manifest_sha256": "58d9b0069a37d1f6b100d6ab32deeac410e7d7d92158ce2c2c417f234bf1eeb5",
+      "bank_regenerated_on_eval_device": false,
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "boundary_predicate_version": "tier3_predicates/v1",
+      "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+      "hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+      "loaded_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "ordered_payload_hashes": [
+        "840bfe92efe00b5e26f184e9eef55a3023d014cba4f82f6b3d5bb2c14793866d",
+        "95ceca2147416bd6a145cc8d0993f3e79c71fa3834702152e1b29f0d495156e9",
+        "8d0c8bd590efef2281d662fa218109dee76bf6c31cdf40144651ee9586b0e568",
+        "7445af0705118a6edc2ee8b705f5d663627d2f542404fdd9902fb041985a3c1a",
+        "e43b55f06a77391c29d7b67b930aa53d1837af70404173d3facce3ebd634c559",
+        "bf6446f06ae8d6e5b99878bc2b722b07a430d1d72b14aa976956699021c4e46b",
+        "0dd0dfa9dee1e7d8a5a1fc9c59c3bfe9c883ffd6b61b989adb76dd887dac5251",
+        "8255c12a21ab3307b756aca09d791411ed9007c2fa584cc67d99ad9ad441d008"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "scenario": "front_l2",
+      "seeds": [
+        10000,
+        10001,
+        10002,
+        10003,
+        10004,
+        10005,
+        10006,
+        10007
+      ],
+      "source_shas": {
+        "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+        "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+      },
+      "state_bank_hash": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "state_count": 8,
+      "verified": true
+    }
+  },
+  "max_steps": 32,
+  "performance_claim_authorized": false,
+  "provisional_selection_only": true,
+  "results": {
+    "back_l2": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 1,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "back_l2",
+          "value": null
+        },
+        "diagnostics": {
+          "damage": null,
+          "failure_taxonomy": {
+            "SUCCESS_DEFEAT_KOBOLD": 1
+          },
+          "kobold_engaged_count": 1,
+          "schema_note": "time_to_first_engagement / time_to_kill / damage are not fields of the frozen episode record schema (mechanism_UED.tier3_evaluation_result/v1); reported as null rather than expanding the schema",
+          "survival": {
+            "defeat_count": 1,
+            "died_count": 0,
+            "max_timesteps_observed": 22,
+            "mean_timesteps": 22.0
+          },
+          "time_to_first_engagement": null,
+          "time_to_kill": null,
+          "valid_starts": 1
+        },
+        "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+        "na_metrics": [
+          "boss_area_reached",
+          "time_to_boss_area",
+          "BACK_BOSS_NOT_FOUND"
+        ],
+        "na_reason": "BACK start is already on floor 3 next to a live Kobold; boss-area search is not exercised by this scaffold",
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+          "scenario": "back_l2",
+          "successes": 1,
+          "valid_starts": 1,
+          "value": 1.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "back_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "back_l2",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "SUCCESS_DEFEAT_KOBOLD": 1
+      },
+      "valid_start_count": 1
+    },
+    "front_l2": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 1,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "is_success_substitute": false,
+          "median": 0.0,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "monotonicity_guaranteed": false,
+          "per_state_progress": [
+            {
+              "graph_distance_progress": 0.0,
+              "state_entry_id": "front_l2-bank0"
+            }
+          ],
+          "range": [
+            0,
+            1
+          ],
+          "scenario": "front_l2",
+          "scored": 1,
+          "valid_starts": 1,
+          "value": 0.0
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+          "scenario": "front_l2",
+          "successes": 0,
+          "valid_starts": 1,
+          "value": 0.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "front_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_TRANSITION": 1
+      },
+      "valid_start_count": 1
+    },
+    "full": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 1,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "full",
+          "value": null
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": false,
+          "metric": "DEFEAT_KOBOLD_SR",
+          "scenario": "full",
+          "successes": 0,
+          "valid_starts": 1,
+          "value": 0.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "full",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_KOBOLD": 1
+      },
+      "valid_start_count": 1
+    }
+  },
+  "run_class": "INTERFACE_SMOKE",
+  "runtime_versions": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "schema": "mechanism_UED.tier3_evaluation_result/v1",
+  "scientific_claim_authorized": false,
+  "single_training_seed": true,
+  "state_entry_ids": {
+    "back_l2": [
+      "back_l2-bank0"
+    ],
+    "front_l2": [
+      "front_l2-bank0"
+    ],
+    "full": [
+      "full-seed42"
+    ]
+  }
+}

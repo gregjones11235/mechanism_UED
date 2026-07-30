@@ -1,0 +1,42 @@
+{
+  "action_sequence_two_load": [
+    11,
+    24,
+    28,
+    4,
+    26,
+    7,
+    8,
+    34
+  ],
+  "arm": "persistent",
+  "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+  "checks": {
+    "action_dim_43": true,
+    "action_mode_greedy": true,
+    "actions_in_range": true,
+    "base_params_sha256_verified": true,
+    "batch2_rejected": true,
+    "carry_mode_matches_arm": true,
+    "checkpoint_file_sha256_verified": true,
+    "checkpoint_step_98304": true,
+    "done_mask_true_rejected": true,
+    "init_memory_fields": true,
+    "memory_snapshot_restore_continues": true,
+    "observation_shape_8335": true,
+    "params_readonly_basis": true,
+    "params_sha256_verified": true,
+    "predicates_not_in_runtime": true,
+    "reset_false_passthrough": true,
+    "reset_mask_size2_rejected": true,
+    "reset_true_fresh": true,
+    "trainable_false": true,
+    "two_load_determinism": true
+  },
+  "generated_at_utc": "2026-07-30T14:34:28.888459+00:00",
+  "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+  "schema": "mechanism_UED.memory_contract_smoke/v1",
+  "status": "PASS"
+}

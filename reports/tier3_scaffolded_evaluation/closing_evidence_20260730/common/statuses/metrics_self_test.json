@@ -1,0 +1,7 @@
+{
+  "argv": "tools/tier3_scaffolded_evaluation/tier3_metrics.py --self-test",
+  "exit_code": 0,
+  "stderr_tail": "",
+  "stdout": "TIER3_METRICS_SELF_TEST_PASS (metrics frozen; diagnostic_only enforced)\n",
+  "stdout_tail": "TIER3_METRICS_SELF_TEST_PASS (metrics frozen; diagnostic_only enforced)\n"
+}

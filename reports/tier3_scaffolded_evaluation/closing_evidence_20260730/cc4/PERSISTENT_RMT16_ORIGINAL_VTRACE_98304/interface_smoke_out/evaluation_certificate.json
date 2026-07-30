@@ -1,0 +1,440 @@
+{
+  "back_l2": {
+    "cert_version": "tier3_evaluation_certificate/v1",
+    "claims": [
+      "INTERFACE_SMOKE_ONLY"
+    ],
+    "eval_binding": {
+      "action_dim": 43,
+      "action_mode": "greedy_argmax",
+      "artifact_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "bank_kind": "FROZEN_SCAFFOLD_BANK",
+      "bank_regenerated_on_eval_device": false,
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "carry_mode": "persistent",
+      "cc2_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+      "cc2_policy_source_sha256": "31c1092c037577c56ba0eba9d51ea40cc6a97210bbcbc98fe047762daed2f46f",
+      "checkpoint_contract_arm": "persistent",
+      "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+      "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+      "checkpoint_step": 98304,
+      "craftax_version": "1.4.5",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+      "episode_records_sha256": "fd78ab209be94e186b11b0e088ab83d9e6c3886eebba7a20d0dd749118e96c18",
+      "evaluation_seed_schedule": {
+        "back_l2": {
+          "count": 1,
+          "kind": "frozen_bank_state_smoke",
+          "seeds": [
+            1010000
+          ]
+        },
+        "front_l2": {
+          "count": 1,
+          "kind": "frozen_bank_state_smoke",
+          "seeds": [
+            10000
+          ]
+        },
+        "full": {
+          "count": 1,
+          "kind": "canonical_reset_seeds_smoke",
+          "seeds": [
+            42
+          ]
+        }
+      },
+      "evaluator_git_commit": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+      "evaluator_source_sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+      "flax_version": "0.8.5",
+      "jax_version": "0.4.30",
+      "jaxlib_version": "0.4.30",
+      "loaded_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "max_timesteps": 32,
+      "numpy_version": "1.26.4",
+      "observation_shape": [
+        8335
+      ],
+      "params_unchanged": true,
+      "performance_claim_authorized": false,
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "provisional_selection_only": true,
+      "python_version": "3.11.15",
+      "run_class": "INTERFACE_SMOKE",
+      "scientific_claim_authorized": false,
+      "single_training_seed": true,
+      "state_bank_hash": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "state_entry_ids": {
+        "back_l2": [
+          "back_l2-bank0"
+        ],
+        "front_l2": [
+          "front_l2-bank0"
+        ],
+        "full": [
+          "full-seed42"
+        ]
+      },
+      "state_payload_hashes": [
+        "51cc71ca6267de891cf8d8f0362dd79e197cb0c034534c2f7c202f64246562f0",
+        "4e6e01398046b59ed49bda84defa4d3be905ee79b038d72a189ac027f25f25a6",
+        "af5c1302002cd2d402db82a5203522c40ce35679acae5de7f4f86d9628389f84",
+        "fa42185788d1fc02829cc5565c3506450666d75403bf85424713e30dfb390ba2",
+        "9837030ab0a1575ae1f7722846beca71f630575f8d6a23e0c784ccf3f84bcaa3",
+        "6357943d3df06820d8886bbef26975308cab1430015e23a1852686f70b15d3b9",
+        "600740f087824785a1b63803fb135c75284c2e0e566f70874dd765375069790e",
+        "b8e46e74905276eb562468cdfac011b08768fd461a8231f4d37084c9f14dab5a"
+      ]
+    },
+    "failure_rule_version": "tier3_failure_rules/v1",
+    "headline_metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+    "headline_metric_achieved": null,
+    "headline_metric_value": 1.0,
+    "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+    "rollout_status": "REAL_ENV_INTERFACE_READY",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "back_l2",
+    "schema": "mechanism_UED.tier3_evaluation_certificate/v1",
+    "source_audit_schema": "mechanism_UED.tier3_source_audit/v1",
+    "state_bank_hash_label": "BACK_SCAFFOLD_STATE_BANK_HASH",
+    "status_labels": {
+      "BACK_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED",
+      "BOUNDARY_SCHEMA": "IMPLEMENTED_STATIC",
+      "EVALUATOR": "TESTED_SYNTHETIC",
+      "FORMAL_EVALUATION_RUNS": 0,
+      "FORMAL_SCIENTIFIC_CLAIM": "NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+      "FRONT_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "NEGATIVE_TESTS": "PASS",
+      "NEW_TRAINING_RUNS": 0,
+      "REAL_CRAFTAX_SCAFFOLD_TEST": "TESTED_REAL_ENV_RESET",
+      "REAL_STUDENT_INTERFACE_SMOKE": "EXECUTED",
+      "REAL_STUDENT_PERFORMANCE_EVALUATION": "NOT_RUN",
+      "REAL_STUDENT_ROUND1_SCREENING": "NOT_RUN",
+      "SCAFFOLDED_RESULTS_CAN_REPLACE_FULL_TASK": false,
+      "SCAFFOLD_BUILDER": "IMPLEMENTED_STATIC",
+      "STATE_BANK_MATERIALIZER": "TESTED_SYNTHETIC"
+    },
+    "student_state": {
+      "performance_evaluation_executed": false,
+      "scientific_claim_authorized": false,
+      "student_checkpoint_loaded": true,
+      "student_policy_rollout_executed": true
+    },
+    "terminal_label_counts": {
+      "SUCCESS_DEFEAT_KOBOLD": 1
+    },
+    "valid_starts": 1
+  },
+  "front_l2": {
+    "cert_version": "tier3_evaluation_certificate/v1",
+    "claims": [
+      "INTERFACE_SMOKE_ONLY"
+    ],
+    "eval_binding": {
+      "action_dim": 43,
+      "action_mode": "greedy_argmax",
+      "artifact_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "bank_kind": "FROZEN_SCAFFOLD_BANK",
+      "bank_regenerated_on_eval_device": false,
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "carry_mode": "persistent",
+      "cc2_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+      "cc2_policy_source_sha256": "31c1092c037577c56ba0eba9d51ea40cc6a97210bbcbc98fe047762daed2f46f",
+      "checkpoint_contract_arm": "persistent",
+      "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+      "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+      "checkpoint_step": 98304,
+      "craftax_version": "1.4.5",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+      "episode_records_sha256": "5c7d64de901e418794149e8b136f63453f50e70f61a71bc25a00498e84e3ca7f",
+      "evaluation_seed_schedule": {
+        "back_l2": {
+          "count": 1,
+          "kind": "frozen_bank_state_smoke",
+          "seeds": [
+            1010000
+          ]
+        },
+        "front_l2": {
+          "count": 1,
+          "kind": "frozen_bank_state_smoke",
+          "seeds": [
+            10000
+          ]
+        },
+        "full": {
+          "count": 1,
+          "kind": "canonical_reset_seeds_smoke",
+          "seeds": [
+            42
+          ]
+        }
+      },
+      "evaluator_git_commit": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+      "evaluator_source_sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+      "flax_version": "0.8.5",
+      "jax_version": "0.4.30",
+      "jaxlib_version": "0.4.30",
+      "loaded_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "max_timesteps": 32,
+      "numpy_version": "1.26.4",
+      "observation_shape": [
+        8335
+      ],
+      "params_unchanged": true,
+      "performance_claim_authorized": false,
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "provisional_selection_only": true,
+      "python_version": "3.11.15",
+      "run_class": "INTERFACE_SMOKE",
+      "scientific_claim_authorized": false,
+      "single_training_seed": true,
+      "state_bank_hash": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "state_entry_ids": {
+        "back_l2": [
+          "back_l2-bank0"
+        ],
+        "front_l2": [
+          "front_l2-bank0"
+        ],
+        "full": [
+          "full-seed42"
+        ]
+      },
+      "state_payload_hashes": [
+        "840bfe92efe00b5e26f184e9eef55a3023d014cba4f82f6b3d5bb2c14793866d",
+        "95ceca2147416bd6a145cc8d0993f3e79c71fa3834702152e1b29f0d495156e9",
+        "8d0c8bd590efef2281d662fa218109dee76bf6c31cdf40144651ee9586b0e568",
+        "7445af0705118a6edc2ee8b705f5d663627d2f542404fdd9902fb041985a3c1a",
+        "e43b55f06a77391c29d7b67b930aa53d1837af70404173d3facce3ebd634c559",
+        "bf6446f06ae8d6e5b99878bc2b722b07a430d1d72b14aa976956699021c4e46b",
+        "0dd0dfa9dee1e7d8a5a1fc9c59c3bfe9c883ffd6b61b989adb76dd887dac5251",
+        "8255c12a21ab3307b756aca09d791411ed9007c2fa584cc67d99ad9ad441d008"
+      ]
+    },
+    "failure_rule_version": "tier3_failure_rules/v1",
+    "headline_metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+    "headline_metric_achieved": null,
+    "headline_metric_value": 0.0,
+    "identity_class": "TIER3_FRONT_DIAGNOSTIC_SCAFFOLD",
+    "rollout_status": "REAL_ENV_INTERFACE_READY",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "front_l2",
+    "schema": "mechanism_UED.tier3_evaluation_certificate/v1",
+    "source_audit_schema": "mechanism_UED.tier3_source_audit/v1",
+    "state_bank_hash_label": "FRONT_SCAFFOLD_STATE_BANK_HASH",
+    "status_labels": {
+      "BACK_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED",
+      "BOUNDARY_SCHEMA": "IMPLEMENTED_STATIC",
+      "EVALUATOR": "TESTED_SYNTHETIC",
+      "FORMAL_EVALUATION_RUNS": 0,
+      "FORMAL_SCIENTIFIC_CLAIM": "NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+      "FRONT_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "NEGATIVE_TESTS": "PASS",
+      "NEW_TRAINING_RUNS": 0,
+      "REAL_CRAFTAX_SCAFFOLD_TEST": "TESTED_REAL_ENV_RESET",
+      "REAL_STUDENT_INTERFACE_SMOKE": "EXECUTED",
+      "REAL_STUDENT_PERFORMANCE_EVALUATION": "NOT_RUN",
+      "REAL_STUDENT_ROUND1_SCREENING": "NOT_RUN",
+      "SCAFFOLDED_RESULTS_CAN_REPLACE_FULL_TASK": false,
+      "SCAFFOLD_BUILDER": "IMPLEMENTED_STATIC",
+      "STATE_BANK_MATERIALIZER": "TESTED_SYNTHETIC"
+    },
+    "student_state": {
+      "performance_evaluation_executed": false,
+      "scientific_claim_authorized": false,
+      "student_checkpoint_loaded": true,
+      "student_policy_rollout_executed": true
+    },
+    "terminal_label_counts": {
+      "TIMEOUT_NO_TRANSITION": 1
+    },
+    "valid_starts": 1
+  },
+  "full": {
+    "cert_version": "tier3_evaluation_certificate/v1",
+    "claims": [
+      "INTERFACE_SMOKE_ONLY"
+    ],
+    "eval_binding": {
+      "action_dim": 43,
+      "action_mode": "greedy_argmax",
+      "artifact_file_sha256": null,
+      "bank_kind": "CANONICAL_RESET_SEEDS",
+      "bank_regenerated_on_eval_device": true,
+      "bank_source": "CANONICAL_RESET_SEEDS",
+      "carry_mode": "persistent",
+      "cc2_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+      "cc2_policy_source_sha256": "31c1092c037577c56ba0eba9d51ea40cc6a97210bbcbc98fe047762daed2f46f",
+      "checkpoint_contract_arm": "persistent",
+      "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+      "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+      "checkpoint_step": 98304,
+      "craftax_version": "1.4.5",
+      "device_provenance": {
+        "eval_device": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "python_version": "3.11.15"
+        }
+      },
+      "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+      "episode_records_sha256": "b93b379d06eb0f337843e790a0f61a52c710012cdceed95576cf08311619abb4",
+      "evaluation_seed_schedule": {
+        "back_l2": {
+          "count": 1,
+          "kind": "frozen_bank_state_smoke",
+          "seeds": [
+            1010000
+          ]
+        },
+        "front_l2": {
+          "count": 1,
+          "kind": "frozen_bank_state_smoke",
+          "seeds": [
+            10000
+          ]
+        },
+        "full": {
+          "count": 1,
+          "kind": "canonical_reset_seeds_smoke",
+          "seeds": [
+            42
+          ]
+        }
+      },
+      "evaluator_git_commit": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+      "evaluator_source_sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+      "flax_version": "0.8.5",
+      "jax_version": "0.4.30",
+      "jaxlib_version": "0.4.30",
+      "loaded_content_sha256": null,
+      "max_timesteps": 32,
+      "numpy_version": "1.26.4",
+      "observation_shape": [
+        8335
+      ],
+      "params_unchanged": true,
+      "performance_claim_authorized": false,
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "provisional_selection_only": true,
+      "python_version": "3.11.15",
+      "run_class": "INTERFACE_SMOKE",
+      "scientific_claim_authorized": false,
+      "single_training_seed": true,
+      "state_bank_hash": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "state_entry_ids": {
+        "back_l2": [
+          "back_l2-bank0"
+        ],
+        "front_l2": [
+          "front_l2-bank0"
+        ],
+        "full": [
+          "full-seed42"
+        ]
+      },
+      "state_payload_hashes": [
+        "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d"
+      ]
+    },
+    "failure_rule_version": "tier3_failure_rules/v1",
+    "headline_metric": "DEFEAT_KOBOLD_SR",
+    "headline_metric_achieved": null,
+    "headline_metric_value": 0.0,
+    "identity_class": "CANONICAL_S4_EVALUATION",
+    "rollout_status": "REAL_ENV_INTERFACE_READY",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "full",
+    "schema": "mechanism_UED.tier3_evaluation_certificate/v1",
+    "source_audit_schema": "mechanism_UED.tier3_source_audit/v1",
+    "state_bank_hash_label": "CANONICAL_TASK_RESET_CONTRACT",
+    "status_labels": {
+      "BACK_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED",
+      "BOUNDARY_SCHEMA": "IMPLEMENTED_STATIC",
+      "EVALUATOR": "TESTED_SYNTHETIC",
+      "FORMAL_EVALUATION_RUNS": 0,
+      "FORMAL_SCIENTIFIC_CLAIM": "NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+      "FRONT_SCAFFOLD_STATE_BANK_HASH": "MATERIALIZED",
+      "GLOBAL_WORLD_SET_HASH": "BLOCKED_SOURCE_UNVERIFIED",
+      "NEGATIVE_TESTS": "PASS",
+      "NEW_TRAINING_RUNS": 0,
+      "REAL_CRAFTAX_SCAFFOLD_TEST": "TESTED_REAL_ENV_RESET",
+      "REAL_STUDENT_INTERFACE_SMOKE": "EXECUTED",
+      "REAL_STUDENT_PERFORMANCE_EVALUATION": "NOT_RUN",
+      "REAL_STUDENT_ROUND1_SCREENING": "NOT_RUN",
+      "SCAFFOLDED_RESULTS_CAN_REPLACE_FULL_TASK": false,
+      "SCAFFOLD_BUILDER": "IMPLEMENTED_STATIC",
+      "STATE_BANK_MATERIALIZER": "TESTED_SYNTHETIC"
+    },
+    "student_state": {
+      "performance_evaluation_executed": false,
+      "scientific_claim_authorized": false,
+      "student_checkpoint_loaded": true,
+      "student_policy_rollout_executed": true
+    },
+    "terminal_label_counts": {
+      "TIMEOUT_NO_KOBOLD": 1
+    },
+    "valid_starts": 1
+  }
+}

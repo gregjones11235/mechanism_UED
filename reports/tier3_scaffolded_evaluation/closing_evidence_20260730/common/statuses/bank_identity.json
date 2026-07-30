@@ -1,0 +1,120 @@
+{
+  "banks": {
+    "back_l2": {
+      "artifact_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "canonical_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+      "frozen_historical_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "ordered_payload_sha256": "f573a89d1dd8f638f61db2df1e748d85e40f1e65a49c46c92e66f90a088f3a45",
+      "pinned_env_identity": {
+        "craftax_version": "1.4.5",
+        "flax_version": "0.8.5",
+        "jax_default_backend": "cpu",
+        "jax_devices": "[CpuDevice(id=0)]",
+        "jax_version": "0.4.30",
+        "jaxlib_version": "0.4.30",
+        "numpy_version": "1.26.4",
+        "platform_machine": "x86_64",
+        "platform_system": "Linux",
+        "python_version": "3.11.15"
+      },
+      "seeds": [
+        1010000,
+        1010001,
+        1010002,
+        1010003,
+        1010004,
+        1010005,
+        1010006,
+        1010007
+      ],
+      "state_count": 8
+    },
+    "front_l2": {
+      "artifact_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "bank_source": "FROZEN_SERIALIZED_ARTIFACT",
+      "canonical_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "device_provenance": {
+        "load": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "gpu",
+          "jax_devices": "[cuda(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        },
+        "mint": {
+          "craftax_version": "1.4.5",
+          "flax_version": "0.8.5",
+          "jax_default_backend": "cpu",
+          "jax_devices": "[CpuDevice(id=0)]",
+          "jax_version": "0.4.30",
+          "jaxlib_version": "0.4.30",
+          "numpy_version": "1.26.4",
+          "platform_machine": "x86_64",
+          "platform_system": "Linux",
+          "python_version": "3.11.15"
+        }
+      },
+      "field_manifest_sha256": "615d4be4df22115e4ac520718076860bf9def636a46806f5a2948be21456ee07",
+      "frozen_historical_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "ordered_payload_sha256": "44162a112884dd3a8bc5fb2583f7bea640eb2c48e83ca974b794d3259a927768",
+      "pinned_env_identity": {
+        "craftax_version": "1.4.5",
+        "flax_version": "0.8.5",
+        "jax_default_backend": "cpu",
+        "jax_devices": "[CpuDevice(id=0)]",
+        "jax_version": "0.4.30",
+        "jaxlib_version": "0.4.30",
+        "numpy_version": "1.26.4",
+        "platform_machine": "x86_64",
+        "platform_system": "Linux",
+        "python_version": "3.11.15"
+      },
+      "seeds": [
+        10000,
+        10001,
+        10002,
+        10003,
+        10004,
+        10005,
+        10006,
+        10007
+      ],
+      "state_count": 8
+    }
+  },
+  "generated_at_utc": "2026-07-30T14:27:35.938355+00:00",
+  "schema": "mechanism_UED.pool_common_assembly/v1"
+}

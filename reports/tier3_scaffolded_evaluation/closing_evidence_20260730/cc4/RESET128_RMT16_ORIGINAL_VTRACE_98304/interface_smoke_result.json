@@ -1,0 +1,80 @@
+{
+  "arm": "reset128",
+  "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+  "checks": {
+    "arm_matches": true,
+    "banks_read_only_from_artifacts": true,
+    "contract_verified": true,
+    "engine_exit_code_zero": true,
+    "max_steps_32": true,
+    "performance_claim_not_authorized": true,
+    "run_class_interface_smoke": true,
+    "three_scenarios_bound": true
+  },
+  "engine_argv": [
+    "/home/oseasy/student_pool_v1/common/common_evaluator.py",
+    "--interface-smoke",
+    "--checkpoint",
+    "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl",
+    "--checkpoint-contract",
+    "/home/oseasy/cc4_tier3_eval_20260730/repo/configs/tier3_cc2_final98304_checkpoint_contract_v1.json",
+    "--arm",
+    "reset128",
+    "--scenario",
+    "all",
+    "--episodes",
+    "1",
+    "--max-steps",
+    "32",
+    "--frozen-bank-artifacts",
+    "/home/oseasy/student_pool_v1/common/frozen_bank_artifacts",
+    "--out",
+    "/home/oseasy/student_pool_v1/cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/interface_smoke_out"
+  ],
+  "engine_exit_code": 0,
+  "engine_stderr_tail": "2026-07-30 22:37:24.969138: W external/xla/xla/service/gpu/nvptx_compiler.cc:765] The NVIDIA driver's CUDA version is 12.4 which is older than the ptxas CUDA version (12.9.86). Because the driver is older than the ptxas version, XLA is disabling parallel compilation, which may slow down compilation. You should update your NVIDIA driver or use the NVIDIA-provided CUDA forward compatibility packages.\n/home/oseasy/cc4_tier3_eval_20260730/venv/lib/python3.11/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=float32 to dtype=int32 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.\n  warnings.warn(\n",
+  "engine_stdout_tail": "Loading Craftax textures from cache.\nTextures successfully loaded from cache.\nGenerated full 9-level base world without ores.\n  [full 1/1 full-seed42 seed=42] steps=32 defeat=False died=False transition=False engaged=False\n  [front_l2 1/1 front_l2-bank0 seed=10000] steps=32 defeat=False died=False transition=False engaged=False\n  [back_l2 1/1 back_l2-bank0 seed=1010000] steps=24 defeat=True died=False transition=False engaged=True\n  [full] episodes=1 valid_start=1/1 labels={'TIMEOUT_NO_KOBOLD': 1}\n  [front_l2] episodes=1 valid_start=1/1 labels={'TIMEOUT_NO_TRANSITION': 1}\n  [back_l2] episodes=1 valid_start=1/1 labels={'SUCCESS_DEFEAT_KOBOLD': 1}\nTIER3_INTERFACE_SMOKE_DONE (run_class=INTERFACE_SMOKE; arm=reset128; performance_claim_authorized=false; params_unchanged=True; out=/home/oseasy/student_pool_v1/cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/interface_smoke_out)\n",
+  "files": {
+    "episode_records.jsonl": "e5e812c27570e69cdb77ab9fc0f376db4a9393578f1104ad3b105be2d79a5894",
+    "evaluation_certificate.json": "48e27c0581f69d53af55f2e548beeb8c9dbc2c3c98a88f876d922f1325fac92e",
+    "evaluation_result.json": "9a788025018b9ff90ed9b67e0c33b7a9986cfe6dde0907470e610faed88d1950"
+  },
+  "generated_at_utc": "2026-07-30T14:39:34.488650+00:00",
+  "output_dir": "/home/oseasy/student_pool_v1/cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/interface_smoke_out",
+  "schema": "mechanism_UED.interface_smoke_result/v1",
+  "status": "PASS",
+  "summary": {
+    "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+    "episode_records_sha256_by_scenario": {
+      "back_l2": {
+        "episode_records_sha256": "d9e588df95b3033265e85cbb7f3636d13b9cfc9b1669663cabfe3a4a561207c4",
+        "seeds": [
+          1010000
+        ]
+      },
+      "front_l2": {
+        "episode_records_sha256": "fea9d9c399c74aec1497a3d9bea203743f86d6e787f7610fe8ec1d09f9519296",
+        "seeds": [
+          10000
+        ]
+      },
+      "full": {
+        "episode_records_sha256": "d2655ed35735658f15468cb2d6ee0dc8d713fbbd45322a33cc19c406bca31af6",
+        "seeds": [
+          42
+        ]
+      }
+    },
+    "frozen_bank_artifacts": {
+      "back_artifact_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+      "back_loaded_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "bank_regenerated_on_eval_device": false,
+      "dir": "/home/oseasy/student_pool_v1/common/frozen_bank_artifacts",
+      "front_artifact_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+      "front_loaded_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687"
+    },
+    "max_steps": 32,
+    "performance_claim_authorized": false,
+    "run_class": "INTERFACE_SMOKE"
+  }
+}

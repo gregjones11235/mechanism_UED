@@ -1,0 +1,30 @@
+{
+  "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "candidate_arm_label": "RMT16-Reset128-OrigVtrace",
+  "carry_mode": "reset128",
+  "cc2_policy_source_sha256": "31c1092c037577c56ba0eba9d51ea40cc6a97210bbcbc98fe047762daed2f46f",
+  "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+  "checkpoint_file_sha256": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+  "checkpoint_step": 98304,
+  "contract_version": "tier3_final98304_checkpoint_contract/v1",
+  "crosses_boundary": true,
+  "derived_from": "configs/tier3_cc2_final98304_checkpoint_contract_v1.json",
+  "derived_from_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+  "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+  "generated_at_utc": "2026-07-30T14:37:05.666312+00:00",
+  "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+  "provenance": {
+    "llm_calls_by_cc4": false,
+    "new_training_by_cc4": false,
+    "performance_claim_authorized": false,
+    "scientific_superiority_claim": false,
+    "strong_student_selection_authorized": false,
+    "trained_by": "CC2 (RMT16 long run; CC2 -> CC4 handover)"
+  },
+  "replay_mode": "original_vtrace",
+  "schema": "mechanism_UED.training_contract/v1",
+  "segment_len": 128,
+  "sequence_length": 129,
+  "training_run_class": "long_run_98304",
+  "training_seed": 42
+}
