@@ -656,8 +656,8 @@ def main(argv=None):
             "kind": ctx["kind"],
             "checkpoint_path": ctx["checkpoint_path"],
             "wandb_stub": ctx.get("wandb_stub"),
-        "import_stubs": ctx.get("import_stubs"),
             "import_stubs": ctx.get("import_stubs"),
+            "numpy_pickle_compat": ctx.get("numpy_pickle_compat"),
             "frozen_modules_live_sha256": ctx.get("frozen_modules_live_sha256"),
             "shared_runtime": ctx.get("shared_runtime"),
             "slowgru_runtime_path": ctx.get("slowgru_runtime_path"),
@@ -862,6 +862,7 @@ def main(argv=None):
         binding["segment_boundary_steps"] = spec["segment_boundary_steps"]
         binding["boundary_semantics"] = spec["boundary_semantics"]
         binding["boundary_unit_check"] = boundary_ev
+        binding["numpy_pickle_compat"] = ctx.get("numpy_pickle_compat")
     if batch1_ev:
         binding["batch1_workaround"] = batch1_ev
     if smoke_abort:

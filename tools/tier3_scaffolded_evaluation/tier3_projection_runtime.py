@@ -478,6 +478,46 @@ def load_cc1_gtrxl128(spec):
             "import_stubs": stubs or None}
 
 
+def install_numpy2_pickle_compat_if_needed():
+    """CC3 checkpoints were PICKLED UNDER numpy>=2: the ndarray reducer in the
+    pickle stream references ``numpy._core.numeric._frombuffer`` (the numpy2
+    module layout). The LOCKED CC4 venv pins numpy 1.26.4 (jax 0.4.30 pin;
+    environment_lock — numpy may NOT be upgraded). In numpy 1.x the identical
+    reconstructor lives at ``numpy.core.numeric._frombuffer`` (protocol-5
+    in-band buffer reconstruction — same semantics). Register ONE sys.modules
+    alias so the OWNER's UNMODIFIED pickle.load resolves it.
+
+    Verified scope (read-only byte scan of both CC3 pkls, 2026-07-31): exactly
+    ONE numpy2-path reference each — ``numpy._core.numeric`` — nothing else.
+    Any OTHER missing module still fails closed (no widening). Reconstruction
+    fidelity is witnessed by the owner-protocol params_sha gate (driver G3):
+    if the alias altered any numeric, the declared params SHA would not match
+    and the binding would fail closed. No owner code is modified; the pkl
+    bytes are read untouched (file SHA gate)."""
+    import numpy as np
+    if hasattr(np, "_core"):
+        return {"installed": False, "reason": "numpy>=2 present natively",
+                "numpy_version": np.__version__}
+    import numpy.core.numeric as _nc_numeric
+    require(hasattr(_nc_numeric, "_frombuffer"),
+            "FAIL CLOSED: numpy.core.numeric._frombuffer missing in locked "
+            "numpy %s — cannot alias the numpy2 pickle path" % np.__version__)
+    sys.modules.setdefault("numpy._core.numeric", _nc_numeric)
+    return {"installed": True,
+            "alias": "numpy._core.numeric -> numpy.core.numeric",
+            "reason": "cc3 checkpoints pickled under numpy>=2 reference "
+                      "numpy._core.numeric._frombuffer; the identical "
+                      "protocol-5 reconstructor in locked numpy %s lives at "
+                      "numpy.core.numeric" % np.__version__,
+            "numpy_version": np.__version__,
+            "scope": "single module alias; verified pkl reference set = "
+                     "{numpy._core.numeric} only (byte scan both CC3 pkls); "
+                     "any other missing module still fails closed",
+            "fidelity_witness": "owner params_sha_packed gate (G3) + pkl file "
+                                "SHA gate (G2) — both fail closed on drift",
+            "owner_code_modified": False}
+
+
 def load_cc3_slowgru(spec):
     """SLOWGRU_RESET128 / SLOWGRU_PERSISTENT (CC3): owner thin binding over
     slowgru_runtime. The thin module asserts capsule contract identity
@@ -513,6 +553,7 @@ def load_cc3_slowgru(spec):
         "cc4_proj_cc3_%s_candidate_runtime" % spec["candidate_id"].lower(),
         os.path.join(capsule, "candidate_runtime.py"),
         expected_sha256=spec["capsule_file_sha256"]["candidate_runtime.py"])
+    np_compat = install_numpy2_pickle_compat_if_needed()
     handle = mod.load_candidate()          # owner triple gate + carry mode gate
     require(handle.get("carry_mode") == spec["carry_mode"],
             "FAIL CLOSED (CARRY_MODE_MISMATCH_CC4): loaded %r != registry %r"
@@ -526,7 +567,8 @@ def load_cc3_slowgru(spec):
             "checkpoint_path": contract.get("checkpoint_path"),
             "arm_src": arm_src, "slowgru_runtime_path": rt_path,
             "slowgru_runtime_sha256": rt_sha, "slowgru_network_sha256": net_sha,
-            "wandb_stub": None, "import_stubs": None}
+            "wandb_stub": None, "import_stubs": None,
+            "numpy_pickle_compat": np_compat}
 
 
 def contract_checkpoint_path(contract_path):
