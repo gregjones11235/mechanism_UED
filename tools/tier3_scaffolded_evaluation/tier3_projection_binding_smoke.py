@@ -22,16 +22,19 @@ Gate order (each fail closed, each BEFORE any binding claim):
      profile (contract §六); READY marker cross-check
   2. GPU discipline: visible device UUIDs ⊆ CC4 allowlist (GPU2/GPU3), never
      GPU0/GPU1
-  3. frozen bank artifact load (FRONT/BACK) with content-hash gate
-  4. owner runtime load through the projection registry (owner fail-closed
+  3. canonical env build (8335 / 43) — BEFORE bank load, engine order: the
+     bank treedef unpickling requires the minicraftax classes the canonical
+     env construction imports
+  4. frozen bank artifact load (FRONT/BACK) with content-hash gate
+  5. owner runtime load through the projection registry (owner fail-closed
      gates) + capsule file triple-SHA verification + CC4-side recompute of
      params_sha256 / checkpoint_file_sha256 PER THE OWNER PROTOCOL vs the
      owner-declared full64 (mismatch => fail closed, never faked)
-  5. canonical env (8335 / 43) + policy adapter + (slowgru) boundary unit check
-  6. smoke rollouts: FULL canonical-reset seeds 42+i, FRONT/BACK frozen bank
+  6. policy adapter + (slowgru) boundary unit check
+  7. smoke rollouts: FULL canonical-reset seeds 42+i, FRONT/BACK frozen bank
      state prefix; engine rollout_episode; canonical episode-record SHAs;
      engine evaluate() aggregates recorded AS SMOKE-ONLY
-  7. NEG23 analog: params byte-unchanged via the OWNER hash protocol
+     (+ NEG23 analog: params byte-unchanged via the OWNER hash protocol)
   8. evidence writes + provenance
 
 This driver performs NO formal performance evaluation, NO ranking, and makes NO
@@ -362,11 +365,23 @@ def main(argv=None):
     print("[stage2] visible GPUs %s (allowlist enforced)"
           % gpu_ev["visible_gpu_uuids"], flush=True)
 
-    # --- Stage 3: frozen bank artifacts --------------------------------------
+    # --- Stage 3: canonical env (JAX/craftax; imports minicraftax, which the
+    # bank treedef unpickling below depends on — same order as the engine:
+    # make_canonical_env BEFORE frozen bank load) -----------------------------
     import jax
     import jax.numpy as jnp
+    print("[stage3] building canonical env ...", flush=True)
+    entry = ev.make_canonical_env()
+    proj.require(tuple(entry["observation_shape"]) == proj.FROZEN_OBSERVATION_SHAPE,
+                 "FAIL CLOSED: observation shape %s != frozen %s"
+                 % (entry["observation_shape"], proj.FROZEN_OBSERVATION_SHAPE))
+    proj.require(int(entry["action_count"]) == proj.FROZEN_ACTION_DIM,
+                 "FAIL CLOSED: action count %d != frozen %d"
+                 % (entry["action_count"], proj.FROZEN_ACTION_DIM))
+
+    # --- Stage 4: frozen bank artifacts --------------------------------------
     import tier3_frozen_bank_artifacts as art
-    print("[stage3] loading frozen bank artifacts (read-only) ...", flush=True)
+    print("[stage4] loading frozen bank artifacts (read-only) ...", flush=True)
     bindings = {}
     bank_ev = {}
     for sc in (ev.FRONT, ev.BACK):
@@ -387,8 +402,8 @@ def main(argv=None):
                      "FAIL CLOSED: bank %s has %d states < episodes %d"
                      % (sc, bank_ev[sc]["n_states"], episodes))
 
-    # --- Stage 4: capsule verification + owner runtime load ------------------
-    print("[stage4] verifying capsule files + loading owner runtime via "
+    # --- Stage 5: capsule verification + owner runtime load ------------------
+    print("[stage5] verifying capsule files + loading owner runtime via "
           "projection registry ...", flush=True)
     capsule_ev = proj.verify_capsule_files(spec)
     dicode_ev = proj.pin_dicode_resolution(repo_root)
@@ -408,29 +423,22 @@ def main(argv=None):
                  "owner-protocol recompute %s != owner-declared %s [%s]"
                  % (file_sha, declared_file,
                     spec["declared_checkpoint_file_sha256"]["declaration_source"]))
-    print("[stage4] params_sha256(owner protocol)==declared MATCH; "
+    print("[stage5] params_sha256(owner protocol)==declared MATCH; "
           "checkpoint_file_sha256(owner protocol)==declared MATCH", flush=True)
 
-    # --- Stage 5: canonical env + policy adapter + boundary check ------------
-    print("[stage5] building canonical env + policy adapter ...", flush=True)
-    entry = ev.make_canonical_env()
-    proj.require(tuple(entry["observation_shape"]) == proj.FROZEN_OBSERVATION_SHAPE,
-                 "FAIL CLOSED: observation shape %s != frozen %s"
-                 % (entry["observation_shape"], proj.FROZEN_OBSERVATION_SHAPE))
-    proj.require(int(entry["action_count"]) == proj.FROZEN_ACTION_DIM,
-                 "FAIL CLOSED: action count %d != frozen %d"
-                 % (entry["action_count"], proj.FROZEN_ACTION_DIM))
+    # --- Stage 6: policy adapter + (slowgru) boundary unit check --------------
+    print("[stage6] building policy adapter ...", flush=True)
     policy = proj.build_policy(spec, ctx)
     boundary_ev = None
     if spec["loader_kind"] == "cc3_slowgru":
         boundary_ev = proj.slowgru_boundary_unit_check(ctx["module"],
                                                        spec["carry_mode"])
-        print("[stage5] slowgru boundary unit check: carry_mode=%s info=%s"
+        print("[stage6] slowgru boundary unit check: carry_mode=%s info=%s"
               % (boundary_ev["carry_mode"], boundary_ev["boundary_info"]),
               flush=True)
 
     # --- Stage 6: smoke rollouts (engine library path) ------------------------
-    print("[stage6] interface smoke: %d episodes/scenario, max_steps=%d ..."
+    print("[stage7] interface smoke: %d episodes/scenario, max_steps=%d ..."
           % (episodes, max_steps), flush=True)
     scenarios = [ev.FULL, ev.FRONT, ev.BACK]
     schedule = {}
