@@ -262,6 +262,7 @@ def install_wandb_stub_if_needed():
     def _noop(*a, **k):
         return _NoOp()
 
+    stub.__path__ = []                     # submodule-less package marker
     stub.__getattr__ = lambda name: _noop      # PEP 562 module-level __getattr__
     stub.__doc__ = ("CC4 minimal no-op wandb stub (package-chain import only; "
                     "train_state_utils.py has zero wandb references).")
@@ -307,6 +308,11 @@ def install_openai_stub_if_needed():
             "LLM calls forbidden by CC4 contract)." % name)
 
     stub.AsyncOpenAI = _ForbiddenLLMClient
+    # __path__ = [] marks the stub as a (submodule-less) package: CPython's
+    # from-import machinery probes module.__path__ at the C level and would
+    # otherwise hit __getattr__ below. Real attribute -> machinery is happy;
+    # `import openai.anything` still fails closed (no submodule will resolve).
+    stub.__path__ = []
     stub.__getattr__ = _forbidden          # PEP 562 module-level __getattr__
     stub.__doc__ = ("CC4 import-only openai stub (package-chain import "
                     "satisfaction only; instantiation / LLM calls forbidden).")
@@ -441,12 +447,19 @@ def load_cc1_gtrxl128(spec):
             break
         except ModuleNotFoundError as exc:
             last_exc = exc
-            if "wandb" in str(exc):
+            missing = getattr(exc, "name", "") or ""
+            # Match the EXACT missing top-level module only — a submodule miss
+            # (e.g. openai.types) means something tried to reach THROUGH the
+            # import-only stub, which fails closed rather than widening it.
+            if missing == "wandb":
                 s = install_wandb_stub_if_needed()
-            elif "openai" in str(exc):
+            elif missing == "openai":
                 s = install_openai_stub_if_needed()
             else:
-                raise FailClosed("FAIL CLOSED: unexpected cc1 load failure: %r" % exc)
+                raise FailClosed(
+                    "FAIL CLOSED: unexpected cc1 load failure: %r (missing "
+                    "module %r; only bare 'wandb'/'openai' may be stubbed)"
+                    % (exc, missing))
             require(s["installed"],
                     "FAIL CLOSED: %s stub not installed but its import failed" % exc)
             stubs.append(s)

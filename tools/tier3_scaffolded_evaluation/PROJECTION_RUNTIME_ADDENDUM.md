@@ -92,6 +92,10 @@ OWNER_ACTION_REQUIRED = false
     import 但实例化即 raise**,其余属性访问亦 raise——合同禁止 CC4 任何新 LLM
     调用,stub 从结构上使调用不可能;本路径实际只用 `task_utils.
     get_achievement_multi_hot` 的纯 numpy/craftax 常数数学,LLM 类从不实例化)。
+    壳设 `__path__=[]`(无子模块包壳:CPython from-import 机制在 C 层探查
+    `__path__`,须为真实属性;`import openai.X` 仍 fail closed);驱动重试
+    循环只对 `ModuleNotFoundError.name` **恰为** `wandb`/`openai` 的顶层缺失
+    装壳,任何子模块级缺失一律 fail closed,不扩大 stub 面。
   - 任何**其他**缺失模块一律 fail closed,不猜、不静默 stub。
 
 ## GPU 与边界
