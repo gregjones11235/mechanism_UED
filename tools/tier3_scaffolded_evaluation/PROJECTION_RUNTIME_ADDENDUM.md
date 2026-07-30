@@ -109,6 +109,30 @@ OWNER_ACTION_REQUIRED = false
     装壳,任何子模块级缺失一律 fail closed,不扩大 stub 面。
   - 任何**其他**缺失模块一律 fail closed,不猜、不静默 stub。
 
+- **引擎 FRONT corridor predicate 裁定记录(引擎设计级 fail-closed,不放宽)**:
+  `tier3_evaluator.rollout_episode` 在 FRONT 场景对每一仍在 floor-1 的步调用
+  `tier3_event_predicates.normalized_corridor_progress(state, walkable, …)`,其中
+  `walkable = _front_walkable_grid(start_state, view)` 是**静态初始网格**——取初始
+  `map[FRONT_FLOOR]` 的 BlockType 陆生可走集(与 `game_logic.move_player` 碰撞
+  一致,排除 SOLID_BLOCK/WATER/LAVA),唯一例外是把两枚梯子转运 tile OR 入网格
+  (LADDER_TILE_TRANSIT)。引擎 docstring 明示该度量是 "graph distance over map
+  topology"(**初始**地图拓扑):**挖掘(mining)出初始可走网格、站到被挖开的
+  原 SOLID_BLOCK 格**在该度量域内为非法,引擎按设计 fail-closed 中止该 rollout
+  (引擎注释:"FAIL CLOSED (no swallowing) … never silently skipped … STOPS
+  permanently")。predicate 由 predicate_code_sha256 绑定、引擎模块 LF-SHA 冻结,
+  CC4 无权放宽、跳过或重实现(C1/C2);正式评估跑**同一引擎代码路径**,对同一
+  候选会得到**同一裁定**,故 binding 必须如实记录而非掩盖。驱动处置:仅捕获
+  `tier3_event_predicates.FailClosed`(引擎设计级裁定),记录为结构化最小阻断
+  证据(`smoke_abort` 字段:exception_type / engine_message / scenario /
+  episode_index / entry_id / seed / verdict=ENGINE_PREDICATE_REJECTED_ROLLOUT /
+  formal_evaluation_consequence),保留中止前已完成 episode 的部分证据
+  (`partial=true`),写 `binding_status=BLOCKED`、`interface_smoke_status=
+  FAIL_CLOSED_ENGINE_PREDICATE`、`READY_V2=false`(G4 失败),并附每候选一条
+  minimum owner prompt(§七 诚实 BLOCKED 纪律);**任何其他异常**(含 evaluator
+  自身 require 的 FailClosed)仍令驱动 fail-closed 崩溃。实测触发者:
+  CONTROL_CONTINUOUS_98304(训练后的 greedy policy 挖墙推进;FULL 种子已完成、
+  FRONT 被拒)。BASE / TEACHER 的 FRONT 行为不挖墙,未触发。
+
 ## GPU 与边界
 
 - **启动合同(CWD = 仓库根)**:冻结引擎 `tier3_source_audit.SOURCE_FILES` 把审计

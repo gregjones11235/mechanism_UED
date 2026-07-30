@@ -37,6 +37,14 @@ Gate order (each fail closed, each BEFORE any binding claim):
      state prefix; engine rollout_episode; canonical episode-record SHAs;
      engine evaluate() aggregates recorded AS SMOKE-ONLY
      (+ NEG23 analog: params byte-unchanged via the OWNER hash protocol)
+     Engine-predicate verdict discipline: ONLY tier3_event_predicates.
+     FailClosed (the frozen engine's OWN designed verdict, e.g. FRONT policy
+     position outside the STATIC initial walkable grid — mining is outside the
+     corridor metric's domain) is caught and RECORDED as structured minimum
+     blocking evidence (smoke_abort; binding_status=BLOCKED; READY_V2=false);
+     the predicate is predicate_code_sha256-bound / LF-SHA frozen and is never
+     relaxed, skipped, or reimplemented by CC4. Every other exception still
+     crashes the driver fail-closed.
   8. evidence writes + provenance
 
 This driver performs NO formal performance evaluation, NO ranking, and makes NO
@@ -360,6 +368,7 @@ def main(argv=None):
 
     # --- engine import (guarded) -------------------------------------------
     import tier3_evaluator as ev
+    import tier3_event_predicates as predm
     import tier3_state_bank_materializer as mat
     import tier3_state_serializer as ser
     proj.require(ser.have_jax_craftax(),
@@ -486,6 +495,7 @@ def main(argv=None):
             "count": len(seeds), "seeds": [int(s) for s in seeds]}
     reset_fn = ev._jit_reset(entry)
     records_by_scenario, results_by_scenario = {}, {}
+    smoke_abort = None
     for sc in scenarios:
         seeds = [int(s) for s in schedule[sc]["seeds"]]
         entry_ids = ev.state_entry_ids_for(sc, seeds)
@@ -497,8 +507,50 @@ def main(argv=None):
             else:
                 start_state = jax.tree.map(jnp.asarray,
                                            bindings[sc]["states"][i])
-            rec = ev.rollout_episode(entry, start_state, sc, policy,
-                                     entry_ids[i], int(seed), max_steps=max_steps)
+            try:
+                rec = ev.rollout_episode(entry, start_state, sc, policy,
+                                         entry_ids[i], int(seed),
+                                         max_steps=max_steps)
+            except predm.FailClosed as exc:
+                # The FROZEN engine's OWN designed verdict, recorded — NOT
+                # swallowed, NOT relaxed (engine comment: "FAIL CLOSED (no
+                # swallowing) ... never silently skipped ... STOPS permanently";
+                # the predicate is predicate_code_sha256-bound and the engine
+                # modules are LF-SHA frozen, so CC4 may not relax, skip, or
+                # reimplement it — C1/C2). Typical case: the policy violates a
+                # frozen FRONT scaffold invariant (position outside the STATIC
+                # initial walkable grid, e.g. after digging through a wall —
+                # mining is outside the frozen corridor metric's domain, which
+                # is graph distance over the INITIAL map topology). The formal
+                # evaluation runs this SAME engine code path and would reach
+                # the SAME verdict, so the binding must record it honestly as
+                # minimum blocking evidence (contract §七 honest-BLOCKED
+                # discipline; never a faked PASS). SCOPE: ONLY
+                # tier3_event_predicates.FailClosed is caught — every other
+                # exception (including the evaluator's own require() FailClosed)
+                # still crashes the driver fail-closed.
+                smoke_abort = {
+                    "exception_type": "tier3_event_predicates.FailClosed",
+                    "engine_message": str(exc),
+                    "scenario": sc,
+                    "episode_index": i,
+                    "episodes_planned": len(seeds),
+                    "episodes_completed_before_abort": i,
+                    "entry_id": entry_ids[i],
+                    "seed": int(seed),
+                    "scenarios_completed_before_abort":
+                        list(records_by_scenario.keys()),
+                    "verdict": "ENGINE_PREDICATE_REJECTED_ROLLOUT",
+                    "authority": "frozen engine predicate (predicate_code_sha256-"
+                                 "bound; LF-SHA frozen; not relaxable by CC4)",
+                    "formal_evaluation_consequence": "the formal run executes the "
+                                 "same rollout_episode code path and reaches the "
+                                 "same verdict for this candidate",
+                }
+                print("  [%s %d/%d %s seed=%d] ENGINE PREDICATE ABORT (recorded, "
+                      "NOT swallowed): %s" % (sc, i + 1, len(seeds), entry_ids[i],
+                                              seed, exc), flush=True)
+                break
             rec["episode_record_sha256"] = proj.sha256_bytes(
                 proj.canonical_json_bytes(rec))
             eps.append(rec)
@@ -508,14 +560,19 @@ def main(argv=None):
                      rec["defeat_kobold"], rec["player_died"],
                      rec["front_floor_transition_reached"], rec["kobold_engaged"]),
                   flush=True)
-        lines = [proj.canonical_json_bytes(r).decode("utf-8") for r in eps]
-        records_by_scenario[sc] = {
-            "seeds": seeds,
-            "entry_ids": entry_ids,
-            "episode_records": eps,
-            "episode_records_sha256": proj.sha256_bytes(
-                ("\n".join(lines) + "\n").encode("utf-8"))}
-        results_by_scenario[sc] = ev.evaluate(sc, eps)
+        if eps:                            # keep honest partial evidence
+            lines = [proj.canonical_json_bytes(r).decode("utf-8") for r in eps]
+            records_by_scenario[sc] = {
+                "seeds": seeds[:len(eps)],
+                "entry_ids": entry_ids[:len(eps)],
+                "episode_records": eps,
+                "partial": bool(smoke_abort and smoke_abort["scenario"] == sc),
+                "episode_records_sha256": proj.sha256_bytes(
+                    ("\n".join(lines) + "\n").encode("utf-8"))}
+            if not (smoke_abort and smoke_abort["scenario"] == sc):
+                results_by_scenario[sc] = ev.evaluate(sc, eps)
+        if smoke_abort:
+            break
 
     # --- Stage 7: NEG23 analog (owner-protocol params unchanged) --------------
     params_after = proj.recompute_params_sha_owner(ctx)
@@ -555,14 +612,18 @@ def main(argv=None):
     }
 
     # --- Stage 8: evidence writes ---------------------------------------------
-    # 8a. episode_records.jsonl (all scenarios, canonical order)
+    # 8a. episode_records.jsonl (completed scenarios in canonical order; on an
+    # engine-predicate abort the aborted scenario's completed episodes — if any
+    # — appear as honest partial evidence, later scenarios are absent)
     jsonl_lines = []
     for sc in scenarios:
+        if sc not in records_by_scenario:
+            continue
         for r in records_by_scenario[sc]["episode_records"]:
             jsonl_lines.append(proj.canonical_json_bytes(r).decode("utf-8"))
     jsonl_path = os.path.join(out_dir, "episode_records.jsonl")
     with open(jsonl_path, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("\n".join(jsonl_lines) + "\n")
+        fh.write(("\n".join(jsonl_lines) + "\n") if jsonl_lines else "")
     episode_records_jsonl_sha256 = proj.sha256_file(jsonl_path)
 
     # 8b. projection_record.json
@@ -647,8 +708,10 @@ def main(argv=None):
                  "entry_ids": records_by_scenario[sc]["entry_ids"],
                  "episode_records_sha256":
                      records_by_scenario[sc]["episode_records_sha256"],
+                 "partial": records_by_scenario[sc].get("partial", False),
                  "episode_records": records_by_scenario[sc]["episode_records"]}
-            for sc in scenarios},
+            for sc in records_by_scenario},
+        "smoke_abort": smoke_abort,
         "results_by_scenario_smoke_only": results_by_scenario,
         "episode_records_jsonl_sha256": episode_records_jsonl_sha256,
         "common_verification": common_ev,
@@ -742,10 +805,33 @@ def main(argv=None):
         "projection_module_sha256": provenance["projection_module_sha256"],
         "driver_module_sha256": provenance["driver_module_sha256"],
         "bound_owner_runtime_sha256": spec["bound_owner_runtime_sha256"],
-        "interface_smoke_status": "PASS",
-        "binding_status": "PASS",
-        "formal_eval_binding": "INTERFACE_SMOKE_PASS_FORMAL_PENDING",
-        "remaining_blocker": None,
+        "interface_smoke_status": ("PASS" if smoke_abort is None
+                                   else "FAIL_CLOSED_ENGINE_PREDICATE"),
+        "binding_status": "PASS" if smoke_abort is None else "BLOCKED",
+        "formal_eval_binding": ("INTERFACE_SMOKE_PASS_FORMAL_PENDING"
+                                if smoke_abort is None
+                                else "INTERFACE_SMOKE_BLOCKED_BY_FROZEN_ENGINE_"
+                                     "PREDICATE"),
+        "remaining_blocker": (None if smoke_abort is None else {
+            "kind": "FROZEN_ENGINE_PREDICATE_REJECTS_ROLLOUT",
+            "engine_message": smoke_abort["engine_message"],
+            "scenario": smoke_abort["scenario"],
+            "episode_index": smoke_abort["episode_index"],
+            "why_not_relaxable": "the predicate is predicate_code_sha256-bound and "
+                "the engine modules are LF-SHA frozen; CC4 may not relax, skip, "
+                "or reimplement it (conditions C1/C2); the formal evaluation "
+                "executes the same engine code path and would reach the same "
+                "verdict for this candidate",
+            "minimum_owner_prompt": "[%s → owner %s] 冻结引擎 FRONT/BACK scaffold "
+                "predicate 在 smoke rollout 拒绝该候选(policy 离开初始 walkable "
+                "corridor,engine_message=%r)。引擎 predicate 字节冻结,CC4 无权"
+                "放宽。请 owner 裁定:该候选的 FRONT 行为(挖墙离开初始可走网格)"
+                "是否为其声明的 FRONT 合同;若属预期,则由总控裁定该候选在冻结 "
+                "FRONT corridor 度量域下的资格(metric-domain ruling),否则 owner "
+                "提供修正后的 checkpoint/胶囊并重新进入 binding。"
+                % (args.candidate_id, spec["owner"],
+                   smoke_abort["engine_message"]),
+        }),
         "episode_records_jsonl_sha256": episode_records_jsonl_sha256,
         "records_sha256_by_scenario": {
             sc: records_by_scenario[sc]["episode_records_sha256"]
@@ -778,6 +864,14 @@ def main(argv=None):
         binding["boundary_unit_check"] = boundary_ev
     if batch1_ev:
         binding["batch1_workaround"] = batch1_ev
+    if smoke_abort:
+        binding["smoke_abort"] = smoke_abort
+        binding["episode_count_status"] += (
+            " — SMOKE PARTIAL/ABORTED: frozen engine predicate rejected the "
+            "rollout at %s episode %d/%d (see smoke_abort; remaining scenarios "
+            "not executed)" % (smoke_abort["scenario"],
+                               smoke_abort["episode_index"] + 1,
+                               smoke_abort["episodes_planned"]))
     binding_path = os.path.join(out_dir, "common_evaluator_binding_result_v2.json")
     write_json(binding_path, binding)
 
@@ -796,8 +890,9 @@ def main(argv=None):
             capsule_ev[fn]["match"] for fn in proj.CAPSULE_FILES),
         "G2_CHECKPOINT_FILE_SHA_OWNER_RECOMPUTE_MATCH": file_sha == declared_file,
         "G3_PARAMS_SHA_OWNER_RECOMPUTE_MATCH": params_before == declared_params,
-        "G4_INTERFACE_SMOKE_EXECUTED": all(
-            len(records_by_scenario[sc]["episode_records"]) == episodes
+        "G4_INTERFACE_SMOKE_EXECUTED": (smoke_abort is None) and all(
+            sc in records_by_scenario
+            and len(records_by_scenario[sc]["episode_records"]) == episodes
             for sc in scenarios),
         "G5_PARAMS_UNCHANGED": params_unchanged,
         "G6_COMMON_SUMS_57_57": common_ev["common_sha256sums_self_check"]
@@ -818,10 +913,13 @@ def main(argv=None):
         "candidate_id": args.candidate_id,
         "runtime_family": spec["runtime_family"],
         "READY_V2": all(gates.values()),
-        "binding_status": "PASS",
+        "binding_status": "PASS" if smoke_abort is None else "BLOCKED",
+        "smoke_abort": smoke_abort,
         "candidate_class": spec["candidate_class"],
         "counts_toward_student_binding_count": (False if is_teacher else True),
-        "teacher_reference_binding": ("PASS" if is_teacher else None),
+        "teacher_reference_binding": (
+            (("PASS" if smoke_abort is None else "BLOCKED") if is_teacher
+             else None)),
         "run_class": "INTERFACE_SMOKE",
         "performance_claim_authorized": False,
         "formal_ranking_authorized_by_this_file": False,
@@ -835,9 +933,18 @@ def main(argv=None):
     }
     write_json(os.path.join(out_dir, "READY_V2.json"), ready_v2)
 
-    print("[done] %s binding_status=PASS READY_V2=%s gates=%s"
-          % (args.candidate_id, ready_v2["READY_V2"],
-             {k: v for k, v in gates.items() if not v} or "all PASS"), flush=True)
+    print("[done] %s binding_status=%s READY_V2=%s failed_gates=%s"
+          % (args.candidate_id, ready_v2["binding_status"],
+             ready_v2["READY_V2"],
+             {k: v for k, v in gates.items() if not v} or "none"), flush=True)
+    if smoke_abort:
+        print("[done] BLOCKED by frozen engine predicate: %s @ %s episode %d/%d "
+              "(engine_message=%r) — recorded as minimum blocking evidence; "
+              "NOT relaxed, NOT skipped"
+              % (args.candidate_id, smoke_abort["scenario"],
+                 smoke_abort["episode_index"] + 1,
+                 smoke_abort["episodes_planned"],
+                 smoke_abort["engine_message"]), flush=True)
     print("[done] out=%s" % out_dir, flush=True)
     return 0
 
