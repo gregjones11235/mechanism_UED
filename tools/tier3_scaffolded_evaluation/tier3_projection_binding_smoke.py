@@ -835,7 +835,7 @@ def main(argv=None):
         "episode_records_jsonl_sha256": episode_records_jsonl_sha256,
         "records_sha256_by_scenario": {
             sc: records_by_scenario[sc]["episode_records_sha256"]
-            for sc in scenarios},
+            for sc in records_by_scenario},
         "results_by_scenario_smoke_only": results_by_scenario,
         "wandb_stub": ctx.get("wandb_stub"),
         "import_stubs": ctx.get("import_stubs"),
