@@ -1,0 +1,41 @@
+{
+  "action_dim": 43,
+  "base_checkpoint_params_sha256": null,
+  "budget_class": "MATCHED_98304",
+  "candidate_class": "STUDENT",
+  "candidate_class_is_student": true,
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "cc4_common_abi_registered_families": [
+    "rmt16_gtrxl_cc2"
+  ],
+  "checkpoint_file_sha256": "PENDING_ORBAX_DIR_COMPUTED_IN_SMOKE",
+  "checkpoint_file_sha256_cc4_recomputed": null,
+  "checkpoint_file_sha256_status": "BLOCKED_PENDING_OWNER_PROTOCOL (orbax dir; the file SHA definition is owned by CC1 — CC4 computes no competing directory hash)",
+  "checkpoint_format": "orbax",
+  "checkpoint_path": "/home/oseasy/student_pool_v1/cc1_retrain/CONTROL_CONTINUOUS_CANONICAL_98304/long_98304/checkpoints/98304",
+  "checkpoint_step": 98304,
+  "formal_student_ranking_eligible": true,
+  "generated_at_utc": "2026-07-30T15:51:13.395556+00:00",
+  "generated_by": "CC4 (common evaluator owner) — AUDIT PROJECTION, not an owner capsule; owner artifacts are never modified",
+  "immutable": true,
+  "memory_mode": "gtrxl_window128",
+  "network_family": "GTrXL128",
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC1",
+  "params_sha256": "PENDING_COMPUTED_IN_SMOKE",
+  "params_sha256_status": "BLOCKED_PENDING_OWNER",
+  "performance_claim_authorized": false,
+  "reference_only": false,
+  "replay_mode": "OFF",
+  "runtime_family_label": "GTrXL128",
+  "runtime_family_registered_in_cc4_common_abi": false,
+  "schema": "mechanism_UED.candidate_audit_manifest/v1",
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc1/CONTROL_CONTINUOUS_98304",
+  "strong_student_selection_authorized": false,
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "training_seed": 42,
+  "training_steps": 98304
+}

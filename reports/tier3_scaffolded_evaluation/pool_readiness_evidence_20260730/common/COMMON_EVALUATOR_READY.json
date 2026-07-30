@@ -1,0 +1,106 @@
+{
+  "COMMON_EVALUATOR_READY": true,
+  "FORMAL_RANKING_AUTHORIZED": false,
+  "FULL_PROFILE_STATUS": "FROZEN",
+  "assembly_manifest_sha256": "52d1fa0fca2ceaa0e992a118b1d5812166e3347fef23100cad0b4389cc9136d4",
+  "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+  "back_bank_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+  "common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+  "common_root": "/home/oseasy/student_pool_v1/common",
+  "common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+  "common_sha256sums_evidence": {
+    "listed": 57,
+    "mismatches": [],
+    "missing": [],
+    "status": "PASS"
+  },
+  "common_sha256sums_self_check": "PASS",
+  "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+  "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+  "formal_ranking_authorization_basis": "false while STUDENT_COMMON_BINDING_PASS_COUNT < 6/6 (only rmt16_gtrxl_cc2 is registered in the common ABI; the other four students + teacher reference await owner-registered runtimes)",
+  "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+  "front_bank_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+  "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+  "gates": {
+    "B1_COMMON_EVALUATOR": {
+      "evidence": {
+        "binding_pass_by_arm": {
+          "persistent": true,
+          "reset128": true
+        },
+        "evaluator_self_test_exit_code": 0
+      },
+      "status": "PASS"
+    },
+    "B3_FROZEN_BANKS": {
+      "evidence": {
+        "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+        "four_sha_kinds_recorded": true,
+        "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+        "reloaded_content_matches_frozen": {
+          "back_l2": true,
+          "front_l2": true
+        }
+      },
+      "status": "PASS"
+    },
+    "COMMON_ARTIFACT_IDENTITY": {
+      "evidence": {
+        "engine_modules_bound": 24,
+        "engine_modules_reproduced": 24,
+        "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+        "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+        "metrics_source_lf_sha256_reproduced": true
+      },
+      "status": "PASS"
+    },
+    "COMMON_RUNTIME_ABI_READY": {
+      "evidence": {
+        "abi_self_test_exit_code": 0,
+        "runner_engine_sha_reproduced": true
+      },
+      "status": "PASS"
+    },
+    "CROSS_GPU_DETERMINISM_PREFLIGHT": {
+      "evidence": {
+        "certificate_sha256": "794a05dd7f4abe0392a1f40dd7a3be5d8da4a6ad1e7e0ca9e040b894f3e31b96",
+        "certificate_verdict": "PASS",
+        "checkpoint_identity_verified": true
+      },
+      "status": "PASS"
+    },
+    "FULL_PROFILE_READY": {
+      "evidence": {
+        "full_seed_count": 64
+      },
+      "status": "PASS"
+    },
+    "NEGATIVE_GATES": {
+      "evidence": {
+        "fail": 0,
+        "tests": 49
+      },
+      "status": "PASS"
+    },
+    "SHA256SUMS_STATUS": {
+      "evidence": {
+        "listed": 57,
+        "mismatches": [],
+        "missing": [],
+        "sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+        "status": "PASS",
+        "unlisted": []
+      },
+      "status": "PASS"
+    }
+  },
+  "generated_at_utc": "2026-07-30T14:40:21.219808+00:00",
+  "git_commit_head": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+  "honest_false_discipline": "ANY failed gate keeps COMMON_EVALUATOR_READY false; no gate is ever faked to PASS",
+  "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+  "negative_test_report_sha256": "bc42ee6a4b743e1dc7c011b4ff9aba46c7f2bb772b30148e400d6810545ddd6e",
+  "ready_marker_supplemented_utc": "2026-07-30T15:51:13.198951+00:00",
+  "schema": "mechanism_UED.common_evaluator_ready/v1",
+  "sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+  "supplement_discipline": "additive fields only; pre-existing SHAs re-verified live; no other file touched; SHA256SUMS unaffected (marker excluded by construction)"
+}

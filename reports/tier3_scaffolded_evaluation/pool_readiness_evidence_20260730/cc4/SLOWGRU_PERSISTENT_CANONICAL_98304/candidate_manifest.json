@@ -1,0 +1,41 @@
+{
+  "action_dim": 43,
+  "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "budget_class": "MATCHED_98304",
+  "candidate_class": "STUDENT",
+  "candidate_class_is_student": true,
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "cc4_common_abi_registered_families": [
+    "rmt16_gtrxl_cc2"
+  ],
+  "checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checkpoint_file_sha256_cc4_recomputed": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH",
+  "checkpoint_format": "pickle",
+  "checkpoint_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
+  "checkpoint_step": 98304,
+  "formal_student_ranking_eligible": true,
+  "generated_at_utc": "2026-07-30T15:51:13.649495+00:00",
+  "generated_by": "CC4 (common evaluator owner) — AUDIT PROJECTION, not an owner capsule; owner artifacts are never modified",
+  "immutable": true,
+  "memory_mode": "persistent",
+  "network_family": "SlowGRU",
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC3",
+  "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "params_sha256_status": "FULL64_OWNER_CLAIMED_NOT_RECOMPUTED_BY_CC4",
+  "performance_claim_authorized": false,
+  "reference_only": false,
+  "replay_mode": "canonical_awr",
+  "runtime_family_label": "SlowGRU",
+  "runtime_family_registered_in_cc4_common_abi": false,
+  "schema": "mechanism_UED.candidate_audit_manifest/v1",
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "strong_student_selection_authorized": false,
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "training_seed": 42,
+  "training_steps": 98304
+}

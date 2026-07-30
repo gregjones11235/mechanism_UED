@@ -1,0 +1,25 @@
+{
+  "READY": false,
+  "blockers": [
+    "runtime_family_not_registered_in_cc4_common_abi (registered set is exactly ('rmt16_gtrxl_cc2',); ABI doc: registration is by owner)",
+    "no_interface_smoke_through_cc4_common_evaluator (impossible without a registered runtime; this round authorizes no new adapter)",
+    "params_sha256_not_recomputed_by_cc4 (owner hash protocol; recomputing it differently would fabricate evidence)",
+    "formal_evaluation_not_authorized_this_round"
+  ],
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "formal_eval_binding": "MISSING_EVIDENCE",
+  "formal_ranking_eligible_this_round": false,
+  "gates": {
+    "binding_status_honest": "PASS",
+    "cc4_interface_smoke_through_common_evaluator": "FAIL",
+    "checkpoint_file_sha256_cc4_verified": "PASS",
+    "common_ready_verified": "PASS",
+    "full_profile_frozen": "PASS",
+    "params_sha256_cc4_verified": "BLOCKED",
+    "runtime_family_registered_in_common_abi": "FAIL",
+    "source_capsule_files_present": "PASS"
+  },
+  "generated_at_utc": "2026-07-30T15:51:13.392485+00:00",
+  "honest_false_discipline": "this record can only become READY after an owner-registered runtime family + a CC4-run interface smoke through the common evaluator + owner-protocol params recomputation; nothing here is ever faked to PASS",
+  "schema": "mechanism_UED.candidate_pending_ready/v1"
+}

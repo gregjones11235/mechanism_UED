@@ -1,0 +1,41 @@
+{
+  "action_dim": 43,
+  "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "budget_class": "UNMATCHED_REFERENCE",
+  "candidate_class": "TEACHER_REFERENCE",
+  "candidate_class_is_student": false,
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "cc4_common_abi_registered_families": [
+    "rmt16_gtrxl_cc2"
+  ],
+  "checkpoint_file_sha256": "a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01",
+  "checkpoint_file_sha256_cc4_recomputed": "a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH",
+  "checkpoint_format": "pickle",
+  "checkpoint_path": "/home/oseasy/experiments/bakeoff_phase1/shared_assets/ckpt17500_params.pkl",
+  "checkpoint_step": 17500,
+  "formal_student_ranking_eligible": false,
+  "generated_at_utc": "2026-07-30T15:51:13.318175+00:00",
+  "generated_by": "CC4 (common evaluator owner) — AUDIT PROJECTION, not an owner capsule; owner artifacts are never modified",
+  "immutable": true,
+  "memory_mode": "gtrxl_window128",
+  "network_family": "GTrXL128",
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC1",
+  "params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "params_sha256_status": "FULL64_OWNER_CLAIMED_NOT_RECOMPUTED_BY_CC4",
+  "performance_claim_authorized": false,
+  "reference_only": true,
+  "replay_mode": "reference_only",
+  "runtime_family_label": "GTrXL128",
+  "runtime_family_registered_in_cc4_common_abi": false,
+  "schema": "mechanism_UED.candidate_audit_manifest/v1",
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc1/BASELINE_TEACHER_CKPT17500",
+  "strong_student_selection_authorized": false,
+  "strong_student_selection_eligible": false,
+  "student_rank": null,
+  "training_seed": "UNKNOWN_HENRY_BASE_PROVENANCE",
+  "training_steps": 17500
+}

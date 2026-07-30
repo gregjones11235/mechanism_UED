@@ -1,0 +1,51 @@
+{
+  "cc4_gpu_policy": "CC4 may use ONLY GPU2/GPU3; GPU0/GPU1 strictly banned; idle + non-conflicting + no W512 preemption must be re-verified before ANY GPU run",
+  "eval_device_identity": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "gpu",
+    "jax_devices": "[cuda(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "generated_at_utc": "2026-07-30T14:27:35.978819+00:00",
+  "git_commit_head": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+  "gpu_names_nvidia_smi": [
+    "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+    "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+    "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+    "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+  ],
+  "host": {
+    "platform": "linux",
+    "python_executable": "/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python",
+    "python_version": "3.11.15"
+  },
+  "jax_devices": [
+    "cuda:0"
+  ],
+  "pinned_env_identity_from_bank_manifest": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "cpu",
+    "jax_devices": "[CpuDevice(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "platform_machine": "x86_64",
+    "platform_system": "Linux",
+    "python_version": "3.11.15"
+  },
+  "repo_root_at_assembly": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+  "runtime_versions": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "schema": "mechanism_UED.environment_lock/v1"
+}
