@@ -592,28 +592,66 @@ class BaseGtrxlProjectionPolicy(object):
 class GTrXL128ProjectionPolicy(object):
     """CC1 control/teacher: owner module-level policy_step(loaded, obs, ms,
     done_mask, greedy=True) -> dict(action, logits, value, memory_state);
-    greedy=True selects pi.mode() (owner greedy)."""
+    greedy=True selects pi.mode() (owner greedy).
+
+    BATCH-1 WORKAROUND (disclosed in every binding as `batch1_workaround`):
+    the owner's dicode transformerXL.forward_eval does `x = x.squeeze()` after
+    EVERY transformer layer; at batch size 1 that also removes the batch
+    dimension, so layer 2's `jnp.concatenate([memories[:, :, i], x[:, None]])`
+    mismatches ((1,128,256) vs (256,1) — observed on server 2026-07-31). The
+    owner's own harness NEVER runs at B=1 (build_stage4_env smoke_batch_size
+    >= 2; eval_bakeoff NUM_ENVS=256 — vectorized). Rows are fully independent
+    (per-row Dense encoder / per-row attention; no cross-batch op anywhere in
+    forward_eval), so this adapter calls the owner's policy_step UNMODIFIED at
+    batch 2 with the row DUPLICATED and reads action/memory from row 0 —
+    numerically identical to the intended batch-1 semantics. This is a
+    protocol-shell batching choice (the projection's defined job), NOT a
+    network modification; both CC1 candidates use the identical adapter."""
+
+    EFFECTIVE_BATCH = 2
+    READOUT_ROW = 0
 
     def __init__(self, module, loaded, R):
         self.module = module
         self.loaded = loaded
         self.R = R
         self.ms = None
+        self.batch1_workaround = {
+            "applied": True,
+            "effective_batch": self.EFFECTIVE_BATCH,
+            "rows_duplicated": True,
+            "readout_row": self.READOUT_ROW,
+            "reason": ("owner dicode transformerXL.forward_eval x.squeeze() "
+                       "removes the batch dim at B=1 (layer-2 concat TypeError "
+                       "(1,128,256) vs (256,1)); owner harness is always "
+                       "vectorized (smoke_batch_size>=2, NUM_ENVS=256) and "
+                       "never hits B=1"),
+            "fidelity_basis": ("forward_eval rows are fully independent "
+                               "(per-row encoder/attention, no cross-batch "
+                               "op) -> duplicated-row batch 2 with row-0 "
+                               "readout is numerically identical to B=1"),
+            "owner_code_modified": False}
 
     def reset(self):
-        self.ms = self.R.init_memory(1)
+        import jax
+        import jax.numpy as jnp
+        m = self.R.init_memory(1)
+        # carry the owner memory state at batch 2 (two identical rows)
+        self.ms = jax.tree_util.tree_map(
+            lambda a: jnp.concatenate([a, a], axis=0), m)
 
     def __call__(self, obs, env_state):
         import jax.numpy as jnp
         import numpy as np
         if self.ms is None:
             self.reset()
-        o = jnp.asarray(np.asarray(obs)[None, :])
-        done_mask = jnp.zeros((1,), dtype=jnp.bool_)
+        o1 = jnp.asarray(np.asarray(obs)[None, :])
+        o = jnp.concatenate([o1, o1], axis=0)              # (2, obs_dim)
+        done_mask = jnp.zeros((self.EFFECTIVE_BATCH,), dtype=jnp.bool_)
         out = self.module.policy_step(self.loaded, o, self.ms, done_mask,
                                       greedy=True, rng=None)
-        self.ms = out["memory_state"]
-        return int(np.asarray(out["action"]).reshape(-1)[0])
+        self.ms = out["memory_state"]                      # both rows stay equal
+        return int(np.asarray(out["action"]).reshape(-1)[self.READOUT_ROW])
 
 
 class SlowGRUProjectionPolicy(object):

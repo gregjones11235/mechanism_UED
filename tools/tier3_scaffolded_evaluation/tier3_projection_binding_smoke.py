@@ -462,6 +462,12 @@ def main(argv=None):
         print("[stage6] slowgru boundary unit check: carry_mode=%s info=%s"
               % (boundary_ev["carry_mode"], boundary_ev["boundary_info"]),
               flush=True)
+    batch1_ev = getattr(policy, "batch1_workaround", None)
+    if batch1_ev:
+        print("[stage6] gtrxl128 batch-1 workaround ACTIVE (disclosed): "
+              "effective_batch=%d readout_row=%d owner_code_modified=%s"
+              % (batch1_ev["effective_batch"], batch1_ev["readout_row"],
+                 batch1_ev["owner_code_modified"]), flush=True)
 
     # --- Stage 6: smoke rollouts (engine library path) ------------------------
     print("[stage7] interface smoke: %d episodes/scenario, max_steps=%d ..."
@@ -620,6 +626,7 @@ def main(argv=None):
         "canonical_env": {"observation_shape": list(entry["observation_shape"]),
                           "action_count": int(entry["action_count"])},
         "boundary_unit_check": boundary_ev,
+        "batch1_workaround": batch1_ev,
         "policy_adapter": {
             "class": type(policy).__name__,
             "greedy_readout": (
@@ -769,6 +776,8 @@ def main(argv=None):
         binding["segment_boundary_steps"] = spec["segment_boundary_steps"]
         binding["boundary_semantics"] = spec["boundary_semantics"]
         binding["boundary_unit_check"] = boundary_ev
+    if batch1_ev:
+        binding["batch1_workaround"] = batch1_ev
     binding_path = os.path.join(out_dir, "common_evaluator_binding_result_v2.json")
     write_json(binding_path, binding)
 

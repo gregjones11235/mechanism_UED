@@ -64,6 +64,17 @@ OWNER_ACTION_REQUIRED = false
   前向的忠实 greedy 读出——不改行为、不重实现。
 - **done/true_done**:引擎在 env done 时**停止** episode(不越过 done 再步进),
   故 done_mask / true_done 恒 False,与引擎对 CC2 adapter 的约定一致。
+- **batch-1 协议壳(仅 CC1 GTrXL128 两族:CONTROL + TEACHER)**:owner 的 dicode
+  `transformerXL.forward_eval` 每层后执行 `x = x.squeeze()`,**B=1 时把 batch 维
+  一并挤掉**,第 2 层 `jnp.concatenate([memories[:, :, i], x[:, None]])` 即形状
+  失配(服务器实测 `(1,128,256)` vs `(256,1)` TypeError)。owner 自有评测**从不
+  在 B=1 运行**(build_stage4_env smoke_batch_size≥2;eval_bakeoff NUM_ENVS=256,
+  恒向量化)。`forward_eval` 行间完全独立(逐行 encoder / 逐行 attention,无任何
+  跨 batch 运算),故 adapter **原样调用 owner policy_step**,仅以 batch 2 复制
+  行运行、读 row-0 action / row-0 memory——与 B=1 语义**数值恒等**。这是协议壳
+  的 batching 选择(projection 的本职),**未改 owner 任何代码**
+  (`owner_code_modified=false`);两份 binding 以 `batch1_workaround` 字段完整
+  公开。CC2 BASE 的 frozen 网络 B=1 路径正常(实测通过),不受此影响。
 - **§四 语义分立**:两 SlowGRU 族绝不统一。smoke rollout 每 128 步调度
   `on_segment_boundary`;32 步 smoke 到不了边界,故另跑**直接 boundary 单元核验**
   (longstate 叶 +1.0 扰动 → `on_segment_boundary` → RESET128 必须复原 init
