@@ -507,10 +507,14 @@ def assemble(common_root, frozen_bank_artifacts, repo_root=None) -> dict:
         src_dir = os.path.join(str(frozen_bank_artifacts), sc)
         src_npz = os.path.join(src_dir, "states.npz")
         src_manifest = os.path.join(src_dir, "manifest.json")
-        require(os.path.isfile(src_npz) and os.path.isfile(src_manifest),
-                "FAIL CLOSED: frozen bank artifact missing for %s under %s"
+        src_sums = os.path.join(src_dir, "SHA256SUMS")
+        require(os.path.isfile(src_npz) and os.path.isfile(src_manifest)
+                and os.path.isfile(src_sums),
+                "FAIL CLOSED: frozen bank artifact incomplete for %s under %s "
+                "(states.npz / manifest.json / SHA256SUMS all required by load_bank)"
                 % (sc, frozen_bank_artifacts))
-        # load_bank-compatible layout + flat contract-named aliases (same bytes).
+        # load_bank-compatible layout (all THREE mint files, byte-exact) + flat
+        # contract-named aliases for the two payload files (same bytes).
         layout_dir = os.path.join(common_root, "frozen_bank_artifacts", sc)
         flat_npz = os.path.join(common_root, "%s_states.npz"
                                 % ("front_bank" if sc == metrics.FRONT
@@ -522,8 +526,10 @@ def assemble(common_root, frozen_bank_artifacts, repo_root=None) -> dict:
         _copy(src_npz, flat_npz)
         sha_man = _copy(src_manifest, os.path.join(layout_dir, "manifest.json"))
         _copy(src_manifest, flat_manifest)
+        sha_sums = _copy(src_sums, os.path.join(layout_dir, "SHA256SUMS"))
         record("frozen_bank_artifacts/%s/states.npz" % sc, src_npz, sha_npz)
         record("frozen_bank_artifacts/%s/manifest.json" % sc, src_manifest, sha_man)
+        record("frozen_bank_artifacts/%s/SHA256SUMS" % sc, src_sums, sha_sums)
         record(os.path.basename(flat_npz), src_npz, sha_npz)
         record(os.path.basename(flat_manifest), src_manifest, sha_man)
 
