@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CC4 Tier3 — negative tests (§十七 NEG01–NEG29).
+"""CC4 Tier3 — negative tests (§十七 NEG01–NEG42).
 
 Each negative test constructs an INVALID input and asserts the corresponding guard
 REJECTS it (fail-closed). A test PASSES when the rejection is correctly detected;
@@ -7,7 +7,7 @@ the suite requirement is FAIL=0 (no negative test silently accepts a violation).
 BLOCKED is allowed only with a documented environment-capability absence — never a
 fake PASS.
 
-Coverage (all 29 implemented; FAIL=0 required):
+Coverage (all 42 implemented; FAIL=0 required):
   NEG01-NEG18  boundary / builder / state-bank / predicate level
   NEG19        episode missing valid_start (evaluator)
   NEG20        ambiguous termination silently labelled (failure taxonomy)
@@ -17,8 +17,21 @@ Coverage (all 29 implemented; FAIL=0 required):
   NEG26        state/sample selection must be blind to Student performance (materializer)
   NEG27        certificate eval_binding must carry real VALUES, never labels (certificate)
   NEG28        tampered frozen bank manifest fails closed (materializer, pure compare)
-  NEG29        certificate provenance (pid/argv/times/exit code/driver SHA) missing or
-               invalid (certificate)
+  NEG29        finalized certificate runner provenance (child pid/argv/times/literal
+               exit code/exit_source/runner SHA) missing or invalid (certificate)
+  NEG30        wrong final checkpoint FILE SHA vs the frozen contract (contract)
+  NEG31        wrong final PARAMS SHA vs the frozen contract (contract)
+  NEG32        step-8192 checkpoint impersonating final 98304 (contract)
+  NEG33        wrong arm name / carry_mode vs the contract arm (contract)
+  NEG34        wrong replay_mode vs the frozen contract (contract)
+  NEG35        wrong seed / run_class vs the frozen contract (contract)
+  NEG36        wrong base_checkpoint_params_sha256 vs the frozen contract (contract)
+  NEG37        self-declared / legacy exit code never accepted (certificate/runner)
+  NEG38        engine cert without runner literal provenance can never finalize (runner)
+  NEG39        non-empty / file output dir rejected; fresh dir accepted (evaluator)
+  NEG40        split Student status labels correct; old ambiguous key gone (certificate)
+  NEG41        both arms' frozen start schedules identical; drift rejected (evaluator)
+  NEG42        carry-mode comparison rule fixed/recomputable + fixed scope fields + forbidden selection vocabulary rejected (selection)
 """
 from __future__ import annotations
 
@@ -38,11 +51,15 @@ import tier3_metrics as metrics                   # noqa: E402
 import tier3_failure_taxonomy as taxonomy         # noqa: E402
 import tier3_evaluator as evaluator              # noqa: E402
 import tier3_evaluation_certificate as certmod    # noqa: E402
+import tier3_checkpoint_contract as contractmod   # noqa: E402
+import tier3_evaluation_runner as runnermod       # noqa: E402
+import tier3_provisional_selection as selection   # noqa: E402
 
 # Every guard may raise its own module's FailClosed (or the reused V3 one).
 FAILCLOSED = (audit.FailClosed, pred.FailClosed, ser.FailClosed, builder.FailClosed,
               mat.FailClosed, ckpt.FailClosed, metrics.FailClosed, taxonomy.FailClosed,
-              evaluator.FailClosed, certmod.FailClosed, ser.v3mat.FailClosed)
+              evaluator.FailClosed, certmod.FailClosed, ser.v3mat.FailClosed,
+              contractmod.FailClosed, runnermod.FailClosed, selection.FailClosed)
 
 KOBOLD = mat.SYNTHETIC_KOBOLD_TYPE_ID   # == resolved craftax==1.4.5 binding (RANGED type_id 3)
 
@@ -281,10 +298,8 @@ def neg25():
     return rejects(lambda: certmod.build_certificate(result, claims=claims))
 
 
-def neg27():
-    """Certificate eval_binding with a hash LABEL / missing value instead of a real
-    64-hex SHA value (or wrong interface / params changed) -> fail."""
-    result = {
+def _front_result():
+    return {
         "scenario": mat.FRONT,
         "contract": {"observation_schema": "canonical_craftax_symbolic"},
         "metrics": {"primary": {"metric": metrics.FRONT_PRIMARY_METRIC, "value": 0.5,
@@ -293,90 +308,140 @@ def neg27():
         "terminal_label_counts": {},
         "rollout_status": "BLOCKED_ENVIRONMENT",
     }
-    binding = {
-        "state_bank_hash": "FRONT_SCAFFOLD_STATE_BANK_HASH",   # a LABEL, not a SHA value
-        "state_payload_hashes": ["a" * 64],
-        "checkpoint_file_sha256": "b" * 64,
-        "cc2_params_sha256": "c" * 64,
-        "checkpoint_step": 4096,
-        "carry_mode": "persistent",
-        "run_class": "INTERFACE_SMOKE",
-        "episode_records_sha256": "d" * 64,
-        "cc2_policy_source_sha256": "e" * 64,
-        "evaluator_source_sha256": "f" * 64,
-        "predicate_code_sha256": "0" * 64,
-        "observation_shape": [8335],
-        "action_dim": 43,
-        "params_unchanged": True,
-        "performance_claim_authorized": False,
-    }
-    label_rejected = rejects(
-        lambda: certmod.build_certificate(result, eval_binding=dict(binding)))
-    empty = dict(binding)
-    empty["state_bank_hash"] = "a" * 64
-    empty["checkpoint_file_sha256"] = None                       # missing value
-    missing_rejected = rejects(
-        lambda: certmod.build_certificate(result, eval_binding=empty))
-    changed = dict(binding)
-    changed["state_bank_hash"] = "a" * 64
-    changed["params_unchanged"] = False                          # params mutated
-    changed_rejected = rejects(
-        lambda: certmod.build_certificate(result, eval_binding=changed))
-    return label_rejected and missing_rejected and changed_rejected
 
 
-def neg29():
-    """Certificate eval_binding with missing / invalid PROCESS PROVENANCE (actual pid /
-    argv / start-end UTC / exit code) or driver-source SHA -> fail closed.
-
-    A complete provenance binding is accepted; ten tamper paths (bad/missing pid,
-    empty argv, empty argv element, unparseable/empty timestamps, non-zero/missing
-    exit code, non-hex/missing driver SHA) are each rejected."""
-    result = {
-        "scenario": mat.FRONT,
-        "contract": {"observation_schema": "canonical_craftax_symbolic"},
-        "metrics": {"primary": {"metric": metrics.FRONT_PRIMARY_METRIC, "value": 0.5,
-                                "valid_starts": 4}},
-        "failure_rule_version": taxonomy.FAILURE_RULE_VERSION,
-        "terminal_label_counts": {},
-        "rollout_status": "BLOCKED_ENVIRONMENT",
-    }
-    binding = {
-        "state_bank_hash": "a" * 64,
-        "state_payload_hashes": ["a" * 64],
-        "checkpoint_file_sha256": "b" * 64,
-        "cc2_params_sha256": "c" * 64,
+def _engine_binding(**over):
+    """A complete ENGINE-STAGE binding (task §一/§五): every frozen field present,
+    NO exit provenance (the engine cannot know its own literal exit code)."""
+    b = {
+        "state_bank_hash": "2" + "a" * 63,
+        "state_payload_hashes": ["b" * 64, "c" * 64],
+        "checkpoint_file_sha256": "d" * 64,
+        "cc2_params_sha256": "e" * 64,
         "checkpoint_step": 98304,
         "carry_mode": "persistent",
         "run_class": "INTERFACE_SMOKE",
-        "episode_records_sha256": "d" * 64,
-        "cc2_policy_source_sha256": "e" * 64,
-        "evaluator_source_sha256": "f" * 64,
-        "predicate_code_sha256": "0" * 64,
-        "driver_source_sha256": "9" * 64,
-        "process_pid": 4242,
-        "process_argv": ["python", "tier3_evaluator.py", "--interface-smoke"],
-        "run_start_utc": "2026-07-30T00:00:00+00:00",
-        "run_end_utc": "2026-07-30T00:05:00+00:00",
-        "run_exit_code": 0,
+        "episode_records_sha256": "f" * 64,
+        "cc2_policy_source_sha256": "0" * 64,
+        "evaluator_source_sha256": "1" * 64,
+        "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525d"
+                                 "ecb1801fa474ee7fb0d25b4c",
         "observation_shape": [8335],
         "action_dim": 43,
         "params_unchanged": True,
         "performance_claim_authorized": False,
+        "driver_source_sha256": "9" * 64,
+        "checkpoint_contract_sha256": "7" * 64,
+        "checkpoint_contract_arm": "persistent",
+        "action_mode": "greedy_argmax",
+        "max_timesteps": 32,
+        "evaluation_seed_schedule": {
+            metrics.FULL: {"kind": "canonical_reset_seeds_smoke", "base": 42,
+                           "count": 2, "seeds": [42, 43]},
+            metrics.FRONT: {"kind": "frozen_bank_state_smoke", "seed_base": 10000,
+                            "stride": 1, "count": 2, "seeds": [10000, 10001]},
+            metrics.BACK: {"kind": "frozen_bank_state_smoke", "seed_base": 10000,
+                           "stride": 1, "count": 2, "seeds": [1010000, 1010001]},
+        },
+        "state_entry_ids": {metrics.FULL: ["full-seed42", "full-seed43"],
+                            metrics.FRONT: ["front_l2-bank0", "front_l2-bank1"],
+                            metrics.BACK: ["back_l2-bank0", "back_l2-bank1"]},
+        "python_version": "3.11.9",
+        "jax_version": "0.4.30",
+        "jaxlib_version": "0.4.30",
+        "numpy_version": "1.26.4",
+        "flax_version": "0.8.5",
+        "craftax_version": "1.4.5",
+        "evaluator_git_commit": "f67675b87ad98b391f82678bc2f937ab30578145",
+        "scientific_claim_authorized": False,
+        "single_training_seed": True,
+        "provisional_selection_only": True,
     }
-    complete_accepted = not rejects(
-        lambda: certmod.build_certificate(result, eval_binding=dict(binding)))
-    tamper_results = []
-    for over in ({"process_pid": None}, {"process_pid": 0},
-                 {"process_argv": []}, {"process_argv": ["python", ""]},
-                 {"run_start_utc": "yesterday"}, {"run_end_utc": None},
-                 {"run_exit_code": 137}, {"run_exit_code": None},
-                 {"driver_source_sha256": "not-a-sha"},
-                 {"driver_source_sha256": None}):
-        b = dict(binding)
+    b.update(over)
+    return b
+
+
+def _exit_binding(**over):
+    """The RUNNER-SUPPLIED provenance (task §二) — literal wait() exit code only."""
+    p = {
+        "child_process_pid": 4242,
+        "child_process_argv": ["python", "-u",
+                               "tools/tier3_scaffolded_evaluation/tier3_evaluator.py",
+                               "--performance-evaluation"],
+        "actual_started_at_utc": "2026-07-30T00:00:00+00:00",
+        "actual_finished_at_utc": "2026-07-30T01:00:00+00:00",
+        "literal_exit_code": 0,
+        "exit_source": "wait_pid",
+        "inferred_from_log": False,
+        "evaluation_runner_source_sha256": "8" * 64,
+    }
+    p.update(over)
+    return p
+
+
+def _prov_entry_ids():
+    return {metrics.FULL: ["full-seed%d" % (200000 + i) for i in range(64)],
+            metrics.FRONT: ["front_l2-bank%d" % i for i in range(8)],
+            metrics.BACK: ["back_l2-bank%d" % i for i in range(8)]}
+
+
+def neg27():
+    """Certificate eval_binding with a hash LABEL / missing value instead of a real
+    64-hex SHA value (or wrong interface / params changed / wrong frozen action
+    identity) -> fail."""
+    label_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(state_bank_hash="FRONT_SCAFFOLD_STATE_BANK_HASH")))
+    missing_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(checkpoint_file_sha256=None)))
+    changed_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(params_unchanged=False)))
+    contract_label_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(checkpoint_contract_sha256="contract-sha-label")))
+    action_mode_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(action_mode="sampling")))
+    complete_ok = not rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding()))
+    return (label_rejected and missing_rejected and changed_rejected
+            and contract_label_rejected and action_mode_rejected and complete_ok)
+
+
+def neg29():
+    """FINALIZED certificate with missing / invalid RUNNER PROVENANCE (child pid /
+    argv / actual start-finish UTC / literal exit code / exit_source / runner source
+    SHA) -> fail closed (task §二).
+
+    A complete runner-finalized binding is accepted; every tamper path (non-zero or
+    missing literal exit code, non-wait_pid exit_source, inferred-from-log, bad pid,
+    empty argv, unparseable/empty timestamps, non-hex runner SHA) is rejected."""
+    def build(**over):
+        b = _engine_binding()
+        b.update(_exit_binding())
         b.update(over)
-        tamper_results.append(rejects(
-            lambda b=b: certmod.build_certificate(result, eval_binding=b)))
+        return certmod.build_certificate(
+            _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+            eval_binding=b, finalized=True)
+    complete_accepted = not rejects(build)
+    tamper_results = [
+        rejects(lambda: build(literal_exit_code=137)),
+        rejects(lambda: build(literal_exit_code=None)),
+        rejects(lambda: build(exit_source="self_declared")),
+        rejects(lambda: build(exit_source="log_inferred")),
+        rejects(lambda: build(inferred_from_log=True)),
+        rejects(lambda: build(child_process_pid=0)),
+        rejects(lambda: build(child_process_pid=None)),
+        rejects(lambda: build(child_process_argv=[])),
+        rejects(lambda: build(child_process_argv=["python", ""])),
+        rejects(lambda: build(actual_started_at_utc="yesterday")),
+        rejects(lambda: build(actual_finished_at_utc="")),
+        rejects(lambda: build(evaluation_runner_source_sha256="not-a-sha")),
+        rejects(lambda: build(evaluation_runner_source_sha256=None)),
+    ]
     return complete_accepted and all(tamper_results)
 
 
@@ -428,6 +493,238 @@ def neg28():
 
 
 # ---------------------------------------------------------------------------
+# NEG30–NEG42 (task §一/§二/§四/§七/§九/§十二): frozen final-98304 checkpoint
+# contract, literal exit provenance, output freshness, split Student labels,
+# identical arm schedules, and the recomputable provisional selection rule.
+# ---------------------------------------------------------------------------
+def _contract_mismatch_rejects(fn) -> bool:
+    """True iff fn() raises the stable FINAL_98304_CHECKPOINT_CONTRACT_MISMATCH id."""
+    try:
+        fn()
+        return False
+    except contractmod.FailClosed as exc:
+        return "FINAL_98304_CHECKPOINT_CONTRACT_MISMATCH" in str(exc)
+
+
+def _contract_run(**kw):
+    """Verify a (possibly tampered) loaded checkpoint against the committed frozen
+    contract's persistent arm."""
+    file_sha = kw.get("file_sha", contractmod.FROZEN_CHECKPOINT_FILE_SHA256["persistent"])
+    params_sha = kw.get("params_sha", contractmod.FROZEN_PARAMS_SHA256["persistent"])
+    manifest = kw.get("manifest", contractmod._synthetic_manifest())
+    driver = kw.get("driver_sha", contractmod.FROZEN_DRIVER_SOURCE_SHA256)
+    policy = kw.get("policy_sha", contractmod.FROZEN_CC2_POLICY_SOURCE_SHA256)
+    return contractmod.verify_checkpoint_against_contract(
+        kw.get("arm", "persistent"), file_sha, params_sha, manifest, driver, policy)
+
+
+def neg30():
+    """Wrong final checkpoint FILE SHA vs the frozen contract -> mismatch id."""
+    return _contract_mismatch_rejects(lambda: _contract_run(file_sha="0" * 64))
+
+
+def neg31():
+    """Wrong final PARAMS SHA vs the frozen contract -> mismatch id."""
+    return _contract_mismatch_rejects(lambda: _contract_run(params_sha="1" * 64))
+
+
+def neg32():
+    """A step-8192 checkpoint impersonating the final 98304 -> mismatch id."""
+    return _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(step=8192)))
+
+
+def neg33():
+    """Wrong arm name OR wrong carry_mode vs the contract arm -> mismatch id."""
+    arm_rejected = _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(
+            arm="RMT16-Evil-Arm")))
+    carry_rejected = _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(
+            carry_mode="reset128")))
+    # the reset128 file SHA must never verify against the persistent arm entry
+    cross_arm_rejected = _contract_mismatch_rejects(
+        lambda: _contract_run(
+            file_sha=contractmod.FROZEN_CHECKPOINT_FILE_SHA256["reset128"]))
+    return arm_rejected and carry_rejected and cross_arm_rejected
+
+
+def neg34():
+    """Wrong replay_mode vs the frozen contract -> mismatch id."""
+    return _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(
+            replay_mode="replay")))
+
+
+def neg35():
+    """Wrong seed OR wrong run_class vs the frozen contract -> mismatch id."""
+    seed_rejected = _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(seed=43)))
+    p4 = dict(contractmod._synthetic_manifest()["phase4a_v2"], run_class="smoke")
+    run_class_rejected = _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(phase4a_v2=p4)))
+    return seed_rejected and run_class_rejected
+
+
+def neg36():
+    """Wrong base_checkpoint_params_sha256 vs the frozen contract -> mismatch id."""
+    p4 = dict(contractmod._synthetic_manifest()["phase4a_v2"],
+              base_checkpoint_params_sha256="2" * 64)
+    return _contract_mismatch_rejects(
+        lambda: _contract_run(manifest=contractmod._synthetic_manifest(phase4a_v2=p4)))
+
+
+def neg37():
+    """Self-declared / legacy exit provenance is NEVER accepted (task §二/§十二-8).
+
+    Legacy fields in an engine binding, an engine certificate that already carries
+    runner provenance, and a finalized binding with a self-declared / log-inferred
+    exit source are each rejected."""
+    legacy_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(run_exit_code=0)))
+    legacy_pid_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(process_pid=4242)))
+    # an engine certificate pre-loaded with runner provenance fails the ENGINE stage
+    pre = _engine_binding()
+    pre.update(_exit_binding())
+    engine_stage_rejected = rejects(
+        lambda: certmod.assert_engine_binding_complete({"eval_binding": pre}))
+    self_declared_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=dict(pre, exit_source="self_declared"), finalized=True))
+    inferred_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=dict(pre, inferred_from_log=True), finalized=True))
+    return (legacy_rejected and legacy_pid_rejected and engine_stage_rejected
+            and self_declared_rejected and inferred_rejected)
+
+
+def neg38():
+    """An engine certificate WITHOUT the runner's literal wait() provenance can never
+    pass FINAL verification (task §二/§十二-9): when the child fails there is no PASS
+    certificate, because only the parent runner can bind literal_exit_code=0."""
+    engine_cert = certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=_engine_binding(), finalized=False)
+    return rejects(lambda: certmod.assert_eval_binding_complete(engine_cert))
+
+
+def neg39():
+    """Non-empty output dir / file path rejected; missing or empty dir fresh
+    (task §四/§十二-10). Never rm -rf, never overwrite."""
+    import tempfile
+    ok = True
+    with tempfile.TemporaryDirectory() as td:
+        missing = os.path.join(td, "new_dir")
+        evaluator.assert_output_dir_fresh(missing)          # must NOT raise
+        os.makedirs(missing)
+        evaluator.assert_output_dir_fresh(missing)          # empty -> fresh
+        with open(os.path.join(missing, "stale.jsonl"), "w") as fh:
+            fh.write("{}\n")
+        ok = ok and rejects(lambda: evaluator.assert_output_dir_fresh(missing))
+        fpath = os.path.join(td, "afile")
+        with open(fpath, "w") as fh:
+            fh.write("x")
+        ok = ok and rejects(lambda: evaluator.assert_output_dir_fresh(fpath))
+    return ok
+
+
+def neg40():
+    """Split Student status labels (task §三/§十二-11,12): smoke vs performance modes
+    label exactly the executed activity; the old ambiguous REAL_STUDENT_EVALUATION
+    key is gone from EVERY mode; the scientific claim stays unauthorized."""
+    ss_smoke = {"student_checkpoint_loaded": True,
+                "student_policy_rollout_executed": True,
+                "performance_evaluation_executed": False,
+                "scientific_claim_authorized": False}
+    ss_perf = dict(ss_smoke, performance_evaluation_executed=True)
+    smoke = certmod.honest_status_labels(True, ss_smoke, "interface_smoke")
+    perf = certmod.honest_status_labels(True, ss_perf, "performance_evaluation")
+    ok = (smoke["REAL_STUDENT_INTERFACE_SMOKE"] == "EXECUTED"
+          and smoke["REAL_STUDENT_PERFORMANCE_EVALUATION"] == "NOT_RUN"
+          and perf["REAL_STUDENT_PERFORMANCE_EVALUATION"] == "EXECUTED"
+          and perf["REAL_STUDENT_INTERFACE_SMOKE"] == "NOT_RUN"
+          and smoke["FORMAL_SCIENTIFIC_CLAIM"] == "NOT_AUTHORIZED_SINGLE_TRAINING_SEED"
+          and perf["FORMAL_SCIENTIFIC_CLAIM"] == "NOT_AUTHORIZED_SINGLE_TRAINING_SEED")
+    # the ambiguous key must never reappear, in any mode
+    for mode in certmod.CERT_MODES:
+        ok = ok and ("REAL_STUDENT_EVALUATION"
+                     not in certmod.honest_status_labels(False, ss_smoke, mode))
+    return ok
+
+
+def neg41():
+    """Both arms run the IDENTICAL frozen start schedule (task §七/§十二-13):
+    performance_start_schedule() is pure and reproduces 64 held-out seeds
+    200000..200063 plus all 8 FRONT/BACK bank states; a drifted schedule is rejected
+    by the certificate binding for PROVISIONAL runs."""
+    s1 = evaluator.performance_start_schedule()
+    s2 = evaluator.performance_start_schedule()
+    identical = (s1 == s2
+                 and s1[metrics.FULL]["seeds"] == [200000 + i for i in range(64)]
+                 and s1[metrics.FULL]["count"] == 64
+                 and s1[metrics.FRONT]["seeds"] == mat.fixed_seed_schedule(
+                     mat.FRONT, mat.FROZEN_BANK_N, mat.FROZEN_SEED_BASE,
+                     mat.FROZEN_SEED_STRIDE)
+                 and s1[metrics.BACK]["seeds"] == mat.fixed_seed_schedule(
+                     mat.BACK, mat.FROZEN_BANK_N, mat.FROZEN_SEED_BASE,
+                     mat.FROZEN_SEED_STRIDE))
+    shifted = json.loads(json.dumps(s1))
+    shifted[metrics.FULL]["seeds"] = [200001 + i for i in range(64)]
+    prov = _engine_binding(run_class="PROVISIONAL_STRONG_STUDENT_SELECTION",
+                           max_timesteps=4096,
+                           evaluation_seed_schedule=shifted,
+                           state_entry_ids=_prov_entry_ids())
+    drift_rejected = rejects(lambda: certmod.build_certificate(
+        _front_result(), state_bank_hash_label="FRONT_SCAFFOLD_STATE_BANK_HASH",
+        eval_binding=prov))
+    return identical and drift_rejected
+
+
+def neg42():
+    """The carry-mode comparison rule is FIXED, machine-readable and strictly
+    RECOMPUTABLE (task §九/§十二-14 + 总控范围修正): identical metrics -> identical
+    RMT16_CARRY_MODE_WINNER; the rule constant is embedded verbatim; EVERY output
+    carries the fixed scope fields (no overall strong-student selection is
+    authorized this round); the forbidden strong-student / bakeoff vocabulary is
+    rejected by the overclaim gate; a run that did not complete the frozen 64/8/8
+    counts is not even extractable."""
+    pm = selection.extract_arm_metrics(selection._result_doc(5, 4, 0.6, 2))
+    rm = selection.extract_arm_metrics(selection._result_doc(3, 4, 0.6, 2, "reset128"))
+    a = selection.select_provisional(pm, rm)
+    b = selection.select_provisional(pm, rm)
+    scope_ok = all(a.get(k) == v
+                   for k, v in selection.FIXED_SCOPE_FIELDS.items())
+    recomputable = (a == b
+                    and a["RMT16_CARRY_MODE_WINNER"] == "PERSISTENT"
+                    and a["decided_at_level"] == 1
+                    and a["rule"] is selection.SELECTION_RULE
+                    and scope_ok
+                    and a["OVERALL_STRONG_STUDENT_SELECTION_AUTHORIZED"] is False
+                    and a["STRONG_STUDENT_V1"] == "NOT_SELECTED"
+                    and a["EXISTING_STUDENT_BAKEOFF_REQUIRED"] is True
+                    and a["SCIENTIFIC_SUPERIORITY_CLAIM"] is False
+                    and a["REQUIRES_MULTI_SEED_CONFIRMATION"] is True
+                    and "PROVISIONAL_STRONG_STUDENT_RECOMMENDATION" not in a)
+    # 总控 §二: the overclaim gate rejects the forbidden selection vocabulary
+    # outright (existing gate, no new NEG number).
+    forbidden_rejected = all(
+        rejects(lambda claim=c: selection.assert_no_forbidden_claims(
+            {"note": claim}))
+        for c in ("PROVISIONAL_STRONG_STUDENT_RECOMMENDATION",
+                  "STRONG_STUDENT_V1=PERSISTENT",
+                  "STRONG_STUDENT_V1=RESET128",
+                  "BEST_OVERALL_STUDENT",
+                  "ALL_STUDENT_BAKEOFF_WINNER"))
+    wrong = selection._result_doc(5, 4, 0.6, 2)
+    wrong["results"][metrics.FULL]["metrics"]["primary"]["valid_starts"] = 63
+    count_gate = rejects(lambda: selection.extract_arm_metrics(wrong))
+    return recomputable and forbidden_rejected and count_gate
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 NEG_TESTS = [
@@ -459,11 +756,24 @@ NEG_TESTS = [
     ("NEG26", "result-based state/sample selection", neg26),
     ("NEG27", "certificate eval_binding label / missing value / params changed", neg27),
     ("NEG28", "tampered frozen bank manifest (payload / hash / seeds)", neg28),
-    ("NEG29", "certificate provenance missing/invalid (pid/argv/times/exit/driver SHA)",
-     neg29),
+    ("NEG29", "finalized certificate runner provenance missing/invalid", neg29),
+    ("NEG30", "wrong final checkpoint file SHA vs frozen contract", neg30),
+    ("NEG31", "wrong final params SHA vs frozen contract", neg31),
+    ("NEG32", "step-8192 checkpoint impersonating final 98304", neg32),
+    ("NEG33", "wrong arm name / carry_mode / cross-arm file SHA", neg33),
+    ("NEG34", "wrong replay_mode vs frozen contract", neg34),
+    ("NEG35", "wrong seed / run_class vs frozen contract", neg35),
+    ("NEG36", "wrong base_checkpoint_params_sha256 vs frozen contract", neg36),
+    ("NEG37", "self-declared / legacy exit code never accepted", neg37),
+    ("NEG38", "engine cert without literal runner provenance never finalizes", neg38),
+    ("NEG39", "non-empty / file output dir rejected (freshness gate)", neg39),
+    ("NEG40", "split Student status labels; ambiguous key removed", neg40),
+    ("NEG41", "both arms' frozen start schedules identical; drift rejected", neg41),
+    ("NEG42", "comparison rule fixed + scope fields + forbidden vocab rejected", neg42),
 ]
 
-# All 29 NEG tests are implemented (NEG19-23/25 landed with the Commit-3 modules).
+# All 42 NEG tests are implemented (NEG30-42 land with the frozen final-98304
+# checkpoint contract + runner provenance + provisional selection work).
 PENDING_COMMIT_3 = []
 
 
@@ -494,7 +804,7 @@ def self_test() -> int:
     if n_fail != 0:
         print("TIER3_NEGATIVE_TESTS_FAIL (FAIL=%d/%d implemented)" % (n_fail, implemented))
         return 1
-    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/29, pending_commit3=%d)"
+    print("TIER3_NEGATIVE_TESTS_PASS (FAIL=0; implemented=%d/42, pending_commit3=%d)"
           % (implemented, pending))
     return 0
 

@@ -428,12 +428,25 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
 
 
 # ---------------------------------------------------------------------------
-# REAL CLI — interface smoke bound to a real CC2 checkpoint + policy adapter
+# REAL CLI — evaluation bound to a real CC2 checkpoint + frozen contract
 # ---------------------------------------------------------------------------
 # Deterministic canonical-reset rng seeds for the FULL interface smoke (FULL starts
 # are canonical S4 resets; FRONT/BACK starts come from the frozen bank schedule).
 FULL_SMOKE_SEED_BASE = 42
 SCENARIO_ALIASES = {"front_l2": FRONT, "back_l2": BACK, "full": FULL, "all": "all"}
+
+# Run classes (task §三/§六): smoke is chain verification only; the provisional
+# selection evaluation is single-seed, provisional, and authorizes no scientific
+# claim. FORMAL_EVALUATION remains certificate-side only (multi-seed; not this round).
+RUN_CLASS_SMOKE = "INTERFACE_SMOKE"
+RUN_CLASS_PROVISIONAL = "PROVISIONAL_STRONG_STUDENT_SELECTION"
+
+# Frozen held-out FULL start seeds for the provisional selection evaluation (task §七):
+# 64 canonical reset seeds 200000..200063 — never used by training, never overlapping
+# the smoke base; FRONT/BACK use the frozen 8-state banks, each state exactly once.
+PERF_FULL_SEED_BASE = 200_000
+PERF_FULL_N = 64
+PERF_FULL_SEEDS = [PERF_FULL_SEED_BASE + i for i in range(PERF_FULL_N)]
 
 
 def _sha256_lf_file(path: str) -> str:
@@ -443,33 +456,129 @@ def _sha256_lf_file(path: str) -> str:
         return hashlib.sha256(fh.read().replace(b"\r\n", b"\n")).hexdigest()
 
 
-def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
-                        out_dir: str, episodes: int = 2, max_steps: int = 32,
-                        driver_source: str = None) -> dict:
-    """The REAL evaluation CLI path (task §六), fail-closed end to end:
+def performance_start_schedule() -> dict:
+    """The FROZEN provisional-selection start schedule (task §七). Pure; depends on
+    no arm / checkpoint / result, and BOTH arms MUST consume the identical return
+    value: FULL = 64 held-out canonical reset seeds 200000..200063; FRONT_L2 /
+    BACK_L2 = all 8 frozen bank states, each exactly once (frozen bank schedule)."""
+    import tier3_state_bank_materializer as mat
+    front_seeds = mat.fixed_seed_schedule(FRONT, mat.FROZEN_BANK_N,
+                                          mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE)
+    back_seeds = mat.fixed_seed_schedule(BACK, mat.FROZEN_BANK_N,
+                                         mat.FROZEN_SEED_BASE, mat.FROZEN_SEED_STRIDE)
+    return {
+        FULL: {"kind": "canonical_reset_seeds_held_out", "base": PERF_FULL_SEED_BASE,
+               "count": PERF_FULL_N, "seeds": list(PERF_FULL_SEEDS)},
+        FRONT: {"kind": "frozen_bank_state_each_once", "seed_base": mat.FROZEN_SEED_BASE,
+                "stride": mat.FROZEN_SEED_STRIDE, "count": mat.FROZEN_BANK_N,
+                "seeds": list(front_seeds)},
+        BACK: {"kind": "frozen_bank_state_each_once", "seed_base": mat.FROZEN_SEED_BASE,
+               "stride": mat.FROZEN_SEED_STRIDE, "count": mat.FROZEN_BANK_N,
+               "seeds": list(back_seeds)},
+    }
 
-      --checkpoint        CC2 full_state.pkl (DIRECT pytree + manifest; NEG21-verified)
-      --cc2_snapshot_root CC2 source snapshot root (bytes-bound; modules must import
-                          from exactly there; NO RMT/GTrXL reimplementation in CC4)
-      --cc2_driver_source SHA-bound CC2 driver source (AST-literal-parsed for the
-                          frozen Cfg; real manifests carry config={} by design)
-      --scenario          front_l2 | back_l2 | full | all
-      --out               output dir (episode_records.jsonl, evaluation_result.json,
-                          evaluation_certificate.json, SHA256SUMS)
-      --interface-smoke   run_class=INTERFACE_SMOKE, max_steps<=32 default,
-                          performance_claim_authorized=False ALWAYS (no performance
-                          numbers, no arm comparison — chain verification only)
 
-    Before any rollout BOTH frozen bank identities (FRONT+BACK) are re-verified in
-    memory (verify_frozen_bank_identity; nothing written to disk, banks unmodified).
-    The certificate binds ACTUAL VALUES (NEG27/NEG29): state_bank_hash, ordered state
-    payload hashes, checkpoint file SHA, CC2 params SHA, checkpoint step, carry_mode,
-    run_class, episode-records SHA, CC2 policy source SHA, evaluator source SHA,
-    predicate code SHA, observation shape (8335), action dim (43), params_unchanged,
-    driver_source_sha256, and REAL process provenance (pid / argv / start-end UTC /
-    exit code).
+def state_entry_ids_for(scenario: str, seeds: list) -> list:
+    """Stable, scenario-qualified entry ids for one scenario's seed list."""
+    if scenario == FULL:
+        return ["full-seed%d" % int(s) for s in seeds]
+    return ["%s-bank%d" % (scenario, i) for i in range(len(seeds))]
+
+
+def assert_output_dir_fresh(out_dir: str):
+    """Output-freshness gate (task §四): the final output directory must not exist or
+    must be empty. Refuses rm -rf, auto-overwrite, appending, auto-renaming — the
+    operator must clear a non-empty directory manually, then re-run."""
+    if os.path.exists(out_dir):
+        require(os.path.isdir(out_dir),
+                "FAIL CLOSED (EVALUATION_OUTPUT_DIRECTORY_NOT_FRESH): %r exists and is "
+                "not a directory" % out_dir)
+        entries = os.listdir(out_dir)
+        require(not entries,
+                "FAIL CLOSED (EVALUATION_OUTPUT_DIRECTORY_NOT_FRESH): output directory "
+                "%r is not empty (%d entries, e.g. %s). Refusing to overwrite / append "
+                "/ rename: clear it manually, then re-run."
+                % (out_dir, len(entries), sorted(entries)[:5]))
+    return True
+
+
+def _runtime_versions() -> dict:
+    """Actual runtime versions (task §五): Python / JAX / jaxlib / NumPy / Flax /
+    Craftax. Any failure to determine a version fails closed."""
+    import platform
+    import importlib
+    out = {"python_version": platform.python_version()}
+    for key, modname in (("jax_version", "jax"), ("jaxlib_version", "jaxlib"),
+                         ("numpy_version", "numpy"), ("flax_version", "flax"),
+                         ("craftax_version", "craftax")):
+        v = None
+        try:
+            v = getattr(importlib.import_module(modname), "__version__", None)
+        except Exception:
+            v = None
+        if not v:
+            try:
+                import importlib.metadata as md
+                v = md.version(modname)
+            except Exception:
+                v = None
+        require(v, "FAIL CLOSED: cannot determine %s (module %r unavailable)"
+                % (key, modname))
+        out[key] = str(v)
+    return out
+
+
+def _git_commit_head() -> str:
+    """The evaluator repo HEAD (40-hex) at run time — binds the certificate to the
+    exact evaluated code revision. Fails closed if git is unavailable."""
+    import subprocess
+    root = str(audit.repo_root())
+    try:
+        proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                              capture_output=True, text=True, timeout=60)
+    except Exception as exc:
+        raise FailClosed("FAIL CLOSED: cannot determine evaluator_git_commit: %r" % exc)
+    require(proc.returncode == 0,
+            "FAIL CLOSED: git rev-parse HEAD failed (rc=%d): %s"
+            % (proc.returncode, (proc.stderr or "").strip()[:200]))
+    sha = (proc.stdout or "").strip()
+    require(len(sha) == 40 and all(c in "0123456789abcdef" for c in sha),
+            "FAIL CLOSED: git rev-parse HEAD returned %r (not a 40-hex commit)" % sha)
+    return sha
+
+
+def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
+                   out_dir: str, run_class: str, contract_path: str = None,
+                   arm: str = None, episodes: int = 2, max_steps: int = None,
+                   driver_source: str = None) -> dict:
+    """The REAL evaluation engine (task §一/§五/§六/§七), fail-closed end to end.
+
+    Two run classes share ONE frozen contract (greedy_argmax, max_timesteps<=4096,
+    canonical obs 8335 / 43 actions):
+
+      * INTERFACE_SMOKE            — chain verification only (short caps);
+      * PROVISIONAL_STRONG_STUDENT_SELECTION — the frozen provisional selection
+        evaluation: FULL = 64 held-out canonical reset seeds 200000..200063,
+        FRONT_L2/BACK_L2 = all 8 frozen bank states each exactly once, every episode
+        under the full 4096-step cap. Both arms consume the IDENTICAL schedule.
+
+    Gates, in order (each fail closed, each before any binding):
+      0. anti-pollution hook gate (handover §7; fires before any JAX import)
+      1. output-directory freshness (task §四: non-empty -> rejected; no rm -rf /
+         overwrite / append / rename)
+      2. checkpoint contract loaded + self-checksum-verified; the LOADED checkpoint
+         (file SHA, recomputed params SHA, every manifest field) verified against the
+         declared arm -> FINAL_98304_CHECKPOINT_CONTRACT_MISMATCH on any drift
+      3. CC2 policy source / driver Cfg / NEG21 / env interface / frozen banks
+      4. rollouts + NEG23 (params unchanged)
+
+    The engine writes episode_records.jsonl / evaluation_result.json /
+    evaluation_certificate.json with ENGINE-STAGE certificates (no exit provenance —
+    task §二: the engine cannot know its own literal exit code). SHA256SUMS and the
+    runner provenance are added ONLY by tier3_evaluation_runner.py after wait()-ing
+    on this process and reading its literal exit code.
     """
-    # ANTI-POLLUTION GATE (handover §7): RMT16_POSTJAX_BINDING_SELFTEST=1 makes the
+    # 0. ANTI-POLLUTION GATE (handover §7): RMT16_POSTJAX_BINDING_SELFTEST=1 makes the
     # CC2 driver exit rc=0 BEFORE training (false success). Refuse to bind ANY
     # checkpoint while it is set — fail closed; never silently pop-and-continue.
     hook = os.environ.get("RMT16_POSTJAX_BINDING_SELFTEST", "")
@@ -477,12 +586,13 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
             "FAIL CLOSED (anti-pollution): RMT16_POSTJAX_BINDING_SELFTEST=%r is set; "
             "this hook makes the CC2 driver exit rc=0 before training (false success). "
             "Unset it before any real checkpoint binding." % hook)
-    # REAL process provenance for the certificate (NEG29): the actual child pid / argv
-    # / start time of this evaluation; end time + exit code are stamped at the end.
-    import datetime as _dt
-    run_start = _dt.datetime.now(_dt.timezone.utc)
-    process_pid = os.getpid()
-    process_argv = [str(a) for a in sys.argv] or ["<no-argv>"]
+    require(run_class in (RUN_CLASS_SMOKE, RUN_CLASS_PROVISIONAL),
+            "FAIL CLOSED: run_class %r not in (%s, %s)"
+            % (run_class, RUN_CLASS_SMOKE, RUN_CLASS_PROVISIONAL))
+    is_perf = run_class == RUN_CLASS_PROVISIONAL
+
+    # 1. Output freshness (task §四).
+    assert_output_dir_fresh(out_dir)
 
     import json
     import hashlib
@@ -492,25 +602,49 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
     import tier3_boundary_schema as bnd
     import tier3_cc2_policy_adapter as policy_adapter
     import tier3_evaluation_certificate as certmod
+    import tier3_checkpoint_contract as contractmod
 
     require(ser.have_jax_craftax(),
             "FAIL CLOSED (BLOCKED_ENVIRONMENT): the real CLI requires JAX+craftax "
             "(jax=%s, craftax=%s)" % (ser.have_jax(), ser.have_craftax()))
-    require(scenario in SCENARIO_ALIASES,
-            "FAIL CLOSED: --scenario %r not in %s" % (scenario, sorted(SCENARIO_ALIASES)))
-    scenarios = [FULL, FRONT, BACK] if SCENARIO_ALIASES[scenario] == "all" \
-        else [SCENARIO_ALIASES[scenario]]
-    require(1 <= int(episodes) <= mat.FROZEN_BANK_N,
-            "FAIL CLOSED: --episodes %r outside [1, %d]" % (episodes, mat.FROZEN_BANK_N))
-    episodes = int(episodes)
-    require(1 <= int(max_steps) <= MAX_TIMESTEPS,
-            "FAIL CLOSED: --max-steps %r outside [1, %d]" % (max_steps, MAX_TIMESTEPS))
-    max_steps = int(max_steps)
+
+    # 2. Frozen start schedule (task §七). Performance: the frozen held-out schedule;
+    #    smoke: a short prefix of the same deterministic schedules.
+    if is_perf:
+        scenarios = [FULL, FRONT, BACK]
+        schedule = performance_start_schedule()
+        max_steps = MAX_TIMESTEPS
+    else:
+        require(scenario in SCENARIO_ALIASES,
+                "FAIL CLOSED: --scenario %r not in %s"
+                % (scenario, sorted(SCENARIO_ALIASES)))
+        scenarios = [FULL, FRONT, BACK] if SCENARIO_ALIASES[scenario] == "all" \
+            else [SCENARIO_ALIASES[scenario]]
+        require(1 <= int(episodes) <= mat.FROZEN_BANK_N,
+                "FAIL CLOSED: --episodes %r outside [1, %d]"
+                % (episodes, mat.FROZEN_BANK_N))
+        episodes = int(episodes)
+        if max_steps is None:
+            max_steps = 32
+        require(1 <= int(max_steps) <= MAX_TIMESTEPS,
+                "FAIL CLOSED: --max-steps %r outside [1, %d]" % (max_steps, MAX_TIMESTEPS))
+        max_steps = int(max_steps)
+        schedule = {}
+        for sc in scenarios:
+            seeds = ([FULL_SMOKE_SEED_BASE + i for i in range(episodes)] if sc == FULL
+                     else mat.fixed_seed_schedule(sc, mat.FROZEN_BANK_N,
+                                                  mat.FROZEN_SEED_BASE,
+                                                  mat.FROZEN_SEED_STRIDE)[:episodes])
+            schedule[sc] = {
+                "kind": ("canonical_reset_seeds_smoke" if sc == FULL
+                         else "frozen_bank_state_smoke"),
+                "count": len(seeds), "seeds": [int(s) for s in seeds],
+            }
     os.makedirs(out_dir, exist_ok=True)
 
-    # 1. CC2 policy source identity (byte-bound) + real module import from the root.
+    # 3. CC2 policy source identity (byte-bound) + real module import from the root.
     modules, src_id = policy_adapter.load_cc2_policy_modules(cc2_snapshot_root)
-    # 1b. Frozen network hyperparameters from the SHA-bound driver SOURCE — real
+    # 3b. Frozen network hyperparameters from the SHA-bound driver SOURCE — real
     #     manifests carry config={} BY DESIGN (Cfg is a class-attributes class). The
     #     driver is AST-literal-parsed only: never executed, never guessed, never
     #     defaulted; its LF-SHA must equal the frozen value (fail closed).
@@ -518,39 +652,53 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
         driver_source = policy_adapter.DEFAULT_DRIVER_SOURCE
     driver_cfg, driver_sha = policy_adapter.load_cfg_from_driver_source(
         driver_source, policy_adapter.FROZEN_DRIVER_FILE_SHA256)
-    # 2. CC2 checkpoint (REAL full_state.pkl format; NEG21 verified inside).
+
+    # 4. CC2 checkpoint (REAL full_state.pkl format; NEG21 verified inside) +
+    #    frozen final-checkpoint CONTRACT verification of the LOADED bytes/manifest
+    #    (task §一 — verify, not copy).
+    require(contract_path is not None and arm is not None,
+            "FAIL CLOSED: the evaluation CLI requires --checkpoint-contract <PATH> and "
+            "--arm {persistent|reset128} (frozen final-98304 checkpoint contract)")
+    contract = contractmod.load_contract(contract_path)
     params, params_sha, manifest, file_sha = ckpt.load_full_params_readonly(checkpoint_path)
-    # 3. Canonical evaluation environment + frozen interface assertion.
+    contract_verification = contractmod.verify_checkpoint_against_contract(
+        arm, file_sha, params_sha, manifest, driver_sha,
+        src_id["cc2_policy_source_sha256"], contract)
+
+    # 5. Canonical evaluation environment + frozen interface assertion.
     entry = make_canonical_env()
     require(tuple(entry["observation_shape"]) == (8335,),
             "FAIL CLOSED: observation shape %s != frozen (8335,)"
             % (entry["observation_shape"],))
     require(int(entry["action_count"]) == 43,
             "FAIL CLOSED: action count %d != frozen 43" % entry["action_count"])
-    # 4. Network + greedy policy built from the SHA-bound driver Cfg, cross-checked
+    # 6. Network + greedy policy built from the SHA-bound driver Cfg, cross-checked
     #    against the manifest (carry_mode is READ from the manifest, never chosen
     #    here; params stay read-only).
     network, rmt_cfg, carry_mode = policy_adapter.build_network_from_manifest(
         modules, manifest, entry["action_count"], driver_cfg)
+    require(carry_mode == arm,
+            "FAIL CLOSED (FINAL_98304_CHECKPOINT_CONTRACT_MISMATCH): loaded carry_mode "
+            "%r != contract arm %r" % (carry_mode, arm))
     policy = policy_adapter.CC2RMT16Policy(
         modules, network, params, rmt_cfg, carry_mode,
         driver_cfg["window_mem"], driver_cfg["num_heads"],
         driver_cfg["num_layers"], driver_cfg["embed_size"])
-    # 5. Re-verify BOTH frozen bank identities before any real evaluation.
+    # 7. Re-verify BOTH frozen bank identities before any real evaluation.
     frozen_bindings = {sc: mat.verify_frozen_bank_identity(sc) for sc in (FRONT, BACK)}
     rec_before = ckpt.make_cc2_checkpoint_record(
         params, manifest, file_sha, entry["observation_shape"],
         "canonical_craftax_action_set",
-        checkpoint_ref=os.path.abspath(checkpoint_path),
+        checkpoint_ref=checkpoint_path,      # invocation record; SHA is the identity
         driver_source_sha256=driver_sha)
 
-    # 6. Rollouts (params read-only; fresh real RMT+GTrXL state per episode).
+    # 8. Rollouts (params read-only; fresh real RMT+GTrXL state per episode; the
+    #    frozen schedule is consumed exactly — a scaffold state is never repeated to
+    #    fake more samples).
     records_by_scenario, results_by_scenario = {}, {}
     for sc in scenarios:
-        seeds = ([FULL_SMOKE_SEED_BASE + i for i in range(episodes)] if sc == FULL
-                 else mat.fixed_seed_schedule(sc, mat.FROZEN_BANK_N,
-                                              mat.FROZEN_SEED_BASE,
-                                              mat.FROZEN_SEED_STRIDE)[:episodes])
+        seeds = [int(s) for s in schedule[sc]["seeds"]]
+        entry_ids = state_entry_ids_for(sc, seeds)
         eps = []
         for i, seed in enumerate(seeds):
             policy.reset()
@@ -560,34 +708,52 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
                     entry["task_embeddings"])
             else:
                 start_state = builder.materialize_start(sc, int(seed))
-            eps.append(rollout_episode(entry, start_state, sc, policy,
-                                       "%s-ep%d" % (sc, i), int(seed),
-                                       max_steps=max_steps))
+            rec = rollout_episode(entry, start_state, sc, policy, entry_ids[i],
+                                  int(seed), max_steps=max_steps)
+            eps.append(rec)
+            print("  [%s %d/%d %s seed=%d] steps=%d defeat=%s died=%s "
+                  "transition=%s engaged=%s"
+                  % (sc, i + 1, len(seeds), entry_ids[i], seed, rec["timesteps"],
+                     rec["defeat_kobold"], rec["player_died"],
+                     rec["front_floor_transition_reached"], rec["kobold_engaged"]),
+                  flush=True)
         lines = [json.dumps(r, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
                  for r in eps]
         records_by_scenario[sc] = {
-            "seeds": [int(s) for s in seeds],
+            "seeds": seeds,
             "episode_records": eps,
             "episode_records_sha256": hashlib.sha256(
                 ("\n".join(lines) + "\n").encode("utf-8")).hexdigest(),
         }
         results_by_scenario[sc] = evaluate(sc, eps)
 
-    # 7. NEG23: params byte-identical after every rollout.
+    # 9. NEG23: params byte-identical after every rollout.
     rec_after = dict(rec_before)
     rec_after["params_sha256"] = ckpt.cc2_params_sha256(params)
     ckpt.assert_evaluation_does_not_update_params(rec_before, rec_after)
 
-    # 8. Certificates with REAL value bindings (NEG27).
+    # 10. ENGINE-STAGE certificates with REAL value bindings (NEG27). NO exit
+    #     provenance here (task §二): the parent runner finalizes these after
+    #     wait()-ing on this child and reading its literal exit code.
     evaluator_sha = _sha256_lf_file(os.path.abspath(__file__))
     psha = bnd.predicate_code_sha256()
     require(psha == mat.FROZEN_PREDICATE_CODE_SHA256,
             "FAIL CLOSED: predicate code SHA %s != frozen %s"
             % (psha[:16], mat.FROZEN_PREDICATE_CODE_SHA256[:16]))
-    # REAL process provenance (NEG29): end time + successful exit code, stamped after
-    # every rollout / NEG23 check passed and before the certificates are built.
-    run_end = _dt.datetime.now(_dt.timezone.utc)
-    run_exit_code = 0
+    versions = _runtime_versions()
+    git_commit = _git_commit_head()
+    entry_ids_by_scenario = {sc: state_entry_ids_for(
+        sc, [int(s) for s in schedule[sc]["seeds"]]) for sc in scenarios}
+    mode_label = "performance_evaluation" if is_perf else "interface_smoke"
+    student_state = {
+        "student_checkpoint_loaded": True,
+        "student_policy_rollout_executed": True,
+        "performance_evaluation_executed": bool(is_perf),
+        "scientific_claim_authorized": False,
+    }
+    claims = (["PROVISIONAL_SELECTION_ONLY", "SINGLE_TRAINING_SEED",
+               "NO_SCIENTIFIC_SUPERIORITY_CLAIM"] if is_perf
+              else ["INTERFACE_SMOKE_ONLY"])
     certs = {}
     for sc in scenarios:
         scaffolded = sc in (FRONT, BACK)
@@ -602,17 +768,28 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
             "cc2_params_sha256": params_sha,
             "checkpoint_step": manifest.get("step"),
             "carry_mode": carry_mode,
-            "run_class": "INTERFACE_SMOKE",
+            "run_class": run_class,
             "episode_records_sha256": records_by_scenario[sc]["episode_records_sha256"],
             "cc2_policy_source_sha256": src_id["cc2_policy_source_sha256"],
             "evaluator_source_sha256": evaluator_sha,
             "predicate_code_sha256": psha,
             "driver_source_sha256": driver_sha,
-            "process_pid": process_pid,
-            "process_argv": process_argv,
-            "run_start_utc": run_start.isoformat(timespec="seconds"),
-            "run_end_utc": run_end.isoformat(timespec="seconds"),
-            "run_exit_code": run_exit_code,
+            "checkpoint_contract_sha256": contract["checkpoint_contract_sha256"],
+            "checkpoint_contract_arm": arm,
+            "action_mode": ACTION_MODE,
+            "max_timesteps": int(max_steps),
+            "evaluation_seed_schedule": schedule,
+            "state_entry_ids": entry_ids_by_scenario,
+            "python_version": versions["python_version"],
+            "jax_version": versions["jax_version"],
+            "jaxlib_version": versions["jaxlib_version"],
+            "numpy_version": versions["numpy_version"],
+            "flax_version": versions["flax_version"],
+            "craftax_version": versions["craftax_version"],
+            "evaluator_git_commit": git_commit,
+            "scientific_claim_authorized": False,
+            "single_training_seed": True,
+            "provisional_selection_only": True,
             "observation_shape": list(entry["observation_shape"]),
             "action_dim": int(entry["action_count"]),
             "params_unchanged": True,
@@ -623,10 +800,11 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
                  else "CANONICAL_TASK_RESET_CONTRACT")
         certs[sc] = certmod.build_certificate(
             results_by_scenario[sc], state_bank_hash_label=label,
-            claims=["INTERFACE_SMOKE_ONLY"], has_real_rollout=True,
-            has_student_data=False, eval_binding=binding)
+            claims=claims, has_real_rollout=True, student_state=student_state,
+            mode=mode_label, eval_binding=binding, finalized=False)
 
-    # 9. Deterministic artifacts + SHA256SUMS.
+    # 11. Deterministic artifacts. SHA256SUMS is written ONLY by the runner after it
+    #     finalizes the certificates with the literal exit provenance (task §二).
     jl = os.path.join(out_dir, "episode_records.jsonl")
     with open(jl, "w", encoding="utf-8", newline="\n") as fh:
         for sc in scenarios:
@@ -634,10 +812,21 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
                 fh.write(json.dumps(r, sort_keys=True, ensure_ascii=False,
                                     separators=(",", ":")) + "\n")
     result_doc = {
-        "schema": SCHEMA, "run_class": "INTERFACE_SMOKE",
+        "schema": SCHEMA, "run_class": run_class,
         "performance_claim_authorized": False,
-        "max_steps": max_steps, "episodes_per_scenario": episodes,
-        "scenario_alias": scenario,
+        "scientific_claim_authorized": False,
+        "single_training_seed": True,
+        "provisional_selection_only": True,
+        "max_steps": max_steps,
+        "evaluation_seed_schedule": schedule,
+        "state_entry_ids": entry_ids_by_scenario,
+        "checkpoint_contract": {
+            "checkpoint_contract_sha256": contract["checkpoint_contract_sha256"],
+            "arm": arm,
+            "verified": contract_verification["verified"],
+        },
+        "runtime_versions": versions,
+        "evaluator_git_commit": git_commit,
         "checkpoint": rec_before,
         "cc2_policy_source": src_id,
         "frozen_bank_bindings": frozen_bindings,
@@ -655,24 +844,41 @@ def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: 
               encoding="utf-8", newline="\n") as fh:
         json.dump(certs, fh, indent=2, sort_keys=True, ensure_ascii=False)
         fh.write("\n")
-    sums = {}
-    for name in ("episode_records.jsonl", "evaluation_result.json",
-                 "evaluation_certificate.json"):
-        with open(os.path.join(out_dir, name), "rb") as fh:
-            sums[name] = hashlib.sha256(fh.read()).hexdigest()
-    with open(os.path.join(out_dir, "SHA256SUMS"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        for name in sorted(sums):
-            fh.write("%s  %s\n" % (sums[name], name))
 
     for sc in scenarios:
         res = results_by_scenario[sc]
         print("  [%s] episodes=%d valid_start=%d/%d labels=%s"
               % (sc, res["episode_count"], res["valid_start_count"],
                  res["episode_count"], res["terminal_label_counts"]))
-    return {"run_class": "INTERFACE_SMOKE", "scenarios": scenarios,
+    return {"run_class": run_class, "arm": arm, "scenarios": scenarios,
             "out_dir": os.path.abspath(out_dir),
-            "params_unchanged": True, "performance_claim_authorized": False}
+            "checkpoint_contract_sha256": contract["checkpoint_contract_sha256"],
+            "params_unchanged": True, "performance_claim_authorized": False,
+            "scientific_claim_authorized": False}
+
+
+def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
+                        out_dir: str, episodes: int = 2, max_steps: int = 32,
+                        driver_source: str = None, contract_path: str = None,
+                        arm: str = None) -> dict:
+    """REAL interface smoke (run_class=INTERFACE_SMOKE, chain verification only;
+    performance_claim_authorized=False ALWAYS). Thin wrapper over run_evaluation."""
+    return run_evaluation(checkpoint_path, cc2_snapshot_root, scenario, out_dir,
+                          RUN_CLASS_SMOKE, contract_path=contract_path, arm=arm,
+                          episodes=episodes, max_steps=max_steps,
+                          driver_source=driver_source)
+
+
+def run_performance_evaluation(checkpoint_path: str, cc2_snapshot_root: str,
+                               out_dir: str, contract_path: str, arm: str,
+                               driver_source: str = None) -> dict:
+    """The frozen PROVISIONAL_STRONG_STUDENT_SELECTION evaluation (task §六): greedy
+    argmax, max_timesteps=4096, FULL 64 held-out seeds 200000..200063 + FRONT/BACK
+    all 8 frozen bank states each once, performance_evaluation_executed=true,
+    scientific_claim_authorized=false, provisional_selection_only=true."""
+    return run_evaluation(checkpoint_path, cc2_snapshot_root, "all", out_dir,
+                          RUN_CLASS_PROVISIONAL, contract_path=contract_path, arm=arm,
+                          driver_source=driver_source)
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +957,59 @@ def self_test() -> int:
     except (ckpt.FailClosed, FailClosed):
         check("NEG23_changed_params_rejected", True)
 
+    # task §七 pure gates (any host): the frozen provisional start schedule is
+    # IDENTICAL for both arms and reproduces the held-out seeds exactly; entry ids
+    # derive deterministically from (scenario, seed).
+    sched = performance_start_schedule()
+    check("perf_schedule_full_frozen",
+          sched[FULL]["seeds"] == [200000 + i for i in range(64)]
+          and sched[FULL]["count"] == 64
+          and sched[FULL]["kind"] == "canonical_reset_seeds_held_out")
+    check("perf_schedule_front_frozen",
+          sched[FRONT]["seeds"] == [10000 + i for i in range(8)]
+          and sched[FRONT]["count"] == 8)
+    check("perf_schedule_back_frozen",
+          sched[BACK]["seeds"] == [1010000 + i for i in range(8)]
+          and sched[BACK]["count"] == 8)
+    check("perf_schedule_arm_identical",
+          performance_start_schedule() == sched)      # one schedule, both arms
+    check("entry_ids_full",
+          state_entry_ids_for(FULL, [200000, 200001])
+          == ["full-seed200000", "full-seed200001"])
+    check("entry_ids_bank",
+          state_entry_ids_for(FRONT, [10000]) == ["front_l2-bank0"])
+
+    # task §四 pure gates (any host): output freshness — a missing or empty dir is
+    # fresh; a non-empty dir or a file path is rejected (no rm -rf / overwrite).
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        fresh = os.path.join(td, "new_dir")
+        assert_output_dir_fresh(fresh)                 # not-yet-existing -> fresh
+        os.makedirs(fresh)
+        assert_output_dir_fresh(fresh)                 # existing + empty -> fresh
+        with open(os.path.join(fresh, "x.json"), "w") as fh:
+            fh.write("{}")
+        try:
+            assert_output_dir_fresh(fresh)
+            check("NEG39_nonempty_dir_rejected", False)
+        except FailClosed:
+            check("NEG39_nonempty_dir_rejected", True)
+        fpath = os.path.join(td, "afile")
+        with open(fpath, "w") as fh:
+            fh.write("x")
+        try:
+            assert_output_dir_fresh(fpath)
+            check("NEG39_path_is_file_rejected", False)
+        except FailClosed:
+            check("NEG39_path_is_file_rejected", True)
+
+    # run_class gate (pure): only the two frozen run classes are accepted.
+    try:
+        run_evaluation("<none>", "<none>", "all", "<none>", "SMOKE_BUT_PERFORMANCE")
+        check("bad_run_class_rejected", False)
+    except FailClosed:
+        check("bad_run_class_rejected", True)
+
     # ANTI-POLLUTION GATE (handover §7; pure, any host): run_interface_smoke must FAIL
     # CLOSED while RMT16_POSTJAX_BINDING_SELFTEST is set (the hook makes the CC2 driver
     # exit rc=0 before training = false success). The gate fires before any JAX import.
@@ -824,32 +1083,53 @@ def main(argv=None) -> int:
                 return argv[i + 1]
         return default
 
-    if "--interface-smoke" in argv:
-        checkpoint = _opt("--checkpoint")
-        out = _opt("--out")
-        if not checkpoint or not out:
-            print("usage: tier3_evaluator.py --checkpoint <full_state.pkl> "
-                  "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>] "
-                  "--scenario {front_l2,back_l2,full,all} "
-                  "--out <DIR> --interface-smoke [--episodes 2] [--max-steps 32]")
-            return 3
-        import tier3_cc2_policy_adapter as policy_adapter
-        root = _opt("--cc2_snapshot_root", policy_adapter._default_snapshot_root())
-        driver_src = _opt("--cc2_driver_source", policy_adapter.DEFAULT_DRIVER_SOURCE)
-        summary = run_interface_smoke(
-            checkpoint, root, _opt("--scenario", "all"), out,
-            episodes=int(_opt("--episodes", "2")),
-            max_steps=int(_opt("--max-steps", "32")),
-            driver_source=driver_src)
-        print("TIER3_INTERFACE_SMOKE_DONE (run_class=INTERFACE_SMOKE; "
-              "performance_claim_authorized=false; params_unchanged=%s; out=%s)"
-              % (summary["params_unchanged"], summary["out_dir"]))
+    # task §六: the two entry points are MUTUALLY EXCLUSIVE; neither / both -> usage.
+    smoke = "--interface-smoke" in argv
+    perf = "--performance-evaluation" in argv
+    if smoke == perf:
+        print("usage: tier3_evaluator.py --self-test\n"
+              "       tier3_evaluator.py --interface-smoke --checkpoint <full_state.pkl> "
+              "--checkpoint-contract <PATH> --arm {persistent|reset128} "
+              "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>] "
+              "[--scenario {front_l2,back_l2,full,all}] --out <DIR> "
+              "[--episodes N] [--max-steps M]\n"
+              "       tier3_evaluator.py --performance-evaluation "
+              "--checkpoint <full_state.pkl> --checkpoint-contract <PATH> "
+              "--arm {persistent|reset128} [--cc2_snapshot_root <PATH>] "
+              "[--cc2_driver_source <PATH>] --out <DIR>\n"
+              "(--interface-smoke and --performance-evaluation are mutually exclusive)")
+        return 3
+    checkpoint = _opt("--checkpoint")
+    contract = _opt("--checkpoint-contract")
+    arm = _opt("--arm")
+    out = _opt("--out")
+    if not checkpoint or not contract or not arm or not out:
+        print("FAIL CLOSED (usage): --checkpoint, --checkpoint-contract, --arm and "
+              "--out are required for every real evaluation")
+        return 3
+    import tier3_cc2_policy_adapter as policy_adapter
+    root = _opt("--cc2_snapshot_root", policy_adapter._default_snapshot_root())
+    driver_src = _opt("--cc2_driver_source", policy_adapter.DEFAULT_DRIVER_SOURCE)
+    if perf:
+        summary = run_performance_evaluation(checkpoint, root, out, contract, arm,
+                                             driver_source=driver_src)
+        print("TIER3_PERFORMANCE_EVALUATION_DONE "
+              "(run_class=PROVISIONAL_STRONG_STUDENT_SELECTION; arm=%s; "
+              "checkpoint_contract_sha256=%s; action_mode=greedy_argmax; "
+              "max_timesteps=4096; scientific_claim_authorized=false; "
+              "provisional_selection_only=true; params_unchanged=%s; out=%s)"
+              % (arm, summary["checkpoint_contract_sha256"],
+                 summary["params_unchanged"], summary["out_dir"]))
         return 0
-    print("usage: tier3_evaluator.py --self-test | --checkpoint <full_state.pkl> "
-          "[--cc2_snapshot_root <PATH>] [--cc2_driver_source <PATH>] "
-          "--scenario {front_l2,back_l2,full,all} "
-          "--out <DIR> --interface-smoke [--episodes N] [--max-steps M]")
-    return 3
+    summary = run_interface_smoke(
+        checkpoint, root, _opt("--scenario", "all"), out,
+        episodes=int(_opt("--episodes", "2")),
+        max_steps=int(_opt("--max-steps", "32")),
+        driver_source=driver_src, contract_path=contract, arm=arm)
+    print("TIER3_INTERFACE_SMOKE_DONE (run_class=INTERFACE_SMOKE; arm=%s; "
+          "performance_claim_authorized=false; params_unchanged=%s; out=%s)"
+          % (arm, summary["params_unchanged"], summary["out_dir"]))
+    return 0
 
 
 if __name__ == "__main__":

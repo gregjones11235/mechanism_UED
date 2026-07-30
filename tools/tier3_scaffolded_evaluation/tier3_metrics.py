@@ -74,6 +74,16 @@ def _ratio(num, den):
     return float(num) / float(den)
 
 
+def _median(vals):
+    """Plain median over a list of floats (None when empty); pure, no statistics dep."""
+    if not vals:
+        return None
+    s = sorted(float(v) for v in vals)
+    n = len(s)
+    mid = n // 2
+    return s[mid] if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
+
+
 def compute_primary_metric(scenario, episodes):
     """Conditional success probability over valid starts for the scenario."""
     valid = _valid_episodes(scenario, episodes)
@@ -99,25 +109,67 @@ def compute_primary_metric(scenario, episodes):
 
 
 def compute_dense_progress(scenario, episodes):
-    """Mean GRAPH_DISTANCE_PROGRESS (max over the episode) over valid FRONT starts."""
+    """Mean + median GRAPH_DISTANCE_PROGRESS (max over the episode) over valid FRONT
+    starts, plus the per-state paired progress (task §八: one progress value per
+    frozen scaffold state; under greedy a state is never repeated to fake samples)."""
     if scenario != FRONT:
         return {"metric": FRONT_DENSE_METRIC, "scenario": scenario,
-                "value": None, "note": "dense progress defined for front_l2 only"}
+                "value": None, "median": None, "per_state_progress": [],
+                "note": "dense progress defined for front_l2 only"}
     valid = _valid_episodes(FRONT, episodes)
     vals = []
+    per_state = []
     for e in valid:
         p = e.get("graph_distance_progress")
         if p is not None:
-            vals.append(assert_progress_in_range(p))
+            p = assert_progress_in_range(p)
+            vals.append(p)
+            per_state.append({"state_entry_id": e.get("episode_id"),
+                              "graph_distance_progress": p})
     return {
         "metric": FRONT_DENSE_METRIC,
         "scenario": FRONT,
         "valid_starts": len(valid),
         "scored": len(vals),
         "value": (sum(vals) / len(vals)) if vals else None,
+        "median": _median(vals),
+        "per_state_progress": per_state,
         "range": [0, 1],
         "monotonicity_guaranteed": False,
         "is_success_substitute": False,
+    }
+
+
+def compute_back_diagnostics(episodes):
+    """BACK combat diagnostics (task §八) computed ONLY from fields that already
+    exist in the episode record schema — no scenario-semantics expansion:
+    kobold_engaged, player_died, defeat_kobold, timesteps, classified_label.
+    time_to_first_engagement / time_to_kill / accumulated damage are NOT episode
+    fields and are honestly reported as null with a schema note."""
+    valid = _valid_episodes(BACK, episodes)
+    steps = [int(e.get("timesteps") or 0) for e in valid]
+    label_counts = {}
+    for e in valid:
+        lbl = e.get("classified_label")
+        if lbl is not None:
+            label_counts[lbl] = label_counts.get(lbl, 0) + 1
+    return {
+        "valid_starts": len(valid),
+        "kobold_engaged_count": sum(1 for e in valid if e.get("kobold_engaged") is True),
+        "time_to_first_engagement": None,
+        "time_to_kill": None,
+        "damage": None,
+        "schema_note": ("time_to_first_engagement / time_to_kill / damage are not "
+                        "fields of the frozen episode record schema "
+                        "(mechanism_UED.tier3_evaluation_result/v1); reported as null "
+                        "rather than expanding the schema"),
+        "survival": {
+            "died_count": sum(1 for e in valid if e.get("player_died") is True),
+            "defeat_count": sum(1 for e in valid if e.get("defeat_kobold") is True),
+            "mean_timesteps": (sum(steps) / len(steps)) if steps else None,
+            "max_timesteps_observed": max(steps) if steps else None,
+        },
+        "failure_taxonomy": label_counts,
     }
 
 
@@ -136,6 +188,7 @@ def summarize(scenario, episodes):
         out["na_metrics"] = list(BACK_NA_METRICS)
         out["na_reason"] = ("BACK start is already on floor 3 next to a live Kobold; "
                             "boss-area search is not exercised by this scaffold")
+        out["diagnostics"] = compute_back_diagnostics(episodes)
     return out
 
 
@@ -175,18 +228,37 @@ def self_test() -> int:
     check("front_metric_name", frp["metric"] == FRONT_PRIMARY_METRIC)
     frd = compute_dense_progress(FRONT, front)
     check("front_dense_mean", abs(frd["value"] - 0.5) < 1e-9)
+    check("front_dense_median", abs(frd["median"] - 0.5) < 1e-9)
+    check("front_dense_per_state_paired",
+          len(frd["per_state_progress"]) == 4
+          and all(0.0 <= x["graph_distance_progress"] <= 1.0
+                  for x in frd["per_state_progress"]))
     check("front_dense_metric_name", frd["metric"] == FRONT_DENSE_METRIC)
     check("front_dense_not_success_substitute", frd["is_success_substitute"] is False)
 
     # BACK: 1/3 defeat; summary carries BOSS_COMBAT_SCAFFOLDED identity + N/A metrics.
-    back = [_ep(BACK, True, defeat_kobold=True), _ep(BACK, True, defeat_kobold=False),
-            _ep(BACK, True, defeat_kobold=False)]
+    back = [_ep(BACK, True, defeat_kobold=True, kobold_engaged=True, timesteps=900),
+            _ep(BACK, True, defeat_kobold=False, player_died=True, kobold_engaged=True,
+                timesteps=300),
+            _ep(BACK, True, defeat_kobold=False, timed_out=True, timesteps=4096)]
     bp = compute_primary_metric(BACK, back)
     check("back_primary_1_of_3", abs(bp["value"] - 1 / 3) < 1e-9 and bp["valid_starts"] == 3)
     check("back_metric_name", bp["metric"] == BACK_PRIMARY_METRIC)
     bs = summarize(BACK, back)
     check("back_identity_boss_combat_scaffolded", bs.get("identity_class") == BACK_IDENTITY)
     check("back_na_metrics", bs.get("na_metrics") == BACK_NA_METRICS)
+    diag = bs.get("diagnostics") or {}
+    check("back_diagnostics_engagement",
+          diag.get("kobold_engaged_count") == 2
+          and diag.get("time_to_first_engagement") is None
+          and diag.get("time_to_kill") is None
+          and diag.get("damage") is None
+          and "schema_note" in diag)
+    check("back_diagnostics_survival",
+          diag.get("survival", {}).get("died_count") == 1
+          and diag.get("survival", {}).get("defeat_count") == 1
+          and abs(diag.get("survival", {}).get("mean_timesteps") - (900 + 300 + 4096) / 3)
+          < 1e-9)
 
     # No valid starts -> value undefined (None), never faked.
     check("empty_undefined", compute_primary_metric(FRONT, [])["value"] is None)
