@@ -425,6 +425,11 @@ def assemble(common_root, frozen_bank_artifacts, repo_root=None) -> dict:
     repo_root = str(repo_root or audit.repo_root())
     common_root = str(common_root)
     tools_dir = os.path.join(repo_root, "tools", "tier3_scaffolded_evaluation")
+    # Bank payloads unpickle CC2 pytree defs (minicraftax) — the audited source
+    # tree must be importable BEFORE any load_bank / materialize call.
+    _src = os.path.join(repo_root, "dicode_src", "src")
+    if os.path.isdir(_src) and _src not in sys.path:
+        sys.path.insert(0, _src)
 
     # S0 fresh-directory gate: never clobber an existing pool surface.
     if os.path.exists(common_root):
@@ -702,6 +707,11 @@ def finalize_ready(common_root, preflight_cert_src, persistent_binding_src,
                    reset128_binding_src, repo_root=None) -> dict:
     repo_root = str(repo_root or audit.repo_root())
     common_root = str(common_root)
+    # Bank reloads unpickle CC2 pytree defs (minicraftax) — audited source tree
+    # first (same setup as every other entry point).
+    _src = os.path.join(repo_root, "dicode_src", "src")
+    if os.path.isdir(_src) and _src not in sys.path:
+        sys.path.insert(0, _src)
 
     import tier3_evaluation_profile as profile_mod
     import tier3_frozen_bank_artifacts as art

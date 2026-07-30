@@ -357,6 +357,12 @@ def _render(template, mapping) -> str:
 # ---------------------------------------------------------------------------
 def run_memory_contract_smoke(checkpoint_path, arm, contract_path,
                               cc2_snapshot_root=None) -> dict:
+    # Defensive: the ABI loader inserts the audited dicode source tree itself,
+    # but every entry point that unpickles CC2 state (checkpoint pkl) must have
+    # minicraftax importable — make the setup explicit here as well.
+    _src = str(audit.repo_root() / "dicode_src" / "src")
+    if os.path.isdir(_src) and _src not in sys.path:
+        sys.path.insert(0, _src)
     import numpy as np
     import tier3_candidate_runtime as abi
 
