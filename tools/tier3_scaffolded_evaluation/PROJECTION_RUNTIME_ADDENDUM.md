@@ -83,7 +83,12 @@ OWNER_ACTION_REQUIRED = false
 
 ## GPU 与边界
 
-仅 GPU2 `GPU-8df11537-ab79-722d-606f-411966196c4c` / GPU3
+- **启动合同(CWD = 仓库根)**:冻结引擎 `tier3_source_audit.SOURCE_FILES` 把审计
+  原始数据抽取路径记为 `D:/Projects/…`,POSIX 下按 **CWD 相对**解析;驱动必须在
+  仓库根启动,使解析命中仓库内 SHA-核验过的抽取副本(`<repo>/D:/…`,
+  `s4_task_code.py` `45fdd17c…` == 审计期望 == 服务器原文件,2026-07-31 复验)。
+  这与历史 RMT16 bank 铸造 / binding smoke 的启动环境一致;CWD 不符即 fail closed。
+- 仅 GPU2 `GPU-8df11537-ab79-722d-606f-411966196c4c` / GPU3
 `GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd`(驱动强制;GPU0/GPU1 fail closed);
 锁定 CC4 venv(craftax 1.4.5 / jax 0.4.30 / flax 0.8.5 / orbax-checkpoint 0.6.4);
 dicode310 不承载 rollout。不启动正式 ranking / 性能评估 / 训练;teacher binding

@@ -339,6 +339,21 @@ def main(argv=None):
     tools_dir = HERE
     repo_root = os.path.dirname(os.path.dirname(tools_dir))
 
+    # Launch contract: the FROZEN engine resolves its audited raw-data extract
+    # paths (tier3_source_audit.SOURCE_FILES[*].abspath, "D:/Projects/…")
+    # CWD-relative under POSIX. Every prior engine run (frozen-bank minting,
+    # both RMT16 binding smokes) was launched from the repo root, where the
+    # SHA-verified extract copies live (<repo>/D:/…; s4_task_code.py
+    # 45fdd17c… == audited == server original). Enforce the identical launch
+    # contract; fail closed otherwise — never guess at path resolution.
+    cwd_real = os.path.realpath(os.getcwd())
+    root_real = os.path.realpath(repo_root)
+    proj.require(cwd_real == root_real,
+                 "FAIL CLOSED (launch contract): cwd %s != repo root %s. The "
+                 "frozen engine resolves its audit-extract source paths "
+                 "CWD-relative; launch from the repo root so the SHA-verified "
+                 "extract under <repo>/D:/ is what resolves." % (cwd_real, root_real))
+
     print("[stage0] candidate=%s family=%s class=%s out=%s"
           % (args.candidate_id, spec["runtime_family"], spec["candidate_class"],
              out_dir), flush=True)
