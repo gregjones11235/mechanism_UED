@@ -84,7 +84,17 @@ FROZEN_SPEC = dict(
     evaluator="frozen_rmt16_evaluator",
 )
 
-VALID_CARRY_MODES = ("persistent", "reset128")
+# VALID_CARRY_MODES: every carry_mode the frozen protocol may run. base_gtrxl is the third arm
+# (CC2 §二 BASE_GTRXL_ORIGINAL_VTRACE_98304): the SAME network module + SAME ckpt17500, but the
+# RMT16 persistent-token READ path is skipped (mem_tokens=None) so the policy reduces to the pure
+# GTrXL backbone. APPENDING here is additive and does NOT touch FROZEN_SPEC / FROZEN_SPEC_SHA256
+# (spec_sha256 hashes only the FROZEN_SPEC dict, not VALID_CARRY_MODES) -> P/R identity unchanged.
+VALID_CARRY_MODES = ("persistent", "reset128", "base_gtrxl")
+
+# The two canonical arms that have a FORMAL-VTRACE profile YAML (configs/rmt16_phase4a_v2_<arm>.yaml).
+# base_gtrxl is an engineering smoke / long_run_98304 candidate ONLY — it has NO formal_vtrace
+# profile — so the frozen-spec-vs-formal-YAML self-test cross-check below is scoped to these two.
+FORMAL_VTRACE_ARMS = ("persistent", "reset128")
 
 
 def _canonical_json(obj):
@@ -161,7 +171,8 @@ def self_test():
     if yaml is None:
         yaml_ok = False
     else:
-        for arm in VALID_CARRY_MODES:
+        # Cross-check only the canonical formal-vtrace arms (base_gtrxl has no formal-vtrace YAML).
+        for arm in FORMAL_VTRACE_ARMS:
             yp = os.path.join(snap, "configs", f"rmt16_phase4a_v2_{arm}.yaml")
             with open(yp, encoding="utf-8") as f:
                 ycfg = yaml.safe_load(f)

@@ -248,6 +248,26 @@ ENGINEERING_CONFIG_IDENTITIES = {
             "140a535c786f02c0a2bb0124629f04558bd821fe80c6d5939a95083efe412693",
         "schema": SCHEMA, "carry_mode": "reset128", "replay_mode": "original_vtrace",
     },
+    # ---- CC2 §二 BASE_GTRXL_ORIGINAL_VTRACE_98304 (third arm; additive, P/R entries untouched) ----
+    # base_gtrxl: SAME RMT16 module + SAME ckpt17500, persistent-token READ path skipped (pure GTrXL
+    # backbone). scientific_config differs from persistent ONLY in carry_mode -> distinct scientific
+    # SHA -> independent frozen identity. SHAs computed from the real committed LF bytes (server
+    # /tmp via the deployed RTC canonicalization; method validated against the frozen persistent
+    # file SHA c35627fc... and scientific SHA 02207e60...).
+    ("engineering_smoke", "base_gtrxl"): {
+        "relative_path": "configs/rmt16_phase4a_smoke_base_gtrxl.yaml",
+        "file_sha256": "d0414311f9ccb6677de474135c411c75952c8571170c3ecd3dccef9f5ffae7e7",
+        "scientific_config_sha256":
+            "c2db3ce2ece51d420d46d76a7ea71a467c207c1df298001f46d7b055a443ee1b",
+        "schema": SCHEMA, "carry_mode": "base_gtrxl", "replay_mode": "original_vtrace",
+    },
+    ("long_run_98304", "base_gtrxl"): {
+        "relative_path": "configs/rmt16_phase4a_long98304_base_gtrxl.yaml",
+        "file_sha256": "5afe24dde8c8d5148c87217ea93c30b984d75af2eec14e2005d1e5c9043a9b20",
+        "scientific_config_sha256":
+            "c67381b1efa17825295e0326dfe2bae5d84bf097ac74dab8f95ee0dd7d09465b",
+        "schema": SCHEMA, "carry_mode": "base_gtrxl", "replay_mode": "original_vtrace",
+    },
 }
 
 # Derived (single source of truth = ENGINEERING_CONFIG_IDENTITIES). Kept for the canonical-path

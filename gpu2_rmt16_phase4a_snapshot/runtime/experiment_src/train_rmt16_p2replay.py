@@ -23,7 +23,8 @@ are NOT tuned here. GPU2=persistent, GPU3=reset128 (directive §二).
 import os, sys, json, time, hashlib, pickle, argparse
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--carry_mode", required=True, choices=["persistent", "reset128"])
+ap.add_argument("--carry_mode", required=True,
+                choices=["persistent", "reset128", "base_gtrxl"])
 # ---- Phase4A-v2 (CC2 directive §四): EXPLICIT replay mode (replaces ambiguous --replay on/off) ----
 # required=True with NO default -> a missing --replay_mode is a hard argparse failure (exit 2).
 # No old parameter is auto-inferred: the mode is taken verbatim, nothing else implies it.
@@ -265,7 +266,7 @@ import rmt_hindsight as RH
 # constants the formal YAML must match (not CLI args).
 from rmt_replay_buffer import RMTReplayBuffer, ANCHOR_INTERVAL, MIN_SEQUENCE_LENGTH
 from full_p2_learner import FullP2Config, build_optimizer
-from rmt_memory_anchor import make_apply_eval_rmt
+from rmt_memory_anchor import make_apply_eval_rmt, entering_read_tokens
 # Phase4A-v2 (CC2 directive §三/§八): split counters + Hindsight/AWR firewall.
 from phase4a_v2_counters import Phase4ACounters
 # Phase4A-v2.1 (CC2 §三/§四/§五): policy-lag gate identity, replay label split, fail-closed gates.
@@ -287,7 +288,20 @@ if REPLAY_MODE == "original_vtrace" and SEQUENCE_LENGTH <= SEGMENT_LEN:
                      f"(got {SEQUENCE_LENGTH}); the formal Carry experiment crosses one boundary.")
 ARM_REPLAY_TAG = {"off": "-PPO", "original_vtrace": "-OrigVtrace",
                   "full_p2_legacy": "-P2ReplayLegacy"}[REPLAY_MODE]
-ARM = f"RMT16-{args.carry_mode.capitalize()}{ARM_REPLAY_TAG}"
+# CC2 §二 BASE_GTRXL_ORIGINAL_VTRACE_98304: the third arm. SAME network module (ActorCriticTransformer
+# RMT16) + SAME ckpt17500, but the RMT16 persistent-token READ path is SKIPPED (entering tokens forced
+# to None) so the policy reduces to the pure GTrXL backbone; RMT params get no gradient (frozen at
+# init). PPO / Replay / task / seed / budget are UNCHANGED from the frozen protocol — the ONLY
+# scientific_config difference vs persistent/reset128 is carry_mode=base_gtrxl.
+EXECUTED_READ_SKIPPED = (args.carry_mode == "base_gtrxl")   # positive evidence the skip path ran
+if args.carry_mode == "base_gtrxl":
+    ARM = f"BASEGTRXL{ARM_REPLAY_TAG}"          # e.g. BASEGTRXL-OrigVtrace (aligns w/ candidate_id)
+    NETWORK_FAMILY = "base_gtrxl"               # handover §七: pure GTrXL backbone (no RMT memory read)
+    MEMORY_MODE = "none"                        # handover §七: persistent-token read path disabled
+else:
+    ARM = f"RMT16-{args.carry_mode.capitalize()}{ARM_REPLAY_TAG}"
+    NETWORK_FAMILY = "rmt16"
+    MEMORY_MODE = args.carry_mode               # persistent / reset128
 
 # Phase4A-v2.1 (§三.2) FAIL-CLOSED runtime alignment: the policy-lag gate identity is derived
 # SOLELY from REPLAY_MODE, so original_vtrace/off can NEVER carry an active hard lag gate at
@@ -707,6 +721,9 @@ env_params = env.default_params
 assert env_params is not None, 'env_params (Craftax EnvParams) must resolve before collect/env.step'
 ACTION_DIM = int(env.action_space(env_params).n)
 OBS_DIM = int(env.observation_space(env_params).shape[0])
+# CC2 §七 handover: the FULL canonical Craftax observation shape + action dim (recorded in the
+# summary so CC4 can load the checkpoint read-only against the exact obs/action contract).
+OBS_SHAPE = tuple(int(x) for x in env.observation_space(env_params).shape)
 fp_cfg.action_dim = ACTION_DIM; fp_cfg.obs_dim = OBS_DIM
 
 network = ActorCriticTransformerRMT16(
@@ -1048,8 +1065,10 @@ for u in range(args.total_updates):
               f"first_ge512={probe_first_ge512}", flush=True)
 
     # 2. last_value + GAE + PPO main update
+    # Use the SAME entering_read_tokens helper as collection + rmt_step_forward so the GAE
+    # bootstrap value is computed on the identical (base_gtrxl: read-skipped) forward path.
     _lg, last_value, _mo, _ht = apply_eval_rmt(
-        params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+        params, memories, obsv, mem_mask, entering_read_tokens(rmt_state, args.carry_mode))
     advantages, targets = PPO.compute_gae(
         rollout["rewards"], rollout["values"], rollout["dones"], np.asarray(last_value),
         cfg.gamma, cfg.gae_lambda, cfg.value_target_clip_min, cfg.value_target_clip_max)
@@ -1409,7 +1428,7 @@ if args.carry_mode == "persistent":
         ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
     else:
         ARM_STATUS = "FAIL"
-else:  # reset128 -- cross-boundary long-term carry read NOT required; read branch MUST be connected.
+elif args.carry_mode == "reset128":  # cross-boundary long-term carry read NOT required; read branch MUST be connected.
     # (a) expected control: carried tokens zero (reset works) AND read branch connected (forced-open
     #     gate + injected non-zero tokens produce detectable logit/KL/top-action change / read grad).
     # (b) defect: read branch NEVER connected -> RMT_RESET128_READ_PATH_ENGINEERING_DEFECT.
@@ -1431,6 +1450,32 @@ else:  # reset128 -- cross-boundary long-term carry read NOT required; read bran
         ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
     else:
         ARM_STATUS = "FAIL"
+elif args.carry_mode == "base_gtrxl":
+    # CC2 §二 BASE_GTRXL: the RMT16 persistent-token READ path is DISABLED BY DESIGN (entering tokens
+    # forced to None -> the policy is the pure GTrXL backbone; RMT params get no gradient, frozen at
+    # init). The persistent/reset128 read-ACTIVITY / read-CONNECTIVITY requirements therefore DO NOT
+    # apply — those probes only report LATENT wiring here and are explicitly NOT gates for this arm.
+    # Correctness = the GTrXL short-memory window stays finite AND the read-skip actually executed
+    # (positive evidence) AND (replay horizon reached OR not required for this run class). NaN/Inf is
+    # already a hard stop during training (ppo_finite / replay-finite asserts), so it is not re-checked
+    # here. replay_update_count is NOT a gate for engineering_smoke / long_run_98304 (§四).
+    _BASE_CORRECTNESS_OK = bool(gtrxl_window_finite_all and EXECUTED_READ_SKIPPED)
+    ARM_GATES_PASS = bool(_BASE_CORRECTNESS_OK
+                          and (REPLAY_HORIZON_REACHED or not REPLAY_HORIZON_REQUIRED_FOR_PASS))
+    if not EXECUTED_READ_SKIPPED:
+        ARM_STATUS = "BASE_GTRXL_READ_SKIP_NOT_EXECUTED"
+    elif not gtrxl_window_finite_all:
+        ARM_STATUS = "BASE_GTRXL_WINDOW_NOT_FINITE"
+    elif not REPLAY_HORIZON_REACHED and REPLAY_HORIZON_REQUIRED_FOR_PASS:
+        ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
+    elif ARM_GATES_PASS and REPLAY_HORIZON_REACHED:
+        ARM_STATUS = "PASS"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
+    else:
+        ARM_STATUS = "FAIL"
+else:
+    raise SystemExit(f"FATAL: unhandled carry_mode={args.carry_mode!r} in per-arm final gate")
 print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
       f"replay_upd={replay_update_success_count} read_active={RMT_READ_PATH_ACTIVE} "
       f"read_conn={READ_BRANCH_CONNECTED} carry_final_maxabs={_carried_final_maxabs:.3e} "
@@ -1453,6 +1498,14 @@ if REPLAY_MODE in ("off", "original_vtrace"):
 # certificate + the four-way label split (phase4a_v2.replay_labels); it does NOT self-declare
 # MATCHED_REPLAY_EXPOSURE=PASS (no two-arm run this round -> NOT_RUN).
 summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
+               # CC2 §二/§七 BASE_GTRXL handover labels: the network family + memory mode + the
+               # positive evidence that the read path was skipped (base_gtrxl) / the canonical
+               # Craftax obs shape + action dim (for CC4 read-only checkpoint loading). For the
+               # frozen persistent/reset128 arms these are network_family=rmt16, memory_mode=<arm>,
+               # executed_read_skipped=False — i.e. purely additive, no behaviour change.
+               network_family=NETWORK_FAMILY, memory_mode=MEMORY_MODE,
+               executed_read_skipped=EXECUTED_READ_SKIPPED,
+               observation_shape=list(OBS_SHAPE), action_dim=ACTION_DIM,
                # Phase4A-direct-98304 (§一.2): the run management class + its bound identity
                # (NON-scientific; None on formal_vtrace). Recorded so the smoke PASS evaluation
                # (§四) and the conditional 98k launch (§五) can key off the run class directly.

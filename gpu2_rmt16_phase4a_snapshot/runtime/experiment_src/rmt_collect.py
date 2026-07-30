@@ -24,7 +24,8 @@ from pending_episodes import PendingEpisodeBuffers
 from replay_buffer import ANCHOR_INTERVAL
 from rmt_replay_buffer import RMTTrajectory
 import rmt16_memory as rmtm
-from rmt_memory_anchor import make_apply_eval_rmt, make_update_fn, rmt_advance_tokens
+from rmt_memory_anchor import (make_apply_eval_rmt, make_update_fn, rmt_advance_tokens,
+                              entering_read_tokens)
 # Phase4A-v2 (CC2 directive §二): PRECISE resolved-env-step provenance (pure, no JAX).
 from phase4a_v2_counters import completion_resolved_env_step
 
@@ -141,10 +142,12 @@ def collect_rollout_rmt(
                 pending.add_anchor(e, k, mem_in[e].copy(), mask_in[e].copy(), int(idx_in[e]))
                 pending.add_rmt_anchor(e, tok_in[e].copy(), segbuf_in[e].copy(), int(segcount_in[e]))
 
-        # ---- forward (read ENTERING tokens) ----
+        # ---- forward (read ENTERING tokens; base_gtrxl -> None -> read path skipped) ----
+        # Must use the SAME entering_read_tokens helper as rmt_memory_anchor.rmt_step_forward so
+        # collection old_logp == PPO re-forward new_logp by construction (valid PPO ratio).
         rng, a_rng = jax.random.split(rng)
         logits, value, mem_out, h_t = apply_eval_rmt(
-            params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+            params, memories, obsv, mem_mask, entering_read_tokens(rmt_state, carry_mode))
         value_np = np.asarray(value); mem_out_np = np.asarray(mem_out)
         probs = np.asarray(jax.nn.softmax(jnp.asarray(logits), axis=-1))
         actions_np = RU.sample_actions(action_rng, probs)
