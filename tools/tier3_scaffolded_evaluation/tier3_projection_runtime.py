@@ -716,11 +716,41 @@ class GTrXL128ProjectionPolicy(object):
 class SlowGRUProjectionPolicy(object):
     """CC3 slowgru: owner policy_step ALWAYS samples an action, but the memory
     update (mem_out from the network forward) is ACTION-INDEPENDENT — so reading
-    argmax(extras['logits']) is the faithful greedy readout of the identical
+    argmax(extras['logits'][row]) is the faithful greedy readout of the identical
     forward pass (no reimplementation, no behavior change). Segment boundary:
     on_segment_boundary every 128 env steps (owner-documented segment length);
     true_done/done_mask stay False — the engine STOPS an episode at env done and
-    never steps past it."""
+    never steps past it.
+
+    BATCH-1 WORKAROUND (disclosed in every binding as `batch1_workaround`):
+    the owner's slowgru_network.forward_eval delegates to the SAME dicode
+    transformerXL.forward_eval (byte-identical module, crash site
+    transformerXL.py:194) as CC1's GTrXL128; that function does
+    `x = x.squeeze()` after EVERY transformer layer, and at batch size 1
+    that also removes the batch dimension, so layer 2's
+    `jnp.concatenate([memories[:, :, i], x[:, None]])` mismatches
+    ((1,128,256) vs (256,1) — observed on server 2026-07-31). The owner's
+    trainer is ALWAYS vectorized (PPO `_env_step` over E envs; this runtime's
+    docstring states it replicates that trainer mechanics VERBATIM) and never
+    runs forward_eval at B=1. Every op is per-row: transformerXL.forward_eval
+    is per-row encoder/attention (no cross-batch op); the owner's own
+    `_slow_update` header comment reads "vectorised over env axis; no
+    cross-env mixing" (per-row buffer write, per-row attention pooling,
+    per-row GRUCell); the fast-memory roll is along axis=1; the mask
+    mechanics are per-row; on_segment_boundary is per-row (RESET128:
+    longstate -> init_longstate(B) for the whole batch; PERSISTENT:
+    identity). So this adapter calls the owner's policy_step /
+    on_segment_boundary UNMODIFIED at batch 2 with the rows DUPLICATED and
+    reads the row-0 action — numerically identical to the intended batch-1
+    semantics, INCLUDING §四 boundary semantics at the shell's effective
+    batch (row 0 undergoes the same per-row op it would at B=1). This is a
+    protocol-shell batching choice (the projection's defined job), NOT a
+    network modification; owner code is untouched. Both CC3 candidates use
+    the identical adapter; the two families still diverge solely through the
+    owner's mode-dependent on_segment_boundary."""
+
+    EFFECTIVE_BATCH = 2
+    READOUT_ROW = 0
 
     def __init__(self, module, segment_boundary_steps=SLOWGRU_SEGMENT_BOUNDARY_STEPS):
         self.module = module
@@ -729,9 +759,44 @@ class SlowGRUProjectionPolicy(object):
         self.steps = 0
         self.boundary_invocations = 0
         self.boundary_info_log = []
+        self.batch1_workaround = {
+            "applied": True,
+            "effective_batch": self.EFFECTIVE_BATCH,
+            "rows_duplicated": True,
+            "readout_row": self.READOUT_ROW,
+            "reason": ("owner slowgru_network.forward_eval -> dicode "
+                       "transformerXL.forward_eval x.squeeze() removes the "
+                       "batch dim at B=1 (layer-2 concat TypeError "
+                       "(1,128,256) vs (256,1) at transformerXL.py:194 — "
+                       "SAME crash site and byte-identical module as CC1 "
+                       "GTrXL128); owner trainer is always vectorized (PPO "
+                       "_env_step over E envs) and never hits B=1"),
+            "fidelity_basis": ("all ops per-row: transformerXL.forward_eval "
+                               "per-row encoder/attention; owner _slow_update "
+                               "own comment 'vectorised over env axis; no "
+                               "cross-env mixing' (per-row buffer/pooling/"
+                               "GRUCell); fast-memory roll axis=1; mask "
+                               "mechanics per-row; on_segment_boundary "
+                               "per-row -> duplicated-row batch 2 with row-0 "
+                               "readout numerically identical to B=1, "
+                               "including section-4 boundary semantics"),
+            "owner_code_modified": False}
 
     def reset(self):
-        self.ms = self.module.init_memory(1)
+        import jax.numpy as jnp
+        m = self.module.init_memory(1)
+        # carry the owner memory state at batch 2 (two identical rows).
+        # step_idx is a python int (non-array leaf) — kept an int.
+        self.ms = dict(m)
+        self.ms["memories"] = jnp.concatenate([m["memories"], m["memories"]], axis=0)
+        self.ms["memories_mask"] = jnp.concatenate(
+            [m["memories_mask"], m["memories_mask"]], axis=0)
+        self.ms["memories_mask_idx"] = jnp.concatenate(
+            [m["memories_mask_idx"], m["memories_mask_idx"]], axis=0)
+        self.ms["longstate"] = dict(
+            (k, jnp.concatenate([v, v], axis=0)) for k, v in m["longstate"].items())
+        self.ms["true_done"] = jnp.concatenate([m["true_done"], m["true_done"]], axis=0)
+        self.ms["step_idx"] = m["step_idx"]
         self.steps = 0
 
     def __call__(self, obs, env_state):
@@ -739,12 +804,16 @@ class SlowGRUProjectionPolicy(object):
         import numpy as np
         if self.ms is None:
             self.reset()
-        o = jnp.asarray(np.asarray(obs)[None, :])
-        done_mask = jnp.zeros((1,), dtype=jnp.bool_)
-        true_done = jnp.zeros((1,), dtype=jnp.bool_)
+        o1 = jnp.asarray(np.asarray(obs)[None, :])
+        o = jnp.concatenate([o1, o1], axis=0)              # (2, obs_dim)
+        done_mask = jnp.zeros((self.EFFECTIVE_BATCH,), dtype=jnp.bool_)
+        true_done = jnp.zeros((self.EFFECTIVE_BATCH,), dtype=jnp.bool_)
         _sampled_action, self.ms, extras = self.module.policy_step(
             o, self.ms, done_mask, true_done=true_done)
-        action = int(np.argmax(np.asarray(extras["logits"]).reshape(-1)))
+        # rows are fully independent and start equal -> both rows stay equal;
+        # the row-0 greedy readout is the faithful argmax of the B=1 forward
+        action = int(np.argmax(
+            np.asarray(extras["logits"])[self.READOUT_ROW].reshape(-1)))
         self.steps += 1
         if self.segment_boundary_steps > 0 and \
                 self.steps % self.segment_boundary_steps == 0:

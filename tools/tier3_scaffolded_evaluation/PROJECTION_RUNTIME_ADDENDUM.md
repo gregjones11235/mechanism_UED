@@ -64,17 +64,32 @@ OWNER_ACTION_REQUIRED = false
   前向的忠实 greedy 读出——不改行为、不重实现。
 - **done/true_done**:引擎在 env done 时**停止** episode(不越过 done 再步进),
   故 done_mask / true_done 恒 False,与引擎对 CC2 adapter 的约定一致。
-- **batch-1 协议壳(仅 CC1 GTrXL128 两族:CONTROL + TEACHER)**:owner 的 dicode
+- **batch-1 协议壳(CC1 GTrXL128 两族 CONTROL + TEACHER,CC3 SlowGRU 两族
+  RESET128 + PERSISTENT——共四族同一崩溃点)**:owner 的 dicode
   `transformerXL.forward_eval` 每层后执行 `x = x.squeeze()`,**B=1 时把 batch 维
   一并挤掉**,第 2 层 `jnp.concatenate([memories[:, :, i], x[:, None]])` 即形状
-  失配(服务器实测 `(1,128,256)` vs `(256,1)` TypeError)。owner 自有评测**从不
-  在 B=1 运行**(build_stage4_env smoke_batch_size≥2;eval_bakeoff NUM_ENVS=256,
-  恒向量化)。`forward_eval` 行间完全独立(逐行 encoder / 逐行 attention,无任何
-  跨 batch 运算),故 adapter **原样调用 owner policy_step**,仅以 batch 2 复制
-  行运行、读 row-0 action / row-0 memory——与 B=1 语义**数值恒等**。这是协议壳
-  的 batching 选择(projection 的本职),**未改 owner 任何代码**
-  (`owner_code_modified=false`);两份 binding 以 `batch1_workaround` 字段完整
-  公开。CC2 BASE 的 frozen 网络 B=1 路径正常(实测通过),不受此影响。
+  失配(服务器实测 `(1,128,256)` vs `(256,1)` TypeError,崩溃点
+  `transformerXL.py:194`)。CC3 的 `slowgru_network.forward_eval`(arm
+  `b2652105…`)第一行即委托**同一** dicode `transformerXL.forward_eval`(字节
+  同一模块,2026-07-31 服务器实测同一行同一形状报错),故同一协议壳同样适用。
+  各 owner 自有评测**从不在 B=1 运行**:CC1 build_stage4_env
+  smoke_batch_size≥2、eval_bakeoff NUM_ENVS=256;CC3 trainer PPO `_env_step`
+  恒在 E envs 上向量化(slowgru_runtime docstring:"replicating the trainer
+  `_env_step` memory mechanics verbatim")。**行间独立性证据**:
+  `transformerXL.forward_eval` 逐行 encoder / 逐行 attention,无任何跨 batch
+  运算;owner 自有 `_slow_update` 头部注释明示 "vectorised over env axis; no
+  cross-env mixing"(逐行 buffer 写入 / 逐行 attention pooling / 逐行
+  GRUCell);fast memory `jnp.roll(..., axis=1)` 逐行;mask 机构逐行;
+  `on_segment_boundary` 逐行(RESET128:longstate → `init_longstate(B)` 全批;
+  PERSISTENT:恒等)。故 adapter **原样调用 owner policy_step /
+  on_segment_boundary**,仅以 batch 2 复制行运行、读 row-0 action——与 B=1
+  语义**数值恒等**(§四 boundary 语义在壳的有效批上同样忠实:row-0 所受逐行
+  运算与 B=1 完全相同;两 SlowGRU 族的行为分立仍**唯一**来自 owner 的
+  mode-dependent `on_segment_boundary`,绝不统一)。这是协议壳的 batching
+  选择(projection 的本职),**未改 owner 任何代码**
+  (`owner_code_modified=false`);每份 binding 以 `batch1_workaround` 字段完整
+  公开。adapter 复制内存状态时 `step_idx`(python int,非数组叶)保持 int 不升维。
+  CC2 BASE 的 frozen 网络 B=1 路径正常(实测通过),不受此影响。
 - **§四 语义分立**:两 SlowGRU 族绝不统一。smoke rollout 每 128 步调度
   `on_segment_boundary`;32 步 smoke 到不了边界,故另跑**直接 boundary 单元核验**
   (longstate 叶 +1.0 扰动 → `on_segment_boundary` → RESET128 必须复原 init
