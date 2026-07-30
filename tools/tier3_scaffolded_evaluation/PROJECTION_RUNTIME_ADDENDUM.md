@@ -76,10 +76,23 @@ OWNER_ACTION_REQUIRED = false
   声明 policy_source,与 CC1 V7fix58 树字节恒等,2026-07-31 服务器复验;两树唯一
   差异 `wrappers_cl.py` 仅用于 owner 侧 eval_env 包装,不在引擎 canonical env /
   rollout 路径上。
-- **wandb stub(仅 CONTROL orbax 路径)**:`dicode.utils.general` 包链在 import 期
-  引用 wandb,但 `train_state_utils.py`(SHA `cbd091f9…`)本体零处 wandb
-  (grep 验证)。驱动仅在 `import wandb` 失败时安装最小 PEP-562 no-op 模块壳,
-  范围与理由写入每份 binding 的 `wandb_stub` 字段。
+- **import-chain 补全(锁定 venv,全部公开)**:CC1 owner `build_stage4_env` 的
+  导入链(`dicode.utils.general` 包链、`dicode.task_utils → dicode.dreaming.
+  gen_manager → {llm, utils}`)会触及锁定 venv 未装的包。处置分两类,每份 binding
+  的 `wandb_stub` / `import_stubs` 字段逐一公开:
+  - **真装(纯依赖,零数值/零网络语义)**:`networkx 3.6.1`、`hydra-core 1.3.4`、
+    `omegaconf 2.3.1`、`antlr4-python3-runtime 4.9.3`,经 `pip install --no-index
+    --no-deps` 从 SHA-记录 wheel/sdist 装入(networkx wheel
+    `d47fbf30…`,hydra_core wheel `e5868369…`,omegaconf wheel `3d701d14…`)。
+    装后复探锁定版本**全数不变**(python 3.11.15 / jax 0.4.30 / jaxlib 0.4.30 /
+    craftax 1.4.5 / flax 0.8.5 / orbax-checkpoint 0.6.4 / distrax 0.1.5 /
+    optax 0.2.5 / numpy 1.26.4 / scipy 1.17.1,2026-07-31 服务器复验)。
+  - **stub(仅满足 import)**:`wandb`(PEP-562 no-op 壳;`train_state_utils.py`
+    本体零处 wandb,grep 验证);`openai`(**import-only 壳,`AsyncOpenAI` 可被
+    import 但实例化即 raise**,其余属性访问亦 raise——合同禁止 CC4 任何新 LLM
+    调用,stub 从结构上使调用不可能;本路径实际只用 `task_utils.
+    get_achievement_multi_hot` 的纯 numpy/craftax 常数数学,LLM 类从不实例化)。
+  - 任何**其他**缺失模块一律 fail closed,不猜、不静默 stub。
 
 ## GPU 与边界
 
@@ -90,7 +103,8 @@ OWNER_ACTION_REQUIRED = false
   这与历史 RMT16 bank 铸造 / binding smoke 的启动环境一致;CWD 不符即 fail closed。
 - 仅 GPU2 `GPU-8df11537-ab79-722d-606f-411966196c4c` / GPU3
 `GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd`(驱动强制;GPU0/GPU1 fail closed);
-锁定 CC4 venv(craftax 1.4.5 / jax 0.4.30 / flax 0.8.5 / orbax-checkpoint 0.6.4);
+锁定 CC4 venv(craftax 1.4.5 / jax 0.4.30 / flax 0.8.5 / orbax-checkpoint 0.6.4;
+补装 import-chain 纯依赖后锁定版本复验全数不变,见上条);
 dicode310 不承载 rollout。不启动正式 ranking / 性能评估 / 训练;teacher binding
 可 PASS 但 `counts_toward_student_binding_count=false`,不计入
 STUDENT_COMMON_BINDING_PASS_COUNT。

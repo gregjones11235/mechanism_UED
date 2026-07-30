@@ -267,10 +267,57 @@ def install_wandb_stub_if_needed():
                     "train_state_utils.py has zero wandb references).")
     sys.modules["wandb"] = stub
     return {"installed": True,
+            "module": "wandb",
             "reason": "ModuleNotFoundError: wandb on bare import (package-chain only)",
             "stub_scope": "sys.modules['wandb'] = no-op ModuleType with PEP562 __getattr__",
             "train_state_utils_sha256": CC1_TRAIN_STATE_UTILS_SHA256,
             "train_state_utils_wandb_references": 0}
+
+
+def install_openai_stub_if_needed():
+    """SCOPE-DISCLOSED import-only stub, installed ONLY if `import openai` fails.
+
+    Why: CC1's build_stage4_env -> dicode.task_utils -> dicode.dreaming.gen_manager
+    -> dicode.dreaming.llm imports `from openai import AsyncOpenAI` at import
+    time, but the LLM class is NEVER instantiated on our path — the owner's
+    stage4 env builder uses only task_utils.get_achievement_multi_hot (pure
+    numpy / craftax-constant math). The CC4 contract FORBIDS any new LLM call,
+    so instead of installing the real client library (and its httpx/pydantic
+    chain) into the locked eval venv, `openai` is stubbed: AsyncOpenAI exists
+    for the import, but INSTANTIATION RAISES, and any other attribute access
+    RAISES too — an accidental LLM attempt fails loudly, never makes a call.
+    Every binding record discloses whether the stub was installed.
+    """
+    try:
+        importlib.import_module("openai")
+        return {"installed": False, "reason": "openai importable without stub"}
+    except ImportError:
+        pass
+    stub = types.ModuleType("openai")
+
+    class _ForbiddenLLMClient(object):
+        def __init__(self, *a, **k):
+            raise RuntimeError(
+                "CC4 eval venv: 'openai' is an import-only stub; "
+                "instantiation (any LLM call) is forbidden by CC4 contract.")
+
+    def _forbidden(name):
+        raise RuntimeError(
+            "CC4 eval venv: 'openai.%s' does not exist (import-only stub; "
+            "LLM calls forbidden by CC4 contract)." % name)
+
+    stub.AsyncOpenAI = _ForbiddenLLMClient
+    stub.__getattr__ = _forbidden          # PEP 562 module-level __getattr__
+    stub.__doc__ = ("CC4 import-only openai stub (package-chain import "
+                    "satisfaction only; instantiation / LLM calls forbidden).")
+    sys.modules["openai"] = stub
+    return {"installed": True,
+            "module": "openai",
+            "reason": "ModuleNotFoundError: openai via task_utils->gen_manager->llm (import chain only)",
+            "stub_scope": ("sys.modules['openai'] = ModuleType; AsyncOpenAI exists "
+                           "for import but RAISES on instantiation; other attrs RAISE"),
+            "llm_calls_executed": 0,
+            "contract_basis": "CC4 contract forbids new LLM calls"}
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +409,8 @@ def load_cc2_base_gtrxl(spec):
     candidate = mod.load_candidate(contract_path, verify_source_sha=True)
     return {"kind": "cc2_base_gtrxl", "module": mod, "candidate": candidate,
             "params": candidate.params, "checkpoint_path": contract_checkpoint_path(contract_path),
-            "frozen_modules_live_sha256": fm_live, "wandb_stub": None}
+            "frozen_modules_live_sha256": fm_live, "wandb_stub": None,
+            "import_stubs": None}
 
 
 def load_cc1_gtrxl128(spec):
@@ -379,16 +427,32 @@ def load_cc1_gtrxl128(spec):
         "cc4_proj_cc1_%s_candidate_runtime" % spec["candidate_id"].lower(),
         os.path.join(capsule, "candidate_runtime.py"),
         expected_sha256=spec["capsule_file_sha256"]["candidate_runtime.py"])
-    stub = None
-    try:
-        loaded = mod.load_candidate()
-    except ModuleNotFoundError as exc:
-        require("wandb" in str(exc),
-                "FAIL CLOSED: unexpected cc1 load failure: %r" % exc)
-        stub = install_wandb_stub_if_needed()
-        require(stub["installed"],
-                "FAIL CLOSED: wandb stub not installed but wandb import failed")
-        loaded = mod.load_candidate()
+    # Import-chain completion (disclosed per-binding): the owner's stage4 env
+    # builder pulls package-chain modules absent from the locked eval venv.
+    # wandb -> documented no-op stub; openai -> import-only stub whose
+    # instantiation RAISES (LLM calls forbidden by CC4 contract). Anything
+    # else missing fails closed — never guessed, never silently stubbed.
+    stubs = []
+    loaded = None
+    last_exc = None
+    for _attempt in range(3):
+        try:
+            loaded = mod.load_candidate()
+            break
+        except ModuleNotFoundError as exc:
+            last_exc = exc
+            if "wandb" in str(exc):
+                s = install_wandb_stub_if_needed()
+            elif "openai" in str(exc):
+                s = install_openai_stub_if_needed()
+            else:
+                raise FailClosed("FAIL CLOSED: unexpected cc1 load failure: %r" % exc)
+            require(s["installed"],
+                    "FAIL CLOSED: %s stub not installed but its import failed" % exc)
+            stubs.append(s)
+    require(loaded is not None,
+            "FAIL CLOSED: cc1 load still failing after stub retries: %r" % last_exc)
+    stub = next((s for s in stubs if s.get("module") == "wandb"), None)
     R = getattr(mod, "R", None)
     require(R is not None,
             "FAIL CLOSED: cc1 candidate_runtime did not expose the shared "
@@ -397,7 +461,8 @@ def load_cc1_gtrxl128(spec):
             "params": loaded["params"],
             "checkpoint_path": loaded["contract"]["checkpoint_path"],
             "obs_dim": loaded.get("obs_dim"), "action_dim": loaded.get("action_dim"),
-            "shared_runtime": sr, "wandb_stub": stub}
+            "shared_runtime": sr, "wandb_stub": stub,
+            "import_stubs": stubs or None}
 
 
 def load_cc3_slowgru(spec):
@@ -448,7 +513,7 @@ def load_cc3_slowgru(spec):
             "checkpoint_path": contract.get("checkpoint_path"),
             "arm_src": arm_src, "slowgru_runtime_path": rt_path,
             "slowgru_runtime_sha256": rt_sha, "slowgru_network_sha256": net_sha,
-            "wandb_stub": None}
+            "wandb_stub": None, "import_stubs": None}
 
 
 def contract_checkpoint_path(contract_path):
