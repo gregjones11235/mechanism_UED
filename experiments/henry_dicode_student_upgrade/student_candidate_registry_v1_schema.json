@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "student_candidate_registry_v1_schema.json",
   "title": "Student Candidate Registry v1",
-  "description": "Machine-readable registry of REAL Craftax Student candidates, performance-screened for CC3 (CC3_ALL_EXISTING_STUDENT_CANDIDATE_REGISTRY_AND_PERFORMANCE_PRIORITY). Checkpoints entities are NOT in this git repo (excluded by archive policy); *_sha256 fields are transcribed from archived reports/manifests when recorded, otherwise NONE_RECORDED, and are NOT locally verifiable here. Identity/readiness judgments are conservative: anything whose observation/action or params cannot be confirmed is BLOCKED_IDENTITY, never ELIGIBLE.",
+  "description": "Machine-readable registry of REAL Craftax Student candidates, performance-screened for CC3 (CC3_ALL_EXISTING_STUDENT_CANDIDATE_REGISTRY_AND_PERFORMANCE_PRIORITY). Checkpoints entities are NOT in this git repo (excluded by archive policy); *_sha256 fields are transcribed from archived reports/manifests when recorded, otherwise NONE_RECORDED, and are NOT locally verifiable here. Identity/readiness judgments are conservative: anything whose observation/action or params cannot be confirmed is BLOCKED_IDENTITY, never ELIGIBLE. Correction round (2026-07-30): EXTERNAL_VERIFIED_ARTIFACT candidates with a verified CC handoff chain (engineering gates all PASS + SHA chain + accessible artifact handoff + real forward/interface smoke) MAY be ELIGIBLE_NOW; a checkpoint not committed to git is not itself a disqualifier.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -59,10 +59,15 @@
     },
     "round_1_candidate_order": {
       "type": "array",
-      "description": "Performance-priority ordered candidate_id list (target 4-8).",
+      "description": "Performance-priority ordered candidate_id list (target 4-8). Correction round: every member's cc4_adapter_family must be in fast_adapter_priority.",
       "items": { "type": "string" },
       "minItems": 4,
       "maxItems": 8
+    },
+    "round_1_alternates": {
+      "type": "array",
+      "description": "Correction round: documented alternates just outside the fast lane (e.g. whose adapter family is DEFERRED_AFTER_FAST_SCREEN), in priority order.",
+      "items": { "type": "string" }
     },
     "cc2_recommendation": {
       "type": "object",
@@ -92,6 +97,24 @@
         "winner_candidate_id": { "type": ["string", "null"] },
         "winner_profile_input_schema": { "type": ["string", "null"] }
       }
+    },
+    "primary_artifact_recovery": {
+      "type": ["string", "null"],
+      "description": "Correction round: highest-priority EXISTING artifact to recover/replay for the ROUND_1 fast lane."
+    },
+    "secondary_artifact_recovery": {
+      "type": ["string", "null"],
+      "description": "Correction round: second-priority existing artifact to recover/replay."
+    },
+    "fast_adapter_priority": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Correction round: adapter families authorized for the ROUND_1 fast lane, in priority order."
+    },
+    "deferred_adapter_families": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Correction round: adapter families marked DEFERRED_AFTER_FAST_SCREEN."
     },
     "candidates": {
       "type": "array",
@@ -201,7 +224,29 @@
         "evidence_refs": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Repo-relative paths of archived reports/manifests backing this entry."
+          "description": "Repo-relative paths of archived reports/manifests backing this entry (for EXTERNAL_VERIFIED_ARTIFACT candidates these may be local control-plane paths outside this repo, annotated as such)."
+        },
+        "evidence_location_class": {
+          "type": "string",
+          "enum": [
+            "EXTERNAL_VERIFIED_ARTIFACT",
+            "SERVER_REPORT_LEVEL",
+            "IN_REPO_MANIFEST_MIRRORED",
+            "IN_REPO_VERIFIABLE"
+          ],
+          "description": "Correction round: where the checkpoint evidence physically lives and how it was verified. EXTERNAL_VERIFIED_ARTIFACT = server-side artifact owned by another CC with a verified handoff chain (engineering gates all PASS + SHA chain + accessible handoff + real forward/interface smoke); qualifies for ELIGIBLE_NOW even though the checkpoint is not committed to git."
+        },
+        "artifact_owner": {
+          "type": ["string", "null"],
+          "description": "Correction round: which CC owns/stewards the artifact (e.g. CC4), null when not applicable."
+        },
+        "artifact_handoff_required": {
+          "type": "boolean",
+          "description": "Correction round: true when downstream use requires an artifact handoff from the owner CC."
+        },
+        "priority": {
+          "type": ["string", "null"],
+          "description": "Correction round: optional priority annotation, e.g. DEPRIORITIZED_KNOWN_UNDERPERFORMER."
         }
       }
     }

@@ -1,7 +1,7 @@
 {
   "schema_version": "student_candidate_registry/v1",
   "task": "CC3_ALL_EXISTING_STUDENT_CANDIDATE_REGISTRY_AND_PERFORMANCE_PRIORITY",
-  "generated_from": "experiments/henry_dicode_student_upgrade 归档（13 个阶段目录 + inventory + MANIFEST.sha256 + 6 份治理文档）与 gpu1_aggregation_siege/reports 冻结标签；由 CC3 四路并行取证 agent 汇总。所有 checkpoint 实体均被归档策略排除、仅在服务器 oseasy@172.25.14.221；本地仅存 manifest/report/源码镜像。故 checkpoint_file_sha256/params_sha256 均为报告级转录（除 MANIFEST.sha256 所登在库小文件外不可本地复算）；身份与 readiness 判定从保守：凡 observation/action 或参数不可确认者一律 BLOCKED_IDENTITY，绝不登记为 ELIGIBLE。",
+  "generated_from": "experiments/henry_dicode_student_upgrade 归档（13 个阶段目录 + inventory + MANIFEST.sha256 + 6 份治理文档）与 gpu1_aggregation_siege/reports 冻结标签；由 CC3 四路并行取证 agent 汇总。所有 checkpoint 实体均被归档策略排除、仅在服务器 oseasy@172.25.14.221；本地仅存 manifest/report/源码镜像。故 checkpoint_file_sha256/params_sha256 均为报告级转录（除 MANIFEST.sha256 所登在库小文件外不可本地复算）；身份与 readiness 判定从保守：凡 observation/action 或参数不可确认者一律 BLOCKED_IDENTITY，绝不登记为 ELIGIBLE。修正轮（2026-07-30，最小修正）：吸收 CC2→CC4 direct98304 交接真实证据（本地控制平面 orchestration/control/20260729T234937+0800_cc2_to_cc4_handover_direct98304.md + 20260729T231800+0800_cc2_direct98304_run_completion_addendum.json 等 4 份 CC2 报告 + tournament_v1 录取记录；这些证据在本地控制平面 D:/Projects/dicode-codex-director/ 下，不在本仓库），新增 2 个 ELIGIBLE_NOW RMT16@98304 候选（evidence_location_class=EXTERNAL_VERIFIED_ARTIFACT、artifact_owner=CC4、artifact_handoff_required=true）；按总监指令'checkpoint 未提交到 Git'本身不构成不可运行依据——外部 artifact 具备经验证交接链（工程门禁全 PASS + SHA 链 + 可访问交接 + 真实前向/interface smoke）即可登记 ELIGIBLE_NOW；保守 BLOCKED 策略仅继续适用于身份不可核验者。两新候选 evidence_refs 为本地控制平面路径（非本仓库相对路径），已在各条 blockers 显式标注。",
   "date": "2026-07-30",
   "source_archive_root": "experiments/henry_dicode_student_upgrade/",
   "canonical_constants": {
@@ -12,29 +12,49 @@
     "action_dim_note": "action_dim=43 非静态常量，运行时由 env.action_space(env_params).n 导出（gpu0_training_mechanisms/src/dicode/ppo_tr.py:124/:764, craftax_evaluation.py:20）；数值 43 文档化于 HENRY_NATIVE_EVAL_EXTRACTION.md 并被 run_p9_authentic_98304.py:198 `assert action_dim==43 and obs_dim==8335 and EMB==67` 固化"
   },
   "counts": {
-    "total_candidates_found": 21,
-    "eligible_now": 0,
+    "total_candidates_found": 23,
+    "eligible_now": 2,
     "eligible_after_thin_adapter": 5,
     "eligible_after_matched_98304": 8,
     "blocked_identity": 8,
     "rejected": 0
   },
   "round_1_candidate_order": [
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304",
     "CONTROL_CONTINUOUS_98304",
     "BASELINE_TEACHER_CKPT17500",
     "SLOWGRU_RESET128_LONGRUN_98304",
-    "SLOWGRU_PERSISTENT_24576",
+    "SLOWGRU_PERSISTENT_24576"
+  ],
+  "round_1_alternates": [
     "EVENTMEM32_RESET128_24576",
     "EVENTMEM32_PERSISTENT_24576",
-    "W512_RESET128_P2REPLAY_24576",
-    "P2_FULL_A_V1_98304"
+    "W512_RESET128_P2REPLAY_24576"
   ],
   "cc2_recommendation": {
-    "primary_new_training_candidate": "P2_FULL_A_V1_98304",
+    "primary_new_training_candidate": "NONE_PENDING_FAST_EXISTING_STUDENT_SCREEN",
     "secondary_new_training_candidate": "SLOWGRU_PERSISTENT_24576",
-    "rationale": "按任务默认条款：Base GTrXL + Original V-trace Replay（即 P2-Full-A 谱系）默认列为 PRIMARY——除非发现已存在【可验证】的匹配 98304 checkpoint。盘点结果：P2-Full-A Resume RUN1@98304 (params_sha256=67689592…) 仅在【报告级】存在（manifest 已镜像但 checkpoint 实体在服务器、本地不可复算 → evidence_class=REAL_CHECKPOINT_REPORTED 而非 VERIFIED），且其性能未超 Control（@98304 30.08% vs 34.38%，NO_DELAYED_ONSET_WITHIN_98304=true）。因此不存在可验证的匹配 98304 checkpoint，默认条款生效：PRIMARY=P2_FULL_A_V1_98304，建议在 canonical 冻结 provenance 下重训匹配 98304（工程健康 ENGINEERING_PASS=true、replay/hindsight/AWR 机制最完整、谱系哈希链自洽）。SECONDARY=SLOWGRU_PERSISTENT_24576：尚无匹配 98304 的高性能候选中性能最强（DK SR 42.97%，仅次于教师与控制），且非纯消融；风险如实记录：其 Reset128 同胞长训@98304 已反转为有害（−8.59pp，TRANSIENT_SIGNAL），carry 因果为负（−1.56pp ns），新匹配训练恰为检验 persistent-carry 变体在匹配预算下的可持续性。候补顺位：W512_RESET128_P2REPLAY_24576（37.11%，replay 机制完整、工程健康）。两者均属高性能候选而非纯消融；最终是否授权训练由总监/CC2 裁定，本 registry 不授权任何训练。",
-    "matched_98304_already_exists": false
+    "rationale": "修正轮覆写（2026-07-30）：CC2→CC4 direct98304 交接（本地控制平面 orchestration/control/20260729T234937+0800_cc2_to_cc4_handover_direct98304.md）交付了【可验证】的匹配 98304 真实 artifact——RMT16 original_vtrace 双臂（PERSISTENT/RESET128）工程门禁全 PASS（pair_pass=true、persistent_rc=0/reset128_rc=0、PHASE4A_ARM_FINAL_STATUS=PASS、RUNTIME_CONFIG_CERTIFICATE_STATUS=PASS、base_checkpoint_match=PASS、nan_inf_observed=false、constants_mismatch=false、traceback_or_error=false），SHA 证据链完整（base inner-params d4e85af5… 两臂 PASS == 本 registry 教师/基座锚点；step0=2f8cd875993ae103 bit-exact；final_params_sha 各臂已录；per-arm scientific_config/certificate/config_file 全 SHA），CC4 artifact handoff 可访问且真实前向与 interface smoke 已存在（EXTERNAL_VERIFIED_ARTIFACT），故 matched_98304_already_exists=true，盘点轮默认条款被推翻。PRIMARY_NEW_TRAINING_CANDIDATE=NONE_PENDING_FAST_EXISTING_STUDENT_SCREEN：当下不建议新训练，先用既有 artifact 完成 ROUND_1 fast-screen（ELIGIBLE_NOW 2 项 + FAST_ADAPTER_PRIORITY 覆盖 CONTROL/TEACHER/SlowGRU）。P2_FULL_A_V1_98304 降为 DEPRIORITIZED_KNOWN_UNDERPERFORMER（既有匹配 98304 但 @98304 30.08% < Control 34.38%、NO_DELAYED_ONSET_WITHIN_98304=true），退出 ROUND_1 fast-lane，adapter 标记 DEFERRED_AFTER_FAST_SCREEN。新增顶层字段 PRIMARY_ARTIFACT_RECOVERY=CONTROL_CONTINUOUS_98304、SECONDARY_ARTIFACT_RECOVERY=BASELINE_TEACHER_CKPT17500（既有真实 artifact 恢复/重放优先级）。SECONDARY 保留 SLOWGRU_PERSISTENT_24576（未被指令撤销；尚无匹配 98304 候选中性能最强 42.97%、非纯消融；风险仍存：Reset128 同胞长训@98304 反转为有害 −8.59pp）——仅在 fast-screen 证明既有 artifact 全部不足时才进入考虑。候补顺位（round_1_alternates 字段）：EVENTMEM32_RESET128_24576（40.23%）→ EVENTMEM32_PERSISTENT_24576（37.50%）→ W512_RESET128_P2REPLAY_24576（37.11%，盘点轮 ROUND_1 第 7 位降出）——三者 adapter 族均在 DEFERRED_AFTER_FAST_SCREEN，故不占 fast-lane 席位。最终训练授权仍由总监/CC2 裁定，本 registry 不授权任何训练。",
+    "matched_98304_already_exists": true
   },
+  "primary_artifact_recovery": "CONTROL_CONTINUOUS_98304",
+  "secondary_artifact_recovery": "BASELINE_TEACHER_CKPT17500",
+  "fast_adapter_priority": [
+    "EXISTING_RMT16_ADAPTER",
+    "THIN_GTRXL128_PICKLE_CONTROL",
+    "THIN_GTRXL128_ORBAX_BASE",
+    "THIN_GTRXL128_SLOWGRU_PICKLE"
+  ],
+  "deferred_adapter_families": [
+    "THIN_GTRXL128_P2REPLAY_PICKLE",
+    "THIN_GTRXL128_EVENTMEM32_PICKLE",
+    "THIN_W512_P2REPLAY_PICKLE",
+    "THIN_RMT16_PICKLE",
+    "THIN_GTRXL128_SUMMARYMEM_PICKLE",
+    "THIN_GTRXL_EGOMAP_PICKLE",
+    "THIN_GTRXL_LONGCONTEXT_PICKLE"
+  ],
   "d052_boundary": {
     "d052_real_pool": "NOT_STARTED",
     "d052_student_profile": "NOT_FINALIZED",
@@ -133,6 +153,98 @@
       ]
     },
     {
+      "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+      "display_name": "RMT16-LONG98304-PERSISTENT（Phase4A-v2 direct-98304 长跑 persistent 臂；CC2→CC4 交接全门禁 PASS；性能待 ROUND_1 fast-screen 测定）",
+      "network_family": "ActorCriticTransformer + RMT16（rmt_num_tokens=16；证书版本 phase4a_v2.4、frozen spec SHA 722b9971…；run_class=long_run_98304）",
+      "memory_family": "RMT16 memory tokens（16）+ GTrXL window-128",
+      "carry_mode": "PERSISTENT",
+      "replay_mode": "original_vtrace（ρ̄=c̄=1.0，γ=0.999，sequence_length=129，replay ring 容量 64；STEPS_PER_UPDATE=2048 × total_updates=48 = 98304 env steps；save_every=4 → 每 8192 步一存；late-update replay buffer 满容量(64)=true）",
+      "hindsight": "NONE_RECORDED_IN_HANDOVER（CC2 交接 §5 运行配置语义仅列 run_class/replay_mode/seed/sequence_length；逐项开关以本臂 scientific_config_sha256 为准）",
+      "awr": "NONE_RECORDED_IN_HANDOVER（同上）",
+      "training_task": "Craftax S4 Stage4-native DEFEAT_KOBOLD（phase4a 长跑；CC2 交接 §10 明确不交付 reward 曲线/成功率/科学解释）",
+      "training_steps": 98304,
+      "training_seed": 42,
+      "base_checkpoint": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500（两臂共用起点；base_checkpoint_match=PASS；inner-params SHA=d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5 == 本 registry 教师/基座锚点；step0 bit-exact params_sha=2f8cd875993ae103 == bakeoff RMT16 与 Phase4A smoke step0 2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b 前缀 → matched-init 跨阶段成立）",
+      "checkpoint_path_or_reference": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl（本臂 13 个 checkpoint，steps {0,8192,16384,24576,32768,40960,49152,57344,65536,73728,81920,90112,98304}，both_arms_complete=true；final 写入 2026-07-29T23:15:12+08:00；GPU2 GPU-8df11537-ab79-722d-606f-411966196c4c；real_return_code=0、exit_source=wait_pid、inferred_from_log=false、killed_by_signal=0）",
+      "checkpoint_file_sha256": "NONE_RECORDED_FOR_FINAL_98304_PKL（交接/addendum 未录 final full_state.pkl 全文件 SHA；同臂 smoke4096 pkl SHA=98de93500acdcb3634ea892b13d558af6ad4ebefaa77b8604f1db5ee311cafe9（参照）；运行级身份证据：scientific_config_sha256=1dffdf09cb741c6a3f933071f1d83e58a4ec40c49dbad4fa8c4c616c3fb03092（==runtime，证书 PASS）、certificate_file_sha256=b0adee4610312e5534761ed3ab12d51d75d4a5791810961bb7dc8895d0b12fc9、config_file_sha256=992445eefa30042dc043ed8c5403568e016c6db3f416eaa0564b12a01ba9109b）",
+      "params_sha256": "aa6ba44040a0742b（@98304 final_params_sha；报告截断至 16 字符，addendum/handover 原文逐字如此；完整 64 字符待服务器 launch_status.json/证书复算补全）",
+      "source_commit": "76b294b030db79e84b45b233c76dbce9c9cc829b（分支 henry/rmt16-phase4a-v2-original-vtrace，LOCAL==REMOTE，worktree CLEAN；git_sha 两臂/pair/preflight 一致）",
+      "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc（driver_file_sha256，LF 归一，两臂共用，全 64 字符）",
+      "policy_source_sha256": "network_rmt16.py=b5c37d7aa2e9…; rmt16_memory.py=17e1a614c404…（Phase4A 冻结源 SHA，报告截断）",
+      "observation_shape": [8335],
+      "action_dim": 43,
+      "checkpoint_format": "pickle（full_state.pkl，完整训练状态；每臂标准布局：ckpt/<step>/full_state.pkl + launch_status.json + launcher.stdout.log + *_train.jsonl + runtime_config_certificate*.json；读取环境 dicode310 py3.10.20/jax0.6.0，PYTHONPATH=<SNAP>/runtime/frozen_modules:<SNAP>/runtime/experiment_src（<SNAP>=/home/oseasy/cc2_data/cc2_source_76b294b）；反污染门禁：env|grep RMT16_POSTJAX_BINDING_SELFTEST 必须为空）",
+      "cc4_adapter_family": "EXISTING_RMT16_ADAPTER（CC4 已持有；按指令真实前向与 interface smoke 已存在；FAST_ADAPTER_PRIORITY 第 1 位）",
+      "evidence_class": "REAL_CHECKPOINT_VERIFIED",
+      "budget_class": "MATCHED_98304",
+      "readiness": "ELIGIBLE_NOW",
+      "evidence_location_class": "EXTERNAL_VERIFIED_ARTIFACT",
+      "artifact_owner": "CC4（artifact 由 CC2 发射于服务器 oseasy@172.25.14.221，run 76b294b；CC2→CC4 交接完成于 2026-07-30T00:05+08:00；CC4 为下游分析/筛选 owner）",
+      "artifact_handoff_required": true,
+      "blockers": [
+        "残留备注（不构成 blocker）：checkpoint 实体在服务器、未提交本仓库 Git——按总监指令，此点不构成不可运行依据；资格依据为经验证交接链（pair_pass=true、PHASE4A_ARM_FINAL_STATUS=PASS、RUNTIME_CONFIG_CERTIFICATE_STATUS=PASS、base_checkpoint_match=PASS、nan_inf_observed=false、constants_mismatch=false、traceback_or_error=false、elapsed_seconds=7986）",
+        "params_sha256 为 16 字符前缀（报告截断，addendum 逐字转录）；如需全文由服务器侧 launch_status.json/证书复算",
+        "性能待 ROUND_1 fast-screen 测定（CC2 交接 §10 明确不交付成功率/科学解释；performance=null 为如实记录而非缺陷）",
+        "evidence_refs 为本地控制平面路径（D:/Projects/dicode-codex-director/orchestration/control/ 下），不在本仓库"
+      ],
+      "performance": null,
+      "evidence_refs": [
+        "orchestration/control/20260729T234937+0800_cc2_to_cc4_handover_direct98304.md",
+        "orchestration/control/20260729T231800+0800_cc2_direct98304_run_completion_addendum.json",
+        "orchestration/control/20260729T210800+0800_cc2_storage_remediation_direct98304_launch.json",
+        "orchestration/control/20260729T195618+0800_cc2_postjax_hotfix_direct98304_report.json",
+        "orchestration/control/tournament_v1/budget_tagging.json",
+        "orchestration/control/tournament_v1/blocker_ledger.json",
+        "orchestration/control/tournament_v1/readiness_status.json"
+      ]
+    },
+    {
+      "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+      "display_name": "RMT16-LONG98304-RESET128（Phase4A-v2 direct-98304 长跑 reset128 臂；CC2→CC4 交接全门禁 PASS；性能待 ROUND_1 fast-screen 测定）",
+      "network_family": "ActorCriticTransformer + RMT16（rmt_num_tokens=16；证书版本 phase4a_v2.4、frozen spec SHA 722b9971…；run_class=long_run_98304）",
+      "memory_family": "RMT16 memory tokens（16）+ GTrXL window-128",
+      "carry_mode": "RESET128",
+      "replay_mode": "original_vtrace（ρ̄=c̄=1.0，γ=0.999，sequence_length=129，replay ring 容量 64；STEPS_PER_UPDATE=2048 × total_updates=48 = 98304 env steps；save_every=4 → 每 8192 步一存；late-update replay buffer 满容量(64)=true）",
+      "hindsight": "NONE_RECORDED_IN_HANDOVER（CC2 交接 §5 运行配置语义仅列 run_class/replay_mode/seed/sequence_length；逐项开关以本臂 scientific_config_sha256 为准）",
+      "awr": "NONE_RECORDED_IN_HANDOVER（同上）",
+      "training_task": "Craftax S4 Stage4-native DEFEAT_KOBOLD（phase4a 长跑；CC2 交接 §10 明确不交付 reward 曲线/成功率/科学解释）",
+      "training_steps": 98304,
+      "training_seed": 42,
+      "base_checkpoint": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500（两臂共用起点；base_checkpoint_match=PASS；inner-params SHA=d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5 == 本 registry 教师/基座锚点；step0 bit-exact params_sha=2f8cd875993ae103 == bakeoff RMT16 与 Phase4A smoke step0 2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b 前缀 → matched-init 跨阶段成立）",
+      "checkpoint_path_or_reference": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl（本臂 13 个 checkpoint，steps {0,8192,16384,24576,32768,40960,49152,57344,65536,73728,81920,90112,98304}，both_arms_complete=true；final 写入 2026-07-29T23:16:22+08:00；GPU3 GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd；real_return_code=0、exit_source=wait_pid、inferred_from_log=false、killed_by_signal=0）",
+      "checkpoint_file_sha256": "NONE_RECORDED_FOR_FINAL_98304_PKL（交接/addendum 未录 final full_state.pkl 全文件 SHA；同臂 smoke4096 pkl SHA=731cd4a9dcc46bf04d2ed182dce7f66649e55da84ad9df3b2c15d6d66f530ec6（参照）；运行级身份证据：scientific_config_sha256=140a535c786f02c0a2bb0124629f04558bd821fe80c6d5939a95083efe412693（==runtime，证书 PASS）、certificate_file_sha256=133f99171ab30c1153347c3197d59be902ea2134bfb44ad744ed50598e45e674、config_file_sha256=923940cf2a87b41149bc6275e27741fd45aea5f548cc7d464c912e10921f1e92）",
+      "params_sha256": "78a14cc6e9ccdeb2（@98304 final_params_sha；报告截断至 16 字符，addendum/handover 原文逐字如此；完整 64 字符待服务器 launch_status.json/证书复算补全）",
+      "source_commit": "76b294b030db79e84b45b233c76dbce9c9cc829b（分支 henry/rmt16-phase4a-v2-original-vtrace，LOCAL==REMOTE，worktree CLEAN；git_sha 两臂/pair/preflight 一致）",
+      "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc（driver_file_sha256，LF 归一，两臂共用，全 64 字符）",
+      "policy_source_sha256": "network_rmt16.py=b5c37d7aa2e9…; rmt16_memory.py=17e1a614c404…（Phase4A 冻结源 SHA，报告截断）",
+      "observation_shape": [8335],
+      "action_dim": 43,
+      "checkpoint_format": "pickle（full_state.pkl，完整训练状态；每臂标准布局：ckpt/<step>/full_state.pkl + launch_status.json + launcher.stdout.log + *_train.jsonl + runtime_config_certificate*.json；读取环境 dicode310 py3.10.20/jax0.6.0，PYTHONPATH=<SNAP>/runtime/frozen_modules:<SNAP>/runtime/experiment_src（<SNAP>=/home/oseasy/cc2_data/cc2_source_76b294b）；反污染门禁：env|grep RMT16_POSTJAX_BINDING_SELFTEST 必须为空）",
+      "cc4_adapter_family": "EXISTING_RMT16_ADAPTER（CC4 已持有；按指令真实前向与 interface smoke 已存在；FAST_ADAPTER_PRIORITY 第 1 位）",
+      "evidence_class": "REAL_CHECKPOINT_VERIFIED",
+      "budget_class": "MATCHED_98304",
+      "readiness": "ELIGIBLE_NOW",
+      "evidence_location_class": "EXTERNAL_VERIFIED_ARTIFACT",
+      "artifact_owner": "CC4（artifact 由 CC2 发射于服务器 oseasy@172.25.14.221，run 76b294b；CC2→CC4 交接完成于 2026-07-30T00:05+08:00；CC4 为下游分析/筛选 owner）",
+      "artifact_handoff_required": true,
+      "blockers": [
+        "残留备注（不构成 blocker）：checkpoint 实体在服务器、未提交本仓库 Git——按总监指令，此点不构成不可运行依据；资格依据为经验证交接链（pair_pass=true、PHASE4A_ARM_FINAL_STATUS=PASS、RUNTIME_CONFIG_CERTIFICATE_STATUS=PASS、base_checkpoint_match=PASS、nan_inf_observed=false、constants_mismatch=false、traceback_or_error=false、elapsed_seconds=7986）",
+        "params_sha256 为 16 字符前缀（报告截断，addendum 逐字转录）；如需全文由服务器侧 launch_status.json/证书复算",
+        "性能待 ROUND_1 fast-screen 测定（CC2 交接 §10 明确不交付成功率/科学解释；performance=null 为如实记录而非缺陷）",
+        "evidence_refs 为本地控制平面路径（D:/Projects/dicode-codex-director/orchestration/control/ 下），不在本仓库"
+      ],
+      "performance": null,
+      "evidence_refs": [
+        "orchestration/control/20260729T234937+0800_cc2_to_cc4_handover_direct98304.md",
+        "orchestration/control/20260729T231800+0800_cc2_direct98304_run_completion_addendum.json",
+        "orchestration/control/20260729T210800+0800_cc2_storage_remediation_direct98304_launch.json",
+        "orchestration/control/20260729T195618+0800_cc2_postjax_hotfix_direct98304_report.json",
+        "orchestration/control/tournament_v1/budget_tagging.json",
+        "orchestration/control/tournament_v1/blocker_ledger.json",
+        "orchestration/control/tournament_v1/readiness_status.json"
+      ]
+    },
+    {
       "candidate_id": "P2_FULL_A_V1_98304",
       "display_name": "P2-Full-A-v1（Base GTrXL + Original V-trace Replay + hindsight AWR；LevelB@24576 → Resume RUN1@98304）",
       "network_family": "ActorCriticTransformer（原生大 GTrXL-128：window_mem 128 / layers 2 / embed,qkv 256 / heads 8 / gating bias 2.0；4,906,028 params，80 leaves；R2 长上下文未实现）",
@@ -158,7 +270,9 @@
       "evidence_class": "REAL_CHECKPOINT_REPORTED",
       "budget_class": "MATCHED_98304",
       "readiness": "ELIGIBLE_AFTER_THIN_ADAPTER",
+      "priority": "DEPRIORITIZED_KNOWN_UNDERPERFORMER",
       "blockers": [
+        "修正轮降权（2026-07-30）：priority=DEPRIORITIZED_KNOWN_UNDERPERFORMER——既有匹配 98304 但 @98304 30.08% < Control 34.38%（NO_DELAYED_ONSET_WITHIN_98304=true）；已退出 ROUND_1 fast-lane，其 adapter 族 THIN_GTRXL128_P2REPLAY_PICKLE 标记 DEFERRED_AFTER_FAST_SCREEN",
         "性能未超 Control：@98304 30.08% vs 34.38%（NO_DELAYED_ONSET_WITHIN_98304=true；全曲线仅 @49152 39.45% vs 35.55% 单点领先、未持续）",
         "checkpoint 实体在服务器；SHA 报告级（manifest 已镜像、谱系 source 字段互证）",
         "resume manifest 无 driver SHA；posthoc dk_success @24576/49152=0、@73728/98304=1 → SUCCESS_GRADIENT_NOT_ESTIMABLE（CONFIDENCE=MEDIUM）",

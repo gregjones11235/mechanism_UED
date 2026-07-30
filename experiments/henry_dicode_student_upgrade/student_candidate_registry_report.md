@@ -1,8 +1,8 @@
 # Student Candidate Registry v1 —— 性能优先候选盘点报告
 
 - 任务：CC3_ALL_EXISTING_STUDENT_CANDIDATE_REGISTRY_AND_PERFORMANCE_PRIORITY（只做候选盘点、身份归一化与优先级排序；**未开始 D052 v2 实验，未授权任何训练**）
-- 日期：2026-07-30 ｜ 分支：`henry/d052-canonical-refactor` @ 12ac24d7 + 本轮单提交（本地 commit，未 push）
-- 产物：`student_candidate_registry_v1.json`（机器可读，21 候选）+ `student_candidate_registry_v1_schema.json`（JSON Schema draft-07）+ 本报告
+- 日期：2026-07-30 ｜ 分支：`henry/d052-canonical-refactor` @ 12ac24d7 → 1b52b47（盘点轮单提交）→ 本轮修正 follow-up 提交（见 §9；不 amend 1b52b47）
+- 产物：`student_candidate_registry_v1.json`（机器可读，23 候选 = 21 盘点 + 2 修正轮新增，见 §9）+ `student_candidate_registry_v1_schema.json`（JSON Schema draft-07，修正轮扩展 4 个候选字段 + 4 个顶层字段）+ 本报告（§9 为修正轮）
 - 证据来源：`experiments/henry_dicode_student_upgrade/` 归档（13 阶段目录 + inventory + MANIFEST.sha256 + README/TERMINOLOGY/SCIENTIFIC_STATUS/EXPERIMENT_TIMELINE/EVALUATION_PROTOCOL/ARTIFACT_MANIFEST 六份治理文档）与 `gpu1_aggregation_siege/reports/` 冻结标签；CC3 四路并行取证 agent（Base/GTrXL+D052、RMT16、W512+P2、SlowGRU/长记忆 bakeoff/P7-P9）
 
 ## 1. 关键前置事实（决定一切 readiness 判定）
@@ -45,6 +45,7 @@
 
 ## 4. 给 CC2 的推荐（§四）
 
+- （**本节已被 §9 修正轮覆写**：PRIMARY_NEW_TRAINING_CANDIDATE=NONE_PENDING_FAST_EXISTING_STUDENT_SCREEN；P2_FULL_A_V1_98304=DEPRIORITIZED_KNOWN_UNDERPERFORMER；新增 PRIMARY_ARTIFACT_RECOVERY=CONTROL_CONTINUOUS_98304 / SECONDARY_ARTIFACT_RECOVERY=BASELINE_TEACHER_CKPT17500。以下为盘点轮原文，保留留痕。）
 - **PRIMARY_NEW_TRAINING_CANDIDATE = P2_FULL_A_V1_98304**（Base GTrXL + Original V-trace Replay 谱系）。按任务默认条款：除非发现**已存在可验证的匹配 98304 checkpoint**，否则该谱系默认 PRIMARY。盘点结论：P2-Full-A Resume RUN1@98304（params `67689592…`）仅**报告级**存在（manifest 已镜像但实体在服务器、本地不可复算 → `REAL_CHECKPOINT_REPORTED` 而非 `VERIFIED`），且性能未超 Control（@98304 30.08% vs 34.38%，`NO_DELAYED_ONSET_WITHIN_98304=true`）。故 `matched_98304_already_exists=false`，默认条款生效。推荐理由：工程健康（ENGINEERING_PASS、any_nan false、KL 门生效）、replay/hindsight/AWR 机制最完整、谱系哈希链自洽（LevelB@24576 `bd084220…` → resume@98304）。**张力如实上报**：该谱系已有一次报告级 98304 负结果；是否值得在 canonical 冻结 provenance 下重训，由总监/CC2 裁定——若总监认为重跑价值低，可将 Control 线（第 1 位）视为事实最强基线。本 registry 不授权训练。
 - **SECONDARY_NEW_TRAINING_CANDIDATE = SLOWGRU_PERSISTENT_24576**。尚无匹配 98304 的高性能候选中性能最强（42.97%），非纯消融。风险：其 Reset128 同胞长训 @98304 已反转有害（−8.59pp），carry 因果为负（−1.56pp ns）——新匹配训练恰为检验 persistent-carry 变体在匹配预算下是否可持续。候补顺位：W512_RESET128_P2REPLAY_24576（37.11%，replay 机制完整、工程健康）。
 - 两者均属高性能候选而非纯消融；SlowGRU Detach/MatchedMLP 两归因臂依规排除。
@@ -96,4 +97,56 @@ winner_profile_input_schema = null（预留）
 - 单提交 `docs(student): register performance-screen candidates`，仅含 registry JSON + schema + 本报告；
 - 未从总结重新生成任何 JSON/JSONL——所有 SHA 与性能数字均逐字转录自在库 manifest/report 原件。
 
-**本轮到此停止，等待总监复核。真正 winner 产生前，D052 保持 NOT_STARTED。**
+## 9. 修正轮（2026-07-30，最小修正；不重新盘点全部项目）
+
+吸收 CC2→CC4 direct98304 交接真实证据，修正训练推荐与 adapter 优先级。仅改 registry JSON / schema / 本报告三件；盘点轮提交 1b52b47 不动（不 amend）。
+
+### 9.1 新增两个 ELIGIBLE_NOW 候选（CC4 外部已验证 artifact）
+
+| candidate_id | final_params_sha @98304 | base 匹配 | 工程门禁 | checkpoint（服务器，CC4 持有） |
+|---|---|---|---|---|
+| PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 | `aa6ba44040a0742b`（16 字符前缀，addendum 逐字） | d4e85af5… PASS；step0 `2f8cd875993ae103` bit-exact | 全 PASS（rc=0，证书 PASS） | `/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl` |
+| RESET128_RMT16_ORIGINAL_VTRACE_98304 | `78a14cc6e9ccdeb2`（16 字符前缀，addendum 逐字） | 同上 | 同上 | `.../RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl` |
+
+- 新增字段：`evidence_location_class=EXTERNAL_VERIFIED_ARTIFACT`、`artifact_owner=CC4`、`artifact_handoff_required=true`；`evidence_class=REAL_CHECKPOINT_VERIFIED`、`budget_class=MATCHED_98304`。
+- **readiness 策略修正（按总监指令）**："不得因为 checkpoint 未提交到 Git 而标记为不可运行"。两者已具备：真实 final98304 checkpoint（每臂 13 个、both_arms_complete=true）、checkpoint/params SHA（final 98304 pkl 全文件 SHA 交接未录——如实记 NONE_RECORDED_FOR_FINAL_98304_PKL；身份证据落在 final_params_sha + per-arm scientific_config/certificate/config_file 全 SHA 链）、CC4 RMT16 adapter、真实前向与 interface smoke、可访问的 CC4 artifact handoff → 登记 **ELIGIBLE_NOW**。盘点轮的保守 BLOCKED 策略仅继续适用于身份不可核验者。
+- 证据链（本地控制平面 `D:/Projects/dicode-codex-director/orchestration/control/`，不在本仓库，已在条目内标注）：CC2→CC4 交接 MD（RUN_COMPLETE_ALL_GATES_PASS）+ run_completion_addendum.json（pair_pass=true，total_env_steps=98304，total_updates=48，elapsed 7986s，GPU2/GPU3 only）+ 20260729T210800 发射报告 + 20260729T195618 postjax hotfix 报告 + tournament_v1 录取记录（budget_tagging/blocker_ledger/readiness_status，逻辑名与 SHA/budget-tag 由本 registry 权威提供）。
+- `performance=null`：CC2 交接 §10 明确不交付成功率/科学解释；性能由 ROUND_1 fast-screen（CC4 统一评估器 + 冻结 FRONT/BACK 状态集）测定。
+- 跨阶段锚点复验：base inner-params `d4e85af5…` == 本 registry 教师/Control 锚点；step0 `2f8cd875993ae103` == bakeoff RMT16 与 Phase4A smoke step0 全文 `2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b` 前缀（前缀匹配）→ matched-init 链成立。
+
+### 9.2 训练推荐修正（覆写 §4）
+
+- `PRIMARY_NEW_TRAINING_CANDIDATE = NONE_PENDING_FAST_EXISTING_STUDENT_SCREEN`：`matched_98304_already_exists` 由 false 升为 true（已有可验证匹配 98304 真实 artifact），默认条款被推翻；当下不建议新训练，先筛既有 artifact。
+- `P2_FULL_A_V1_98304.priority = DEPRIORITIZED_KNOWN_UNDERPERFORMER`（@98304 30.08% < Control 34.38%，NO_DELAYED_ONSET_WITHIN_98304=true），退出 ROUND_1。
+- 新增顶层字段：`PRIMARY_ARTIFACT_RECOVERY = CONTROL_CONTINUOUS_98304`、`SECONDARY_ARTIFACT_RECOVERY = BASELINE_TEACHER_CKPT17500`。
+- `SECONDARY_NEW_TRAINING_CANDIDATE` 保留 `SLOWGRU_PERSISTENT_24576`（指令未撤销；仅在 fast-screen 证明既有 artifact 全部不足时进入考虑）。
+
+### 9.3 adapter 优先级（覆写 §5 路由次序）
+
+```
+FAST_ADAPTER_PRIORITY = [EXISTING_RMT16_ADAPTER, THIN_GTRXL128_PICKLE_CONTROL, THIN_GTRXL128_ORBAX_BASE, THIN_GTRXL128_SLOWGRU_PICKLE]
+DEFERRED_AFTER_FAST_SCREEN = [THIN_GTRXL128_P2REPLAY_PICKLE, THIN_GTRXL128_EVENTMEM32_PICKLE, THIN_W512_P2REPLAY_PICKLE, THIN_RMT16_PICKLE, THIN_GTRXL128_SUMMARYMEM_PICKLE, THIN_GTRXL_EGOMAP_PICKLE, THIN_GTRXL_LONGCONTEXT_PICKLE]
+```
+
+### 9.4 ROUND_1 fast-lane（重排，6 条；schema maxItems=8，下限 4）
+
+`PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 → RESET128_RMT16_ORIGINAL_VTRACE_98304 → CONTROL_CONTINUOUS_98304 → BASELINE_TEACHER_CKPT17500 → SLOWGRU_RESET128_LONGRUN_98304 → SLOWGRU_PERSISTENT_24576`
+
+候补 `round_1_alternates`（7–9 位）：`EVENTMEM32_RESET128_24576 → EVENTMEM32_PERSISTENT_24576 → W512_RESET128_P2REPLAY_24576`。
+
+- 移出 fast-lane：`P2_FULL_A_V1_98304`（降权 DEPRIORITIZED_KNOWN_UNDERPERFORMER）；`W512_RESET128_P2REPLAY_24576`、`EVENTMEM32_*_24576` 两名（其 adapter 族 THIN_W512_P2REPLAY_PICKLE / THIN_GTRXL128_EVENTMEM32_PICKLE 均标记 DEFERRED_AFTER_FAST_SCREEN → 不得占 fast-lane 席位，降为候补）。
+- 可执行性（§9.5 验证脚本复核）：6 个席位逐条被 FAST_ADAPTER_PRIORITY 覆盖——前 2 位 ELIGIBLE_NOW × EXISTING_RMT16_ADAPTER（CC4 已持有，零新 adapter 工程）；CONTROL_CONTINUOUS_98304 → THIN_GTRXL128_PICKLE_CONTROL；BASELINE_TEACHER_CKPT17500 → THIN_GTRXL128_ORBAX_BASE；SLOWGRU 两名 → THIN_GTRXL128_SLOWGRU_PICKLE。无 DEFERRED 族成员占位。P9_AUTHENTIC_RESET_98304 虽属 PICKLE_CONTROL 族且 matched 98304，但性能 −4.30pp@98304（NO_POSITIVE_SIGNAL），按性能优先不入 fast-lane（如 CC4 需要第 7 席可由总监裁定补入）。
+
+### 9.5 计数自洽
+
+```
+total_candidates_found = 23 = ELIGIBLE_NOW 2 + ELIGIBLE_AFTER_THIN_ADAPTER 5 + ELIGIBLE_AFTER_MATCHED_98304 8 + BLOCKED_IDENTITY 8 + REJECTED 0 ✓
+```
+
+（jsonschema draft-07 验证、直方图自洽、ROUND_1 可执行性三项复核结果见修正轮提交说明与验证脚本输出。）
+
+### 9.6 合规
+
+不重新盘点全部项目；不 amend 1b52b47；未授权训练、未调 LLM、未触碰任何 checkpoint 实体；两新候选 evidence_refs 为本地控制平面路径（非本仓库），已显式标注；单 follow-up 提交 `fix(student): bind verified RMT16 artifacts and correct SOTA priorities`，随后非强制 fast-forward push 两个提交（盘点轮 + 修正轮）。
+
+**两轮均到此停止，等待总监复核。真正 winner 产生前，D052 保持 NOT_STARTED。**
