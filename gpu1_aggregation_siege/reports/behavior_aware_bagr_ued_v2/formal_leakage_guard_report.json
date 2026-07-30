@@ -1,0 +1,42 @@
+{
+  "allowed_demonstrations": {
+    "generative_training": {
+      "findings": [],
+      "guard": "FormalEvaluationLeakageGuard",
+      "label": "demo_generative_training",
+      "passed": true
+    }
+  },
+  "allowed_sources": [
+    "GENERATIVE_TRAINING_ENV",
+    "SYNTHETIC_TEST_TRACE"
+  ],
+  "board_input_status": "PASS",
+  "fail_closed_demonstrations": {
+    "formal_front": {
+      "findings": [
+        {
+          "code": "FORMAL_EVALUATION_LEAKAGE",
+          "detail": "provenance value 'FORMAL_FRONT' is a forbidden formal-evaluation source",
+          "path": "$.provenance.source"
+        },
+        {
+          "code": "FORMAL_EVALUATION_LEAKAGE",
+          "detail": "free-text provenance mentions forbidden source 'formal_front'",
+          "path": "$.provenance.source"
+        }
+      ],
+      "guard": "FormalEvaluationLeakageGuard",
+      "label": "demo_formal_front",
+      "passed": false
+    }
+  },
+  "forbidden_sources": [
+    "FORMAL_BACK",
+    "FORMAL_EVALUATION_CERTIFICATE_PRIVATE_STATE",
+    "FORMAL_FRONT",
+    "FORMAL_FULL",
+    "FROZEN_BANK"
+  ],
+  "guard": "FormalEvaluationLeakageGuard"
+}

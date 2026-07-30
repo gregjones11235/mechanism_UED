@@ -1,0 +1,35 @@
+{
+  "blocking_external_dependencies": [
+    {
+      "id": "REAL_TASKPARAMS_ADAPTER",
+      "note": "real Global TaskParams adapter not delivered; mock adapter + legality gate used; real fields never guessed",
+      "status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "id": "REAL_LLM_BACKEND",
+      "note": "review board roles run on the deterministic mock backend; real providers require director authorization (REAL_LLM_CALLS_AUTHORIZED=false)",
+      "status": "NOT_CONNECTED"
+    },
+    {
+      "id": "REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE",
+      "note": "must stay PENDING until a director decision",
+      "status": "PENDING"
+    },
+    {
+      "id": "REAL_CANONICAL_CRITIC_SELECTION_POLICY",
+      "note": "must stay PENDING until a director decision",
+      "status": "PENDING"
+    },
+    {
+      "id": "REAL_CANONICAL_POOL",
+      "note": "the 4 global anchors are synthetic ids this round",
+      "status": "OUT_OF_SCOPE_THIS_ROUND"
+    },
+    {
+      "id": "CC4_COMMON_EVALUATOR_SLOWGRU_FAMILY",
+      "note": "carried from CC3 binding task; unrelated to this dry run but part of the same student-pool work stream",
+      "status": "BLOCKED_COMMON_EVALUATOR_SLOWGRU_FAMILY_NOT_REGISTERED"
+    }
+  ],
+  "schema": "bagr_ued.dependency_blockers.v1"
+}

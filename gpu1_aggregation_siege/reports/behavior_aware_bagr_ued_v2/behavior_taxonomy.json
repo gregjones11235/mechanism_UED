@@ -1,0 +1,84 @@
+{
+  "action_advice_policy": "FORBIDDEN — taxonomy is descriptive; no pattern carries an action recommendation",
+  "bagr_ued_version": "d052_v2.bagr_ued.v1",
+  "behavior_patterns": {
+    "combat_freeze": {
+      "description": "Hostile adjacent while the Student repeats a non-combat action and keeps taking damage (combat freeze).",
+      "detector_id": "combat_freeze",
+      "scope": "global threat engagement"
+    },
+    "oscillation_loop": {
+      "description": "Persistent A/B/A/B action alternation without progress (exploration loop).",
+      "detector_id": "oscillation_loop",
+      "scope": "global exploration health"
+    },
+    "premature_terminal": {
+      "description": "Episode ends in death with no recent progress gain and a terminal high-risk behavior pattern.",
+      "detector_id": "premature_terminal_behavior",
+      "scope": "global terminal decision-making"
+    },
+    "progress_regression": {
+      "description": "Achieved progress ordinal decreases and stays down across a window (long-term planning failure).",
+      "detector_id": "progress_regression",
+      "scope": "global long-horizon planning"
+    },
+    "repeated_no_effect": {
+      "description": "Long runs of actions that produce no observable state change (possible tool misuse or action-semantics gap).",
+      "detector_id": "repeated_no_effect_action",
+      "scope": "global efficiency (resource/action waste)"
+    },
+    "resource_neglect": {
+      "description": "Critical resource need persists while no resource-class action is taken (resource waste / planning failure).",
+      "detector_id": "resource_neglect",
+      "scope": "global resource planning"
+    },
+    "unprepared_threat_approach": {
+      "description": "Distance to a hostile closes from far/none to near/adjacent with no preparation (equipment/resource) actions in the approach window.",
+      "detector_id": "threat_approach_without_preparation",
+      "scope": "global preparation/planning"
+    },
+    "unsafe_rest_near_hostile": {
+      "description": "Student performs REST/SLEEP-class actions while a hostile entity is nearby and the environment has not confirmed safety, followed by damage/chase/death.",
+      "detector_id": "unsafe_rest_near_hostile",
+      "scope": "global survival hygiene (dangerous resting)"
+    }
+  },
+  "cause_categories": {
+    "action_semantics_confusion": "The Student may misassociate an action's effect (action-semantics gap).",
+    "distribution_shift": "The situation may lie outside the Student's training distribution.",
+    "environment_ambiguity": "The environment itself may be ambiguous (no discriminable safety signal), i.e. not a Student defect at all.",
+    "exploration_noise": "The behavior may be incidental exploration noise rather than a systematic policy defect.",
+    "implementation_or_adapter_bug": "The observed anomaly may stem from an observation/action adapter bug rather than the policy.",
+    "memory_or_context_retention": "The Student may fail to retain the needed context (recent threat encounter, need trajectory) across steps.",
+    "perception_or_observability": "The relevant signal (threat distance, safe zone, need level) may not be observable or discriminable from the Student's observation.",
+    "resource_planning_failure": "The Student may fail to plan resource acquisition/consumption ahead of need.",
+    "unknown": "Evidence insufficient to narrow the cause class.",
+    "value_or_risk_misestimation": "The Student may misestimate the risk/value tradeoff (e.g. rest value over survival risk)."
+  },
+  "environment_families": {
+    "day_night_rest_need_family": "Environments parametrized by day/night-rest coupling.",
+    "global_task_conflict_family": "Environments parametrized by global task-objective conflict.",
+    "long_term_memory_family": "Environments parametrized by long-term memory requirement.",
+    "multi_threat_interference_family": "Environments parametrized by multi-threat interference.",
+    "resource_pressure_family": "Environments parametrized by resource pressure/scarcity.",
+    "threat_distance_family": "Environments parametrized by threat-distance structure.",
+    "visibility_family": "Environments parametrized by visibility/occlusion."
+  },
+  "mutation_axes": {
+    "day_night_rest_need": "Vary the coupling of the day/night cycle to rest need.",
+    "global_task_conflict": "Vary conflict between concurrent global task objectives.",
+    "long_term_memory_requirement": "Vary how much long-horizon memory the task requires.",
+    "multi_threat_interference": "Vary interference between multiple threats.",
+    "resource_pressure": "Vary scarcity/pressure of key resources.",
+    "rest_need_pressure": "Vary the pressure of the rest/sleep need accumulator.",
+    "safe_rest_area_availability": "Vary the availability of areas where the environment confirms safety for rest.",
+    "threat_count": "Vary the number of simultaneous hostiles.",
+    "threat_distance_grading": "Grade the initial/respawn distance between the Student and hostile entities.",
+    "view_occlusion": "Vary occlusion of the local view (partial observability of threats).",
+    "visibility": "Vary overall visibility range."
+  },
+  "taxonomy_sha256": "54d3ffaea755d8f99351c9879d3eff1da9b640571c1e6e46b5eee90cb9926508",
+  "taxonomy_version": "bagr_ued.behavior_taxonomy.v1",
+  "tier3_only_training": false,
+  "training_scope": "GLOBAL"
+}

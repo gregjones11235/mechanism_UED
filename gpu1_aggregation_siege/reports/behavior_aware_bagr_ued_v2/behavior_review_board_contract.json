@@ -1,0 +1,171 @@
+{
+  "bagr_ued_version": "d052_v2.bagr_ued.v1",
+  "envelope_contract": {
+    "fields": [
+      "backend_id",
+      "model_id",
+      "parsed_json",
+      "prompt_version",
+      "protocol_version",
+      "raw_response",
+      "request_hash",
+      "response_hash",
+      "role",
+      "sequence"
+    ],
+    "model": "RoleEnvelope",
+    "note": "every role output is wrapped: role output hash + prompt version + backend/model identity + sequence"
+  },
+  "gates": {
+    "formal_evaluation_leakage_guard": {
+      "allowed_sources": [
+        "GENERATIVE_TRAINING_ENV",
+        "SYNTHETIC_TEST_TRACE"
+      ],
+      "codes": [
+        "FORMAL_EVALUATION_LEAKAGE",
+        "FORBIDDEN_PROVENANCE_KEY",
+        "SOURCE_NOT_DECLARED"
+      ],
+      "failure_mode": "FAIL_CLOSED",
+      "forbidden_sources": [
+        "FORMAL_BACK",
+        "FORMAL_EVALUATION_CERTIFICATE_PRIVATE_STATE",
+        "FORMAL_FRONT",
+        "FORMAL_FULL",
+        "FROZEN_BANK"
+      ],
+      "scope": "board input context + evidence sources + regret inputs"
+    },
+    "trajectory_supervision_guard": {
+      "codes": [
+        "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN",
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ],
+      "failure_mode": "FAIL_CLOSED",
+      "forbidden_supervision_keys": [
+        "action_sequence_to_follow",
+        "expert_demonstration",
+        "hidden_state_override",
+        "policy_override",
+        "recommended_actions",
+        "reward_delta",
+        "reward_shaping",
+        "waypoints"
+      ],
+      "scope": "EVERY role parsed output + the whole dry-run result"
+    }
+  },
+  "pending_rules": {
+    "note": "both must remain PENDING; CriticSkepticOutput validators refuse any frozen value (CRITIC_RULE_FROZEN_FORBIDDEN / CRITIC_POLICY_FROZEN_FORBIDDEN)",
+    "real_canonical_critic_reject_derivation_rule": "PENDING",
+    "real_canonical_critic_selection_policy": "PENDING"
+  },
+  "real_llm_backend": {
+    "mock_backend_id": "mock.bagr_ued.deterministic.v1",
+    "real_calls_this_round": 0,
+    "status": "NOT_CONNECTED"
+  },
+  "reconciler_note": "rule-based provenance-bound decisions; NOT majority vote; role outputs are CANDIDATE hypotheses only",
+  "reconciliation_rule_version": "bagr_ued.reconcile.v1",
+  "role_execution_order": [
+    "student_modeler",
+    "behavior_auditor",
+    "causal_failure_analyst",
+    "intervention_tutor",
+    "explorer",
+    "critic_skeptic"
+  ],
+  "roles": [
+    {
+      "backend_id": "mock.bagr_ued.deterministic.v1",
+      "context_fold_key": "student_model_snapshot",
+      "model_id": "deterministic-rule-synth.v1",
+      "module": "d052.bagr_ued.student_modeler",
+      "must_not_output": [
+        "causes",
+        "proposals",
+        "action advice"
+      ],
+      "output_schema": "StudentModelSnapshot",
+      "prompt_version": "bagr_ued.roles.v1.student_modeler",
+      "role": "student_modeler",
+      "sequence": 0
+    },
+    {
+      "backend_id": "mock.bagr_ued.deterministic.v1",
+      "context_fold_key": "behavior_findings",
+      "model_id": "deterministic-rule-synth.v1",
+      "module": "d052.bagr_ued.behavior_auditor",
+      "must_not_output": [
+        "failure causes",
+        "environment proposals",
+        "action advice"
+      ],
+      "output_schema": "BehaviorAuditorOutput",
+      "prompt_version": "bagr_ued.roles.v1.behavior_auditor",
+      "role": "behavior_auditor",
+      "sequence": 1
+    },
+    {
+      "backend_id": "mock.bagr_ued.deterministic.v1",
+      "context_fold_key": "causal_hypotheses",
+      "model_id": "deterministic-rule-synth.v1",
+      "module": "d052.bagr_ued.causal_failure_analyst",
+      "must_not_output": [
+        "single-cause attribution",
+        "correlation asserted as causation",
+        "direct Student actions"
+      ],
+      "output_schema": "CausalAnalystOutput",
+      "prompt_version": "bagr_ued.roles.v1.causal_failure_analyst",
+      "role": "causal_failure_analyst",
+      "sequence": 2
+    },
+    {
+      "backend_id": "mock.bagr_ued.deterministic.v1",
+      "context_fold_key": "intervention_hypotheses",
+      "model_id": "deterministic-rule-synth.v1",
+      "module": "d052.bagr_ued.intervention_tutor",
+      "must_not_output": [
+        "action instructions",
+        "fixed action sequences",
+        "reward modifications"
+      ],
+      "output_schema": "InterventionTutorOutput",
+      "prompt_version": "bagr_ued.roles.v1.intervention_tutor",
+      "role": "intervention_tutor",
+      "sequence": 3
+    },
+    {
+      "backend_id": "mock.bagr_ued.deterministic.v1",
+      "context_fold_key": "alternative_environment_proposals",
+      "model_id": "deterministic-rule-synth.v1",
+      "module": "d052.bagr_ued.explorer",
+      "must_not_output": [
+        "Tier3-only framing",
+        "action advice"
+      ],
+      "output_schema": "ExplorerOutput",
+      "prompt_version": "bagr_ued.roles.v1.explorer",
+      "role": "explorer",
+      "sequence": 4
+    },
+    {
+      "backend_id": "mock.bagr_ued.deterministic.v1",
+      "context_fold_key": "critic_output",
+      "model_id": "deterministic-rule-synth.v1",
+      "module": "d052.bagr_ued.critic_skeptic",
+      "must_not_output": [
+        "freezing REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE",
+        "freezing REAL_CANONICAL_CRITIC_SELECTION_POLICY",
+        "merging reject-derivation evidence with selection evidence"
+      ],
+      "output_schema": "CriticSkepticOutput",
+      "prompt_version": "bagr_ued.roles.v1.critic_skeptic",
+      "role": "critic_skeptic",
+      "sequence": 5
+    }
+  ],
+  "schema": "bagr_ued.review_board_contract.v1"
+}
