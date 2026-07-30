@@ -69,9 +69,11 @@ OWNER_ACTION_REQUIRED = false
   (longstate 叶 +1.0 扰动 → `on_segment_boundary` → RESET128 必须复原 init
   (`LONGSTATE_RESET_TO_INIT`,fast memories `CARRIED`),PERSISTENT 必须原样保留
   (`FULL_CARRY_NO_CLEAR`)),两条证据都写入 projection 记录。
-- **dicode 解析钉定**:驱动在 owner 装载前把 `dicode` 包解析钉到仓库审计的
-  `dicode_src/src`(`dicode/network.py` 字节 SHA `172e1cd4…` == CC1 声明
-  policy_source,与 CC1 V7fix58 树字节恒等,2026-07-31 服务器复验);两树唯一
+- **dicode 解析钉定**:驱动在 **canonical env 构建与 owner 装载之前**就把源码根
+  钉到仓库审计的 `dicode_src/src`——`dicode` 与 `minicraftax` **都在该源根下**
+  (均不在 site-packages),canonical env 的 `minicraftax` 导入与随后 bank treedef
+  反序列化都必须解析到仓库字节。`dicode/network.py` 字节 SHA `172e1cd4…` == CC1
+  声明 policy_source,与 CC1 V7fix58 树字节恒等,2026-07-31 服务器复验;两树唯一
   差异 `wrappers_cl.py` 仅用于 owner 侧 eval_env 包装,不在引擎 canonical env /
   rollout 路径上。
 - **wandb stub(仅 CONTROL orbax 路径)**:`dicode.utils.general` 包链在 import 期

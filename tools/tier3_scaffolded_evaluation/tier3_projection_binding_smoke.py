@@ -22,7 +22,9 @@ Gate order (each fail closed, each BEFORE any binding claim):
      profile (contract §六); READY marker cross-check
   2. GPU discipline: visible device UUIDs ⊆ CC4 allowlist (GPU2/GPU3), never
      GPU0/GPU1
-  3. canonical env build (8335 / 43) — BEFORE bank load, engine order: the
+  3. dicode source-root pin (<repo>/dicode_src/src — dicode AND minicraftax
+     live there, not in site-packages; network.py SHA-gated 172e1cd4…) then
+     canonical env build (8335 / 43) — BEFORE bank load, engine order: the
      bank treedef unpickling requires the minicraftax classes the canonical
      env construction imports
   4. frozen bank artifact load (FRONT/BACK) with content-hash gate
@@ -365,9 +367,18 @@ def main(argv=None):
     print("[stage2] visible GPUs %s (allowlist enforced)"
           % gpu_ev["visible_gpu_uuids"], flush=True)
 
-    # --- Stage 3: canonical env (JAX/craftax; imports minicraftax, which the
-    # bank treedef unpickling below depends on — same order as the engine:
-    # make_canonical_env BEFORE frozen bank load) -----------------------------
+    # --- Stage 3: dicode resolution pin + canonical env ----------------------
+    # dicode AND minicraftax both live under <repo>/dicode_src/src (NOT in
+    # site-packages); pin that audited source root BEFORE the canonical env
+    # import so minicraftax resolves to the repo bytes, and the bank treedef
+    # unpickling below (which references minicraftax classes) sees the same
+    # classes the engine sees. network.py is SHA-gated here (172e1cd4… ==
+    # CC1's declared policy_source_sha256). make_canonical_env BEFORE frozen
+    # bank load = the engine's own order.
+    dicode_ev = proj.pin_dicode_resolution(repo_root)
+    print("[stage3] dicode resolution pinned to %s (network.py %s == CC1 "
+          "policy_source)" % (dicode_ev["dicode_src"],
+                              dicode_ev["dicode_network_sha256"]), flush=True)
     import jax
     import jax.numpy as jnp
     print("[stage3] building canonical env ...", flush=True)
@@ -406,7 +417,7 @@ def main(argv=None):
     print("[stage5] verifying capsule files + loading owner runtime via "
           "projection registry ...", flush=True)
     capsule_ev = proj.verify_capsule_files(spec)
-    dicode_ev = proj.pin_dicode_resolution(repo_root)
+    # (dicode resolution already pinned in stage 3, before the canonical env)
     ctx = proj.load_owner_runtime(spec)
 
     params_before = proj.recompute_params_sha_owner(ctx)
