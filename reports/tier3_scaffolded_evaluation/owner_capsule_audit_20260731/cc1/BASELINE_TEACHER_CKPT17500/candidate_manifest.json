@@ -1,0 +1,36 @@
+{
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "owner": "CC1",
+  "candidate_class": "TEACHER_REFERENCE",
+  "formal_student_ranking_eligible": false,
+  "network_family": "GTrXL128",
+  "memory_mode": "gtrxl_window128",
+  "replay_mode": "OFF",
+  "training_steps": 17500,
+  "training_seed": "UNKNOWN_HENRY_BASE_PROVENANCE",
+  "budget_class": "UNMATCHED_REFERENCE",
+  "training_contract_match": "N/A",
+  "observation_shape": [
+    8335
+  ],
+  "action_dim": 43,
+  "checkpoint_format": "pickle",
+  "checkpoint_path": "/home/oseasy/experiments/bakeoff_phase1/shared_assets/ckpt17500_params.pkl",
+  "checkpoint_file_sha256": "a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01",
+  "params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "source_commit": "b61fcd3078f26fb6f7f71ca437a7de802883d458",
+  "driver_source_sha256": "faa561c0a78c7d7ea733cfb5ee61f2ca745dfd177c2cd6bca9681bb2a9077584",
+  "policy_source_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+  "adapter_source_sha256": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+  "shared_runtime_source_sha256": "d3d4e55259cbe7cd57112bb26bfc765cae96ae88b170397ea3e76fe2fd0196b1",
+  "server_hostname": "i-00000226",
+  "recovery_status": "RECOVERED",
+  "recovery_evidence": {
+    "primary_source": "/home/oseasy/experiments/bakeoff_phase1/shared_assets/ckpt17500_params.pkl",
+    "frozen_design_anchor": "bakeoff_phase1/gpu1_rmt16/reports/bakeoff_frozen_design.md: 'Baseline ckpt17500' frozen anchor; all arms start from ckpt17500; GTrXL 128-step window UNCHANGED from ckpt17500",
+    "canonical_base_params_sha256_match": true,
+    "canonical_base_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+    "orbax_source_also_present": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+    "eval_results_reference": "/home/oseasy/experiments/p2_full_20260723/outputs/paired_256_eval_20260724/results/baseline_ckpt17500_summary.json"
+  }
+}

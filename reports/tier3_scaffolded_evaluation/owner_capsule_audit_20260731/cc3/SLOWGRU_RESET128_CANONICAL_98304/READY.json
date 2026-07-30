@@ -1,0 +1,29 @@
+{
+  "READY": true,
+  "budget_class": "MATCHED_98304",
+  "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+  "capsule_files": [
+    "candidate_manifest.json",
+    "training_contract.json",
+    "checkpoint_contract.json",
+    "candidate_runtime.py",
+    "evaluate_candidate.py",
+    "interface_smoke_result.json",
+    "environment_lock.json",
+    "SHA256SUMS",
+    "READY.json"
+  ],
+  "checkpoint_external_not_in_git": true,
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "formal_student_ranking_eligible": true,
+  "gating_note": "\u4efb\u4e00\u95e8\u7981\u5931\u8d25\u5373 READY=false\uff1b\u6b63\u5f0f\u6392\u540d\u7b49\u5f85 CC4 \u516c\u5171 evaluator (B1/B3 handoff)",
+  "historical_contract_status": "MATCHED_EXISTING_ARTIFACT",
+  "interface_smoke": "PASS (18/18)",
+  "missing_files": [],
+  "ready_version": "cc3_ready/v1",
+  "recovery_checks": "36/36",
+  "recovery_status": "RECOVERED",
+  "retrain_required": false,
+  "sha256sums": "SHA256SUMS",
+  "training_contract_match": "PASS"
+}

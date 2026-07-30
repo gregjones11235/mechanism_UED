@@ -1,0 +1,259 @@
+{
+  "IDENTITY_CONFLICT": [],
+  "IDENTITY_STATUS": "PASS",
+  "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+  "capsule_dir": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_RESET128_CANONICAL_98304",
+  "checkpoint_path": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/train/ckpt/98304/full_state.pkl",
+  "driver_disk_path": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/src/run_slowgru_reset128_longrun.py",
+  "fields": {
+    "action_dim": {
+      "core": true,
+      "declared": 43,
+      "note": "",
+      "recomputed": 43,
+      "status": "OK"
+    },
+    "action_dim_corroborated_by_params_leaf": {
+      "core": true,
+      "declared": true,
+      "note": "exists a params leaf with trailing dim == 43 (actor head)",
+      "recomputed": true,
+      "status": "OK"
+    },
+    "action_dim_matches_manifest": {
+      "core": true,
+      "declared": 43,
+      "note": "",
+      "recomputed": 43,
+      "status": "OK"
+    },
+    "carry_mode_consistency": {
+      "core": true,
+      "declared": "RESET128",
+      "note": "contract vs manifest carry_mode",
+      "recomputed": "RESET128",
+      "status": "OK"
+    },
+    "checkpoint_file_sha256": {
+      "core": true,
+      "declared": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+      "note": "",
+      "recomputed": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+      "status": "OK"
+    },
+    "checkpoint_path_exists": {
+      "core": true,
+      "declared": true,
+      "note": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/train/ckpt/98304/full_state.pkl",
+      "recomputed": true,
+      "status": "OK"
+    },
+    "checkpoint_step": {
+      "core": true,
+      "declared": 98304,
+      "note": "",
+      "recomputed": 98304,
+      "status": "OK"
+    },
+    "conditioning_emb_67": {
+      "core": false,
+      "declared": 67,
+      "note": "",
+      "recomputed": 67,
+      "status": "OK"
+    },
+    "config_dict_present": {
+      "core": true,
+      "declared": true,
+      "note": "31 keys",
+      "recomputed": true,
+      "status": "OK"
+    },
+    "driver_source_sha256": {
+      "core": true,
+      "declared": null,
+      "note": "FROZEN provenance hash = pkl code_sha256.launcher (the code that actually ran); on-disk /home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/src/run_slowgru_reset128_longrun.py recomputed=ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a matches_frozen=True",
+      "recomputed": "ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a",
+      "status": "OK"
+    },
+    "driver_source_sha256_frozen_present": {
+      "core": true,
+      "declared": true,
+      "note": "pkl code_sha256.launcher = ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a",
+      "recomputed": true,
+      "status": "OK"
+    },
+    "jax_version": {
+      "core": false,
+      "declared": "0.6.0",
+      "note": "",
+      "recomputed": "0.6.0",
+      "status": "OK"
+    },
+    "literal_training_exit_code": {
+      "core": true,
+      "declared": null,
+      "note": "historical gpu2_slowgru_reset128_longrun driver has NO non-zero exit path (script runs to completion; final summary status TRAIN_OK); the literal $? is not capturable after the fact for a historical run, so 0 is recorded by the documented code path",
+      "recomputed": 0,
+      "status": "OK"
+    },
+    "literal_training_exit_code_consistent_with_log": {
+      "core": true,
+      "declared": true,
+      "note": "dossier literal=0; log STATUS='STATUS: LC_SLOWGRU_RESET128_LONGRUN_TRAIN_OK  final_global_step=98304 params_sha=9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247'; log-derived=0",
+      "recomputed": true,
+      "status": "OK"
+    },
+    "observation_shape": {
+      "core": true,
+      "declared": [
+        8335
+      ],
+      "note": "",
+      "recomputed": [
+        8335
+      ],
+      "status": "OK"
+    },
+    "observation_shape_matches_manifest": {
+      "core": true,
+      "declared": [
+        8335
+      ],
+      "note": "",
+      "recomputed": [
+        8335
+      ],
+      "status": "OK"
+    },
+    "params_finite": {
+      "core": true,
+      "declared": true,
+      "note": "",
+      "recomputed": true,
+      "status": "OK"
+    },
+    "params_sha256": {
+      "core": true,
+      "declared": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+      "note": "",
+      "recomputed": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+      "status": "OK"
+    },
+    "pkl_embedded_params_sha_matches_recomputed": {
+      "core": true,
+      "declared": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+      "note": "pkl manifest.params_sha256 vs live recompute",
+      "recomputed": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+      "status": "OK"
+    },
+    "policy_source_on_disk_matches_frozen": {
+      "core": true,
+      "declared": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+      "note": "",
+      "recomputed": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+      "status": "OK"
+    },
+    "policy_source_sha256": {
+      "core": true,
+      "declared": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+      "note": "pkl code_sha256.network vs contract.network_src_sha256",
+      "recomputed": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+      "status": "OK"
+    },
+    "python_version": {
+      "core": false,
+      "declared": "3.10.20",
+      "note": "",
+      "recomputed": "3.10.20",
+      "status": "OK"
+    },
+    "s4_task_sha_on_disk": {
+      "core": true,
+      "declared": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "note": "",
+      "recomputed": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "status": "OK"
+    },
+    "s4_task_sha_pkl_vs_canonical": {
+      "core": true,
+      "declared": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "note": "",
+      "recomputed": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "status": "OK"
+    },
+    "scientific_config_sha256": {
+      "core": true,
+      "declared": null,
+      "note": "sha256 of canonical JSON of pkl frozen config dict (sort_keys=True, separators=(\",\",\":\"), default=str); identical definition applied to both candidates",
+      "recomputed": "4dc65fdac6a37d11ff9feb9b4b127123bd4f608882c9ce6bad5ab3489ca2f56d",
+      "status": "OK"
+    },
+    "server_hostname": {
+      "core": false,
+      "declared": "i-00000226",
+      "note": "",
+      "recomputed": "i-00000226",
+      "status": "OK"
+    },
+    "source_commit": {
+      "core": false,
+      "declared": null,
+      "note": "full40; not declared in manifest (recorded this round)",
+      "recomputed": "57b6925e8834a86742afbb445a83abfd3544a3db",
+      "status": "OK_UNDECLARED"
+    },
+    "training_contract_provenance": {
+      "core": false,
+      "declared": "MATCHED_98304",
+      "note": "recorded verbatim from candidate_manifest",
+      "recomputed": "MATCHED_EXISTING_ARTIFACT",
+      "status": "OK"
+    },
+    "training_gpu_uuid": {
+      "core": true,
+      "declared": null,
+      "note": "pkl manifest.gpu_uuid vs checkpoint_contract.gpu_uuid",
+      "recomputed": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "status": "OK_UNDECLARED"
+    },
+    "training_seed": {
+      "core": true,
+      "declared": 42,
+      "note": "",
+      "recomputed": 42,
+      "status": "OK"
+    }
+  },
+  "generated_at_utc8": "2026-07-30T21:08:42+08:00",
+  "literal_training_exit_code": 0,
+  "literal_training_exit_code_basis": "historical gpu2_slowgru_reset128_longrun driver has NO non-zero exit path (script runs to completion; final summary status TRAIN_OK); the literal $? is not capturable after the fact for a historical run, so 0 is recorded by the documented code path",
+  "note": "CPU-only read-only recomputation; no checkpoint/capsule mutation performed",
+  "owner": "CC3",
+  "readonly": true,
+  "recomputed": {
+    "action_dim": 43,
+    "checkpoint_file_sha256": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+    "checkpoint_step": 98304,
+    "conditioning_emb": 67,
+    "driver_disk_matches_frozen": true,
+    "driver_disk_sha256": "ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a",
+    "driver_source_sha256": "ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a",
+    "observation_shape": [
+      8335
+    ],
+    "params_sha256": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+    "policy_disk_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "policy_source_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "s4_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+    "scientific_config_sha256": "4dc65fdac6a37d11ff9feb9b4b127123bd4f608882c9ce6bad5ab3489ca2f56d",
+    "training_seed": 42
+  },
+  "record_version": "cc3_identity_finalize/v1",
+  "scientific_config_sha256_definition": "sha256(json.dumps(pkl['config'], sort_keys=True, separators=(',',':'), default=str).encode('utf-8'))",
+  "server_hostname": "i-00000226",
+  "source_commit": "57b6925e8834a86742afbb445a83abfd3544a3db",
+  "summary_agreement": "NOT_PROVIDED",
+  "train_log_status_line": "STATUS: LC_SLOWGRU_RESET128_LONGRUN_TRAIN_OK  final_global_step=98304 params_sha=9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+  "training_gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+}

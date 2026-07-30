@@ -1,0 +1,132 @@
+{
+  "access_blocked_not_fail": true,
+  "arm": "persistent",
+  "binding_status": "BLOCKED_COMMON_EVALUATOR_SLOWGRU_FAMILY_NOT_REGISTERED",
+  "both_candidates_use_same_common_runner_sha": true,
+  "both_candidates_use_same_evaluation_profile_sha": true,
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "candidate_manifest_sha256": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+  "candidate_runtime_sha256": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+  "carry_mode": "PERSISTENT",
+  "cc3_created_full_seeds": false,
+  "checkpoint_contract_sha256": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+  "common_entry_binding_identities": {
+    "common_evaluator": {
+      "assembled_at_utc": "2026-07-30T14:27:35.978819+00:00",
+      "common_evaluator_engine_sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+      "engine_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluator.py",
+      "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+      "git_commit_at_assembly": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+      "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+      "schema": "mechanism_UED.common_evaluator_binding_identity/v1"
+    },
+    "common_runner": {
+      "abi_doc_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+      "assembled_at_utc": "2026-07-30T14:27:35.978819+00:00",
+      "common_runner_engine_sha256": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+      "git_commit_at_assembly": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+      "runner_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_candidate_runtime.py",
+      "schema": "mechanism_UED.common_runner_binding_identity/v1"
+    }
+  },
+  "common_evaluator_attempt": {
+    "artifacts_written": false,
+    "command": "common_evaluator.py --interface-smoke --checkpoint <pkl> --checkpoint-contract <cc3_binding_contract.json> --arm persistent --scenario all --episodes 1 --max-steps 32 --frozen-bank-artifacts .../frozen_bank_artifacts --out <fresh dir>",
+    "fail_closed_message": "tier3_cc2_policy_adapter.FailClosed: FAIL CLOSED: CC2 driver source missing ('D:/Projects/dicode-codex-director/orchestration/control/_cc2_stage/train_rmt16_p2replay.py') \u2014 cannot rebuild the network without the frozen hyperparameters (no guessing, no defaults)",
+    "interpretation": "the evaluator path passed CC3's self-consistent checkpoint contract gate, then fail-closed at the CC2-RMT16-only policy source stage: the assembled evaluator rebuilds ONLY tier3_cc2_policy_adapter.CC2RMT16Policy (no runtime_family dispatch exists in tier3_evaluator.py; RUNTIME_FAMILIES is frozen to ('rmt16_gtrxl_cc2',) in the engine). A SlowGRU binding is impossible without modifying CC4's SHA-bound files, which task section 5 forbids.",
+    "literal_exit_code": 1,
+    "log_tail": [
+      "    raise SystemExit(main())",
+      "  File \"/home/oseasy/student_pool_v1/common/common_evaluator.py\", line 73, in main",
+      "    return tier3_evaluator.main(argv)",
+      "  File \"/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluator.py\", line 1478, in main",
+      "    summary = run_interface_smoke(",
+      "  File \"/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluator.py\", line 1094, in run_interface_smoke",
+      "    return run_evaluation(checkpoint_path, cc2_snapshot_root, scenario, out_dir,",
+      "  File \"/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluator.py\", line 790, in run_evaluation",
+      "    driver_cfg, driver_sha = policy_adapter.load_cfg_from_driver_source(",
+      "  File \"/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_cc2_policy_adapter.py\", line 172, in load_cfg_from_driver_source",
+      "    require(driver_path and os.path.isfile(driver_path),",
+      "  File \"/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_cc2_policy_adapter.py\", line 89, in require",
+      "    raise FailClosed(msg)",
+      "tier3_cc2_policy_adapter.FailClosed: FAIL CLOSED: CC2 driver source missing ('D:/Projects/dicode-codex-director/orchestration/control/_cc2_stage/train_rmt16_p2replay.py') \u2014 cannot rebuild the network without the frozen hyperparameters (no guessing, no defaults)"
+    ]
+  },
+  "common_evaluator_verified": {
+    "COMMON_EVALUATOR_READY_declared": true,
+    "abi_doc_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+    "all_shas_match_ready_declarations": true,
+    "assembled_at_utc": "2026-07-30T14:27:35.978819+00:00",
+    "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "back_bank_file_sha256": "9e104772d11abcee9fec2fd22cf57742d19dd37e4aeb122fa313f4a555c2a5ae",
+    "common_evaluator_engine_sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+    "common_evaluator_file_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "common_runner_engine_sha256": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+    "common_runner_file_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "common_sha256sums_file_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+    "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "front_bank_file_sha256": "2c20e886c07c108d036622356c1c8136112f8e31bc1fbf61997044986a842d39",
+    "full_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "git_commit_at_assembly": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+    "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "ready_gates_status": {
+      "B1_COMMON_EVALUATOR": "PASS",
+      "B3_FROZEN_BANKS": "PASS",
+      "COMMON_ARTIFACT_IDENTITY": "PASS",
+      "COMMON_RUNTIME_ABI_READY": "PASS",
+      "CROSS_GPU_DETERMINISM_PREFLIGHT": "PASS",
+      "FULL_PROFILE_READY": "PASS",
+      "NEGATIVE_GATES": "PASS",
+      "SHA256SUMS_STATUS": "PASS"
+    },
+    "ready_generated_at_utc": "2026-07-30T14:40:21.219808+00:00",
+    "sha256sums_check_all_ok": true
+  },
+  "formal_performance_evaluation_started": false,
+  "full_seed_source": "common evaluation_profile.json / tier3_evaluator FULL_SMOKE_SEED_BASE canonical reset seeds (64 held-out seeds 200000..200063 per evaluator docstring); cc3_created_full_seeds=false",
+  "literal_exit_code": 0,
+  "literal_exit_code_note": "certificate writer's own literal exit; the common evaluator attempt's literal exit is recorded in common_evaluator_attempt",
+  "owner": "CC3",
+  "params_unchanged": true,
+  "params_unchanged_evidence": {
+    "checkpoint_file_sha256_recomputed": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+    "checkpoint_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
+    "contract_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+    "contract_params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+    "live_recompute_matches_contract": true,
+    "params_sha256_recomputed": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc"
+  },
+  "performance_claim_authorized": false,
+  "profiles": {
+    "BACK": {
+      "status": "NOT_EXECUTED_FAMILY_NOT_REGISTERED",
+      "steps": 0
+    },
+    "FRONT": {
+      "status": "NOT_EXECUTED_FAMILY_NOT_REGISTERED",
+      "steps": 0
+    },
+    "FULL": {
+      "status": "NOT_EXECUTED_FAMILY_NOT_REGISTERED",
+      "steps": 0
+    }
+  },
+  "ranking_use": "PROHIBITED \u2014 no binding smoke result may be used for ranking",
+  "ready_json_untouched_this_round": true,
+  "record_version": "cc3_common_evaluator_binding/v1",
+  "run_class": "INTERFACE_SMOKE",
+  "schema": "mechanism_UED.cc3_binding_certificate/v1",
+  "structural_evidence": {
+    "abi_doc_statement": "candidate_runtime_abi.md section 1.2: Base GTrXL / Control / SlowGRU / Teacher runtimes are registered by their OWN owners (not implemented this round)",
+    "engine_file": "tier3_candidate_runtime.py (engine SHA 6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f)",
+    "engine_runtime_families": [
+      "rmt16_gtrxl_cc2"
+    ],
+    "evaluator_family_hook_grep_hits": 0,
+    "evaluator_policy_construction": "policy_adapter.CC2RMT16Policy (hardcoded in run_evaluation; no family parameter)",
+    "memory_semantics_note": "CC3 runtimes untouched this round: RESET128 keeps its 128-step boundary longstate reset; PERSISTENT keeps full cross-segment carry with true_done-only clears. The common binding did NOT unify them (nothing ran).",
+    "memory_semantics_preserved": true
+  }
+}

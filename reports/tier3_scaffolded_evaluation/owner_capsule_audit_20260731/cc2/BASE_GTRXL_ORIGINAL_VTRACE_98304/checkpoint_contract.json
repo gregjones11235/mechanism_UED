@@ -1,0 +1,45 @@
+{
+  "contract_version": "cc2_student_pool_v1",
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "network_family": "base_gtrxl",
+  "memory_mode": "none",
+  "carry_mode": "base_gtrxl",
+  "replay_mode": "original_vtrace",
+
+  "checkpoint_path": "/home/oseasy/cc2_data/cc2_basegtrxl_runs/runs/BASEGTRXL-LONG98304/ckpt/98304/full_state.pkl",
+  "checkpoint_format": "pickle:{params:<pytree>, manifest:{params_sha256, step, arm, ...}}",
+  "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+  "checkpoint_file_sha256": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+  "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "base_checkpoint_label": "ckpt17500",
+  "base_checkpoint_path": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+
+  "checkpoint_count": 13,
+  "checkpoint_steps": [0, 8192, 16384, 24576, 32768, 40960, 49152, 57344, 65536, 73728, 81920, 90112, 98304],
+  "training_steps": 98304,
+  "training_seed": 42,
+
+  "observation_shape": [8335],
+  "action_dim": 43,
+
+  "source_commit_full40": "2d0cc74088512634f50230e940f4455d7d429db0",
+  "snapshot_root": "/home/oseasy/cc2_data/cc2_source_2d0cc74/gpu2_rmt16_phase4a_snapshot",
+  "frozen_module_dir": "/home/oseasy/cc2_data/cc2_source_2d0cc74/gpu2_rmt16_phase4a_snapshot/runtime/frozen_modules",
+  "driver_source_sha256": "8c3ad6c1ad7fd0965e621dd07bb0e418b9c4cde42af54248251847dec996fb9e",
+  "policy_source_sha256": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
+  "memory_anchor_source_sha256": "4ff54fb4e932b2a1027803334919f0a19d7484e7e3a827b7f5188fa1283452b4",
+  "rmt16_memory_source_sha256": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
+
+  "config_file_sha256": "5afe24dde8c8d5148c87217ea93c30b984d75af2eec14e2005d1e5c9043a9b20",
+  "scientific_config_sha256": "c67381b1efa17825295e0326dfe2bae5d84bf097ac74dab8f95ee0dd7d09465b",
+  "certificate_path": "/home/oseasy/cc2_data/cc2_basegtrxl_runs/runs/BASEGTRXL-LONG98304/runtime_config_certificate.json",
+  "certificate_file_sha256": "2a2e262c37b74a581e798b24fbed404b6a2edb17959540d0538ec1b2bc2fabe1",
+  "certificate_payload_sha256": "9c00c9cfae98688f83ed7940e6078600dcca883c9676bab5cd77c7d7849e82b2",
+  "certificate_status": "PASS",
+
+  "runtime_module": "candidate_runtime.py",
+  "runtime_abi": "cc2_student_pool_v1",
+  "load_function": "load_candidate",
+  "read_path_skipped": true,
+  "requires_consumer_adapter": false
+}

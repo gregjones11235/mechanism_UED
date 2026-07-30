@@ -1,0 +1,56 @@
+{
+  "lock_version": "cc2_student_pool_v1",
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "server": {
+    "connection": "oseasy@172.25.14.221",
+    "hostname": "i-00000226",
+    "conda_env": "/home/oseasy/miniconda3/envs/dicode310",
+    "python": "3.10.20"
+  },
+  "packages": {
+    "jax": "0.6.0",
+    "jaxlib": "0.6.0",
+    "numpy": "2.2.6",
+    "flax": "0.10.7",
+    "distrax": "0.1.5",
+    "optax": "0.2.8",
+    "orbax-checkpoint": "0.11.39",
+    "craftax": "1.6.1",
+    "minicraftax": "present (version not exposed via importlib.metadata / __version__)"
+  },
+  "gpu": {
+    "run_gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "run_gpu_index": 2,
+    "cuda_visible_devices_for_smoke": "2",
+    "jax_device_seen": "cuda:0",
+    "allowed": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "forbidden": [
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+      "GPU-3c7a2864-755b-7045-b293-6f80e748283f"
+    ]
+  },
+  "source_tree": {
+    "source_commit_full40": "2d0cc74088512634f50230e940f4455d7d429db0",
+    "snapshot_root": "/home/oseasy/cc2_data/cc2_source_2d0cc74/gpu2_rmt16_phase4a_snapshot",
+    "frozen_module_dir": "/home/oseasy/cc2_data/cc2_source_2d0cc74/gpu2_rmt16_phase4a_snapshot/runtime/frozen_modules",
+    "frozen_module_shas": {
+      "network_rmt16.py": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
+      "rmt_memory_anchor.py": "4ff54fb4e932b2a1027803334919f0a19d7484e7e3a827b7f5188fa1283452b4",
+      "rmt16_memory.py": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
+      "driver_train_rmt16_p2replay.py": "8c3ad6c1ad7fd0965e621dd07bb0e418b9c4cde42af54248251847dec996fb9e"
+    }
+  },
+  "env_wrapper": {
+    "module": "dicode.wrappers_cl.DistributedMultiTaskOptimisticLogWrapper",
+    "resolved_file": "/home/oseasy/experiments/dreaming-in-code/src/dicode/wrappers_cl.py",
+    "resolved_file_sha256": "cbbf5865a88551b0a229c5c9692ba9a353015aaca74595eb4f6e0de45d3795d1",
+    "probe_term": "omitted (equivalent to probe_term=False; the long run launched with PROBE=False, documented bit-exact-original)",
+    "task": "DEFEAT_KOBOLD (S4Cls)",
+    "num_envs": 16,
+    "optimistic_reset_ratio": 16
+  },
+  "notes": "Local real JAX/Craftax is FORBIDDEN; all env/network execution happens on this server. The runtime imports the frozen modules from source_tree.frozen_module_dir and verifies their SHAs at load time."
+}

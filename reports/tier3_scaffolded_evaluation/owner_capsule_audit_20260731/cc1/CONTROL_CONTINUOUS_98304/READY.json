@@ -1,0 +1,27 @@
+{
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "owner": "CC1",
+  "capsule_root": "/home/oseasy/student_pool_v1/cc1/CONTROL_CONTINUOUS_98304",
+  "candidate_class": "STUDENT",
+  "formal_student_ranking_eligible": true,
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "reference_only": false,
+  "budget_class": "MATCHED_98304",
+  "training_contract_match": "PASS",
+  "observation_shape": [
+    8335
+  ],
+  "action_dim": 43,
+  "candidate_manifest_sha256": "56cb71ce3ce356ca0667ee6e2881d13fecbb15bceb4f9046d16c986210180148",
+  "checkpoint_contract_sha256": "4c29226dd8c4535c1847cc1760a5edda6653a859c6e86ffaa63c6749f8fd4d84",
+  "adapter_source_sha256": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+  "params_sha256": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+  "checkpoint_file_sha256": "34819d779ad91e59cd62836c803ba9226ffa3623368c12d74044e58cd6db9913",
+  "interface_smoke_status": "PASS",
+  "common_eval_binding_smoke_status": "PASS",
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "candidate_runtime_ready": true,
+  "created_at": "2026-07-30T12:56:24Z",
+  "immutable": true
+}

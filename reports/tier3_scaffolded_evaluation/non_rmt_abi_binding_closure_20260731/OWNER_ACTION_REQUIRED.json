@@ -1,0 +1,12 @@
+{
+  "schema": "mechanism_UED.owner_action_required/v1",
+  "contract": "NON_RMT_RUNTIME_ABI_BINDING_CLOSURE §一",
+  "OWNER_ACTION_REQUIRED": false,
+  "reason": "NON_RMT_RUNTIME_REGISTRATION_AUTHORITY = CC4_CAN_REGISTER_PROJECTIONS (conditional, C1–C5 in non_rmt_registration_authority.json). The common ABI's registration practice (sole precedent: rmt16_gtrxl_cc2, a CC4-authored adapter over owner SHA-bound source) plus this contract's explicit authorization let CC4 perform minimal projection registration WITHOUT owner authorship. No owner prompt is issued at this stage.",
+  "per_owner_actions": {
+    "CC1": "none required (control + teacher projections bind the owner's own candidate_runtime.py + gtrxl128_reference_runtime.py at on-disk SHA d3d4e552…)",
+    "CC2": "none required (base_gtrxl projection binds the owner's candidate_runtime.py + frozen_modules at on-disk SHAs b5c37d7a…/4ff54fb4…/17e1a614…)",
+    "CC3": "none required (both slowgru projections bind the owner's candidate_runtime.py + slowgru_runtime.py d3b74d2e… + slowgru_network.py b2652105…)"
+  },
+  "escalation_rule": "if a projection CANNOT load its owner runtime under the locked CC4 venv, that candidate is reported BLOCKED with a minimum owner prompt (one per non-PASS object) in the §七 final report — never faked PASS"
+}

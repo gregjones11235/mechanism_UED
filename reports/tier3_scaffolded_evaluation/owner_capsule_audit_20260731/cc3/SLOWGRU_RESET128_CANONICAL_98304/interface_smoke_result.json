@@ -1,0 +1,193 @@
+{
+  "abi_version": "cc3_runtime_abi/v1",
+  "boundary_event": {
+    "at_step": 128,
+    "info": {
+      "boundary_action": "LONGSTATE_RESET_TO_INIT",
+      "fast_memories": "CARRIED"
+    },
+    "longstate_hash_after": "528b7fccb05750d10cc88e6ddecc3c1275f2723ef7c1743e15ca2457afc0056c",
+    "longstate_hash_carry_in": "106adff819bc2305046dc7654c925a123a7bef29035a9fd4defe6cc62734752a"
+  },
+  "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+  "carry_mode": "RESET128",
+  "check_details": [
+    {
+      "check": "single_visible_device_gpu_allowed",
+      "detail": "[CudaDevice(id=0)]",
+      "passed": true
+    },
+    {
+      "check": "load_candidate_sha_verified",
+      "detail": "file=2c065fa88bcc8cfc params=9d92c5b9e2e2148b",
+      "passed": true
+    },
+    {
+      "check": "params_sha_matches_contract",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "params_finite_before",
+      "detail": "checked in load_candidate",
+      "passed": true
+    },
+    {
+      "check": "obs_dim_8335",
+      "detail": "8335",
+      "passed": true
+    },
+    {
+      "check": "action_dim_43",
+      "detail": "43",
+      "passed": true
+    },
+    {
+      "check": "conditioning_emb_67",
+      "detail": "67",
+      "passed": true
+    },
+    {
+      "check": "s4_task_sha",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "rollout_steps_executed",
+      "detail": "(160, 16)",
+      "passed": true
+    },
+    {
+      "check": "actions_legal",
+      "detail": "min=0 max=42",
+      "passed": true
+    },
+    {
+      "check": "memory_state_changed_by_step32",
+      "detail": "mem32=6b9595f2af01ec3d init=45f2ec5b1a447732",
+      "passed": true
+    },
+    {
+      "check": "segment_boundary_crossed",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "reset128_boundary_longstate_eq_init_contract",
+      "detail": "after=528b7fccb05750d1 init=528b7fccb05750d1",
+      "passed": true
+    },
+    {
+      "check": "reset128_carry_in_nontrivial",
+      "detail": "carry_in=106adff819bc2305",
+      "passed": true
+    },
+    {
+      "check": "reset128_fast_memories_carried_across_boundary",
+      "detail": "mem160=d38c7256ab77ab9f init=45f2ec5b1a447732",
+      "passed": true
+    },
+    {
+      "check": "params_sha_unchanged_by_inference",
+      "detail": "before=9d92c5b9e2e2148b after=9d92c5b9e2e2148b",
+      "passed": true
+    },
+    {
+      "check": "determinism_first32_actions_bitexact",
+      "detail": "n_equal=512/32",
+      "passed": true
+    },
+    {
+      "check": "determinism_step32_memory_hash_bitexact",
+      "detail": "",
+      "passed": true
+    }
+  ],
+  "checkpoint_file_sha256": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+  "checks": {
+    "failed": 0,
+    "passed": 18,
+    "total": 18
+  },
+  "devices": "[CudaDevice(id=0)]",
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "init_ls_hash": "528b7fccb05750d10cc88e6ddecc3c1275f2723ef7c1743e15ca2457afc0056c",
+  "memory_snapshots": {
+    "init": {
+      "all_hash": "7c070cfaea5f2f5ebda3b7dd7a5c02052a669561823739853e07bf1108d38dfa",
+      "longstate_hash": "528b7fccb05750d10cc88e6ddecc3c1275f2723ef7c1743e15ca2457afc0056c",
+      "mask_hash": "dc0b77ca9a3cc43d3554c865730a441b92ff24968cd9579d0eb104a3592952f7",
+      "memories_hash": "45f2ec5b1a44773205479247d99cd2bf1a0eb251dc4412618a5dc4078d6a0e21"
+    },
+    "step160": {
+      "all_hash": "936d8fe31072d6d5b1f17e5fdcdcb7da66cb9685ff86ed9f269324c71a12d1c9",
+      "longstate_hash": "20af2411c0b7dcf0da0fc0ec574765e50be5d56f49a620b2cad235699c1cb904",
+      "mask_hash": "3475eb31f143e9040e30fd8302631f630c5c5536d6a6a799f30e5ec1210efce1",
+      "memories_hash": "d38c7256ab77ab9f1051f664a677e54a4ef0821f55f6aeddd201902758025845"
+    },
+    "step32": {
+      "all_hash": "852ec942a6ab022bcdf825d719f690ab980b497deb6c0c72b6da9251ea691a81",
+      "longstate_hash": "99afe3bcca3908619c6a5207540c48b42bf32a765af05aef146785a30c417d0d",
+      "mask_hash": "8f029392db4ef7faa3996a236a1ef3c37da7f7f44de52bc93963a574423e3c4f",
+      "memories_hash": "6b9595f2af01ec3d39decead29c427357d243bb713313596e6605f881c9f460f"
+    }
+  },
+  "metadata": {
+    "abi_version": "cc3_runtime_abi/v1",
+    "action_dim": 43,
+    "boundary_semantics": "RESET128: slow longstate cleared to init at every 128-step segment boundary (fast memories carry)",
+    "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+    "carry_mode": "RESET128",
+    "checkpoint_file_sha256": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+    "constructor": {
+      "action_dim": 43,
+      "activation": "relu",
+      "encoder_size": 256,
+      "gating": true,
+      "gating_bias": 2.0,
+      "hidden_layers": 256,
+      "num_heads": 8,
+      "num_layers": 2,
+      "qkv_features": 256,
+      "use_longmem": true
+    },
+    "network_family": "SlowGRU (GTrXL128 + zero-init additive slow-GRU actor channel)",
+    "network_src_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "num_heads": 8,
+    "num_layers": 2,
+    "obs_dim": 8335,
+    "params_sha256": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+    "runtime": "THIN_GTRXL128_SLOWGRU_RUNTIME",
+    "slow_dim": 256,
+    "slow_interval": 32,
+    "window_mem": 128
+  },
+  "params_sha256": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+  "params_sha256_after": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+  "params_sha256_before": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+  "reward_reference_only": {
+    "NOTE": "REFERENCE_ONLY_NOT_PERFORMANCE_JUDGMENT \u2014 \u77ed smoke reward \u4e0d\u5f97\u7528\u4e8e\u6027\u80fd\u5224\u65ad; \u6b63\u5f0f\u6392\u540d\u7531 CC4 \u516c\u5171 evaluator \u56fa\u5b9a",
+    "per_env_total": [
+      15.799999997019768,
+      9.799999997019768,
+      13.0,
+      9.699999995529652,
+      8.399999983608723,
+      11.0,
+      40.100000001490116,
+      13.000000022351742,
+      11.299999989569187,
+      10.0,
+      12.0,
+      5.0,
+      15.399999983608723,
+      7.0,
+      9.899999998509884,
+      12.699999995529652
+    ]
+  },
+  "runtime": "THIN_GTRXL128_SLOWGRU_RUNTIME",
+  "smoke_status": "PASS",
+  "steps_executed": 160
+}

@@ -1,0 +1,90 @@
+{
+  "schema": "mechanism_UED.non_rmt_registration_authority/v1",
+  "generated_by": "CC4 (common evaluator owner)",
+  "contract": "NON_RMT_RUNTIME_ABI_BINDING_CLOSURE §一",
+  "audit_date_utc": "2026-07-31",
+  "audited_artifacts": {
+    "common_root": "/home/oseasy/student_pool_v1/common",
+    "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+    "common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "assembly_manifest_sha256": "52d1fa0fca2ceaa0e992a118b1d5812166e3347fef23100cad0b4389cc9136d4",
+    "sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+    "common_sha256sums_self_check": "PASS (57/57)",
+    "engine_lf_sha256_tier3_candidate_runtime": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+    "engine_lf_sha256_tier3_evaluator": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715"
+  },
+  "NON_RMT_RUNTIME_REGISTRATION_AUTHORITY": "CC4_CAN_REGISTER_PROJECTIONS",
+  "authority_qualification": "CONDITIONAL",
+  "conditions": [
+    "C1_FROZEN_COMMON_UNTOUCHED: common/ 57 files + engine modules byte-identical; registration = NEW cc4-authored files only; sums 57/57 re-verified before any binding run",
+    "C2_ZERO_REIMPLEMENTATION: every projection calls the owner's own SHA-bound runtime module (load_candidate fail-closed gates / policy_step / SHA protocol functions); CC4 writes only protocol mapping, greedy_argmax selection, boundary scheduling, evidence",
+    "C3_PROJECTION_ADDENDUM_DOCUMENTED: PROJECTION_RUNTIME_ADDENDUM.md registers all 5 projection families with owner-file SHA provenance",
+    "C4_HONEST_LABELS: run_class=INTERFACE_SMOKE; performance_claim_authorized=false; formal frozen scale 8/8/64 from evaluation_profile.json, distinct from executed smoke episodes",
+    "C5_OWNER_ARTIFACTS_READONLY: checkpoint/capsule files read-only; params/checkpoint SHA recomputed per owner-defined protocol (full64); mismatch fails closed; no competing hash definitions"
+  ],
+  "evidence": {
+    "owner_registration_text_abi_doc": "candidate_runtime_abi.md §1.2: 'Base GTrXL / Control / SlowGRU / Teacher 由各自 owner 注册(本轮不实现)' — division-of-labor sentence scoped to 本轮; superseded by this contract's explicit §一 authorization",
+    "owner_registration_text_common_runner": "common_runner.py docstring: 'registered by their OWN owners' — same scoping",
+    "precedent_rmt16_gtrxl_cc2_is_cc4_authored": "the ONLY registered family is CC4's own tier3_cc2_policy_adapter.py binding CC2's audited frozen sources by LF-SHA (network_rmt16.py b5c37d7aa2e9… / rmt_memory_anchor.py 4ff54fb4e932… / rmt16_memory.py 17e1a614c404…); CC2 capsule declares requires_consumer_adapter=false yet formal binding proceeds via the CC4 adapter — 'registration' in ABI practice has always meant CC4-authored projection over owner SHA-bound source",
+    "abi_boundary_principles_mandate_projection": "§1.3 '内存语义只复用、不重实现' — a projection adapter is the ONLY compliant form; no principle §1.1–§1.7 requires owner authorship of registration code",
+    "structural_argument": "engine + runner + common/ 57 files are SHA-frozen and referenced by assembly_manifest/READY/both RMT16 capsules/5 pending bindings; any owner-writes-into-common path would break 57/57 sums and all binding refs — structurally, only NEW projection files can register"
+  },
+  "owner_protocol_recomputation_feasibility": {
+    "BASE_GTRXL_ORIGINAL_VTRACE_98304": {
+      "params_protocol": "cc2 canonical_params_sha: sha256 over per-leaf np.ascontiguousarray(np.asarray(leaf)).tobytes() in tree_leaves order; load_candidate recomputes and raises CHECKPOINT_PARAMS_SHA_MISMATCH",
+      "checkpoint_file_protocol": "sha256 of pkl bytes",
+      "declared_params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+      "declared_checkpoint_file_sha256": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+      "importable_in_locked_venv": true
+    },
+    "CONTROL_CONTINUOUS_98304": {
+      "params_protocol": "gtrxl128_reference_runtime.params_sha256: sha256(b\"\".join(np.asarray(l).tobytes() for l in tree_leaves)) — eval_bakeoff convention",
+      "checkpoint_file_protocol": "gtrxl128_reference_runtime.dir_sha256: sorted (relpath, file_sha256) pairs; per pair h.update(rel.encode('utf-8')); h.update(b'\\0'); h.update(sha.encode('ascii')); h.update(b'\\n')",
+      "declared_params_sha256": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+      "declared_checkpoint_file_sha256": "34819d779ad91e59cd62836c803ba9226ffa3623368c12d74044e58cd6db9913",
+      "loader_path": "cc1 candidate_runtime.load_candidate -> gtrxl128_reference_runtime.load_params_orbax -> dicode.utils.general.train_state_utils.load_weights_only(load_opt_state=False) + stage4 env bundle",
+      "importable_in_locked_venv": true,
+      "notes": "orbax-checkpoint 0.6.4 present; dicode.network / minicraftax / wrappers_cl import OK; train_state_utils.py LF-SHA cbd091f90b25… contains ZERO wandb references — the import failure is in the dicode.utils.general package chain and is handled by a minimal-scope documented stub in CC4's driver"
+    },
+    "SLOWGRU_RESET128_CANONICAL_98304": {
+      "params_protocol": "slowgru_runtime.params_sha_packed over pkl-embedded (leaves, treedef): sha256 of per-leaf ascontiguousarray.tobytes(); loader gates file SHA + network_src SHA + params SHA fail closed",
+      "checkpoint_file_protocol": "sha256 of pkl bytes",
+      "declared_params_sha256": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+      "declared_checkpoint_file_sha256": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+      "importable_in_locked_venv": true,
+      "arm_src_network_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b"
+    },
+    "SLOWGRU_PERSISTENT_CANONICAL_98304": {
+      "params_protocol": "same as RESET128 with carry_mode=PERSISTENT; load_candidate raises CARRY_MODE_MISMATCH on any drift",
+      "checkpoint_file_protocol": "sha256 of pkl bytes",
+      "declared_params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+      "declared_checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+      "importable_in_locked_venv": true,
+      "arm_src_network_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b"
+    },
+    "BASELINE_TEACHER_CKPT17500": {
+      "params_protocol": "gtrxl128_reference_runtime.params_sha256 (eval_bakeoff convention); contract expected_params_sha256 = d4e85af5… (== canonical base)",
+      "checkpoint_file_protocol": "sha256 of file bytes (contract file_sha256_method)",
+      "declared_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+      "declared_checkpoint_file_sha256": "a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01",
+      "loader_path": "cc1 candidate_runtime.load_candidate (THIN_GTRXL128_PICKLE_CONTROL — no orbax)",
+      "importable_in_locked_venv": true,
+      "cc4_prior_recompute_match": true
+    }
+  },
+  "locked_environment_probe_utc": "2026-07-31T00:33Z",
+  "locked_environment": "/home/oseasy/cc4_tier3_eval_20260730/venv (python 3.11.15, jax 0.4.30, flax 0.8.5, craftax 1.4.5, orbax-checkpoint 0.6.4, distrax 0.1.5, optax 0.2.5, numpy 1.26.4)",
+  "probe_results_locked_venv": {
+    "orbax.checkpoint": "IMPORT_OK",
+    "dicode.network (V7fix58 src)": "IMPORT_OK",
+    "dicode.wrappers_cl": "IMPORT_OK",
+    "minicraftax.envs.multitask": "IMPORT_OK",
+    "slowgru_network[persistent-arm]": "IMPORT_OK (SLOW_INTERVAL=32, SLOW_DIM=256)",
+    "slowgru_network[reset128-arm]": "IMPORT_OK (SLOW_INTERVAL=32, SLOW_DIM=256)",
+    "network_rmt16 (cc2 frozen_modules)": "IMPORT_OK",
+    "dicode.utils.general.train_state_utils": "IMPORT_FAIL ModuleNotFoundError wandb (package-chain only; module body has zero wandb refs — documented minimal stub in CC4 driver)"
+  },
+  "owner_action_required": false,
+  "honest_blocker_discipline": "any projection that cannot load its owner runtime under the LOCKED venv is reported BLOCKED with minimum evidence, never faked PASS; dicode310 (craftax 1.6.1) is never used for rollout (environment_lock conformance)"
+}

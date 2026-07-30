@@ -1,0 +1,36 @@
+{
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "interface_smoke_status": "PASS",
+  "gpu_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+  "elapsed_s": 230.87,
+  "params_sha256": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+  "checkpoint_file_sha256": "34819d779ad91e59cd62836c803ba9226ffa3623368c12d74044e58cd6db9913",
+  "checks": {
+    "C1_load": "PASS",
+    "C2_file_sha256": "34819d779ad91e59cd62836c803ba9226ffa3623368c12d74044e58cd6db9913",
+    "C3_params_sha256": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+    "C3_params_sha_matches_manifest": false,
+    "C4_params_finite": true,
+    "C5_real_obs_shape": [
+      16,
+      8335
+    ],
+    "C5_real_obs_finite": true,
+    "C6_greedy_forward_action0": 24,
+    "C6_logits_finite": true,
+    "C6_action_in_range": true,
+    "C7_rollout_steps": 32,
+    "C7_rollout_no_nan_inf": true,
+    "C7_rollout_actions_in_range": true,
+    "C7_rollout_action_min": 1,
+    "C7_rollout_action_max": 34,
+    "C8_params_sha_after": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+    "C8_params_unchanged": true,
+    "obs_dim": 8335,
+    "action_dim": 43,
+    "devices": [
+      "cuda:0"
+    ]
+  },
+  "note": "interface smoke only; NOT a performance result; no scientific metrics computed."
+}

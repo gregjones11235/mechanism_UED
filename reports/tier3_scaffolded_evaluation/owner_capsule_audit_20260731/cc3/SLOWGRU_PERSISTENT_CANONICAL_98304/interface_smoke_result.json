@@ -1,0 +1,187 @@
+{
+  "abi_version": "cc3_runtime_abi/v1",
+  "boundary_event": {
+    "at_step": 128,
+    "info": {
+      "boundary_action": "FULL_CARRY_NO_CLEAR"
+    },
+    "longstate_hash_after": "9bedef22710ab31b4cedd596ea275bb8c3588636e70e1577600ce389a246dfd5",
+    "longstate_hash_carry_in": "9bedef22710ab31b4cedd596ea275bb8c3588636e70e1577600ce389a246dfd5"
+  },
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "carry_mode": "PERSISTENT",
+  "check_details": [
+    {
+      "check": "single_visible_device_gpu_allowed",
+      "detail": "[CudaDevice(id=0)]",
+      "passed": true
+    },
+    {
+      "check": "load_candidate_sha_verified",
+      "detail": "file=0bc92c9ee28684ba params=99d734b48acfd349",
+      "passed": true
+    },
+    {
+      "check": "params_sha_matches_contract",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "params_finite_before",
+      "detail": "checked in load_candidate",
+      "passed": true
+    },
+    {
+      "check": "obs_dim_8335",
+      "detail": "8335",
+      "passed": true
+    },
+    {
+      "check": "action_dim_43",
+      "detail": "43",
+      "passed": true
+    },
+    {
+      "check": "conditioning_emb_67",
+      "detail": "67",
+      "passed": true
+    },
+    {
+      "check": "s4_task_sha",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "rollout_steps_executed",
+      "detail": "(160, 16)",
+      "passed": true
+    },
+    {
+      "check": "actions_legal",
+      "detail": "min=0 max=42",
+      "passed": true
+    },
+    {
+      "check": "memory_state_changed_by_step32",
+      "detail": "mem32=9863d5cddad9a691 init=45f2ec5b1a447732",
+      "passed": true
+    },
+    {
+      "check": "segment_boundary_crossed",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "persistent_boundary_full_carry",
+      "detail": "after=9bedef22710ab31b in=9bedef22710ab31b",
+      "passed": true
+    },
+    {
+      "check": "persistent_longstate_non_initial",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "params_sha_unchanged_by_inference",
+      "detail": "before=99d734b48acfd349 after=99d734b48acfd349",
+      "passed": true
+    },
+    {
+      "check": "determinism_first32_actions_bitexact",
+      "detail": "n_equal=512/32",
+      "passed": true
+    },
+    {
+      "check": "determinism_step32_memory_hash_bitexact",
+      "detail": "",
+      "passed": true
+    }
+  ],
+  "checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checks": {
+    "failed": 0,
+    "passed": 17,
+    "total": 17
+  },
+  "devices": "[CudaDevice(id=0)]",
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "gpu_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+  "init_ls_hash": "528b7fccb05750d10cc88e6ddecc3c1275f2723ef7c1743e15ca2457afc0056c",
+  "memory_snapshots": {
+    "init": {
+      "all_hash": "7c070cfaea5f2f5ebda3b7dd7a5c02052a669561823739853e07bf1108d38dfa",
+      "longstate_hash": "528b7fccb05750d10cc88e6ddecc3c1275f2723ef7c1743e15ca2457afc0056c",
+      "mask_hash": "dc0b77ca9a3cc43d3554c865730a441b92ff24968cd9579d0eb104a3592952f7",
+      "memories_hash": "45f2ec5b1a44773205479247d99cd2bf1a0eb251dc4412618a5dc4078d6a0e21"
+    },
+    "step160": {
+      "all_hash": "c9e13bd4e66b2096fe6050c5c66ce0e5dd91908b3aa231a6c447e6f932440a88",
+      "longstate_hash": "abb0a59b66f469c92fee5d217ba0b3cb622ac89248c6d74c9eb648d3fa02b9e5",
+      "mask_hash": "0012f6ad450d64019de746872b0b56ad8c8e7dde32da8ac6bad11696f9648ad4",
+      "memories_hash": "deaaadea3a16be6f87455f4fd2742934c715978105f0094986971df255440b04"
+    },
+    "step32": {
+      "all_hash": "143e19086e8ff8fcba44aad58ceb15a8f542668dcf3036893fac2a5828f4f42c",
+      "longstate_hash": "ce7c5e5999a83bb4a7f406d4441506dedb944c39fc59360bc8048b7d702f76cf",
+      "mask_hash": "8f029392db4ef7faa3996a236a1ef3c37da7f7f44de52bc93963a574423e3c4f",
+      "memories_hash": "9863d5cddad9a69180b8a879432bb64d9e8193dd2d16ec4a0bdb25f6b2ef976a"
+    }
+  },
+  "metadata": {
+    "abi_version": "cc3_runtime_abi/v1",
+    "action_dim": 43,
+    "boundary_semantics": "PERSISTENT: full cross-segment carry; clears only on true episode done/reset",
+    "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+    "carry_mode": "PERSISTENT",
+    "checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+    "constructor": {
+      "action_dim": 43,
+      "activation": "relu",
+      "encoder_size": 256,
+      "gating": true,
+      "gating_bias": 2.0,
+      "hidden_layers": 256,
+      "num_heads": 8,
+      "num_layers": 2,
+      "qkv_features": 256,
+      "use_longmem": true
+    },
+    "network_family": "SlowGRU (GTrXL128 + zero-init additive slow-GRU actor channel)",
+    "network_src_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "num_heads": 8,
+    "num_layers": 2,
+    "obs_dim": 8335,
+    "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+    "runtime": "THIN_GTRXL128_SLOWGRU_RUNTIME",
+    "slow_dim": 256,
+    "slow_interval": 32,
+    "window_mem": 128
+  },
+  "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "params_sha256_after": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "params_sha256_before": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "reward_reference_only": {
+    "NOTE": "REFERENCE_ONLY_NOT_PERFORMANCE_JUDGMENT \u2014 \u77ed smoke reward \u4e0d\u5f97\u7528\u4e8e\u6027\u80fd\u5224\u65ad; \u6b63\u5f0f\u6392\u540d\u7531 CC4 \u516c\u5171 evaluator \u56fa\u5b9a",
+    "per_env_total": [
+      10.0,
+      46.6000000461936,
+      25.09999990463257,
+      12.899999998509884,
+      39.0,
+      10.0,
+      11.699999995529652,
+      13.0,
+      16.69999999552965,
+      10.0,
+      12.699999995529652,
+      6.0,
+      13.0,
+      36.0,
+      12.699999995529652,
+      15.699999995529652
+    ]
+  },
+  "runtime": "THIN_GTRXL128_SLOWGRU_RUNTIME",
+  "smoke_status": "PASS",
+  "steps_executed": 160
+}

@@ -1,0 +1,11 @@
+{
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "loader": "THIN_GTRXL128_PICKLE_CONTROL",
+  "checkpoint_path": "/home/oseasy/experiments/bakeoff_phase1/shared_assets/ckpt17500_params.pkl",
+  "checkpoint_format": "pickle",
+  "expected_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "smoke_batch_size": 16,
+  "max_timesteps": 4096,
+  "cfg_override": {},
+  "file_sha256_method": "sha256 of file bytes"
+}

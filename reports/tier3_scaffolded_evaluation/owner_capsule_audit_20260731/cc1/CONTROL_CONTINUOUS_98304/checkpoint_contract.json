@@ -1,0 +1,11 @@
+{
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "loader": "THIN_GTRXL128_ORBAX_BASE",
+  "checkpoint_path": "/home/oseasy/student_pool_v1/cc1_retrain/CONTROL_CONTINUOUS_CANONICAL_98304/long_98304/checkpoints/98304",
+  "checkpoint_format": "orbax",
+  "expected_params_sha256": "PENDING_COMPUTED_IN_SMOKE",
+  "smoke_batch_size": 16,
+  "max_timesteps": 4096,
+  "cfg_override": {},
+  "file_sha256_method": "sha256 over sorted (relpath, file_sha256) pairs of the orbax dir"
+}

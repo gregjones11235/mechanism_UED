@@ -1,0 +1,62 @@
+{
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "ready": true,
+  "budget_class": "MATCHED_98304",
+  "abi_version": "cc2_student_pool_v1",
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "formal_student_ranking_eligible": true,
+  "gates": {
+    "push_status": "OK (76b294b..2d0cc74 non-forced fast-forward; LOCAL==REMOTE==2d0cc74088512634f50230e940f4455d7d429db0)",
+    "training_contract_match": "PASS",
+    "interface_smoke": "PASS",
+    "interface_smoke_all_gates_pass": true,
+    "params_sha256_verified": true,
+    "checkpoint_file_sha256_verified": true,
+    "params_finite": true,
+    "params_unchanged_by_inference": true,
+    "source_identity_verified": true,
+    "base_checkpoint_sha_verified": true,
+    "read_path_skipped_verified": true,
+    "runtime_requires_no_consumer_adapter": true
+  },
+  "checkpoint": {
+    "checkpoint_path": "/home/oseasy/cc2_data/cc2_basegtrxl_runs/runs/BASEGTRXL-LONG98304/ckpt/98304/full_state.pkl",
+    "checkpoint_file_sha256": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+    "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+    "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+    "training_steps": 98304,
+    "training_seed": 42,
+    "checkpoint_count": 13
+  },
+  "identity": {
+    "observation_shape": [
+      8335
+    ],
+    "action_dim": 43,
+    "source_commit_full40": "2d0cc74088512634f50230e940f4455d7d429db0",
+    "config_file_sha256": "5afe24dde8c8d5148c87217ea93c30b984d75af2eec14e2005d1e5c9043a9b20",
+    "scientific_config_sha256": "c67381b1efa17825295e0326dfe2bae5d84bf097ac74dab8f95ee0dd7d09465b",
+    "driver_source_sha256": "8c3ad6c1ad7fd0965e621dd07bb0e418b9c4cde42af54248251847dec996fb9e",
+    "policy_source_sha256": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632"
+  },
+  "capsule_root": "/home/oseasy/student_pool_v1/cc2/BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "sha256sums_file": "/home/oseasy/student_pool_v1/cc2/BASE_GTRXL_ORIGINAL_VTRACE_98304/SHA256SUMS",
+  "sha256sums_self_sha256": "eb086b43416ac7b7e0cc7a6e746b9e38447732b0bca312460ccd0b76a3267dba",
+  "generated_by": "CC2",
+  "directive": "CC2_CORRECTED_MATCHED_BASE_AND_W512_STUDENTS",
+  "owner": "CC2",
+  "candidate_class": "FORMAL_STUDENT",
+  "strong_student_selection_eligible": true,
+  "training_contract_match": "PASS",
+  "identity_status": "PASS",
+  "interface_smoke_status": "PASS",
+  "formal_eval_binding_blocker": "/home/oseasy/student_pool_v1/common/COMMON_EVALUATOR_READY.json absent; FRONT/BACK/FULL 32-step binding pending CC4 common runner",
+  "checkpoint_path": "/home/oseasy/cc2_data/cc2_basegtrxl_runs/runs/BASEGTRXL-LONG98304/ckpt/98304/full_state.pkl",
+  "checkpoint_file_sha256": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+  "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+  "candidate_manifest_sha256": "6105b62518134101bdae9c7096b3f50662de4f6fdf60395d7d1e47431620cb19",
+  "checkpoint_contract_sha256": "e63a3481cfe00714232bdc3bac1584c3ceeab709db5e539fb5c98ff89d5aa401",
+  "candidate_runtime_sha256": "31e28eb60fd89eb482cdde0273f236948f920ad053740a07eafda3e8bc03e4fb",
+  "evaluate_candidate_sha256": "5e9a1f380c7279341e956013da410543098d695d3b346069c581f2319dfb7ac4",
+  "immutable": true
+}

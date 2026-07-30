@@ -1,0 +1,36 @@
+{
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "owner": "CC1",
+  "candidate_class": "STUDENT",
+  "formal_student_ranking_eligible": true,
+  "network_family": "GTrXL128",
+  "memory_mode": "gtrxl_window128",
+  "replay_mode": "OFF",
+  "training_steps": 98304,
+  "training_seed": 42,
+  "budget_class": "MATCHED_98304",
+  "training_contract_match": "PASS",
+  "observation_shape": [
+    8335
+  ],
+  "action_dim": 43,
+  "checkpoint_format": "orbax",
+  "checkpoint_path": "/home/oseasy/student_pool_v1/cc1_retrain/CONTROL_CONTINUOUS_CANONICAL_98304/long_98304/checkpoints/98304",
+  "checkpoint_file_sha256": "PENDING_ORBAX_DIR_COMPUTED_IN_SMOKE",
+  "params_sha256": "PENDING_COMPUTED_IN_SMOKE",
+  "source_commit": "b61fcd3078f26fb6f7f71ca437a7de802883d458",
+  "driver_source_sha256": "faa561c0a78c7d7ea733cfb5ee61f2ca745dfd177c2cd6bca9681bb2a9077584",
+  "policy_source_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+  "adapter_source_sha256": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+  "shared_runtime_source_sha256": "d3d4e55259cbe7cd57112bb26bfc765cae96ae88b170397ea3e76fe2fd0196b1",
+  "server_hostname": "i-00000226",
+  "recovery_status": "MATCHED_EXISTING_ARTIFACT",
+  "recovery_evidence": {
+    "artifact_origin": "CC1 canonical retrain CONTROL_CONTINUOUS_CANONICAL_98304 (this run), not a renamed historical dir",
+    "historical_control_verdict": "UNMATCHED_HISTORICAL_REFERENCE",
+    "historical_control_reason": "D064 baseline_original_student_gpu2 used seed=0 (contract requires 42); all other contract fields matched (vanilla PPO, canonical base ckpt17500, 98304 steps).",
+    "canonical_base_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+    "identity_gate": "base checkpoint loaded params_sha256 asserted == canonical base BEFORE training (see training_certificate.json identity_gate=PASS)",
+    "training_certificate": "/home/oseasy/student_pool_v1/cc1_retrain/CONTROL_CONTINUOUS_CANONICAL_98304/long_98304/training_certificate.json"
+  }
+}

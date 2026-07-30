@@ -1,0 +1,22 @@
+{
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "candidate_class": "TEACHER_REFERENCE",
+  "formal_student_ranking_eligible": false,
+  "gpu_uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+  "args": {
+    "common_evaluator": "WAITING_CC4_COMMON_CONTRACT",
+    "front_bank": "WAITING",
+    "back_bank": "WAITING",
+    "profile": "WAITING"
+  },
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "formal_metrics": null,
+  "note": "CC4 common evaluator / FRONT/BACK state banks not yet delivered. CC1 does not implement scientific metrics. Runtime binding check only.",
+  "runtime_binding_check": {
+    "status": "PASS",
+    "obs_dim": 8335,
+    "action_dim": 43,
+    "greedy_action0": 32,
+    "logits_finite": true
+  }
+}

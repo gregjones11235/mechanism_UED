@@ -1,0 +1,111 @@
+{
+  "contract_version": "cc2_student_pool_v1",
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "budget_class": "MATCHED_98304",
+
+  "contract_fields": {
+    "task": {
+      "required": "DEFEAT_KOBOLD",
+      "recorded": "DEFEAT_KOBOLD",
+      "source": "configs/rmt16_phase4a_long98304_base_gtrxl.yaml scientific_config.task + S4Cls DEFEAT_KOBOLD task code",
+      "match": true
+    },
+    "seed": {
+      "required": 42,
+      "recorded": 42,
+      "source": "config scientific_config.seed + recompute training_seed",
+      "match": true
+    },
+    "total_env_steps": {
+      "required": 98304,
+      "recorded": 98304,
+      "source": "summary.run_class_identity.total_env_steps + global_env_steps + checkpoint_steps[-1]",
+      "match": true
+    },
+    "base_checkpoint_params_sha256": {
+      "required": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+      "recorded": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+      "source": "certificate.checkpoint_identity.base_checkpoint_params_sha256 (base_checkpoint_match=PASS)",
+      "match": true
+    },
+    "observation_shape": {
+      "required": [8335],
+      "recorded": [8335],
+      "source": "summary.observation_shape",
+      "match": true
+    },
+    "action_dim": {
+      "required": 43,
+      "recorded": 43,
+      "source": "summary.action_dim",
+      "match": true
+    },
+    "num_envs": {
+      "required": 16,
+      "recorded": 16,
+      "source": "config scientific_config.num_envs",
+      "match": true
+    },
+    "num_steps": {
+      "required": 128,
+      "recorded": 128,
+      "source": "config scientific_config.num_steps",
+      "match": true
+    },
+    "network_family": {
+      "required": "base_gtrxl",
+      "recorded": "base_gtrxl",
+      "source": "summary.network_family (carry_mode=base_gtrxl; RMT read path skipped)",
+      "match": true
+    },
+    "carry_mode": {
+      "required": "base_gtrxl",
+      "recorded": "base_gtrxl",
+      "source": "summary.carry_mode + certificate.carry_mode",
+      "match": true
+    },
+    "replay_mode": {
+      "required": "original_vtrace",
+      "recorded": "original_vtrace",
+      "source": "summary.replay_mode + executed_protocol_identity.declaration_match PASS",
+      "match": true
+    },
+    "hindsight": {
+      "required": false,
+      "recorded": false,
+      "source": "config scientific_config.hindsight + summary hindsight_attempt_count=0",
+      "match": true
+    },
+    "awr": {
+      "required": false,
+      "recorded": false,
+      "source": "config scientific_config.awr + summary awr_update_count=0",
+      "match": true
+    }
+  },
+
+  "base_gtrxl_identity_evidence": {
+    "executed_read_skipped": true,
+    "rmt_read_path_active": false,
+    "read_ever_nonzero": false,
+    "mem_on_off_ever_nonzero": false,
+    "carried_rmt_token_final_maxabs": 0.0,
+    "gtrxl_window_finite_all": true,
+    "note": "base_gtrxl == SAME ActorCriticTransformerRMT16 module + SAME ckpt17500, but entering_read_tokens returns None so model_forward_eval skips the read path -> pure GTrXL backbone; RMT params get no gradient and stay frozen at init."
+  },
+
+  "run_completion_evidence": {
+    "status": "COMPLETE",
+    "arm_status": "PASS",
+    "arm_gates_pass": true,
+    "literal_exit_code": 0,
+    "certificate_status": "PASS",
+    "replay_horizon_reached": true,
+    "replay_update_count": 47,
+    "checkpoint_count": 13
+  },
+
+  "training_contract_match": "PASS",
+  "formal_student_ranking_eligible": true,
+  "eligibility_note": "All contract fields match the recorded completed run; NOT auto-granted by long-run completion alone — each field verified against the run's summary/certificate/config/recomputed identity."
+}

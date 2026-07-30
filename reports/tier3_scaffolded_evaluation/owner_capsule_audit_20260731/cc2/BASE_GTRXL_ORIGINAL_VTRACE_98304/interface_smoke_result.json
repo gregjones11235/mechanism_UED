@@ -1,0 +1,136 @@
+{
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "smoke_kind": "server_interface_smoke",
+  "BASE_GTRXL_INTERFACE_SMOKE": "PASS",
+  "gates": {
+    "params_sha_eq_manifest": true,
+    "params_sha_eq_contract": true,
+    "checkpoint_file_sha_eq_contract": true,
+    "params_finite": true,
+    "base_checkpoint_sha_eq": true,
+    "action_dim_eq": true,
+    "obs_dim_eq": true,
+    "greedy_forward_logits_finite": true,
+    "greedy_forward_logits_shape": true,
+    "greedy_forward_action_legal": true,
+    "rollout_actions_legal_all": true,
+    "rollout_logits_finite_all": true,
+    "rollout_completed_32_steps": true,
+    "memory_advances_under_stepping": true,
+    "reset_memory_zeroes_memories": true,
+    "reset_memory_zeroes_mask": true,
+    "reset_memory_idx_window": true,
+    "reset_memory_rmt_tokens_zero": true,
+    "init_memory_fresh_zeros": true,
+    "rmt_tokens_stay_zero_base_gtrxl": true,
+    "params_sha_unchanged_by_inference": true,
+    "checkpoint_file_unchanged": true
+  },
+  "all_gates_pass": true,
+  "detail": {
+    "jax_devices": [
+      "cuda:0"
+    ],
+    "cuda_visible_devices": "2",
+    "run_gpu_uuid_expected": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "candidate_metadata": {
+      "abi_version": "cc2_student_pool_v1",
+      "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+      "network_family": "base_gtrxl",
+      "memory_mode": "none",
+      "replay_mode": "original_vtrace",
+      "carry_mode": "base_gtrxl",
+      "observation_shape": [
+        8335
+      ],
+      "action_dim": 43,
+      "window_mem": 128,
+      "num_heads": 8,
+      "num_layers": 2,
+      "embed_size": 256,
+      "rmt_num_tokens": 16,
+      "segment_len": 128,
+      "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+      "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+      "manifest_params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+      "manifest_step": 98304,
+      "manifest_arm": "BASEGTRXL-OrigVtrace",
+      "checkpoint_path": "/home/oseasy/cc2_data/cc2_basegtrxl_runs/runs/BASEGTRXL-LONG98304/ckpt/98304/full_state.pkl",
+      "frozen_module_dir": "/home/oseasy/cc2_data/cc2_source_2d0cc74/gpu2_rmt16_phase4a_snapshot/runtime/frozen_modules",
+      "source_commit_full40": "2d0cc74088512634f50230e940f4455d7d429db0",
+      "read_path_skipped": true,
+      "source_checks": {
+        "network_rmt16.py": {
+          "expected": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
+          "actual": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
+          "match": true
+        },
+        "rmt_memory_anchor.py": {
+          "expected": "4ff54fb4e932b2a1027803334919f0a19d7484e7e3a827b7f5188fa1283452b4",
+          "actual": "4ff54fb4e932b2a1027803334919f0a19d7484e7e3a827b7f5188fa1283452b4",
+          "match": true
+        },
+        "rmt16_memory.py": {
+          "expected": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
+          "actual": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
+          "match": true
+        }
+      }
+    },
+    "params_sha256_recomputed": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+    "checkpoint_file_sha256_recomputed": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+    "float_leaves": 101,
+    "total_float_params": 5433389,
+    "nonfinite_float_leaves": 0,
+    "dicode_wrappers_cl_file": "/home/oseasy/experiments/dreaming-in-code/src/dicode/wrappers_cl.py",
+    "dicode_wrappers_cl_sha256": "cbbf5865a88551b0a229c5c9692ba9a353015aaca74595eb4f6e0de45d3795d1",
+    "wrapper_probe_term": "omitted_equiv_original",
+    "env_action_dim": 43,
+    "env_obs_dim": 8335,
+    "reset_obs_shape": [
+      16,
+      8335
+    ],
+    "first_action": [
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      5,
+      9,
+      9,
+      9,
+      9,
+      9
+    ],
+    "rollout_steps": 32,
+    "rollout_action_min": 1,
+    "rollout_action_max": 28,
+    "rollout_total_reward": 22.0,
+    "environment": {
+      "python": "3.10.20",
+      "packages": {
+        "jax": "0.6.0",
+        "jaxlib": "0.6.0",
+        "numpy": "2.2.6",
+        "flax": "0.10.7",
+        "distrax": "0.1.5",
+        "optax": "0.2.8",
+        "orbax-checkpoint": "0.11.39",
+        "craftax": "1.6.1",
+        "minicraftax": "unknown"
+      },
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "run_gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "server_hostname": "i-00000226"
+    }
+  }
+}

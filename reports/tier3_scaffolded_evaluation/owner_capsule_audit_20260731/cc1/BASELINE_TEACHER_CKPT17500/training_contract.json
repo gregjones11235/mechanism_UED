@@ -1,0 +1,5 @@
+{
+  "applicable": false,
+  "candidate_class": "TEACHER_REFERENCE",
+  "note": "Reference teacher / canonical base. Not a CC1-trained formal student; not ranking-eligible. Canonical base identity CONFIRMED: params_sha256 == d4e85af5... (contract canonical_base_checkpoint_params_sha256)."
+}

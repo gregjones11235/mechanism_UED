@@ -1,0 +1,22 @@
+{
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "candidate_class": "STUDENT",
+  "formal_student_ranking_eligible": true,
+  "gpu_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+  "args": {
+    "common_evaluator": "WAITING_CC4_COMMON_CONTRACT",
+    "front_bank": "WAITING",
+    "back_bank": "WAITING",
+    "profile": "WAITING"
+  },
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "formal_metrics": null,
+  "note": "CC4 common evaluator / FRONT/BACK state banks not yet delivered. CC1 does not implement scientific metrics. Runtime binding check only.",
+  "runtime_binding_check": {
+    "status": "PASS",
+    "obs_dim": 8335,
+    "action_dim": 43,
+    "greedy_action0": 32,
+    "logits_finite": true
+  }
+}

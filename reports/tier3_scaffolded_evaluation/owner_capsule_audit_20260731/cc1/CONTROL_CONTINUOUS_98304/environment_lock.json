@@ -1,0 +1,28 @@
+{
+  "server_hostname": "i-00000226",
+  "conda_env": "dicode310",
+  "lib_versions": {
+    "jax": "0.6.0",
+    "flax": "0.10.7",
+    "distrax": "0.1.5",
+    "optax": "0.2.8",
+    "orbax.checkpoint": "unknown",
+    "craftax": "unknown",
+    "minicraftax": "unknown",
+    "python": "3.10.20"
+  },
+  "gpu_uuids": [
+    "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+    "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+    "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+  ],
+  "xla_flags": "--xla_gpu_deterministic_ops=true",
+  "cuda_visible_devices_policy": "pinned per-run by UUID (CUDA_VISIBLE_DEVICES)",
+  "shared_runtime_path": "/home/oseasy/git_work/student_pool_reference_gtrxl/student_pool/shared_runtime",
+  "dicode_source_path": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB/src",
+  "dicode_policy_source_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+  "worktree": "/home/oseasy/git_work/student_pool_reference_gtrxl",
+  "worktree_branch": "henry/student-pool-reference-gtrxl",
+  "worktree_commit": "b61fcd3078f26fb6f7f71ca437a7de802883d458"
+}

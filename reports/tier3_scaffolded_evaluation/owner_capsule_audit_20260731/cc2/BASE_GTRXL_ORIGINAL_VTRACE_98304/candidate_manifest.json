@@ -1,0 +1,58 @@
+{
+  "manifest_version": "cc2_student_pool_v1",
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "owner": "CC2",
+  "network_family": "base_gtrxl",
+  "memory_mode": "none",
+  "carry_mode": "base_gtrxl",
+  "replay_mode": "original_vtrace",
+  "budget_class": "MATCHED_98304",
+
+  "abi_version": "cc2_student_pool_v1",
+  "runtime_module": "candidate_runtime.py",
+  "runtime_entrypoint": "load_candidate",
+  "abi_functions": ["load_candidate", "init_memory", "policy_step", "reset_memory", "candidate_metadata"],
+  "requires_consumer_adapter": false,
+  "adapter_note": "Self-contained: reuses the frozen network + memory modules from the source commit; CC4 never implements a Base GTrXL adapter.",
+
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "evaluator_module": "evaluate_candidate.py",
+  "evaluator_cli": ["--candidate-manifest", "--common-evaluator", "--front-bank", "--back-bank", "--profile", "--output-dir", "--gpu-uuid"],
+  "formal_metrics_defined_here": false,
+
+  "formal_student_ranking_eligible": true,
+  "training_contract_match": "PASS",
+  "interface_smoke": "PASS",
+
+  "checkpoint": {
+    "checkpoint_path": "/home/oseasy/cc2_data/cc2_basegtrxl_runs/runs/BASEGTRXL-LONG98304/ckpt/98304/full_state.pkl",
+    "checkpoint_file_sha256": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+    "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+    "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+    "training_steps": 98304,
+    "training_seed": 42,
+    "checkpoint_count": 13
+  },
+
+  "identity": {
+    "observation_shape": [8335],
+    "action_dim": 43,
+    "source_commit_full40": "2d0cc74088512634f50230e940f4455d7d429db0",
+    "config_file_sha256": "5afe24dde8c8d5148c87217ea93c30b984d75af2eec14e2005d1e5c9043a9b20",
+    "scientific_config_sha256": "c67381b1efa17825295e0326dfe2bae5d84bf097ac74dab8f95ee0dd7d09465b",
+    "driver_source_sha256": "8c3ad6c1ad7fd0965e621dd07bb0e418b9c4cde42af54248251847dec996fb9e",
+    "policy_source_sha256": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632"
+  },
+
+  "files": {
+    "candidate_manifest.json": "this index",
+    "training_contract.json": "formal training contract + per-field verification (PASS)",
+    "checkpoint_contract.json": "load contract consumed by candidate_runtime.load_candidate",
+    "candidate_runtime.py": "self-contained §六 ABI runtime",
+    "evaluate_candidate.py": "CC4 common-contract evaluator shim (delegates; defines no metric)",
+    "interface_smoke_result.json": "§四 server interface smoke result (PASS)",
+    "environment_lock.json": "server / package / GPU / source-tree lock",
+    "SHA256SUMS": "sha256 over the capsule files",
+    "READY.json": "final readiness attestation"
+  }
+}
