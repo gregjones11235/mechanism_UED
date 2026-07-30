@@ -449,10 +449,13 @@ def assemble(common_root, frozen_bank_artifacts, repo_root=None) -> dict:
     profile = profile_mod.load_profile(profile_src)
     profile_mod.verify_profile(profile)
     sha = _copy(profile_src, os.path.join(common_root, "evaluation_profile.json"))
-    require(sha == profile_mod.compute_profile_sha256(profile)
-            == profile.get("evaluation_profile_sha256"),
-            "FAIL CLOSED: copied profile SHA does not reproduce the verified "
-            "self-hash")
+    # NOTE: two DISTINCT identities — `sha` is the whole-file SHA256 of the
+    # artifact (what SHA256SUMS / binding references use); the self-hash field
+    # is the canonical-JSON SHA of the body minus that field (load_profile has
+    # already failed closed if it does not reproduce). They are never equal.
+    require(profile.get("evaluation_profile_sha256")
+            == profile_mod.compute_profile_sha256(profile),
+            "FAIL CLOSED: copied profile's recorded self-hash does not reproduce")
     record("evaluation_profile.json", profile_src, sha)
     evaluation_profile_sha256 = sha
     full_profile_ready = (profile.get("scenarios", {}).get("full", {})
