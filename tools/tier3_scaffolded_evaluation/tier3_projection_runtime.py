@@ -480,12 +480,21 @@ def load_cc1_gtrxl128(spec):
 
 def install_numpy2_pickle_compat_if_needed():
     """CC3 checkpoints were PICKLED UNDER numpy>=2: the ndarray reducer in the
-    pickle stream references ``numpy._core.numeric._frombuffer`` (the numpy2
-    module layout). The LOCKED CC4 venv pins numpy 1.26.4 (jax 0.4.30 pin;
-    environment_lock — numpy may NOT be upgraded). In numpy 1.x the identical
-    reconstructor lives at ``numpy.core.numeric._frombuffer`` (protocol-5
-    in-band buffer reconstruction — same semantics). Register ONE sys.modules
-    alias so the OWNER's UNMODIFIED pickle.load resolves it.
+    pickle stream references ``numpy._core.numeric._frombuffer`` (protocol-5
+    in-band buffer reconstruction). The LOCKED CC4 venv pins numpy 1.26.4
+    (jax 0.4.30 pin; environment_lock — numpy may NOT be upgraded).
+
+    numpy 1.26.4 in this venv SHIPS THE OFFICIAL numpy2-pickle interop shim
+    package at site-packages/numpy/_core/ (its own docstring: "This private
+    module only contains stubs for interoperability with NumPy 2.0 pickled
+    arrays") covering _dtype / _internal / multiarray / _multiarray_umath /
+    umath — but NOT `numeric`, the one leaf the CC3 pickle stream references.
+    This function COMPLETES the official shim by exactly that missing leaf:
+    ``sys.modules["numpy._core.numeric"] = numpy.core.numeric`` (numpy 1.x's
+    identical protocol-5 ``_frombuffer`` reconstructor). Gate: if
+    ``numpy._core.numeric`` imports natively, do nothing. (hasattr(np, "_core")
+    is NOT a valid gate: the on-disk shim package sets the attribute without
+    providing the numeric leaf.)
 
     Verified scope (read-only byte scan of both CC3 pkls, 2026-07-31): exactly
     ONE numpy2-path reference each — ``numpy._core.numeric`` — nothing else.
@@ -494,23 +503,31 @@ def install_numpy2_pickle_compat_if_needed():
     if the alias altered any numeric, the declared params SHA would not match
     and the binding would fail closed. No owner code is modified; the pkl
     bytes are read untouched (file SHA gate)."""
+    import importlib
     import numpy as np
-    if hasattr(np, "_core"):
-        return {"installed": False, "reason": "numpy>=2 present natively",
+    try:
+        importlib.import_module("numpy._core.numeric")
+        return {"installed": False,
+                "reason": "numpy._core.numeric imports natively (official "
+                          "shim already complete)",
                 "numpy_version": np.__version__}
+    except ImportError:
+        pass
     import numpy.core.numeric as _nc_numeric
     require(hasattr(_nc_numeric, "_frombuffer"),
             "FAIL CLOSED: numpy.core.numeric._frombuffer missing in locked "
-            "numpy %s — cannot alias the numpy2 pickle path" % np.__version__)
-    sys.modules.setdefault("numpy._core.numeric", _nc_numeric)
+            "numpy %s — cannot complete the numpy2 pickle interop shim"
+            % np.__version__)
+    sys.modules["numpy._core.numeric"] = _nc_numeric
     return {"installed": True,
-            "alias": "numpy._core.numeric -> numpy.core.numeric",
-            "reason": "cc3 checkpoints pickled under numpy>=2 reference "
-                      "numpy._core.numeric._frombuffer; the identical "
-                      "protocol-5 reconstructor in locked numpy %s lives at "
-                      "numpy.core.numeric" % np.__version__,
+            "alias": "sys.modules['numpy._core.numeric'] = numpy.core.numeric",
+            "basis": "completes numpy 1.26.4's OWN numpy2-pickle interop shim "
+                     "package (site-packages/numpy/_core/, docstring: 'stubs "
+                     "for interoperability with NumPy 2.0 pickled arrays') by "
+                     "its one missing leaf `numeric` (protocol-5 _frombuffer); "
+                     "identical reconstructor semantics",
             "numpy_version": np.__version__,
-            "scope": "single module alias; verified pkl reference set = "
+            "scope": "single sys.modules entry; verified pkl reference set = "
                      "{numpy._core.numeric} only (byte scan both CC3 pkls); "
                      "any other missing module still fails closed",
             "fidelity_witness": "owner params_sha_packed gate (G3) + pkl file "

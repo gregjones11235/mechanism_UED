@@ -110,17 +110,25 @@ OWNER_ACTION_REQUIRED = false
   - 任何**其他**缺失模块一律 fail closed,不猜、不静默 stub。
 - **numpy2 pickle 兼容(仅 CC3 两族:RESET128 + PERSISTENT)**:CC3 两份
   checkpoint 在 **numpy>=2** 下 pickle,ndarray 归约在流中引用
-  `numpy._core.numeric._frombuffer`(numpy2 模块布局);锁定 CC4 venv 钉
-  numpy 1.26.4(jax 0.4.30 钉/environment_lock,**不得升级 numpy**)。
-  numpy1 中同一 protocol-5 in-band 重建函数位于 `numpy.core.numeric`。
-  处置:驱动在 owner `load_candidate()` **之前**注册**唯一一条**
-  `sys.modules` 别名 `numpy._core.numeric -> numpy.core.numeric`
-  (numpy>=2 原生在场时不做任何事)。作用域经两份 pkl 的**只读字节扫描**
-  核验:每份恰一条 numpy2 路径引用(`numpy._core.numeric`),别无其他;
-  任何其他缺失模块仍 fail closed,不扩面。保真见证 = owner params_sha_packed
-  门(G3)+ pkl 文件 SHA 门(G2):别名若改动任何数值,声明 SHA 必不符,
-  binding 即 fail closed。owner 代码零改动、pkl 字节只读。每份 binding 以
-  `numpy_pickle_compat` 字段完整公开。
+  `numpy._core.numeric._frombuffer`(protocol-5 in-band 重建)。锁定 CC4
+  venv 钉 numpy 1.26.4(jax 0.4.30 钉/environment_lock,**不得升级
+  numpy**)。该 venv 的 numpy 1.26.4 **自带官方 numpy2-pickle 兼容 shim
+  包** `site-packages/numpy/_core/`(自带 docstring:"stubs for
+  interoperability with NumPy 2.0 pickled arrays"),覆盖 `_dtype` /
+  `_internal` / `multiarray` / `_multiarray_umath` / `umath`,**唯独缺
+  `numeric` 这一叶**——正是 CC3 流所引用者。处置:驱动在 owner
+  `load_candidate()` **之前**为该官方 shim **补齐唯一缺叶**:
+  `sys.modules["numpy._core.numeric"] = numpy.core.numeric`(numpy1 同一
+  `_frombuffer`,语义恒等);门为"`numpy._core.numeric` 能否原生
+  import",能则不做任何事。注意 `hasattr(np, "_core")` **不是**合法门:
+  on-disk shim 包导入后即设该属性,但不提供 numeric 叶(实测驱动进程
+  在 stage3 jax 导入链后 hasattr=True 而 pickle 仍失败,据此定位)。
+  作用域经两份 pkl 的**只读字节扫描**核验:每份恰一条 numpy2 路径引用
+  (`numpy._core.numeric`),别无其他;任何其他缺失模块仍 fail closed,
+  不扩面。保真见证 = owner params_sha_packed 门(G3)+ pkl 文件 SHA 门
+  (G2):别名若改动任何数值,声明 SHA 必不符,binding 即 fail closed。
+  owner 代码零改动、pkl 字节只读。每份 binding 以 `numpy_pickle_compat`
+  字段完整公开。
 
 - **引擎 FRONT corridor predicate 裁定记录(引擎设计级 fail-closed,不放宽)**:
   `tier3_evaluator.rollout_episode` 在 FRONT 场景对每一仍在 floor-1 的步调用
