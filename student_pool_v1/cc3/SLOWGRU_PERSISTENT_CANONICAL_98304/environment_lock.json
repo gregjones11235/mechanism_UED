@@ -1,0 +1,34 @@
+{
+  "conda_env": "dicode310",
+  "cuda_visible_devices_policy": "set per-run to a single allowed GPU UUID before jax import",
+  "gpu_allowed": [
+    "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+  ],
+  "gpu_forbidden": [
+    "GPU-e8c08612 (GPU0, CC2 handover prohibition)",
+    "GPU-3c7a2864 (GPU1, CC2 handover prohibition)"
+  ],
+  "local_jax_craftax_forbidden": true,
+  "lock_version": "cc3_environment_lock/v1",
+  "machine": "x86_64",
+  "modules": {
+    "chex": "0.1.90",
+    "craftax": "unknown_no_version_attr",
+    "distrax": "0.1.5",
+    "flax": "0.10.7",
+    "jax": "0.6.0",
+    "jaxlib": "0.6.0",
+    "minicraftax": "unknown_no_version_attr",
+    "numpy": "2.2.6",
+    "optax": "0.2.8"
+  },
+  "platform_node": "i-00000226",
+  "python": "3.10.20",
+  "python_executable": "/home/oseasy/miniconda3/envs/dicode310/bin/python",
+  "s4_task_path": "/home/oseasy/experiments/p2_v1_20260722/evidence/s4_task_code.py",
+  "s4_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+  "system": "Linux 5.8.0-43-generic",
+  "v7_code_root": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/code/dicode_v7fix58_armB",
+  "xla_flags": "--xla_gpu_deterministic_ops=true"
+}

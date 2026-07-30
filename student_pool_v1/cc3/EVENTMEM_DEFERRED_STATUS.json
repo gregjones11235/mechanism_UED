@@ -1,0 +1,19 @@
+{
+  "record_version": "cc3_eventmem_boundary/v1",
+  "owner": "CC3",
+  "scope": "CC3_CORRECTED_MATCHED_SLOWGRU_STUDENTS section 六 (EventMem boundary)",
+  "EVENTMEM_FORMAL_POOL_STATUS": "DEFERRED",
+  "EVENTMEM_TRAINING_AUTHORIZED": false,
+  "EVENTMEM_TRAINING_STARTED": false,
+  "decisions": [
+    "historical EVENTMEM@24576 does NOT enter the formal student pool and is NOT used as a ranking substitute",
+    "no canonical EventMem@98304 training in this round",
+    "canonical EventMem@98304 is only reconsidered if a SlowGRU/W512/Control arm becomes unimplementable AND the director explicitly authorizes it",
+    "the old-prompt clause 'EventMem@24576 may serve as formal ranking substitute' is VOID"
+  ],
+  "formal_pool_this_round": [
+    "SLOWGRU_RESET128_CANONICAL_98304 (READY=true, MATCHED_EXISTING_ARTIFACT)",
+    "SLOWGRU_PERSISTENT_CANONICAL_98304 (READY=true, EXACT_RESUME_CONTINUATION_24576_TO_98304)"
+  ],
+  "note": "boundary record only — no EventMem code, training, or capsule was produced this round"
+}

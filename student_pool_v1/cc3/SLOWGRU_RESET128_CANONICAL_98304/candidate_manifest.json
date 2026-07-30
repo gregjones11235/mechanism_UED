@@ -1,0 +1,59 @@
+{
+  "manifest_version": "cc3_candidate_manifest/v1",
+  "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+  "artifact_candidate_id": "SLOWGRU_RESET128_LONGRUN_98304",
+  "display_name": "SlowGRU Reset128 canonical @98304 (matched existing artifact)",
+  "owner": "CC3",
+  "network_family": "SlowGRU",
+  "memory_family": "GTrXL128 fast window (128) + slow-GRU long-term channel (SLOW_INTERVAL=32, SLOW_DIM=256, attention-pooled period commit, zero-initialised additive actor injection)",
+  "carry_mode": "RESET128",
+  "carry_semantics": "slow longstate reset to init at every 128-step segment boundary; fast window memories carry across boundaries; per-episode true_done resets the slow state inside the rollout",
+  "task": "DEFEAT_KOBOLD (S4_dark native)",
+  "training_steps": 98304,
+  "training_seed": 42,
+  "obs_dim": 8335,
+  "action_dim": 43,
+  "replay": "OFF",
+  "vtrace": "OFF",
+  "hindsight": false,
+  "awr": false,
+  "historical_contract_status": "MATCHED_EXISTING_ARTIFACT",
+  "retrain_required": false,
+  "budget_class": "MATCHED_98304",
+  "training_contract_match": "PASS",
+  "formal_student_ranking_eligible": true,
+  "runtime": "THIN_GTRXL128_SLOWGRU_RUNTIME (shared with SLOWGRU_PERSISTENT_CANONICAL_98304; identical SlowGRU core network SHA b2652105...; the ONLY behavioral difference is the carry/reset policy)",
+  "recovery": {
+    "status": "RECOVERED",
+    "probe_checks": "36/36",
+    "recovery_result_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_RESET128_LONGRUN_98304/recovery_result.json",
+    "file_sha256": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+    "params_sha256": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+    "canonical_base_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5"
+  },
+  "interface_smoke": {
+    "status": "PASS",
+    "checks": "18/18",
+    "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "result_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_RESET128_CANONICAL_98304/interface_smoke_result.json"
+  },
+  "historical_engineering_gates": {
+    "P3_LONGRUN_gates": "LONGRUN_GATES_PASS=true (G1-G10: sha/trees/restore-no-reinit/boundary-clear/gtrxl-unchanged/no-crosstalk/det-config/no-nan-inf/entropy/roundtrip)",
+    "reset128_gates": "boundary_clear_pass=true, clear_nontrivial_pass=true over 36 rollouts (init_ls_hash 229bcd09... in trainer pytree-flatten convention)",
+    "source_path": "experiments/henry_dicode_student_upgrade/11_slowgru_reset128_phase3/raw_sources/.../gpu2_slowgru_reset128_longrun/{src/P3_LONGRUN_gates.json,train/out/LC_SLOWGRU_RESET128_LONGRUN_train_summary.json}"
+  },
+  "performance_claims": "NONE — 短 smoke reward 仅作 REFERENCE_ONLY_NOT_PERFORMANCE_JUDGMENT；正式排名由 CC4 公共 evaluator 与冻结 FRONT/BACK banks 固定",
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT",
+  "evidence_location_class": "EXTERNAL_VERIFIED_ARTIFACT",
+  "capsule_files": [
+    "candidate_manifest.json",
+    "training_contract.json",
+    "checkpoint_contract.json",
+    "candidate_runtime.py",
+    "evaluate_candidate.py",
+    "interface_smoke_result.json",
+    "environment_lock.json",
+    "SHA256SUMS",
+    "READY.json"
+  ]
+}

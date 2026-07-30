@@ -1,0 +1,56 @@
+{
+  "contract_version": "cc3_checkpoint_contract/v1",
+  "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+  "artifact_candidate_id": "SLOWGRU_RESET128_LONGRUN_98304",
+  "network_family": "SlowGRU",
+  "carry_mode": "RESET128",
+  "checkpoint_path": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/train/ckpt/98304/full_state.pkl",
+  "checkpoint_file_sha256": "2c065fa88bcc8cfcb193deda6ef599522238b99bf7151f5eeab0b70e4420f2de",
+  "params_sha256": "9d92c5b9e2e2148b2375c59f7f595d53b95f924d62436ebdccf8bf9ea3d59247",
+  "canonical_base_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "global_step": 98304,
+  "update_step": 48,
+  "opt_step": 96,
+  "training_seed": 42,
+  "arm_src": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/src",
+  "network_module": "slowgru_network",
+  "network_src_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+  "driver_src_sha256": "ab32f362b97e10fe4ec3e8947a1ab90892542d2e5b8c10d0b343a4f86a1a517a",
+  "s4_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+  "constructor": {
+    "action_dim": 43,
+    "activation": "relu",
+    "hidden_layers": 256,
+    "encoder_size": 256,
+    "num_heads": 8,
+    "qkv_features": 256,
+    "num_layers": 2,
+    "gating": true,
+    "gating_bias": 2.0,
+    "use_longmem": true
+  },
+  "memory_layout": {
+    "window_mem": 128,
+    "num_heads": 8,
+    "num_layers": 2,
+    "embed_size": 256,
+    "slow_interval": 32,
+    "slow_dim": 256
+  },
+  "obs_dim": 8335,
+  "action_dim": 43,
+  "boundary_semantics": "RESET128: slow longstate reset to init at every 128-step segment boundary (fast window memories carry) — trainer boundary-clear block, verified by reset128_gates (boundary_clear_pass=true over 36 rollouts, init_ls_hash=229bcd09...)",
+  "recovery_probe_sha256": "f5118788844b684282f3074d9668d5c276ba9091354acf322ae6b4d5c0e23358",
+  "recovery_result_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_RESET128_LONGRUN_98304/recovery_result.json",
+  "recovery_status": "RECOVERED",
+  "gpu_allowed": [
+    "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+  ],
+  "gpu_forbidden": [
+    "GPU-e8c08612",
+    "GPU-3c7a2864"
+  ],
+  "smoke_seed": 777,
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT"
+}
