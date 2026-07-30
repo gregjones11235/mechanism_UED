@@ -40,6 +40,12 @@ BACK_PRIMARY_METRIC = "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START"
 BACK_IDENTITY = "BOSS_COMBAT_SCAFFOLDED"
 BACK_NA_METRICS = ["boss_area_reached", "time_to_boss_area", "BACK_BOSS_NOT_FOUND"]
 
+# The frozen public metric schema document (closing contract §2/§7) that mirrors
+# these constants byte-for-byte and binds this source file by LF-SHA. The metrics
+# self-test fails closed if the document disagrees with ANY constant below.
+METRIC_SCHEMA_PATH_REL = ("schemas", "tier3_metric_schema_v1.json")
+METRIC_SCHEMA_ID = "mechanism_UED.tier3_metric_schema/v1"
+
 PRIMARY_METRIC = {
     FULL: FULL_PRIMARY_METRIC,
     FRONT: FRONT_PRIMARY_METRIC,
@@ -203,6 +209,13 @@ def _ep(scenario, valid_start, **flags):
     return e
 
 
+def _sha256_lf_file(path: str) -> str:
+    """LF-normalized SHA256 of a source file (EOL-independent source identity)."""
+    import hashlib
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def self_test() -> int:
     problems = []
 
@@ -270,6 +283,42 @@ def self_test() -> int:
         check("NEG17_metric_range_rejected", False)
     except FailClosed:
         check("NEG17_metric_range_rejected", True)
+
+    # The frozen public metric schema document (closing contract §2/§7) must mirror
+    # every constant above AND bind this source file by LF-SHA — a drift on either
+    # side fails closed.
+    import json as _json
+    schema_path = audit.repo_root().joinpath(*METRIC_SCHEMA_PATH_REL)
+    check("metric_schema_doc_present", schema_path.is_file())
+    if schema_path.is_file():
+        doc = _json.loads(schema_path.read_text(encoding="utf-8"))
+        check("metric_schema_id", doc.get("schema") == METRIC_SCHEMA_ID)
+        sc = doc.get("scenarios", {})
+        check("metric_schema_full_primary",
+              sc.get(FULL, {}).get("primary_metric") == FULL_PRIMARY_METRIC)
+        check("metric_schema_front_primary",
+              sc.get(FRONT, {}).get("primary_metric") == FRONT_PRIMARY_METRIC)
+        check("metric_schema_front_dense",
+              sc.get(FRONT, {}).get("dense_metric") == FRONT_DENSE_METRIC)
+        check("metric_schema_back_primary",
+              sc.get(BACK, {}).get("primary_metric") == BACK_PRIMARY_METRIC)
+        check("metric_schema_back_identity",
+              sc.get(BACK, {}).get("identity_class") == BACK_IDENTITY)
+        check("metric_schema_back_na",
+              sc.get(BACK, {}).get("na_metrics") == BACK_NA_METRICS)
+        check("metric_schema_no_boss_search",
+              sc.get(BACK, {}).get("boss_search_claimed") is False)
+        check("metric_schema_source_bound",
+              doc.get("metrics_source_sha256")
+              == _sha256_lf_file(str(schema_path.parent.parent
+                                     / "tools" / "tier3_scaffolded_evaluation"
+                                     / "tier3_metrics.py")))
+        ba = doc.get("bit_agreement_policy", {})
+        check("metric_schema_bit_exact_required",
+              ba.get("canonical_fields_bit_exact") is True
+              and "action_sequence" in ba.get("bit_exact_fields", [])
+              and "episode_record_sha256" in ba.get("bit_exact_fields", [])
+              and "terminal_label" in ba.get("bit_exact_fields", []))
 
     if problems:
         print("TIER3_METRICS_SELF_TEST_FAIL")
