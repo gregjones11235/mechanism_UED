@@ -1083,13 +1083,19 @@ def run_evaluation(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
 def run_interface_smoke(checkpoint_path: str, cc2_snapshot_root: str, scenario: str,
                         out_dir: str, episodes: int = 2, max_steps: int = 32,
                         driver_source: str = None, contract_path: str = None,
-                        arm: str = None) -> dict:
+                        arm: str = None, frozen_bank_artifacts: str = None) -> dict:
     """REAL interface smoke (run_class=INTERFACE_SMOKE, chain verification only;
-    performance_claim_authorized=False ALWAYS). Thin wrapper over run_evaluation."""
+    performance_claim_authorized=False ALWAYS). Thin wrapper over run_evaluation.
+    When `frozen_bank_artifacts` is given (closing contract §4/§7: the pool binding
+    smoke), the FRONT/BACK banks are loaded READ-ONLY from the serialized artifact
+    instead of being regenerated in memory — the identical bytes the formal classes
+    consume (GPU_REGENERATION_DISABLED). Default None preserves the historical
+    in-memory smoke behaviour."""
     return run_evaluation(checkpoint_path, cc2_snapshot_root, scenario, out_dir,
                           RUN_CLASS_SMOKE, contract_path=contract_path, arm=arm,
                           episodes=episodes, max_steps=max_steps,
-                          driver_source=driver_source)
+                          driver_source=driver_source,
+                          frozen_bank_artifacts=frozen_bank_artifacts)
 
 
 def run_performance_evaluation(checkpoint_path: str, cc2_snapshot_root: str,
@@ -1473,7 +1479,8 @@ def main(argv=None) -> int:
         checkpoint, root, _opt("--scenario", "all"), out,
         episodes=int(_opt("--episodes", "2")),
         max_steps=int(_opt("--max-steps", "32")),
-        driver_source=driver_src, contract_path=contract, arm=arm)
+        driver_source=driver_src, contract_path=contract, arm=arm,
+        frozen_bank_artifacts=artifacts)
     print("TIER3_INTERFACE_SMOKE_DONE (run_class=INTERFACE_SMOKE; arm=%s; "
           "performance_claim_authorized=false; params_unchanged=%s; out=%s)"
           % (arm, summary["params_unchanged"], summary["out_dir"]))

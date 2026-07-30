@@ -151,3 +151,50 @@ canonical Stage4 `generate_world`:`set_starting_floor(2)` + `set_monsters_killed
 - **§7/§2 公共交付目录(服务器物化)**:`/home/oseasy/student_pool_v1/common/` ≥ 15 件真实文件(禁止占位):COMMON_EVALUATOR_READY.json、common_evaluator.py、common_runner.py、candidate_runtime_abi.md、evaluation_profile.json、metric_schema.json、front/back bank artifact + manifest、negative_test_report.json、cross_gpu_preflight_certificate.json、environment_lock.json、CLI_TEMPLATE.txt、SHA256SUMS;所有 JSON 引用**实际文件 full SHA256**。
 - **§6/§7 双 RMT16 capsule(服务器物化)**:`.../cc4/{PERSISTENT,RESET128}_RMT16_ORIGINAL_VTRACE_98304/` 各 11 件(candidate_manifest / training_contract / checkpoint_contract / candidate_runtime.py / evaluate_candidate.py / interface_smoke_result / memory_contract_smoke_result / common_evaluator_binding_result / environment_lock / READY.json / SHA256SUMS)。真实 binding smoke:每臂 FRONT/BACK/FULL 各 1 ep × max_steps=32,`run_class=INTERFACE_SMOKE`、`performance_claim_authorized=false`;binding_result 引用 common 目录八个真实 SHA(common_runner / common_evaluator / evaluation_profile / metric_schema / front_bank_content / back_bank_content / full_profile / environment_lock)—— 无 SHA 证据不得写 formal_eval_binding=PASS。
 - **§9 READY 门**:`COMMON_EVALUATOR_READY=true` ⇔ COMMON_ARTIFACT_IDENTITY ∧ B1_COMMON_EVALUATOR ∧ B3_FROZEN_BANKS ∧ FULL_PROFILE_READY=true ∧ COMMON_RUNTIME_ABI_READY ∧ NEGATIVE_GATES ∧ CROSS_GPU_DETERMINISM_PREFLIGHT ∧ SHA256SUMS_STATUS 全 PASS;单 RMT16 `READY=true` ⇔ identity_status ∧ interface_smoke_status ∧ memory_contract_smoke_status ∧ formal_eval_binding 全 PASS ∧ checkpoint SHA verified ∧ params SHA verified ∧ common artifact SHA refs verified ∧ immutable=true。任一门不满足即诚实 false,绝不伪造 PASS。
+
+## §7.10 物化执行层(三个构建器,commit4)
+
+§7.7–§7.9 的交付由三个已提交模块执行,全部复用既有引擎函数,无第二套语义:
+
+1. **`tier3_pool_common_assembly.py`** — `--assemble` / `--finalize-ready`。
+   assemble: profile load+verify 后字节拷贝;metric schema 绑定 tier3_metrics.py
+   LF-SHA 再拷贝;ABI 文档拷贝;evaluator 全包拷贝(模块/ schemas/ configs,记录
+   每个模块 LF-SHA);冻结 bank artifact 字节拷贝(load_bank 布局 + 平坦别名各一
+   份,同字节同 SHA),重载后 content SHA 必须复现历史冻结恒等式
+   21aeb7dc…/c632e30d…,否则 fail closed(§4 不得静默替换);四类 SHA
+   (artifact_file / canonical_content / ordered_payload / field_manifest)记入
+   statuses/bank_identity.json;subprocess 真跑负向套件(--json,fail==0)、
+   evaluator/ABI/metrics 自检;environment_lock.json(jax.devices + nvidia-smi +
+   _runtime_versions/_eval_device_identity + git HEAD + bank manifest 的
+   pinned_env_identity);**真实入口 shim** common_evaluator.py / common_runner.py
+   (按 LF-SHA 绑定部署引擎,tamper 即 fail closed,不是占位文件);CLI_TEMPLATE.txt;
+   assembly_manifest.json;SHA256SUMS。finalize:从盘上重验 S9 八门
+   (COMMON_ARTIFACT_IDENTITY / B1_COMMON_EVALUATOR / B3_FROZEN_BANKS /
+   FULL_PROFILE_READY / COMMON_RUNTIME_ABI_READY / NEGATIVE_GATES /
+   CROSS_GPU_DETERMINISM_PREFLIGHT / SHA256SUMS_STATUS),拷入预检证书,重生
+   SHA256SUMS,写 COMMON_EVALUATOR_READY.json — 任一门 FAIL 则诚实 false。
+2. **`tier3_cross_gpu_preflight.py`** — `--run`(经 ABI + evaluator 自己的
+   rollout_episode/make_canonical_env,FULL 取首个冻结 held-out 种子 200000,
+   FRONT/BACK 取 bank idx 0,各 1 ep × max_steps=32,episode_record_sha256 与
+   evaluator 逐字同法计算)/ `--compare`(按 metric schema bit_agreement_policy
+   比对 action_sequence / terminal_label / timesteps / valid_start /
+   metric_payload / episode_record_sha256 / checkpoint SHA / params SHA /
+   双 bank content SHA;首个 canonical 差异即 FAIL 并记录;时序/设备计数不作为
+   判据;不放宽、不重生成 bank 规避)。
+3. **`tier3_pool_capsule.py`** — `--build` 每候选恰好 11 个文件(S6):
+   candidate_manifest.json(immutable=true,一切性能/优越性声明 false)、
+   training_contract.json(只从冻结 final98304 合同投影,derived_from_sha256 用
+   合同自身 self-hash 定义)、checkpoint_contract.json(字节拷贝)、
+   candidate_runtime.py(按 SHA 绑定 common_runner 的真实 shim,固定
+   family=rmt16_gtrxl_cc2)、evaluate_candidate.py(拒绝 --performance-evaluation
+   / --round1-screening 的真实 shim)、interface_smoke_result.json(经公共
+   common_evaluator.py 入口真跑 INTERFACE_SMOKE,FRONT/BACK/FULL 各 1 ep × 32 步,
+   bank 只读来自 common artifact)、memory_contract_smoke_result.json(真实 pkl
+   上 ABI:双加载确定性、第 3 步快照续跑、reset 语义、门控)、
+   common_evaluator_binding_result.json(S7 八个 common SHA 引用 + 对
+   assembly_manifest 的交叉核验,formal_eval_binding=PASS 仅在 SHA 证据齐全时)、
+   environment_lock.json(common 锁字节拷贝)、SHA256SUMS、READY.json(S9 八条)。
+
+配套修正:`run_interface_smoke` 增加 `frozen_bank_artifacts` 透传(加性参数,
+默认 None 保持历史内存 smoke 行为),main() 转发 `--frozen-bank-artifacts` —
+使 binding smoke 满足 §4 的 GPU 只读 immutable bank 要求。
