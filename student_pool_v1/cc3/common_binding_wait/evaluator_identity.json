@@ -1,0 +1,9 @@
+{
+  "assembled_at_utc": "2026-07-30T14:27:35.978819+00:00",
+  "common_evaluator_engine_sha256": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+  "engine_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_evaluator.py",
+  "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+  "git_commit_at_assembly": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+  "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+  "schema": "mechanism_UED.common_evaluator_binding_identity/v1"
+}

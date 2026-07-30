@@ -1,0 +1,8 @@
+{
+  "abi_doc_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+  "assembled_at_utc": "2026-07-30T14:27:35.978819+00:00",
+  "common_runner_engine_sha256": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+  "git_commit_at_assembly": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+  "runner_path": "/home/oseasy/cc4_tier3_eval_20260730/repo/tools/tier3_scaffolded_evaluation/tier3_candidate_runtime.py",
+  "schema": "mechanism_UED.common_runner_binding_identity/v1"
+}
