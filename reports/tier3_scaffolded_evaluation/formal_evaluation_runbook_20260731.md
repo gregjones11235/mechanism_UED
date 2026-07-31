@@ -16,6 +16,14 @@
 7. 输出正式 evaluation certificates、ranking summary、per-student metrics；
 8. 启动前记录 SECONDARY_AUDIT_PASS marker 或等价审计记录。
 
+## 0.1 GPU 解禁记录（总控裁定，2026-07-31）
+
+彩排外推超单队列一夜窗口后，总控显式裁定：**解禁 GPU0/GPU1 用于本次正式评估，四卡并行（墙钟约 8–15h）**。执行约束：
+- 每 GPU 仍为**单进程顺序队列**（同卡并发 jax 仍是已证实的 CUDA OOM 类，禁止）；
+- GPU0（`GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6`）/ GPU1（`GPU-3c7a2864-755b-7045-b293-6f80e748283f`）正式运行前**必须先过跨 GPU 确定性预检**（metric_schema bit_agreement_policy 的 canonical 字段逐位相同：action_sequence / terminal_label / timesteps / valid_start / primary 与 dense 载荷值 / episode_record_sha256 / episode_records_sha256 / bank_content_sha256 / checkpoint_file_sha256 / params_sha256）；
+- 注册表 `CC4_GPU_ALLOWED_UUIDS` 已扩为 4 卡（提交可审计，历史禁令注释保留）；本记录与最终报告如实披露。
+- 其余 standing 纪律不变：cc1/cc1_retrain/cc2/cc3 只读；孤儿 PID 106885 不触碰；密钥纪律不变。
+
 ## 1. 设计偏差记录（重要）
 
 原计划：marker 工具 = 写 marker + flip READY(`FORMAL_RANKING_STARTED=true`) → 正式运行 → 排名。
@@ -73,53 +81,64 @@ cd /home/oseasy/cc4_tier3_eval_20260730/repo
 
 立即回拉本地证据副本：`SECONDARY_AUDIT_PASS.json` + `.sha256`。marker 拒覆盖——写错只能换名重审。
 
-## 6. 正式启动：双 GPU 顺序队列（静态冻结，开跑后不改）
+## 5.1 跨 GPU 确定性预检（GPU0/GPU1 首跑前必过）
 
-同 GPU 上并发 jax 进程已证实导致 CUDA stream/cuSolver/CUBIN-OOM，故每 GPU 一条 `&&` 顺序队列、nohup、`< /dev/null`、CWD=repo root。RMT16 对拆分、SlowGRU 对拆分、重者先行。teacher 按同一冻结 schedule 全量跑（reference 必须同协议可比）。
+CONTROL_CONTINUOUS 以 1/1/1 受限彩排分别在 GPU0、GPU1 上跑（新 scratch 目录），与既有 GPU2 彩排记录（`_rehearsal_20260731T092931Z`）比对 canonical 字段：`full-seed200000`、`front_l2-bank0`、`back_l2-bank0` 三条 episode 的 action_sequence / terminal_label / timesteps / episode_record_sha256 必须逐位相同。任一不符 → CROSS_GPU_DETERMINISM_PREFLIGHT=FAIL，GPU0/1 不启用（回退双卡队列），不得重铸银行规避差异。
 
-| GPU2（`GPU-8df11537…`，4 个） | GPU3（`GPU-f56a59b4…`，3 个） |
-|---|---|
-| PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 | RESET128_RMT16_ORIGINAL_VTRACE_98304 |
-| SLOWGRU_RESET128_CANONICAL_98304 | SLOWGRU_PERSISTENT_CANONICAL_98304 |
-| BASE_GTRXL_ORIGINAL_VTRACE_98304 | BASELINE_TEACHER_CKPT17500（reference） |
-| CONTROL_CONTINUOUS_98304 | |
+## 6. 正式启动：四 GPU 顺序队列（总控 2026-07-31 裁定；开跑后不改）
+
+同 GPU 上并发 jax 进程已证实导致 CUDA stream/cuSolver/CUBIN-OOM，故每 GPU 一条顺序队列、nohup、`< /dev/null`、CWD=repo root。RMT16 对拆分（GPU2/GPU3）、SlowGRU 对拆分（GPU3/GPU0）、重者先行、teacher 独占 GPU1（reference 同协议全量）。
+
+| GPU2（`GPU-8df11537…`） | GPU3（`GPU-f56a59b4…`） | GPU0（`GPU-e8c08612…`） | GPU1（`GPU-3c7a2864…`） |
+|---|---|---|---|
+| PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 | RESET128_RMT16_ORIGINAL_VTRACE_98304 | SLOWGRU_RESET128_CANONICAL_98304 | BASELINE_TEACHER_CKPT17500（reference） |
+| BASE_GTRXL_ORIGINAL_VTRACE_98304 | SLOWGRU_PERSISTENT_CANONICAL_98304 | CONTROL_CONTINUOUS_98304 | |
 
 ```bash
-cd /home/oseasy/cc4_tier3_eval_20260730/repo
 mkdir -p /home/oseasy/student_pool_v1/cc4/formal_eval_logs
-PY=/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python
-DR=tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py
-LOGS=/home/oseasy/student_pool_v1/cc4/formal_eval_logs
+L=/home/oseasy/student_pool_v1/cc4/formal_eval_logs
 
-run() { CUDA_VISIBLE_DEVICES=$1 $PY $DR --candidate-id $2 < /dev/null \
-        > $LOGS/$2.log 2>&1; }
-
-# GPU2 队列（顺序）
 nohup bash -c '
   cd /home/oseasy/cc4_tier3_eval_20260730/repo
   PY=/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python
   DR=tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py
   L=/home/oseasy/student_pool_v1/cc4/formal_eval_logs
   for C in PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 \
-           SLOWGRU_RESET128_CANONICAL_98304 \
-           BASE_GTRXL_ORIGINAL_VTRACE_98304 \
-           CONTROL_CONTINUOUS_98304; do
+           BASE_GTRXL_ORIGINAL_VTRACE_98304; do
     CUDA_VISIBLE_DEVICES=GPU-8df11537-ab79-722d-606f-411966196c4c \
       $PY $DR --candidate-id $C < /dev/null > $L/$C.log 2>&1
-  done' > $LOGS/_queue_gpu2.nohup 2>&1 &
+  done' > $L/_queue_gpu2.nohup 2>&1 &
 
-# GPU3 队列（顺序）
 nohup bash -c '
   cd /home/oseasy/cc4_tier3_eval_20260730/repo
   PY=/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python
   DR=tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py
   L=/home/oseasy/student_pool_v1/cc4/formal_eval_logs
   for C in RESET128_RMT16_ORIGINAL_VTRACE_98304 \
-           SLOWGRU_PERSISTENT_CANONICAL_98304 \
-           BASELINE_TEACHER_CKPT17500; do
+           SLOWGRU_PERSISTENT_CANONICAL_98304; do
     CUDA_VISIBLE_DEVICES=GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd \
       $PY $DR --candidate-id $C < /dev/null > $L/$C.log 2>&1
-  done' > $LOGS/_queue_gpu3.nohup 2>&1 &
+  done' > $L/_queue_gpu3.nohup 2>&1 &
+
+nohup bash -c '
+  cd /home/oseasy/cc4_tier3_eval_20260730/repo
+  PY=/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python
+  DR=tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py
+  L=/home/oseasy/student_pool_v1/cc4/formal_eval_logs
+  for C in SLOWGRU_RESET128_CANONICAL_98304 \
+           CONTROL_CONTINUOUS_98304; do
+    CUDA_VISIBLE_DEVICES=GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6 \
+      $PY $DR --candidate-id $C < /dev/null > $L/$C.log 2>&1
+  done' > $L/_queue_gpu0.nohup 2>&1 &
+
+nohup bash -c '
+  cd /home/oseasy/cc4_tier3_eval_20260730/repo
+  PY=/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python
+  DR=tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py
+  L=/home/oseasy/student_pool_v1/cc4/formal_eval_logs
+  CUDA_VISIBLE_DEVICES=GPU-3c7a2864-755b-7045-b293-6f80e748283f \
+    $PY $DR --candidate-id BASELINE_TEACHER_CKPT17500 < /dev/null \
+    > $L/BASELINE_TEACHER_CKPT17500.log 2>&1' > $L/_queue_gpu1.nohup 2>&1 &
 ```
 
 ## 7. 监控
