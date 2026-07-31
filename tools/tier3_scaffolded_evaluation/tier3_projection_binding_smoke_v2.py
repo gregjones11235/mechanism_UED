@@ -551,11 +551,14 @@ def main(argv=None):
               % (boundary_ev["carry_mode"], boundary_ev["boundary_info"]),
               flush=True)
     batch1_ev = getattr(policy, "batch1_workaround", None)
-    if batch1_ev:
+    if batch1_ev and batch1_ev.get("applied"):
         print("[stage6] batch-1 workaround ACTIVE (disclosed): effective_batch=%d "
               "readout_row=%d owner_code_modified=%s"
               % (batch1_ev["effective_batch"], batch1_ev["readout_row"],
                  batch1_ev["owner_code_modified"]), flush=True)
+    elif batch1_ev:
+        print("[stage6] batch-1 workaround NOT applied (disclosed): %s"
+              % batch1_ev.get("reason"), flush=True)
 
     # --- Stage 7: smoke rollouts (V2 engine library path) ---------------------
     print("[stage7] interface smoke (V2 dynamic topology): %d episodes/scenario, "
@@ -757,6 +760,13 @@ def main(argv=None):
             "action_dim": ctx.get("action_dim"),
             "carry_mode": (ctx["handle"].get("carry_mode")
                            if ctx["kind"] == "cc3_slowgru" else None),
+            "rmt16_common_root": ctx.get("common_root"),
+            "rmt16_common_runner_path": ctx.get("common_runner_path"),
+            "rmt16_common_runner_sha256": ctx.get("common_runner_sha256"),
+            "rmt16_engine_path": ctx.get("engine_path"),
+            "rmt16_engine_lf_sha256": ctx.get("engine_lf_sha256"),
+            "rmt16_frozen_identities": ctx.get("frozen_identities"),
+            "rmt16_engine_metadata": ctx.get("engine_metadata"),
         },
         "dicode_resolution": dicode_ev,
         "sha_recomputation": {
@@ -784,6 +794,11 @@ def main(argv=None):
                 if ctx["kind"] == "cc2_base_gtrxl"
                 else "owner pi.mode() (greedy=True)"
                 if ctx["kind"] == "cc1_gtrxl128"
+                else "owner CC2 greedy action returned by the frozen engine ABI "
+                     "CandidateRuntime.policy_step (rmt16_gtrxl_cc2 family; "
+                     "int(self._policy(obs, None)); stateful RMT16 memory owned "
+                     "by the engine runtime; batch enforced 1, done_mask=None)"
+                if ctx["kind"] == "cc4_rmt16_capsule"
                 else "argmax(extras['logits']) — memory update is action-independent; "
                      "faithful greedy readout of the owner's identical forward"),
             "state": policy_state,
@@ -973,6 +988,13 @@ def main(argv=None):
         binding["boundary_semantics"] = spec["boundary_semantics"]
         binding["boundary_unit_check"] = boundary_ev
         binding["numpy_pickle_compat"] = ctx.get("numpy_pickle_compat")
+    if spec["loader_kind"] == "cc4_rmt16_capsule":
+        binding["carry_mode"] = spec["carry_mode"]
+        binding["engine_runtime_family"] = spec["engine_runtime_family"]
+        binding["rmt16_engine_metadata"] = ctx.get("engine_metadata")
+        binding["rmt16_frozen_identities"] = ctx.get("frozen_identities")
+        binding["rmt16_common_runner_sha256"] = ctx.get("common_runner_sha256")
+        binding["rmt16_engine_lf_sha256"] = ctx.get("engine_lf_sha256")
     if batch1_ev:
         binding["batch1_workaround"] = batch1_ev
     if smoke_abort:

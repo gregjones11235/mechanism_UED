@@ -100,6 +100,18 @@ CC1_TRAIN_STATE_UTILS_SHA256 = "cbd091f90b2592b7a2ef51251e75dbe51f3b8eb5b9d36a30
 CC3_SLOWGRU_RUNTIME_SHA256 = "d3b74d2ed6aee1affd54bb3a39bdb50162afa81dac0cab5866e4ed6450fcb24b"
 CC3_SLOWGRU_NETWORK_SHA256 = "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b"
 
+# CC4 V1-era RMT16 capsules (both formal RMT16 candidates): the capsule's thin
+# shim binds to the FROZEN V1 common runner at COMMON_ROOT, which delegates to
+# the FROZEN engine's registered rmt16_gtrxl_cc2 family loader (contract
+# verification path identical to tier3_evaluator's). CHECKPOINT_CONTRACT content
+# SHA = canonical SHA of repo configs/tier3_cc2_final98304_checkpoint_contract_v1.json
+# (both capsule copies byte-identical; cited verbatim from both shims'
+# CHECKPOINT_CONTRACT_SHA256 constants).
+RMT16_V1_COMMON_ROOT = "/home/oseasy/student_pool_v1/common"
+RMT16_FROZEN_CONTRACT_CONTENT_SHA256 = "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5"
+RMT16_ENGINE_RUNTIME_FAMILY = "rmt16_gtrxl_cc2"
+RMT16_FROZEN_ACTION_MODE = "greedy_argmax"
+
 # CC4 evaluation-device GPU allowlist (UUIDs). GPU0/GPU1 are BANNED for CC4.
 CC4_GPU_ALLOWED_UUIDS = (
     "GPU-8df11537-ab79-722d-606f-411966196c4c",   # GPU2
@@ -588,6 +600,133 @@ def load_cc3_slowgru(spec):
             "numpy_pickle_compat": np_compat}
 
 
+def load_cc4_rmt16_capsule(spec):
+    """PERSISTENT/RESET128 RMT16 (CC4 V1-era capsule over a CC2 original-vtrace
+    arm). Owner plumbing chain, every hop SHA-gated and NONE of it CC4-defined
+    semantics:
+
+        capsule candidate_runtime.py (thin shim, registry-pinned SHA)
+          -> FROZEN V1 common_runner.py (FROZEN_COMMON_RUNNER_SHA256)
+             -> FROZEN engine tier3_candidate_runtime.py (LF-SHA 6af09be4…),
+                registered rmt16_gtrxl_cc2 family loader: verifies the pkl
+                (file SHA + recomputed params SHA + driver-source SHA + CC2
+                policy-source SHA) against the frozen final98304 contract and
+                requires carry_mode == arm — the SAME verification path
+                tier3_evaluator uses — then builds CC2RMT16Policy and returns
+                the CandidateRuntime ABI (init_memory/policy_step/reset_memory/
+                candidate_metadata; opaque memory snapshot; batch enforced 1).
+
+    CC4 defines no hash and no semantics here: every SHA is owner-declared
+    (capsule manifest/contract/shim), and the engine + driver RECOMPUTE them
+    independently (fail closed). The runtime is carried in ctx["runtime"];
+    params stay inside the engine runtime (read-only, captured by reference)."""
+    capsule = spec["source_capsule_root"]
+    contract_path = os.path.join(capsule, "checkpoint_contract.json")
+    require(sha256_file(contract_path) == spec["capsule_file_sha256"]["checkpoint_contract.json"],
+            "FAIL CLOSED: rmt16 capsule contract sha drift for %s" % capsule)
+    # Hop 1 gate: the FROZEN V1 common runner the shim binds to.
+    common_runner_path = os.path.join(RMT16_V1_COMMON_ROOT, "common_runner.py")
+    require(os.path.isfile(common_runner_path),
+            "FAIL CLOSED: V1 common runner missing: %s" % common_runner_path)
+    runner_sha = sha256_file(common_runner_path)
+    require(runner_sha == FROZEN_COMMON_RUNNER_SHA256,
+            "FAIL CLOSED (V1_COMMON_RUNNER_SHA_MISMATCH): %s live %s != frozen %s"
+            % (common_runner_path, runner_sha, FROZEN_COMMON_RUNNER_SHA256))
+    # Hop 2 gate: the FROZEN engine the runner delegates to (LF-SHA, the same
+    # identity the runner's own engine pin enforces — independent cross-check
+    # of the same bytes in this checkout).
+    engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "tier3_candidate_runtime.py")
+    require(os.path.isfile(engine_path),
+            "FAIL CLOSED: frozen engine missing: %s" % engine_path)
+    engine_sha = lf_sha256_file(engine_path)
+    require(engine_sha == FROZEN_ENGINE_LF_SHA256["tier3_candidate_runtime.py"],
+            "FAIL CLOSED (FROZEN_ENGINE_LF_SHA_MISMATCH): %s live %s != frozen %s"
+            % (engine_path, engine_sha,
+               FROZEN_ENGINE_LF_SHA256["tier3_candidate_runtime.py"]))
+    # Shim import (SHA-gated BEFORE exec) + identity cross-check BEFORE load.
+    mod = import_module_from_file(
+        "cc4_proj_rmt16_%s_candidate_runtime" % spec["carry_mode"].lower(),
+        os.path.join(capsule, "candidate_runtime.py"),
+        expected_sha256=spec["capsule_file_sha256"]["candidate_runtime.py"])
+    require(getattr(mod, "COMMON_RUNNER_SHA256", None) == FROZEN_COMMON_RUNNER_SHA256,
+            "FAIL CLOSED (RMT16_SHIM_RUNNER_PIN_MISMATCH): %s shim pins runner %r "
+            "!= frozen V1 %s"
+            % (capsule, getattr(mod, "COMMON_RUNNER_SHA256", None),
+               FROZEN_COMMON_RUNNER_SHA256))
+    fi = mod.frozen_identities()
+    require(fi.get("candidate_id") == spec["candidate_id"],
+            "FAIL CLOSED (RMT16_SHIM_ID_MISMATCH): shim candidate_id %r != registry %r"
+            % (fi.get("candidate_id"), spec["candidate_id"]))
+    require(fi.get("runtime_family") == RMT16_ENGINE_RUNTIME_FAMILY
+            == spec["engine_runtime_family"],
+            "FAIL CLOSED (RMT16_SHIM_FAMILY_MISMATCH): shim family %r"
+            % (fi.get("runtime_family"),))
+    require(fi.get("arm") == spec["carry_mode"],
+            "FAIL CLOSED (RMT16_SHIM_ARM_MISMATCH): shim arm %r != registry carry %r"
+            % (fi.get("arm"), spec["carry_mode"]))
+    require(fi.get("params_sha256") == spec["declared_params_sha256"]["value"],
+            "FAIL CLOSED (RMT16_SHIM_PARAMS_MISMATCH): shim params %r != registry %r"
+            % (fi.get("params_sha256"), spec["declared_params_sha256"]["value"]))
+    require(fi.get("checkpoint_file_sha256")
+            == spec["declared_checkpoint_file_sha256"]["value"],
+            "FAIL CLOSED (RMT16_SHIM_FILE_MISMATCH): shim file sha %r != registry %r"
+            % (fi.get("checkpoint_file_sha256"),
+               spec["declared_checkpoint_file_sha256"]["value"]))
+    require(fi.get("checkpoint_contract_sha256") == RMT16_FROZEN_CONTRACT_CONTENT_SHA256,
+            "FAIL CLOSED (RMT16_SHIM_CONTRACT_MISMATCH): shim contract content sha "
+            "%r != frozen %s"
+            % (fi.get("checkpoint_contract_sha256"),
+               RMT16_FROZEN_CONTRACT_CONTENT_SHA256))
+    require(fi.get("scientific_predicates_defined_here") is False
+            and fi.get("trainable") is False and fi.get("immutable") is True,
+            "FAIL CLOSED (RMT16_SHIM_FLAGS): shim must declare no predicates, "
+            "non-trainable, immutable")
+    # Owner load through the shim -> V1 runner -> frozen engine family loader
+    # (engine raises on ANY contract/SHA/carry drift — fail closed inside).
+    runtime = mod.load(spec["checkpoint_path"])
+    for meth in ("init_memory", "policy_step", "reset_memory", "candidate_metadata"):
+        require(callable(getattr(runtime, meth, None)),
+                "FAIL CLOSED (RMT16_ABI_SURFACE): engine runtime missing %r" % meth)
+    meta = runtime.candidate_metadata()
+    require(meta.get("runtime_family") == RMT16_ENGINE_RUNTIME_FAMILY,
+            "FAIL CLOSED (RMT16_META_FAMILY): %r" % (meta.get("runtime_family"),))
+    require(meta.get("arm") == spec["carry_mode"],
+            "FAIL CLOSED (RMT16_META_ARM): %r != %r"
+            % (meta.get("arm"), spec["carry_mode"]))
+    require(meta.get("carry_mode") == spec["carry_mode"],
+            "FAIL CLOSED (RMT16_META_CARRY): %r != %r"
+            % (meta.get("carry_mode"), spec["carry_mode"]))
+    require(meta.get("action_mode") == RMT16_FROZEN_ACTION_MODE,
+            "FAIL CLOSED (RMT16_META_ACTION_MODE): %r != %s"
+            % (meta.get("action_mode"), RMT16_FROZEN_ACTION_MODE))
+    require(meta.get("params_sha256") == fi["params_sha256"],
+            "FAIL CLOSED (RMT16_META_PARAMS): engine-recomputed %r != shim-declared %r"
+            % (meta.get("params_sha256"), fi["params_sha256"]))
+    require(meta.get("checkpoint_file_sha256") == fi["checkpoint_file_sha256"],
+            "FAIL CLOSED (RMT16_META_FILE): engine-recomputed %r != shim-declared %r"
+            % (meta.get("checkpoint_file_sha256"), fi["checkpoint_file_sha256"]))
+    require(meta.get("checkpoint_contract_sha256") == RMT16_FROZEN_CONTRACT_CONTENT_SHA256,
+            "FAIL CLOSED (RMT16_META_CONTRACT): %r"
+            % (meta.get("checkpoint_contract_sha256"),))
+    require(meta.get("base_checkpoint_params_sha256")
+            == fi["base_checkpoint_params_sha256"],
+            "FAIL CLOSED (RMT16_META_BASE_PARAMS): %r != %r"
+            % (meta.get("base_checkpoint_params_sha256"),
+               fi["base_checkpoint_params_sha256"]))
+    require(meta.get("checkpoint_path") == spec["checkpoint_path"],
+            "FAIL CLOSED (RMT16_META_PATH): %r != %r"
+            % (meta.get("checkpoint_path"), spec["checkpoint_path"]))
+    return {"kind": "cc4_rmt16_capsule", "module": mod, "runtime": runtime,
+            "frozen_identities": fi, "engine_metadata": meta,
+            "checkpoint_path": spec["checkpoint_path"],
+            "common_root": RMT16_V1_COMMON_ROOT,
+            "common_runner_path": common_runner_path,
+            "common_runner_sha256": runner_sha,
+            "engine_path": engine_path, "engine_lf_sha256": engine_sha,
+            "wandb_stub": None, "import_stubs": None}
+
+
 def contract_checkpoint_path(contract_path):
     return read_json(contract_path).get("checkpoint_path")
 
@@ -604,6 +743,14 @@ def recompute_params_sha_owner(ctx):
         return ctx["R"].params_sha256(ctx["params"])
     if kind == "cc3_slowgru":
         return ctx["_sr"].params_sha(ctx["handle"])
+    if kind == "cc4_rmt16_capsule":
+        # The engine's OWN hash function (the frozen verification path): reload
+        # the pkl read-only and recompute CC2's canonical params SHA from the
+        # bytes — never a CC4-redefined hash, never the shim's declared value.
+        import tier3_checkpoint_adapter as ckpt
+        _params, params_sha, _manifest, _file_sha = \
+            ckpt.load_full_params_readonly(ctx["checkpoint_path"])
+        return params_sha
     raise FailClosed("FAIL CLOSED: unknown loader kind %r" % kind)
 
 
@@ -825,6 +972,45 @@ class SlowGRUProjectionPolicy(object):
         return action
 
 
+class Rmt16CapsuleProjectionPolicy(object):
+    """CC4 RMT16 capsule: the frozen engine's CandidateRuntime.policy_step
+    returns the owner CC2 GREEDY action (int(self._policy(obs, None)); the
+    stateful RMT16 policy — memories/mask/idx/rmt_st snapshot — lives inside
+    the engine runtime). init_memory(1) resets the policy and returns the
+    opaque memory snapshot; policy_step(obs[1, obs_dim], memory_state, None)
+    returns {"action": int, "memory_state": snapshot}.
+
+    NO batch-1 workaround (unlike the CC1/CC3 shells): the engine ENFORCES
+    batch exactly 1 (CandidateRuntime.check_batch_size fails closed on any
+    other size — a batched rollout would silently change CC2's per-step
+    dynamics), and CC2's rmt_step_forward pads 1->2 internally. Calling at
+    B=1 with done_mask=None (the ABI default) is the engine's OWN protocol."""
+
+    def __init__(self, runtime):
+        self.runtime = runtime
+        self.ms = None
+        self.batch1_workaround = {
+            "applied": False,
+            "reason": ("engine CandidateRuntime enforces batch==1 "
+                       "(check_batch_size fails closed) and the owner CC2 "
+                       "rmt_step_forward pads 1->2 internally; done_mask=None "
+                       "is the engine ABI default"),
+            "owner_code_modified": False}
+
+    def reset(self):
+        self.ms = self.runtime.init_memory(1)
+
+    def __call__(self, obs, env_state):
+        import jax.numpy as jnp
+        import numpy as np
+        if self.ms is None:
+            self.reset()
+        o = jnp.asarray(np.asarray(obs)[None, :])          # (1, obs_dim)
+        out = self.runtime.policy_step(o, self.ms, None)
+        self.ms = out["memory_state"]
+        return int(np.asarray(out["action"]).reshape(-1)[0])
+
+
 def build_policy(spec, ctx):
     kind = ctx["kind"]
     if kind == "cc2_base_gtrxl":
@@ -834,6 +1020,8 @@ def build_policy(spec, ctx):
     if kind == "cc3_slowgru":
         return SlowGRUProjectionPolicy(ctx["module"],
                                        SLOWGRU_SEGMENT_BOUNDARY_STEPS)
+    if kind == "cc4_rmt16_capsule":
+        return Rmt16CapsuleProjectionPolicy(ctx["runtime"])
     raise FailClosed("FAIL CLOSED: unknown loader kind %r" % kind)
 
 
@@ -894,11 +1082,13 @@ def slowgru_boundary_unit_check(module, carry_mode):
 
 
 # ---------------------------------------------------------------------------
-# PROJECTION REGISTRY — the five CC4-authored projection families.
-# All SHA constants below were audited 2026-07-31 from owner capsule
-# SHA256SUMS / contracts / READY / interface-smoke records (read-only) and
-# re-verified on disk; declaration_source cites the owner artifact each
-# declared full64 comes from.
+# PROJECTION REGISTRY — the seven CC4-authored projection families (6 students
+# + 1 teacher reference). All SHA constants below were audited 2026-07-31 from
+# owner capsule SHA256SUMS / contracts / READY / interface-smoke records
+# (read-only) and re-verified on disk; declaration_source cites the owner
+# artifact each declared full64 comes from. The two RMT16 entries bind CC4's
+# own V1-era capsules (owner load path: shim -> FROZEN V1 common runner ->
+# FROZEN engine rmt16_gtrxl_cc2 family loader); evaluation binding is V2.
 # ---------------------------------------------------------------------------
 PROJECTION_REGISTRY = {
     "BASE_GTRXL_ORIGINAL_VTRACE_98304": {
@@ -944,6 +1134,131 @@ PROJECTION_REGISTRY = {
             "network_rmt16.py": CC2_FROZEN_MODULE_FILES["network_rmt16.py"],
             "rmt_memory_anchor.py": CC2_FROZEN_MODULE_FILES["rmt_memory_anchor.py"],
             "rmt16_memory.py": CC2_FROZEN_MODULE_FILES["rmt16_memory.py"],
+        },
+        "gpu_allowed_cc4": list(CC4_GPU_ALLOWED_UUIDS),
+    },
+    # The two FORMAL RMT16 candidates (standing CC4 ownership). Owner plumbing:
+    # the CC4 V1-era capsule's thin candidate_runtime.py binds to the FROZEN V1
+    # common runner (FROZEN_COMMON_RUNNER_SHA256), which delegates to the FROZEN
+    # engine tier3_candidate_runtime.py (LF-SHA 6af09be4…) — its registered
+    # rmt16_gtrxl_cc2 family loader verifies the checkpoint (file SHA + params
+    # SHA + driver-source SHA + CC2 policy-source SHA) against the frozen
+    # final98304 contract, exactly as tier3_evaluator does. CC4 defines NO
+    # value here: every SHA is the capsule/contract-declared owner value, and
+    # the loader + driver recompute them independently (fail closed).
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": {
+        "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+        "runtime_family": "rmt16_gtrxl_cc2_persistent_projection",
+        "engine_runtime_family": "rmt16_gtrxl_cc2",
+        "owner": "CC4 capsule over CC2 original-vtrace arm",
+        "candidate_class": "STUDENT",
+        "formal_student_ranking_eligible": True,
+        "strong_student_selection_eligible": True,
+        "reference_only": False,
+        "student_rank": None,
+        "budget_class": "MATCHED_98304",
+        "training_steps": 98304,
+        "training_seed": 42,
+        "loader_kind": "cc4_rmt16_capsule",
+        "checkpoint_kind": "pkl_file",
+        "network_family": "RMT16_GTrXL (CC2 network_rmt16 via the frozen "
+                          "engine's registered rmt16_gtrxl_cc2 family loader)",
+        "memory_mode": "rmt16_window128_persistent",
+        "carry_mode": "persistent",
+        "replay_mode": "original_vtrace",
+        "segment_len": 128,
+        "checkpoint_path": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/"
+                           "RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl",
+        "source_capsule_root": "/home/oseasy/student_pool_v1/cc4/"
+                               "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+        "capsule_file_sha256": {
+            "candidate_runtime.py": "12f2308ac5a8ddba19f62f6d63900fd375ef845e8e1c8062c3b914bd258c374d",
+            "candidate_manifest.json": "e50a04380bafada12862a87088e2e1280b726c4b502fc56856f89c69454834a4",
+            "checkpoint_contract.json": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+            "evaluate_candidate.py": "143dfc1ec61816de4b709ec4647d666896c54a07a0666b5eeda82eb93e651a88",
+        },
+        "declared_params_sha256": {
+            "value": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+            "declaration_source": "cc4 capsule candidate_manifest.json params_sha256 "
+                "+ checkpoint_contract.json arms.persistent.params_sha256 "
+                "(contract content sha 7dda2bc7…); the frozen engine family "
+                "loader recomputes it from the pkl bytes and gates it against "
+                "the contract (verify_checkpoint_against_contract)",
+        },
+        "declared_checkpoint_file_sha256": {
+            "value": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+            "declaration_source": "cc4 capsule candidate_manifest.json "
+                "checkpoint_file_sha256 + checkpoint_contract.json "
+                "arms.persistent.checkpoint_file_sha256 (sha256 of pkl bytes)",
+        },
+        "params_hash_protocol": "tier3_checkpoint_adapter.load_full_params_readonly "
+            "(frozen engine verification path): CC2 canonical params sha256 — "
+            "sha256 over per-leaf np.ascontiguousarray(np.asarray(leaf)).tobytes() "
+            "in jax tree_leaves order, recomputed from the pkl bytes",
+        "checkpoint_file_hash_protocol": "sha256 of pkl file bytes",
+        "bound_owner_runtime_sha256": {
+            "candidate_runtime.py": "12f2308ac5a8ddba19f62f6d63900fd375ef845e8e1c8062c3b914bd258c374d",
+            "common_runner.py (frozen V1)": FROZEN_COMMON_RUNNER_SHA256,
+            "tier3_candidate_runtime.py (frozen engine LF-SHA)":
+                FROZEN_ENGINE_LF_SHA256["tier3_candidate_runtime.py"],
+        },
+        "gpu_allowed_cc4": list(CC4_GPU_ALLOWED_UUIDS),
+    },
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": {
+        "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+        "runtime_family": "rmt16_gtrxl_cc2_reset128_projection",
+        "engine_runtime_family": "rmt16_gtrxl_cc2",
+        "owner": "CC4 capsule over CC2 original-vtrace arm",
+        "candidate_class": "STUDENT",
+        "formal_student_ranking_eligible": True,
+        "strong_student_selection_eligible": True,
+        "reference_only": False,
+        "student_rank": None,
+        "budget_class": "MATCHED_98304",
+        "training_steps": 98304,
+        "training_seed": 42,
+        "loader_kind": "cc4_rmt16_capsule",
+        "checkpoint_kind": "pkl_file",
+        "network_family": "RMT16_GTrXL (CC2 network_rmt16 via the frozen "
+                          "engine's registered rmt16_gtrxl_cc2 family loader)",
+        "memory_mode": "rmt16_window128_reset128",
+        "carry_mode": "reset128",
+        "replay_mode": "original_vtrace",
+        "segment_len": 128,
+        "checkpoint_path": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/"
+                           "RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl",
+        "source_capsule_root": "/home/oseasy/student_pool_v1/cc4/"
+                               "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+        "capsule_file_sha256": {
+            "candidate_runtime.py": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+            "candidate_manifest.json": "d79a04e817395c8db8fa935235492a1c30f4cdd12346c00eef3f7ba9c3d77fe4",
+            "checkpoint_contract.json": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+            "evaluate_candidate.py": "fb7a1d321ebed135a4d28fd16676f44385159fa9604624f0e557430774fe736e",
+        },
+        "declared_params_sha256": {
+            "value": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+            "declaration_source": "cc4 capsule candidate_manifest.json params_sha256 "
+                "+ checkpoint_contract.json arms.reset128.params_sha256 "
+                "(contract content sha 7dda2bc7…); the frozen engine family "
+                "loader recomputes it from the pkl bytes and gates it against "
+                "the contract (verify_checkpoint_against_contract)",
+        },
+        "declared_checkpoint_file_sha256": {
+            "value": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+            "declaration_source": "cc4 capsule candidate_manifest.json "
+                "checkpoint_file_sha256 + checkpoint_contract.json "
+                "arms.reset128.checkpoint_file_sha256 (sha256 of pkl bytes)",
+        },
+        "params_hash_protocol": "tier3_checkpoint_adapter.load_full_params_readonly "
+            "(frozen engine verification path): CC2 canonical params sha256 — "
+            "sha256 over per-leaf np.ascontiguousarray(np.asarray(leaf)).tobytes() "
+            "in jax tree_leaves order, recomputed from the pkl bytes",
+        "checkpoint_file_hash_protocol": "sha256 of pkl file bytes",
+        "bound_owner_runtime_sha256": {
+            "candidate_runtime.py": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+            "common_runner.py (frozen V1)": FROZEN_COMMON_RUNNER_SHA256,
+            "tier3_candidate_runtime.py (frozen engine LF-SHA)":
+                FROZEN_ENGINE_LF_SHA256["tier3_candidate_runtime.py"],
         },
         "gpu_allowed_cc4": list(CC4_GPU_ALLOWED_UUIDS),
     },
@@ -1164,6 +1479,8 @@ def load_owner_runtime(spec):
         return load_cc1_gtrxl128(spec)
     if kind == "cc3_slowgru":
         return load_cc3_slowgru(spec)
+    if kind == "cc4_rmt16_capsule":
+        return load_cc4_rmt16_capsule(spec)
     raise FailClosed("FAIL CLOSED: unknown loader_kind %r" % kind)
 
 
@@ -1178,14 +1495,14 @@ def self_test():
         require(cond, "FAIL CLOSED (self-test): %s" % msg)
         n += 1
 
-    check(len(PROJECTION_REGISTRY) == 5, "registry must hold exactly 5 projections")
+    check(len(PROJECTION_REGISTRY) == 7, "registry must hold exactly 7 projections")
     families = [s["runtime_family"] for s in PROJECTION_REGISTRY.values()]
-    check(len(set(families)) == 5, "runtime families must be pairwise distinct: %s" % families)
+    check(len(set(families)) == 7, "runtime families must be pairwise distinct: %s" % families)
     students = [cid for cid, s in PROJECTION_REGISTRY.items()
                 if s["candidate_class"] == "STUDENT"]
     teachers = [cid for cid, s in PROJECTION_REGISTRY.items()
                 if s["candidate_class"] == "TEACHER_REFERENCE"]
-    check(len(students) == 4, "exactly 4 student projections")
+    check(len(students) == 6, "exactly 6 student projections")
     check(teachers == ["BASELINE_TEACHER_CKPT17500"], "exactly 1 teacher reference")
 
     for cid, s in PROJECTION_REGISTRY.items():
@@ -1239,6 +1556,43 @@ def self_test():
           == p["bound_owner_runtime_sha256"]["slowgru_runtime.py"]
           == CC3_SLOWGRU_RUNTIME_SHA256, "shared slowgru_runtime SHA")
 
+    # The two formal RMT16 candidates are DISTINCT arms of ONE engine family
+    # (contract §六): distinct projection families (pairwise-distinct
+    # invariant), shared engine family / V1 runner / engine LF-SHA / frozen
+    # contract copy; distinct capsules, params and checkpoint files.
+    rp = PROJECTION_REGISTRY["PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"]
+    rr = PROJECTION_REGISTRY["RESET128_RMT16_ORIGINAL_VTRACE_98304"]
+    check(rp["loader_kind"] == rr["loader_kind"] == "cc4_rmt16_capsule",
+          "rmt16 loader kind")
+    check(rp["carry_mode"] == "persistent" and rr["carry_mode"] == "reset128",
+          "rmt16 carry modes must differ")
+    check(rp["runtime_family"] != rr["runtime_family"],
+          "rmt16 projection families must differ")
+    check(rp["engine_runtime_family"] == rr["engine_runtime_family"]
+          == RMT16_ENGINE_RUNTIME_FAMILY,
+          "rmt16 arms share the single registered engine family rmt16_gtrxl_cc2")
+    check(rp["capsule_file_sha256"]["candidate_runtime.py"]
+          != rr["capsule_file_sha256"]["candidate_runtime.py"],
+          "rmt16 capsule runtimes must differ")
+    check(rp["capsule_file_sha256"]["checkpoint_contract.json"]
+          == rr["capsule_file_sha256"]["checkpoint_contract.json"],
+          "rmt16 arms share the byte-identical frozen contract copy")
+    check(rp["declared_params_sha256"]["value"]
+          != rr["declared_params_sha256"]["value"],
+          "rmt16 arm params must differ")
+    check(rp["declared_checkpoint_file_sha256"]["value"]
+          != rr["declared_checkpoint_file_sha256"]["value"],
+          "rmt16 arm checkpoint files must differ")
+    check(rp["bound_owner_runtime_sha256"]["common_runner.py (frozen V1)"]
+          == rr["bound_owner_runtime_sha256"]["common_runner.py (frozen V1)"]
+          == FROZEN_COMMON_RUNNER_SHA256, "rmt16 shared frozen V1 runner SHA")
+    check(rp["bound_owner_runtime_sha256"]
+          ["tier3_candidate_runtime.py (frozen engine LF-SHA)"]
+          == rr["bound_owner_runtime_sha256"]
+          ["tier3_candidate_runtime.py (frozen engine LF-SHA)"]
+          == FROZEN_ENGINE_LF_SHA256["tier3_candidate_runtime.py"],
+          "rmt16 shared frozen engine LF-SHA")
+
     # CC1 control + teacher share the identical thin-binding bytes (as audited)
     c = PROJECTION_REGISTRY["CONTROL_CONTINUOUS_98304"]
     check(c["capsule_file_sha256"]["candidate_runtime.py"]
@@ -1262,7 +1616,8 @@ def self_test():
               FROZEN_ASSEMBLY_MANIFEST_SHA256, FROZEN_CC2_ADAPTER_LF_SHA256,
               CC1_GTRXL128_REFERENCE_RUNTIME_SHA256, FROZEN_DICODE_NETWORK_SHA256,
               CC1_TRAIN_STATE_UTILS_SHA256, CC3_SLOWGRU_RUNTIME_SHA256,
-              CC3_SLOWGRU_NETWORK_SHA256):
+              CC3_SLOWGRU_NETWORK_SHA256,
+              RMT16_FROZEN_CONTRACT_CONTENT_SHA256):
         check(_is_hex64(v), "frozen constant not full64: %r" % v)
     for v in FROZEN_ENGINE_LF_SHA256.values():
         check(_is_hex64(v), "engine LF sha not full64")
