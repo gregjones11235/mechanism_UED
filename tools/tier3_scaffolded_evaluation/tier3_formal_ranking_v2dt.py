@@ -102,7 +102,13 @@ READY_FLIP_ALLOWED_KEYS = frozenset([
 # ---------------------------------------------------------------------------
 def extract_rule_tuple(evaluation_by_scenario, candidate_id):
     """Map ev.evaluate() outputs to the frozen 4-tuple, verifying scenario
-    identities and counts. Fail-closed on any missing/None value."""
+    identities and counts. Fail-closed on any missing/None value.
+
+    Real ev.evaluate() shape (frozen tier3_evaluator):
+      {"schema", "scenario", "metrics": {"primary", "dense",
+       ["diagnostics" for back_l2], ...}, "valid_start_count",
+       "episode_count", "terminal_label_counts", "contract", ...}
+    """
     ev_full = evaluation_by_scenario["full"]
     ev_front = evaluation_by_scenario["front_l2"]
     ev_back = evaluation_by_scenario["back_l2"]
@@ -111,26 +117,33 @@ def extract_rule_tuple(evaluation_by_scenario, candidate_id):
                  and ev_back["scenario"] == "back_l2",
                  "FAIL CLOSED (RULE_EXTRACT %s): scenario identity mismatch"
                  % candidate_id)
-    proj.require(ev_full["primary"]["valid_starts"] == 64,
+    m_full, m_front, m_back = (ev_full["metrics"], ev_front["metrics"],
+                               ev_back["metrics"])
+    proj.require(m_full["primary"]["scenario"] == "full"
+                 and m_front["primary"]["scenario"] == "front_l2"
+                 and m_back["primary"]["scenario"] == "back_l2",
+                 "FAIL CLOSED (RULE_EXTRACT %s): metrics scenario mismatch"
+                 % candidate_id)
+    proj.require(m_full["primary"]["valid_starts"] == 64,
                  "FAIL CLOSED (RULE_EXTRACT %s): full valid_starts %r"
-                 % (candidate_id, ev_full["primary"]["valid_starts"]))
-    proj.require(ev_front["primary"]["valid_starts"] == 8,
+                 % (candidate_id, m_full["primary"]["valid_starts"]))
+    proj.require(m_front["primary"]["valid_starts"] == 8,
                  "FAIL CLOSED (RULE_EXTRACT %s): front valid_starts %r"
-                 % (candidate_id, ev_front["primary"]["valid_starts"]))
-    proj.require(ev_back["primary"]["valid_starts"] == 8,
+                 % (candidate_id, m_front["primary"]["valid_starts"]))
+    proj.require(m_back["primary"]["valid_starts"] == 8,
                  "FAIL CLOSED (RULE_EXTRACT %s): back valid_starts %r"
-                 % (candidate_id, ev_back["primary"]["valid_starts"]))
-    front_progress = ev_front["dense"]["value"]
+                 % (candidate_id, m_back["primary"]["valid_starts"]))
+    front_progress = m_front["dense"]["value"]
     proj.require(front_progress is not None,
                  "FAIL CLOSED (RULE_EXTRACT %s): front dense value is None"
                  % candidate_id)
-    back_defeat = int(ev_back["primary"]["successes"])
+    back_defeat = int(m_back["primary"]["successes"])
     proj.require(back_defeat == int(
-        ev_back["diagnostics"]["survival"]["defeat_count"]),
+        m_back["diagnostics"]["survival"]["defeat_count"]),
         "FAIL CLOSED (RULE_EXTRACT %s): back primary/diagnostics mismatch"
         % candidate_id)
-    return (int(ev_full["primary"]["successes"]),
-            int(ev_front["primary"]["successes"]),
+    return (int(m_full["primary"]["successes"]),
+            int(m_front["primary"]["successes"]),
             float(front_progress),
             back_defeat)
 
@@ -580,8 +593,12 @@ def main(argv=None):
 # ---------------------------------------------------------------------------
 def _synthetic_evaluation(scenario, successes, valid_starts, dense_value=None,
                           defeat_count=None):
-    evd = {
-        "schema": "mechanism_UED.tier3_evaluation_result/v1",
+    """Mirrors the REAL frozen ev.evaluate() envelope: top-level scenario /
+    valid_start_count / contract, with the metrics block (primary / dense /
+    back diagnostics) nested under 'metrics' (tier3_evaluator.evaluate wraps
+    tier3_metrics.summarize)."""
+    metrics = {
+        "schema": "mechanism_UED.tier3_metrics/v1",
         "scenario": scenario,
         "primary": {"metric": "P_%s" % scenario.upper(),
                     "scenario": scenario,
@@ -603,10 +620,10 @@ def _synthetic_evaluation(scenario, successes, valid_starts, dense_value=None,
         "scaffolded_results_can_replace_full_task": False,
     }
     if scenario == "back_l2":
-        evd["identity_class"] = "BOSS_COMBAT_SCAFFOLDED"
-        evd["na_metrics"] = ["boss_area_reached"]
-        evd["na_reason"] = "synthetic"
-        evd["diagnostics"] = {
+        metrics["identity_class"] = "BOSS_COMBAT_SCAFFOLDED"
+        metrics["na_metrics"] = ["boss_area_reached"]
+        metrics["na_reason"] = "synthetic"
+        metrics["diagnostics"] = {
             "valid_starts": valid_starts,
             "kobold_engaged_count": successes,
             "time_to_first_engagement": None,
@@ -622,7 +639,25 @@ def _synthetic_evaluation(scenario, successes, valid_starts, dense_value=None,
                          "mean_timesteps": 100.0,
                          "max_timesteps_observed": 200},
             "failure_taxonomy": {}}
-    return evd
+    return {
+        "schema": "mechanism_UED.tier3_evaluation_result/v1",
+        "result_version": "tier3_evaluation_result/v1",
+        "failure_rule_version": "tier3_failure_rules/v1",
+        "scenario": scenario,
+        "metrics": metrics,
+        "valid_start_count": valid_starts,
+        "episode_count": valid_starts,
+        "terminal_label_counts": {},
+        "contract": {"action_mode": "greedy_argmax",
+                     "max_timesteps": 4096,
+                     "action_space": "canonical_craftax_action_set",
+                     "observation_schema": "canonical_craftax_symbolic",
+                     "identical_for_all_arms": True},
+        "rollout_status": "REAL_ENV_INTERFACE_READY",
+        "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+        "checkpoint_params_sha256": None,
+        "scaffolded_results_can_replace_full_task": False,
+    }
 
 
 def _build_synthetic_bundle(cc4_dir, cid, rule_tuple, git_head,
