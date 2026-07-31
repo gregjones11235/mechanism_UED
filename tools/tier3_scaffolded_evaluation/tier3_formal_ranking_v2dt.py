@@ -786,9 +786,12 @@ def _build_synthetic_bundle(cc4_dir, cid, rule_tuple, git_head,
 
 
 def _write_marker(cc4_dir, git_head):
+    # mirror the canonical marker shape produced by
+    # tier3_formal_start_marker_v2dt.write_marker (gate sha under evidence)
     marker = {"schema": "mechanism_UED.tier3_secondary_audit_marker/v2dt",
               "verdict": driver.SECONDARY_AUDIT_VERDICT,
-              "binding_gate_sha256": driver.POOL_BINDING_GATE_V2DT_SHA256,
+              "evidence": {"binding_gate_sha256":
+                           driver.POOL_BINDING_GATE_V2DT_SHA256},
               "pool_cc4_dir": cc4_dir,
               "recorded_at_utc": "1970-01-01T00:00:01+00:00",
               "git_commit_head": git_head}

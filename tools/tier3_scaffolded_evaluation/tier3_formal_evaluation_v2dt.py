@@ -145,10 +145,18 @@ def verify_formal_start(common_dir, pool_cc4_dir):
     proj.require(marker.get("verdict") == SECONDARY_AUDIT_VERDICT,
                  "FAIL CLOSED (FORMAL_START): marker verdict %r != %r"
                  % (marker.get("verdict"), SECONDARY_AUDIT_VERDICT))
-    proj.require(marker.get("binding_gate_sha256") == POOL_BINDING_GATE_V2DT_SHA256,
+    # Canonical marker schema (sole producer: tier3_formal_start_marker_v2dt.
+    # write_marker): the binding-gate SHA lives under the evidence block. A
+    # top-level binding_gate_sha256 is the legacy hand-built shape and is
+    # rejected (regression: 2026-07-31 pre-launch catch).
+    evidence = marker.get("evidence")
+    proj.require(isinstance(evidence, dict),
+                 "FAIL CLOSED (FORMAL_START): marker has no evidence block "
+                 "(not written by tier3_formal_start_marker_v2dt?)")
+    gate_sha = evidence.get("binding_gate_sha256")
+    proj.require(gate_sha == POOL_BINDING_GATE_V2DT_SHA256,
                  "FAIL CLOSED (FORMAL_START): marker binding-gate sha %r != "
-                 "frozen %s" % (marker.get("binding_gate_sha256"),
-                                POOL_BINDING_GATE_V2DT_SHA256))
+                 "frozen %s" % (gate_sha, POOL_BINDING_GATE_V2DT_SHA256))
     proj.require(os.path.normpath(marker.get("pool_cc4_dir") or "")
                  == os.path.normpath(pool_cc4_dir),
                  "FAIL CLOSED (FORMAL_START): marker pool_cc4_dir %r != %r"
@@ -159,7 +167,7 @@ def verify_formal_start(common_dir, pool_cc4_dir):
             "sha256": got,
             "verdict": marker["verdict"],
             "recorded_at_utc": marker["recorded_at_utc"],
-            "binding_gate_sha256": marker["binding_gate_sha256"]}
+            "binding_gate_sha256": gate_sha}
 
 
 # ---------------------------------------------------------------------------
@@ -798,48 +806,88 @@ def run_self_test():
             checks += 1
         smokev2.write_json(os.path.join(common, "COMMON_EVALUATOR_V2_READY.json"),
                            {"COMMON_EVALUATOR_V2_READY": True,
-                            "FORMAL_RANKING_STARTED": False})
+                            "FORMAL_RANKING_STARTED": False,
+                            "STUDENT_COMMON_BINDING_PASS_COUNT": "6/6"})
         try:
             verify_formal_start(common, cc4)
             ok(False, "missing marker accepted")
         except proj.FailClosed:
             checks += 1
-        marker = {"verdict": SECONDARY_AUDIT_VERDICT,
-                  "binding_gate_sha256": POOL_BINDING_GATE_V2DT_SHA256,
-                  "pool_cc4_dir": cc4,
-                  "recorded_at_utc": "1970-01-01T00:00:00+00:00"}
+        # happy path via the REAL marker producer (drift-proof: the driver
+        # must accept exactly what tier3_formal_start_marker_v2dt writes).
+        # The temp gate file cannot match the frozen pool pin, so the pin is
+        # swapped for the synthetic sha for this block only; pin enforcement
+        # against the real value is covered by the marker self-test.
+        import tier3_formal_start_marker_v2dt as marker_tool
+        gp = os.path.join(cc4, "POOL_BINDING_GATE_V2DT.json")
+        with open(gp, "wb") as fh:
+            fh.write(b'{"synthetic_formal_gate": true}\n')
+        gsha = proj.sha256_file(gp)
         mp = os.path.join(cc4, SECONDARY_AUDIT_MARKER_NAME)
-        smokev2.write_json(mp, marker)
-        sha = proj.sha256_file(mp)
-        with open(mp + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("%s  %s\n" % (sha, SECONDARY_AUDIT_MARKER_NAME))
-        ref = verify_formal_start(common, cc4)
-        ok(ref["sha256"] == sha and ref["verdict"] == SECONDARY_AUDIT_VERDICT,
-           "marker verified")
-        # wrong verdict rejected
-        marker2 = dict(marker, verdict="PASS_SOMETHING_ELSE")
-        smokev2.write_json(mp, marker2)
-        sha2 = proj.sha256_file(mp)
-        with open(mp + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("%s  %s\n" % (sha2, SECONDARY_AUDIT_MARKER_NAME))
+        marker_tool.write_marker(cc4, common,
+                                 recorded_at_utc="1970-01-01T00:00:00+00:00",
+                                 expected_gate_sha=gsha)
+        good_bytes = open(mp, "rb").read()
+        good_side = open(mp + ".sha256", "rb").read()
+        saved_pin = globals()["POOL_BINDING_GATE_V2DT_SHA256"]
+        globals()["POOL_BINDING_GATE_V2DT_SHA256"] = gsha
         try:
-            verify_formal_start(common, cc4)
-            ok(False, "wrong verdict accepted")
-        except proj.FailClosed:
-            checks += 1
-        # FORMAL_RANKING_STARTED=true (post-closing) rejected
-        smokev2.write_json(mp, marker)
+            sha = proj.sha256_file(mp)
+            ref = verify_formal_start(common, cc4)
+            ok(ref["sha256"] == sha and ref["verdict"] == SECONDARY_AUDIT_VERDICT
+               and ref["binding_gate_sha256"] == gsha,
+               "marker verified (real marker-tool shape)")
+            # wrong verdict rejected
+            marker2 = proj.read_json(mp)
+            marker2["verdict"] = "PASS_SOMETHING_ELSE"
+            smokev2.write_json(mp, marker2)
+            sha2 = proj.sha256_file(mp)
+            with open(mp + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
+                fh.write("%s  %s\n" % (sha2, SECONDARY_AUDIT_MARKER_NAME))
+            try:
+                verify_formal_start(common, cc4)
+                ok(False, "wrong verdict accepted")
+            except proj.FailClosed:
+                checks += 1
+        finally:
+            globals()["POOL_BINDING_GATE_V2DT_SHA256"] = saved_pin
+        # regression: the legacy hand-built shape (gate sha at TOP level, no
+        # evidence block) must be REJECTED under the real frozen pin — this is
+        # the exact mismatch caught at the 2026-07-31 pre-launch attempt.
+        with open(mp, "wb") as fh:
+            fh.write(good_bytes)
+        with open(mp + ".sha256", "wb") as fh:
+            fh.write(good_side)
+        legacy = proj.read_json(mp)
+        legacy["binding_gate_sha256"] = legacy["evidence"]["binding_gate_sha256"]
+        del legacy["evidence"]
+        smokev2.write_json(mp, legacy)
         sha3 = proj.sha256_file(mp)
         with open(mp + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
             fh.write("%s  %s\n" % (sha3, SECONDARY_AUDIT_MARKER_NAME))
+        try:
+            verify_formal_start(common, cc4)
+            ok(False, "legacy top-level gate-sha shape accepted")
+        except proj.FailClosed as exc:
+            ok("no evidence block" in str(exc),
+               "legacy top-level gate-sha shape rejected")
+        # FORMAL_RANKING_STARTED=true (post-closing) rejected
+        with open(mp, "wb") as fh:
+            fh.write(good_bytes)
+        with open(mp + ".sha256", "wb") as fh:
+            fh.write(good_side)
         smokev2.write_json(os.path.join(common, "COMMON_EVALUATOR_V2_READY.json"),
                            {"COMMON_EVALUATOR_V2_READY": True,
-                            "FORMAL_RANKING_STARTED": True})
+                            "FORMAL_RANKING_STARTED": True,
+                            "STUDENT_COMMON_BINDING_PASS_COUNT": "6/6"})
+        globals()["POOL_BINDING_GATE_V2DT_SHA256"] = gsha
         try:
             verify_formal_start(common, cc4)
             ok(False, "post-closing rerun accepted")
         except proj.FailClosed:
             checks += 1
+        finally:
+            globals()["POOL_BINDING_GATE_V2DT_SHA256"] = saved_pin
 
     # certificate module self-test (jax-free)
     checks += certmod.self_test()
