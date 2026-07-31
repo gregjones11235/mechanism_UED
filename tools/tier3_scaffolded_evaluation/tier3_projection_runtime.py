@@ -112,12 +112,24 @@ RMT16_FROZEN_CONTRACT_CONTENT_SHA256 = "7dda2bc7517342b189a1f1ba949d620eb4d1c978
 RMT16_ENGINE_RUNTIME_FAMILY = "rmt16_gtrxl_cc2"
 RMT16_FROZEN_ACTION_MODE = "greedy_argmax"
 
-# CC4 evaluation-device GPU allowlist (UUIDs). GPU0/GPU1 are BANNED for CC4.
+# CC4 evaluation-device GPU allowlist (UUIDs).
+# HISTORY: GPU0/GPU1 were BANNED for CC4 until 2026-07-31. 总控 scheduling
+# decision 2026-07-31 (formal global performance evaluation, rehearsal
+# extrapolation exceeded one overnight window per 2-GPU queue): GPU0/GPU1
+# UNBANNED for this evaluation so the seven formal runs parallelize across
+# four GPUs (one sequential nohup queue per GPU, single jax process per GPU
+# — concurrent jax on one GPU stays forbidden, proven CUDA OOM class).
+# A cross-GPU determinism preflight (bit_agreement_policy canonical fields)
+# must pass on GPU0/GPU1 before any formal run starts there.
 CC4_GPU_ALLOWED_UUIDS = (
+    "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",   # GPU0 (unbanned 2026-07-31)
+    "GPU-3c7a2864-755b-7045-b293-6f80e748283f",   # GPU1 (unbanned 2026-07-31)
     "GPU-8df11537-ab79-722d-606f-411966196c4c",   # GPU2
     "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",   # GPU3
 )
-CC4_GPU_BANNED_UUID_PREFIXES = ("GPU-e8c08612", "GPU-3c7a2864")  # GPU0 / GPU1
+# Cleared by 总控 decision 2026-07-31; historical banned prefixes were
+# ("GPU-e8c08612", "GPU-3c7a2864")  # GPU0 / GPU1
+CC4_GPU_BANNED_UUID_PREFIXES = ()
 
 # SlowGRU owner-documented segment boundary (on_segment_boundary cadence).
 SLOWGRU_SEGMENT_BOUNDARY_STEPS = 128
@@ -1631,8 +1643,12 @@ def self_test():
         check(_is_hex64(v), "cc2 frozen module sha not full64")
     check(FROZEN_COMMON_SUMS_ENTRY_COUNT == 57, "common sums entry count")
 
-    # GPU discipline
-    check(len(CC4_GPU_ALLOWED_UUIDS) == 2, "exactly two allowed GPUs")
+    # GPU discipline (4-GPU allowlist since 总控 decision 2026-07-31; the
+    # banned-prefix list is empty but the check is kept so any future ban
+    # re-added to CC4_GPU_BANNED_UUID_PREFIXES is enforced again)
+    check(len(CC4_GPU_ALLOWED_UUIDS) == 4, "exactly four allowed GPUs")
+    check(all(u.startswith("GPU-") and len(u) == 40 for u in CC4_GPU_ALLOWED_UUIDS),
+          "allowed GPU ids must be full UUIDs")
     for pre in CC4_GPU_BANNED_UUID_PREFIXES:
         check(not any(u.startswith(pre) for u in CC4_GPU_ALLOWED_UUIDS),
               "banned GPU prefix %s must not appear in allowlist" % pre)
