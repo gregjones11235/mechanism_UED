@@ -984,7 +984,13 @@ class Rmt16CapsuleProjectionPolicy(object):
     batch exactly 1 (CandidateRuntime.check_batch_size fails closed on any
     other size — a batched rollout would silently change CC2's per-step
     dynamics), and CC2's rmt_step_forward pads 1->2 internally. Calling at
-    B=1 with done_mask=None (the ABI default) is the engine's OWN protocol."""
+    B=1 with done_mask=None (the ABI default) is the engine's OWN protocol.
+
+    OBSERVATION SHAPE: the engine ABI policy_step for rmt16_gtrxl_cc2 takes a
+    FLAT (obs_dim,) vector — the owner CC2RMT16Policy.__call__ adds the batch
+    dimension itself (`jnp.asarray(obs)[None, :]`); passing an already-batched
+    (1, obs_dim) would double-batch into (1, 1, obs_dim) and mismatch the
+    transformerXL memory concat. The shell therefore flattens obs."""
 
     def __init__(self, runtime):
         self.runtime = runtime
@@ -1005,7 +1011,7 @@ class Rmt16CapsuleProjectionPolicy(object):
         import numpy as np
         if self.ms is None:
             self.reset()
-        o = jnp.asarray(np.asarray(obs)[None, :])          # (1, obs_dim)
+        o = jnp.asarray(np.asarray(obs).reshape(-1))       # FLAT (obs_dim,)
         out = self.runtime.policy_step(o, self.ms, None)
         self.ms = out["memory_state"]
         return int(np.asarray(out["action"]).reshape(-1)[0])
