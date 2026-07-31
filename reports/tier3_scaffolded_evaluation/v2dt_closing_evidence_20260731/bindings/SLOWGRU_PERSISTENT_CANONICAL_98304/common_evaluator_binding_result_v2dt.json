@@ -1,0 +1,416 @@
+{
+  "action_dim": 43,
+  "action_mode": "greedy_argmax",
+  "action_mode_source": "frozen_evaluation_profile (V2 stamp; invariants byte-identical to V1)",
+  "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+  "await_independent_secondary_audit": true,
+  "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+  "back_episode_count": 8,
+  "batch1_workaround": {
+    "applied": true,
+    "effective_batch": 2,
+    "fidelity_basis": "all ops per-row: transformerXL.forward_eval per-row encoder/attention; owner _slow_update own comment 'vectorised over env axis; no cross-env mixing' (per-row buffer/pooling/GRUCell); fast-memory roll axis=1; mask mechanics per-row; on_segment_boundary per-row -> duplicated-row batch 2 with row-0 readout numerically identical to B=1, including section-4 boundary semantics",
+    "owner_code_modified": false,
+    "readout_row": 0,
+    "reason": "owner slowgru_network.forward_eval -> dicode transformerXL.forward_eval x.squeeze() removes the batch dim at B=1 (layer-2 concat TypeError (1,128,256) vs (256,1) at transformerXL.py:194 — SAME crash site and byte-identical module as CC1 GTrXL128); owner trainer is always vectorized (PPO _env_step over E envs) and never hits B=1",
+    "rows_duplicated": true
+  },
+  "bfs_graph_source": "CURRENT_ENVIRONMENT_STATE_TOPOLOGY",
+  "binding_status": "PASS",
+  "bound_owner_runtime_sha256": {
+    "candidate_runtime.py": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+    "slowgru_network.py (arm_src)": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "slowgru_runtime.py": "d3b74d2ed6aee1affd54bb3a39bdb50162afa81dac0cab5866e4ed6450fcb24b"
+  },
+  "boundary_semantics": "on_segment_boundary: memory returned UNCHANGED (FULL_CARRY_NO_CLEAR) — cross-segment carry preserved",
+  "boundary_unit_check": {
+    "boundary_info": {
+      "boundary_action": "FULL_CARRY_NO_CLEAR"
+    },
+    "carry_mode": "PERSISTENT",
+    "fast_memories_carried": true,
+    "longstate_full_carried": true,
+    "longstate_restored_to_init": false,
+    "segment_boundary_steps": 128
+  },
+  "budget_class": "MATCHED_98304",
+  "candidate_class": "STUDENT",
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "candidate_manifest_sha256": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+  "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+  "candidate_runtime_sha256": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+  "capsule_file_verification": {
+    "candidate_manifest.json": {
+      "capsule_sums": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+      "declared": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+      "live": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+      "match": true
+    },
+    "candidate_runtime.py": {
+      "capsule_sums": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+      "declared": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+      "live": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+      "match": true
+    },
+    "checkpoint_contract.json": {
+      "capsule_sums": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+      "declared": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+      "live": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+      "match": true
+    },
+    "evaluate_candidate.py": {
+      "capsule_sums": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+      "declared": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+      "live": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+      "match": true
+    }
+  },
+  "carry_mode": "PERSISTENT",
+  "cc4_projection_path": "/home/oseasy/student_pool_v1/cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/projection_binding_v2dt",
+  "checkpoint_contract_sha256": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+  "checkpoint_file_hash_protocol": "sha256 of pkl file bytes",
+  "checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checkpoint_file_sha256_cc4_recomputed": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "checkpoint_file_sha256_verified_by_cc4": true,
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+  "common_root": "/home/oseasy/student_pool_v1/common_v2",
+  "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+  "common_sha_match_status": "PASS (live 7/7 + per-artifact byte SHAs + profile invariants + bank content hashes + protocol version)",
+  "common_v2_sha256sums_self_check": "PASS (7/7)",
+  "counts_toward_student_binding_count": true,
+  "device_identity": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "gpu",
+    "jax_devices": "[cuda(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "dicode_resolution": {
+    "dicode_network_matches_cc1_policy_source": true,
+    "dicode_network_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    "dicode_package_file": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src/dicode/__init__.py",
+    "dicode_src": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src"
+  },
+  "driver_module_sha256": "a939a4df554512d2e3bb5a365099a25e3b017739dd0d0fe86d650956e6ce7eab",
+  "engine_module_lf_sha_verified": 4,
+  "engine_modules_v2_new": [
+    "tier3_evaluator_v2.py",
+    "tier3_event_predicates_v2.py"
+  ],
+  "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+  "episode_count_source": "evaluation_profile.json (V2; live byte-SHA verified) scenarios.{front_l2.n,back_l2.n,full.world_seed_set.count}",
+  "episode_count_status": "PASS (frozen 8/8/64 from V2 profile; smoke executed 2/scenario at max_steps=32)",
+  "episode_records_jsonl_sha256": "aa5b57809a1afe5606386610fa1afce4f8e151ef100c8f2c50446ced151e5cec",
+  "evaluate_candidate_sha256": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+  "evaluation_certificate_file": null,
+  "evaluation_certificate_status": "PENDING_FORMAL_EVALUATION",
+  "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+  "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+  "formal_eval_binding": "INTERFACE_SMOKE_PASS_FORMAL_PENDING",
+  "formal_ranking_started": false,
+  "formal_student_ranking_eligible": true,
+  "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+  "front_episode_count": 8,
+  "full_episode_count": 64,
+  "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+  "full_profile_status": "FROZEN",
+  "generated_at_utc": "2026-07-31T06:13:23.118649+00:00",
+  "git_commit_head": "f43d3257a915bccc44c3a12e6130f358fb26a74f",
+  "gpu": {
+    "cuda_visible_devices": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+    "gpu_allowlist_cc4": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "nvidia_smi_L": [
+      "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+      "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+      "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+      "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ]
+  },
+  "import_stubs": null,
+  "interface_smoke_status": "PASS",
+  "max_steps": 4096,
+  "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+  "numpy_pickle_compat": {
+    "alias": "sys.modules['numpy._core.numeric'] = numpy.core.numeric",
+    "basis": "completes numpy 1.26.4's OWN numpy2-pickle interop shim package (site-packages/numpy/_core/, docstring: 'stubs for interoperability with NumPy 2.0 pickled arrays') by its one missing leaf `numeric` (protocol-5 _frombuffer); identical reconstructor semantics",
+    "fidelity_witness": "owner params_sha_packed gate (G3) + pkl file SHA gate (G2) — both fail closed on drift",
+    "installed": true,
+    "numpy_version": "1.26.4",
+    "owner_code_modified": false,
+    "scope": "single sys.modules entry; verified pkl reference set = {numpy._core.numeric} only (byte scan both CC3 pkls); any other missing module still fails closed"
+  },
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC3",
+  "params_hash_protocol": "slowgru_runtime.params_sha_packed over the pkl-embedded (leaves, treedef): sha256 of per-leaf ascontiguousarray.tobytes()",
+  "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "params_sha256_cc4_recomputation": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "params_sha256_declaration_source": "cc3 capsule checkpoint_contract.json (contract sha 7f0e731b…); owner loader triple fail-closed gate; load_candidate raises CARRY_MODE_MISMATCH on any drift",
+  "params_unchanged": true,
+  "performance_claim_authorized": false,
+  "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5",
+  "projection_module_sha256": "85abaabbb03a8e8464faa3c5052b2536373dc3b16063994287cdba4f4eaa7bab",
+  "provenance_pid": 821607,
+  "rebind_generation": "V2DT",
+  "records_sha256_by_scenario": {
+    "back_l2": "314da166747195c7ad5964b11af49fcec3185b28ae9bc499daebf9422ff8cab7",
+    "front_l2": "1e7af201f3d761cb430a80bcc493a104c576f485d49d20dea154b79e34332391",
+    "full": "ca10f57c44b1b2c451d115ba015c5c0d4182038877ffdfb51529d51cd804c4b5"
+  },
+  "reference_only": false,
+  "remaining_blocker": null,
+  "results_by_scenario_smoke_only": {
+    "back_l2": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 2,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "back_l2",
+          "value": null
+        },
+        "diagnostics": {
+          "damage": null,
+          "failure_taxonomy": {
+            "SUCCESS_DEFEAT_KOBOLD": 1,
+            "TIMEOUT_COMBAT_NOT_WON": 1
+          },
+          "kobold_engaged_count": 2,
+          "schema_note": "time_to_first_engagement / time_to_kill / damage are not fields of the frozen episode record schema (mechanism_UED.tier3_evaluation_result/v1); reported as null rather than expanding the schema",
+          "survival": {
+            "defeat_count": 1,
+            "died_count": 0,
+            "max_timesteps_observed": 32,
+            "mean_timesteps": 27.0
+          },
+          "time_to_first_engagement": null,
+          "time_to_kill": null,
+          "valid_starts": 2
+        },
+        "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+        "na_metrics": [
+          "boss_area_reached",
+          "time_to_boss_area",
+          "BACK_BOSS_NOT_FOUND"
+        ],
+        "na_reason": "BACK start is already on floor 3 next to a live Kobold; boss-area search is not exercised by this scaffold",
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+          "scenario": "back_l2",
+          "successes": 1,
+          "valid_starts": 2,
+          "value": 0.5
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "back_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "back_l2",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "SUCCESS_DEFEAT_KOBOLD": 1,
+        "TIMEOUT_COMBAT_NOT_WON": 1
+      },
+      "valid_start_count": 2
+    },
+    "front_l2": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 2,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "is_success_substitute": false,
+          "median": 0.5,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "monotonicity_guaranteed": false,
+          "per_state_progress": [
+            {
+              "graph_distance_progress": 0.0,
+              "state_entry_id": "front_l2-bank0"
+            },
+            {
+              "graph_distance_progress": 1.0,
+              "state_entry_id": "front_l2-bank1"
+            }
+          ],
+          "range": [
+            0,
+            1
+          ],
+          "scenario": "front_l2",
+          "scored": 2,
+          "valid_starts": 2,
+          "value": 0.5
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+          "scenario": "front_l2",
+          "successes": 1,
+          "valid_starts": 2,
+          "value": 0.5
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "front_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "FRONT_FLOOR_TRANSITION_REACHED": 1,
+        "TIMEOUT_NO_TRANSITION": 1
+      },
+      "valid_start_count": 2
+    },
+    "full": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 2,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "full",
+          "value": null
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": false,
+          "metric": "DEFEAT_KOBOLD_SR",
+          "scenario": "full",
+          "successes": 0,
+          "valid_starts": 2,
+          "value": 0.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "full",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_KOBOLD": 2
+      },
+      "valid_start_count": 2
+    }
+  },
+  "run_class": "INTERFACE_SMOKE",
+  "runtime_family": "slowgru_persistent_cc3_projection",
+  "runtime_registered": true,
+  "schema": "mechanism_UED.common_evaluator_binding/v2dt",
+  "segment_boundary_steps": 128,
+  "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde",
+  "smoke_episodes_per_scenario": 2,
+  "smoke_max_steps": 32,
+  "smoke_schedule": {
+    "back_l2": {
+      "count": 2,
+      "kind": "frozen_bank_state_smoke",
+      "seeds": [
+        1010000,
+        1010001
+      ]
+    },
+    "front_l2": {
+      "count": 2,
+      "kind": "frozen_bank_state_smoke",
+      "seeds": [
+        10000,
+        10001
+      ]
+    },
+    "full": {
+      "count": 2,
+      "kind": "canonical_reset_seeds_smoke",
+      "seeds": [
+        42,
+        43
+      ]
+    }
+  },
+  "source_capsule_missing_files": [],
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "strong_student_selection_authorized": false,
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "supersedes": "cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/projection_binding_v2/ (d0d05ff2-era V1 metric binding; retained as history, NOT modified, NOT inherited — the common evaluator SHA changed)",
+  "teacher_included_in_student_ranking": false,
+  "training_seed": 42,
+  "training_steps": 98304,
+  "v1_supersession": {
+    "COMMON_EVALUATOR_V1_DRIVER": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+    "COMMON_EVALUATOR_V1_STATUS": "SUPERSEDED_PRE_RANKING",
+    "v1_assembly_manifest_sha256": "52d1fa0fca2ceaa0e992a118b1d5812166e3347fef23100cad0b4389cc9136d4",
+    "v1_binding_evidence_retained": "cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/projection_binding_v2/ (unmodified)",
+    "v1_common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "v1_common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "v1_environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "v1_evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "v1_formal_ranking_ever_authorized": false,
+    "v1_metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "v1_preservation_reverified": {
+      "v1_common_root": "/home/oseasy/student_pool_v1/common",
+      "v1_driver_commit": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+      "v1_formal_ranking_authorized": false,
+      "v1_sha256sums_self_check": "PASS (57/57)",
+      "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+      "v1_status": "SUPERSEDED_PRE_RANKING"
+    },
+    "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e"
+  },
+  "wandb_stub": null
+}

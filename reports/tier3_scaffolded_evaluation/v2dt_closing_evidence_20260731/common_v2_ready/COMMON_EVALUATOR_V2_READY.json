@@ -1,0 +1,54 @@
+{
+  "COMMON_EVALUATOR_V2_READY": true,
+  "FORMAL_RANKING_STARTED": false,
+  "REGRESSION_AF": {
+    "CONTROL_REPRODUCTION": "PASS",
+    "DYNAMIC_DISTANCE_UPDATE": "PASS",
+    "LEGAL_DIG_NO_ABORT": "PASS",
+    "STATIC_TOPOLOGY_PARITY": "PASS",
+    "TRUE_INVALID_FAIL_CLOSED": "PASS (synthetic authoritative)",
+    "UNREACHABLE_CONTINUES": "PASS (synthetic authoritative)"
+  },
+  "STUDENT_COMMON_BINDING_PASS_COUNT": "6/6",
+  "TEACHER_REFERENCE_BINDING": "PASS (reference_only, counts_toward_student=false)",
+  "abi_doc_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+  "assembled_at_utc": "2026-07-31T05:16:26.751095+00:00",
+  "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+  "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+  "binding_gate_file": "/home/oseasy/student_pool_v1/cc4/POOL_BINDING_GATE_V2DT.json",
+  "binding_gate_file_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+  "binding_gate_generated_at_utc": "2026-07-31T06:19:43Z",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+  "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+  "engine_module_lf_sha256": {
+    "tier3_candidate_runtime.py": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+    "tier3_evaluator.py": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715",
+    "tier3_evaluator_v2.py": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+    "tier3_event_predicates_v2.py": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+  },
+  "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+  "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+  "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+  "gate_checked_at_utc": "2026-07-31T06:19:43Z",
+  "git_commit_at_assembly": "df2b3066605de4fe746b1909eb5492adcb8f52ce",
+  "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+  "pending_gates": [
+    "INDEPENDENT_SECONDARY_AUDIT"
+  ],
+  "readiness_reason": "ALL_CC4_GATES_PASS: 6/6 student V2 bindings + teacher reference binding + all SHA256SUMS + regression A–F; AWAITING_INDEPENDENT_SECONDARY_AUDIT before any formal ranking",
+  "schema": "mechanism_UED.common_evaluator_ready/v2",
+  "sha256sums_entry_count": 7,
+  "sha256sums_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde",
+  "supersedes_v1": {
+    "common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "driver_commit": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+    "evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "git_commit_at_assembly": "7fe25a72fbe0e0e01dd74e25376a313698cee67b",
+    "metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "sha256sums_entry_count": 57,
+    "sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+    "status": "SUPERSEDED_PRE_RANKING"
+  }
+}

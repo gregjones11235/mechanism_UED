@@ -1,0 +1,1024 @@
+{
+  "CONTROL_REPRODUCTION": {
+    "candidate_id": "CONTROL_CONTINUOUS_98304",
+    "checkpoint_params_sha256": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+    "criterion": "the ORIGINAL CONTROL checkpoint + original block start: V1 still aborts (invalid_position non-walkable, reproduced), V2 completes with no initial-graph-membership abort; the instrumented action sequence matches the official V2 record (determinism)",
+    "entry_id": "front_l2-bank0",
+    "instrumented_actions_match_official_record": true,
+    "max_steps": 32,
+    "seed": 10000,
+    "v1_engine_aborts_with_historical_verdict": true,
+    "v1_engine_message": "invalid_position_policy: player position non-walkable",
+    "v2_engine_completes_episode": true,
+    "v2_front_floor_transition_reached": false,
+    "v2_graph_distance_progress": 0.052631578947368474,
+    "v2_timesteps": 32,
+    "verdict": "PASS"
+  },
+  "DYNAMIC_DISTANCE_UPDATE": {
+    "criterion": "after a dig opens new paths, BFS progress uses the CURRENT graph (d_initial None or d_current < d_initial)",
+    "d_start_baseline": 19,
+    "kind": "real_control_greedy_trajectory",
+    "verdict": "PASS",
+    "witness_count": 1,
+    "witnesses_first8": [
+      {
+        "kind": "dynamic_only",
+        "p_current": -0.10526315789473695,
+        "step": 29
+      }
+    ]
+  },
+  "LEGAL_DIG_NO_ABORT": {
+    "candidate_id": "CONTROL_CONTINUOUS_98304",
+    "criterion": "V2 rollout raises no invalid_position while the player stands on legally-mined tiles outside the initial graph",
+    "entry_id": "front_l2-bank0",
+    "first_off_initial_step": {
+      "d_current": 21,
+      "d_initial": null,
+      "legal_on_current_graph": true,
+      "lvl": 2,
+      "metric_window": true,
+      "on_initial_graph": false,
+      "pos": [
+        36,
+        28
+      ],
+      "step": 29
+    },
+    "kind": "real_control_greedy_trajectory",
+    "seed": 10000,
+    "steps_off_initial_graph_but_legal": 1,
+    "v2_graph_distance_progress": 0.052631578947368474,
+    "v2_rollout_completed": true,
+    "verdict": "PASS"
+  },
+  "STATIC_TOPOLOGY_PARITY": {
+    "criterion": "on initial-reachable states: identical primary label + dense progress + terminal flags + canonical episode payload (episode_record_sha256) on a fixed no-map-change trajectory; on dig-required states (initial graph has no start -> exit path — legally, e.g. state 7 seed 10007): V1 NEG18 abort reproduced AND V2 completes with dense progress frozen at 0.0 and no false primary (intended V2_DYNAMIC_TOPOLOGY divergence, not a parity violation)",
+    "dig_required_states": 1,
+    "initial_reachable_states": 7,
+    "kind": "real_noop_rollout_v1_vs_v2",
+    "max_steps": 32,
+    "rows": [
+      {
+        "bank_index": 0,
+        "classification": "initial_reachable",
+        "d_start": 19,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10000,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 1,
+        "classification": "initial_reachable",
+        "d_start": 6,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10001,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 2,
+        "classification": "initial_reachable",
+        "d_start": 53,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10002,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 3,
+        "classification": "initial_reachable",
+        "d_start": 16,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10003,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 4,
+        "classification": "initial_reachable",
+        "d_start": 20,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10004,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 5,
+        "classification": "initial_reachable",
+        "d_start": 14,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10005,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 6,
+        "classification": "initial_reachable",
+        "d_start": 29,
+        "entry_id": "front_l2-bank0",
+        "identical": true,
+        "seed": 10006,
+        "v1_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v1_v2": {
+          "action_sequence": {
+            "same": true,
+            "v1": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "v2": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "corridor_exit_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "defeat_kobold": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "front_floor_transition_reached": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "graph_distance_progress": {
+            "same": true,
+            "v1": 0.0,
+            "v2": 0.0
+          },
+          "player_died": {
+            "same": true,
+            "v1": false,
+            "v2": false
+          },
+          "timed_out": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          },
+          "timesteps": {
+            "same": true,
+            "v1": 32,
+            "v2": 32
+          },
+          "valid_start": {
+            "same": true,
+            "v1": true,
+            "v2": true
+          }
+        },
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41"
+      },
+      {
+        "bank_index": 7,
+        "classification": "dig_required_initial_unreachable",
+        "d_start": null,
+        "entry_id": "front_l2-bank0",
+        "intended_divergence_ok": true,
+        "seed": 10007,
+        "v1_aborts_NEG18_reproduced": true,
+        "v1_engine_message": "NEG18: corridor exit unreachable from scaffold start (no blocked label)",
+        "v2_completes": true,
+        "v2_episode_record_sha256": "9028efe9d071f258f1232cf62ce538db109183b9b3ba76ecb5d26eb39606af41",
+        "v2_front_floor_transition_reached": false,
+        "v2_graph_distance_progress_frozen": 0.0,
+        "v2_player_died": false,
+        "v2_timesteps": 32
+      }
+    ],
+    "states": 8,
+    "verdict": "PASS"
+  },
+  "TRUE_INVALID_FAIL_CLOSED": {
+    "note": "corruption-class fail-closed is fully witnessed by the pure suite (--self-test test E)",
+    "verdict": "PASS (synthetic authoritative)"
+  },
+  "UNREACHABLE_CONTINUES": {
+    "note": "unreachable semantics are fully witnessed by the pure suite (--self-test test D); see TIER3_PREDICATES_V2 self-test too",
+    "verdict": "PASS (synthetic authoritative)"
+  },
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "generated_at_utc": "2026-07-31T05:17:55.399413+00:00",
+  "provenance": {
+    "a_states": 8,
+    "candidate_id": "CONTROL_CONTINUOUS_98304",
+    "capsule_verification": {
+      "candidate_manifest.json": {
+        "capsule_sums": "56cb71ce3ce356ca0667ee6e2881d13fecbb15bceb4f9046d16c986210180148",
+        "declared": "56cb71ce3ce356ca0667ee6e2881d13fecbb15bceb4f9046d16c986210180148",
+        "live": "56cb71ce3ce356ca0667ee6e2881d13fecbb15bceb4f9046d16c986210180148",
+        "match": true
+      },
+      "candidate_runtime.py": {
+        "capsule_sums": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+        "declared": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+        "live": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+        "match": true
+      },
+      "checkpoint_contract.json": {
+        "capsule_sums": "4c29226dd8c4535c1847cc1760a5edda6653a859c6e86ffaa63c6749f8fd4d84",
+        "declared": "4c29226dd8c4535c1847cc1760a5edda6653a859c6e86ffaa63c6749f8fd4d84",
+        "live": "4c29226dd8c4535c1847cc1760a5edda6653a859c6e86ffaa63c6749f8fd4d84",
+        "match": true
+      },
+      "evaluate_candidate.py": {
+        "capsule_sums": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+        "declared": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+        "live": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+        "match": true
+      }
+    },
+    "common_verification_v2": {
+      "common_v2_sha256sums_self_check": "PASS (7/7)",
+      "engine_modules_lf_sha_verified": 4,
+      "v1_preservation": {
+        "v1_common_root": "/home/oseasy/student_pool_v1/common",
+        "v1_driver_commit": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+        "v1_formal_ranking_authorized": false,
+        "v1_sha256sums_self_check": "PASS (57/57)",
+        "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+        "v1_status": "SUPERSEDED_PRE_RANKING"
+      }
+    },
+    "dicode_resolution": {
+      "dicode_network_matches_cc1_policy_source": true,
+      "dicode_network_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+      "dicode_package_file": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src/dicode/__init__.py",
+      "dicode_src": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src"
+    },
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "gpu": {
+      "cuda_visible_devices": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "gpu_allowlist_cc4": [
+        "GPU-8df11537-ab79-722d-606f-411966196c4c",
+        "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      ],
+      "nvidia_smi_L": [
+        "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+        "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+        "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+        "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+      ],
+      "visible_gpu_uuids": [
+        "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      ]
+    },
+    "max_steps": 32,
+    "note": "smoke-scale regression evidence; NOT a performance conclusion",
+    "params_sha256_owner_recomputed": "4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505",
+    "performance_claim_authorized": false
+  },
+  "schema": "mechanism_UED.v2dt_regression_server_suite/v1"
+}

@@ -1,0 +1,385 @@
+{
+  "action_dim": 43,
+  "action_mode": "greedy_argmax",
+  "action_mode_source": "frozen_evaluation_profile (V2 stamp; invariants byte-identical to V1)",
+  "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+  "await_independent_secondary_audit": true,
+  "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+  "back_episode_count": 8,
+  "bfs_graph_source": "CURRENT_ENVIRONMENT_STATE_TOPOLOGY",
+  "binding_status": "PASS",
+  "bound_owner_runtime_sha256": {
+    "candidate_runtime.py": "31e28eb60fd89eb482cdde0273f236948f920ad053740a07eafda3e8bc03e4fb",
+    "network_rmt16.py": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
+    "rmt16_memory.py": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
+    "rmt_memory_anchor.py": "4ff54fb4e932b2a1027803334919f0a19d7484e7e3a827b7f5188fa1283452b4"
+  },
+  "budget_class": "MATCHED_98304",
+  "candidate_class": "STUDENT",
+  "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "candidate_manifest_sha256": "6105b62518134101bdae9c7096b3f50662de4f6fdf60395d7d1e47431620cb19",
+  "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+  "candidate_runtime_sha256": "31e28eb60fd89eb482cdde0273f236948f920ad053740a07eafda3e8bc03e4fb",
+  "capsule_file_verification": {
+    "candidate_manifest.json": {
+      "capsule_sums": "6105b62518134101bdae9c7096b3f50662de4f6fdf60395d7d1e47431620cb19",
+      "declared": "6105b62518134101bdae9c7096b3f50662de4f6fdf60395d7d1e47431620cb19",
+      "live": "6105b62518134101bdae9c7096b3f50662de4f6fdf60395d7d1e47431620cb19",
+      "match": true
+    },
+    "candidate_runtime.py": {
+      "capsule_sums": "31e28eb60fd89eb482cdde0273f236948f920ad053740a07eafda3e8bc03e4fb",
+      "declared": "31e28eb60fd89eb482cdde0273f236948f920ad053740a07eafda3e8bc03e4fb",
+      "live": "31e28eb60fd89eb482cdde0273f236948f920ad053740a07eafda3e8bc03e4fb",
+      "match": true
+    },
+    "checkpoint_contract.json": {
+      "capsule_sums": "e63a3481cfe00714232bdc3bac1584c3ceeab709db5e539fb5c98ff89d5aa401",
+      "declared": "e63a3481cfe00714232bdc3bac1584c3ceeab709db5e539fb5c98ff89d5aa401",
+      "live": "e63a3481cfe00714232bdc3bac1584c3ceeab709db5e539fb5c98ff89d5aa401",
+      "match": true
+    },
+    "evaluate_candidate.py": {
+      "capsule_sums": "5e9a1f380c7279341e956013da410543098d695d3b346069c581f2319dfb7ac4",
+      "declared": "5e9a1f380c7279341e956013da410543098d695d3b346069c581f2319dfb7ac4",
+      "live": "5e9a1f380c7279341e956013da410543098d695d3b346069c581f2319dfb7ac4",
+      "match": true
+    }
+  },
+  "cc4_projection_path": "/home/oseasy/student_pool_v1/cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/projection_binding_v2dt",
+  "checkpoint_contract_sha256": "e63a3481cfe00714232bdc3bac1584c3ceeab709db5e539fb5c98ff89d5aa401",
+  "checkpoint_file_hash_protocol": "sha256 of pkl file bytes",
+  "checkpoint_file_sha256": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+  "checkpoint_file_sha256_cc4_recomputed": "d71e30aebb307c6fc5b404543a5ba3e32b30e25857905ae20300be46600713ea",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "checkpoint_file_sha256_verified_by_cc4": true,
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+  "common_root": "/home/oseasy/student_pool_v1/common_v2",
+  "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+  "common_sha_match_status": "PASS (live 7/7 + per-artifact byte SHAs + profile invariants + bank content hashes + protocol version)",
+  "common_v2_sha256sums_self_check": "PASS (7/7)",
+  "counts_toward_student_binding_count": true,
+  "device_identity": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "gpu",
+    "jax_devices": "[cuda(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "dicode_resolution": {
+    "dicode_network_matches_cc1_policy_source": true,
+    "dicode_network_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    "dicode_package_file": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src/dicode/__init__.py",
+    "dicode_src": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src"
+  },
+  "driver_module_sha256": "a939a4df554512d2e3bb5a365099a25e3b017739dd0d0fe86d650956e6ce7eab",
+  "engine_module_lf_sha_verified": 4,
+  "engine_modules_v2_new": [
+    "tier3_evaluator_v2.py",
+    "tier3_event_predicates_v2.py"
+  ],
+  "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+  "episode_count_source": "evaluation_profile.json (V2; live byte-SHA verified) scenarios.{front_l2.n,back_l2.n,full.world_seed_set.count}",
+  "episode_count_status": "PASS (frozen 8/8/64 from V2 profile; smoke executed 2/scenario at max_steps=32)",
+  "episode_records_jsonl_sha256": "7cfd054ede6e9961fef8ec4267b0bbce85ac866887557afb53f0462a986dbd2b",
+  "evaluate_candidate_sha256": "5e9a1f380c7279341e956013da410543098d695d3b346069c581f2319dfb7ac4",
+  "evaluation_certificate_file": null,
+  "evaluation_certificate_status": "PENDING_FORMAL_EVALUATION",
+  "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+  "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+  "formal_eval_binding": "INTERFACE_SMOKE_PASS_FORMAL_PENDING",
+  "formal_ranking_started": false,
+  "formal_student_ranking_eligible": true,
+  "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+  "front_episode_count": 8,
+  "full_episode_count": 64,
+  "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+  "full_profile_status": "FROZEN",
+  "generated_at_utc": "2026-07-31T05:56:47.103571+00:00",
+  "git_commit_head": "f43d3257a915bccc44c3a12e6130f358fb26a74f",
+  "gpu": {
+    "cuda_visible_devices": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "gpu_allowlist_cc4": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "nvidia_smi_L": [
+      "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+      "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+      "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+      "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    ]
+  },
+  "import_stubs": null,
+  "interface_smoke_status": "PASS",
+  "max_steps": 4096,
+  "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC2",
+  "params_hash_protocol": "cc2 candidate_runtime.canonical_params_sha: sha256 over per-leaf np.ascontiguousarray(np.asarray(leaf)).tobytes() in tree_leaves order",
+  "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+  "params_sha256_cc4_recomputation": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "params_sha256_declaration_source": "cc2 capsule checkpoint_contract.json params_sha256 (contract sha e63a3481…); owner load_candidate recomputes canonical_params_sha and raises CHECKPOINT_PARAMS_SHA_MISMATCH",
+  "params_unchanged": true,
+  "performance_claim_authorized": false,
+  "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5",
+  "projection_module_sha256": "85abaabbb03a8e8464faa3c5052b2536373dc3b16063994287cdba4f4eaa7bab",
+  "provenance_pid": 757751,
+  "rebind_generation": "V2DT",
+  "records_sha256_by_scenario": {
+    "back_l2": "8f936dd66fc650cd021769fc4aed7a2b7f70d2e4051de3fd8d7b8fd788a475fc",
+    "front_l2": "2441332e33fa4f2e2b33b2c983e286a93a258d931faecb4031eee3f2bd9d7237",
+    "full": "e1e402925813ec61a9448fc5cf331aa252dd4c64cdbe783ddd49185d0395f995"
+  },
+  "reference_only": false,
+  "remaining_blocker": null,
+  "results_by_scenario_smoke_only": {
+    "back_l2": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 2,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "back_l2",
+          "value": null
+        },
+        "diagnostics": {
+          "damage": null,
+          "failure_taxonomy": {
+            "SUCCESS_DEFEAT_KOBOLD": 1,
+            "TIMEOUT_COMBAT_NOT_WON": 1
+          },
+          "kobold_engaged_count": 2,
+          "schema_note": "time_to_first_engagement / time_to_kill / damage are not fields of the frozen episode record schema (mechanism_UED.tier3_evaluation_result/v1); reported as null rather than expanding the schema",
+          "survival": {
+            "defeat_count": 1,
+            "died_count": 0,
+            "max_timesteps_observed": 32,
+            "mean_timesteps": 28.0
+          },
+          "time_to_first_engagement": null,
+          "time_to_kill": null,
+          "valid_starts": 2
+        },
+        "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+        "na_metrics": [
+          "boss_area_reached",
+          "time_to_boss_area",
+          "BACK_BOSS_NOT_FOUND"
+        ],
+        "na_reason": "BACK start is already on floor 3 next to a live Kobold; boss-area search is not exercised by this scaffold",
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+          "scenario": "back_l2",
+          "successes": 1,
+          "valid_starts": 2,
+          "value": 0.5
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "back_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "back_l2",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "SUCCESS_DEFEAT_KOBOLD": 1,
+        "TIMEOUT_COMBAT_NOT_WON": 1
+      },
+      "valid_start_count": 2
+    },
+    "front_l2": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 2,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "is_success_substitute": false,
+          "median": 0.0,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "monotonicity_guaranteed": false,
+          "per_state_progress": [
+            {
+              "graph_distance_progress": 0.0,
+              "state_entry_id": "front_l2-bank0"
+            },
+            {
+              "graph_distance_progress": 0.0,
+              "state_entry_id": "front_l2-bank1"
+            }
+          ],
+          "range": [
+            0,
+            1
+          ],
+          "scenario": "front_l2",
+          "scored": 2,
+          "valid_starts": 2,
+          "value": 0.0
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+          "scenario": "front_l2",
+          "successes": 0,
+          "valid_starts": 2,
+          "value": 0.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "front_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_TRANSITION": 2
+      },
+      "valid_start_count": 2
+    },
+    "full": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 2,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "full",
+          "value": null
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": false,
+          "metric": "DEFEAT_KOBOLD_SR",
+          "scenario": "full",
+          "successes": 0,
+          "valid_starts": 2,
+          "value": 0.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "full",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "TIMEOUT_NO_KOBOLD": 2
+      },
+      "valid_start_count": 2
+    }
+  },
+  "run_class": "INTERFACE_SMOKE",
+  "runtime_family": "base_gtrxl_cc2_projection",
+  "runtime_registered": true,
+  "schema": "mechanism_UED.common_evaluator_binding/v2dt",
+  "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde",
+  "smoke_episodes_per_scenario": 2,
+  "smoke_max_steps": 32,
+  "smoke_schedule": {
+    "back_l2": {
+      "count": 2,
+      "kind": "frozen_bank_state_smoke",
+      "seeds": [
+        1010000,
+        1010001
+      ]
+    },
+    "front_l2": {
+      "count": 2,
+      "kind": "frozen_bank_state_smoke",
+      "seeds": [
+        10000,
+        10001
+      ]
+    },
+    "full": {
+      "count": 2,
+      "kind": "canonical_reset_seeds_smoke",
+      "seeds": [
+        42,
+        43
+      ]
+    }
+  },
+  "source_capsule_missing_files": [],
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc2/BASE_GTRXL_ORIGINAL_VTRACE_98304",
+  "strong_student_selection_authorized": false,
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "supersedes": "cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/projection_binding_v2/ (d0d05ff2-era V1 metric binding; retained as history, NOT modified, NOT inherited — the common evaluator SHA changed)",
+  "teacher_included_in_student_ranking": false,
+  "training_seed": 42,
+  "training_steps": 98304,
+  "v1_supersession": {
+    "COMMON_EVALUATOR_V1_DRIVER": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+    "COMMON_EVALUATOR_V1_STATUS": "SUPERSEDED_PRE_RANKING",
+    "v1_assembly_manifest_sha256": "52d1fa0fca2ceaa0e992a118b1d5812166e3347fef23100cad0b4389cc9136d4",
+    "v1_binding_evidence_retained": "cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/projection_binding_v2/ (unmodified)",
+    "v1_common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "v1_common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "v1_environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "v1_evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "v1_formal_ranking_ever_authorized": false,
+    "v1_metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "v1_preservation_reverified": {
+      "v1_common_root": "/home/oseasy/student_pool_v1/common",
+      "v1_driver_commit": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+      "v1_formal_ranking_authorized": false,
+      "v1_sha256sums_self_check": "PASS (57/57)",
+      "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+      "v1_status": "SUPERSEDED_PRE_RANKING"
+    },
+    "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e"
+  },
+  "wandb_stub": null
+}

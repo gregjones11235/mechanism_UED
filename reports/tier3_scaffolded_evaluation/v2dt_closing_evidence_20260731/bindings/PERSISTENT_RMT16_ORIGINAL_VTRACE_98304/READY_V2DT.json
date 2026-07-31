@@ -1,0 +1,37 @@
+{
+  "READY_V2DT": true,
+  "await_independent_secondary_audit": true,
+  "binding_status": "PASS",
+  "candidate_class": "STUDENT",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "counts_toward_student_binding_count": true,
+  "evidence_files": [
+    "episode_records.jsonl",
+    "projection_record.json",
+    "common_evaluator_binding_result_v2dt.json",
+    "SHA256SUMS_V2DT"
+  ],
+  "formal_ranking_authorized_by_this_file": false,
+  "formal_ranking_started": false,
+  "gates": {
+    "G10_PROTOCOL_VERSION_V2": true,
+    "G1_CAPSULE_FILE_SHA_MATCH": true,
+    "G2_CHECKPOINT_FILE_SHA_OWNER_RECOMPUTE_MATCH": true,
+    "G3_PARAMS_SHA_OWNER_RECOMPUTE_MATCH": true,
+    "G4_INTERFACE_SMOKE_EXECUTED": true,
+    "G5_PARAMS_UNCHANGED": true,
+    "G6_COMMON_V2_SUMS": true,
+    "G7_EPISODE_COUNTS_FROM_V2_PROFILE": true,
+    "G8_GPU_ALLOWED": true,
+    "G9_V1_FROZEN_PRESERVED": true
+  },
+  "generated_at_utc": "2026-07-31T05:54:09.592194+00:00",
+  "honest_false_discipline": "ANY failed gate keeps READY_V2DT false; no gate is ever faked to PASS; smoke is not performance",
+  "performance_claim_authorized": false,
+  "run_class": "INTERFACE_SMOKE",
+  "runtime_family": "rmt16_gtrxl_cc2_persistent_projection",
+  "schema": "mechanism_UED.projection_ready/v2dt",
+  "smoke_abort": null,
+  "teacher_reference_binding": null
+}
