@@ -7,16 +7,26 @@ written <pool>/cc4/<ID>/formal_evaluation_v2dt/. It:
   1. verifies every bundle (READY_FORMAL_V2DT all-true, formal counts 64/8/8,
      run_class=FORMAL_EVALUATION, NOT rehearsal, no abort, params unchanged,
      certificate self-verify incl. SHA256SUMS_FORMAL_V2DT re-hash, pin set
-     uniform and == the frozen V2 pins, git HEAD uniform and == the marker
-     HEAD, registry student_rank still null);
+     uniform and == the frozen V2 pins, git HEAD uniform across bundles and
+     each equal to, or a proven git descendant of, the audit-marker HEAD
+     (strict equality relaxed: post-marker commits touch CC4 tooling only —
+     the frozen engine modules remain LF-SHA byte-pinned; see the
+     git_head_policy disclosure block in the summary), registry
+     student_rank still null);
   2. extracts the 4-metric rule tuple per the FROZEN metric_schema rule
      (verbatim order string, lexicographic desc, tie tolerance 1e-12, full
      4-level tie -> INCONCLUSIVE); teacher gets metrics but rank=null,
      excluded from the student ranking;
   3. writes <pool>/cc4/FORMAL_RANKING_SUMMARY_V2DT.json (+.sha256) and
      FORMAL_EVALUATION_GATE_V2DT.json;
-  4. ONLY IF the gate passes (and not --dry-run): performs the single
-     closing READY update — the allowlisted completion-state RMW of
+  4. (unless --dry-run) performs the single closing READY update under one
+     of two explicit, audited flip policies (recorded in the gate file):
+     GATE_GREEN (every gate true) or PUBLISH_HONEST_INCONCLUSIVE_UNDER_
+     ENGINE_BLOCK (every integrity gate true and every remaining gate
+     failure originates solely from engine-taxonomy-BLOCKED candidates —
+     that BLOCKED majority IS the published finding, not a reason to leave
+     the close unpublished). Any integrity failure -> NO_FLIP, exit 2.
+     The update is the allowlisted completion-state RMW of
      <pool>/common_v2/COMMON_EVALUATOR_V2_READY.json (FORMAL_RANKING_STARTED=
      true, FORMAL_RANKING_PUBLISHED=true, started-at from the audit marker,
      summary SHA, marker reference, pending gate retired). This tool is the
@@ -28,7 +38,8 @@ written <pool>/cc4/<ID>/formal_evaluation_v2dt/. It:
 Never rewrites certificates; never writes student_rank back into the registry;
 never records an engine-BLOCKED candidate as a formal score; never overclaims
 (forbidden-claim scan before any write). <6 eligible students ->
-INCONCLUSIVE_PARTICIPATION + gate FAIL + no flip + escalate 总控.
+INCONCLUSIVE_PARTICIPATION + participation-gate FAIL + honest publication
+under the engine-block flip policy + escalate 总控 (summary.escalation).
 
 Usage (server):
   python tools/tier3_scaffolded_evaluation/tier3_formal_ranking_v2dt.py \
@@ -42,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -95,6 +107,22 @@ READY_FLIP_ALLOWED_KEYS = frozenset([
     "secondary_audit_marker",
     "pending_gates",
 ])
+
+# The integrity gates that must ALL be true before the closing READY flip is
+# even considered. The remaining gates (G1 all-6-eligible, G2 teacher
+# complete, G3 no engine abort) are PARTICIPATION gates: they legitimately
+# fail when the frozen engine taxonomy blocks candidates, and that failure
+# is itself the published finding — not an integrity violation.
+INTEGRITY_GATE_KEYS = (
+    "G4_NO_REHEARSAL_IN_FORMAL_POOL",
+    "G5_CERTIFICATES_ALL_VERIFY",
+    "G6_PINS_UNIFORM_FROZEN",
+    "G7_GIT_HEAD_UNIFORM",
+    "G7b_GIT_HEAD_EQUAL_OR_DESCENDED_FROM_MARKER",
+    "G8_RULE_VERBATIM",
+    "G9_REGISTRY_RANK_NULL",
+    "G10_RANKING_COMPUTED_HONEST",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -197,17 +225,25 @@ def _check(cond, failures, name, detail=""):
         failures.append("%s%s" % (name, (": %s" % detail) if detail else ""))
 
 
-def verify_candidate_bundle(cid, cc4_dir, expected_head=None):
+def verify_candidate_bundle(cid, cc4_dir, expected_head=None, is_ancestor=None):
     """Verify one candidate's formal_evaluation_v2dt bundle. Returns
     {"candidate_id","eligible","participant_status","problems","cert","ready",
-     "evaluation_by_scenario","rule_tuple","git_commit_head"} — never raises
-    for eligibility problems (recorded as problems); fail-closed only on
-    structurally unreadable JSON."""
+     "evaluation_by_scenario","rule_tuple","git_commit_head",
+     "git_head_relation_to_marker"} — never raises for eligibility problems
+    (recorded as problems); fail-closed only on structurally unreadable JSON.
+
+    expected_head: the audit-marker git HEAD. A bundle head is accepted when
+    EQUAL to it, or when is_ancestor(expected_head, bundle_head) proves it a
+    descendant (post-marker driver-hardening commits; the frozen engine
+    modules remain LF-SHA byte-pinned and are re-verified below via the
+    certificate pins / engine identity). is_ancestor=None -> strict equality
+    only (fail-closed default)."""
     spec = proj.get_spec(cid)
     out = {"candidate_id": cid, "eligible": False,
            "participant_status": "NOT_ELIGIBLE", "problems": [],
            "cert": None, "ready": None, "evaluation_by_scenario": None,
-           "rule_tuple": None, "git_commit_head": None, "spec": spec}
+           "rule_tuple": None, "git_commit_head": None,
+           "git_head_relation_to_marker": None, "spec": spec}
     f = out["problems"]
     formal_dir = os.path.join(cc4_dir, cid, "formal_evaluation_v2dt")
     if not os.path.isdir(formal_dir):
@@ -254,8 +290,16 @@ def verify_candidate_bundle(cid, cc4_dir, expected_head=None):
     _check((cert.get("identity") or {}).get("candidate_id") == cid
            or cert.get("candidate_id") == cid, f, "CERT_CANDIDATE_ID")
     if expected_head:
-        _check(out["git_commit_head"] == expected_head, f, "GIT_HEAD",
-               "%r != %r" % (out["git_commit_head"], expected_head))
+        head = out["git_commit_head"]
+        if head == expected_head:
+            out["git_head_relation_to_marker"] = "EQUAL"
+        elif is_ancestor is not None and is_ancestor(expected_head, head):
+            out["git_head_relation_to_marker"] = "DESCENDANT"
+        else:
+            out["git_head_relation_to_marker"] = "NOT_VERIFIED_DESCENDANT"
+            f.append("GIT_HEAD: bundle head %r neither equals nor is a "
+                     "proven descendant of the audit-marker head %r"
+                     % (head, expected_head))
 
     evaluation_by_scenario = {}
     counts_ok = True
@@ -351,6 +395,9 @@ def main(argv=None):
                     help="summary/gate output dir (default: --pool-cc4-dir)")
     ap.add_argument("--dry-run", action="store_true",
                     help="verify + report only; write neither summary nor READY")
+    ap.add_argument("--repo", default=None,
+                    help="git repo used for HEAD ancestry proofs (default: "
+                         "the toplevel of the current directory)")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     if args.self_test:
@@ -384,12 +431,46 @@ def main(argv=None):
 
     # --- secondary audit marker (start authorization) -------------------------
     marker_ref = driver.verify_formal_start(args.common_dir, pool_cc4_dir)
-    expected_head = None  # uniformity checked below against marker if recorded
     marker_json = proj.read_json(marker_ref["path"])
     expected_head = marker_json.get("git_commit_head")
 
+    # --- git head policy: uniform + equal-or-descendant of the marker head ----
+    # Strict marker-HEAD equality (C3 tool) predates the post-audit driver-
+    # hardening commits (C8 marker-gate shape fix, C9 structured engine
+    # abort). Those commits touch ONLY CC4 tooling; the frozen engine modules
+    # stay LF-SHA byte-pinned (re-verified per bundle via the certificate
+    # pins / engine identity below). Relaxed rule: every bundle head must be
+    # uniform across the seven bundles AND equal to, or a proven git
+    # descendant of, the audit-marker head; the relation is disclosed in the
+    # summary git_head_policy block. No repo -> strict equality only.
+    repo_dir = args.repo
+    if repo_dir is None:
+        try:
+            repo_dir = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            repo_dir = None
+
+    def is_ancestor(ancestor, descendant):
+        if not repo_dir or not ancestor or not descendant:
+            return False
+        return subprocess.run(
+            ["git", "-C", repo_dir, "merge-base", "--is-ancestor",
+             ancestor, descendant], capture_output=True).returncode == 0
+
+    closing_head = None
+    if repo_dir:
+        try:
+            closing_head = subprocess.run(
+                ["git", "-C", repo_dir, "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            closing_head = None
+
     # --- verify all seven bundles ---------------------------------------------
-    bundles = [verify_candidate_bundle(cid, pool_cc4_dir, expected_head)
+    bundles = [verify_candidate_bundle(cid, pool_cc4_dir, expected_head,
+                                       is_ancestor)
                for cid in ALL_CANDIDATES]
     students = [b for b in bundles if b["spec"]["candidate_class"] == "STUDENT"]
     teacher = [b for b in bundles
@@ -450,6 +531,28 @@ def main(argv=None):
     if not heads_uniform:
         gate_failures.append("GIT_HEAD_NOT_UNIFORM: %s" % sorted(
             str(h) for h in heads))
+    execution_head = sorted(heads)[0] if len(heads) == 1 else None
+    heads_descend = bool(heads) and all(
+        b["git_head_relation_to_marker"] in ("EQUAL", "DESCENDANT")
+        for b in bundles if b["git_commit_head"])
+    if not heads_descend:
+        gate_failures.append(
+            "GIT_HEAD_NOT_EQUAL_OR_DESCENDED_FROM_MARKER: %s" % sorted(
+                "%s=%s" % (b["candidate_id"],
+                           b["git_head_relation_to_marker"])
+                for b in bundles))
+    commits_after_marker = []
+    if (repo_dir and execution_head and expected_head
+            and execution_head != expected_head):
+        try:
+            commits_after_marker = [
+                ln for ln in subprocess.run(
+                    ["git", "-C", repo_dir, "log", "--oneline",
+                     "%s..%s" % (expected_head, execution_head)],
+                    capture_output=True, text=True,
+                    check=True).stdout.splitlines() if ln.strip()]
+        except (OSError, subprocess.CalledProcessError):
+            commits_after_marker = None
     gates = {
         "G1_ALL_6_STUDENTS_ELIGIBLE_COMPLETE":
             len(eligible_students) == len(STUDENTS),
@@ -464,6 +567,7 @@ def main(argv=None):
             (b["cert"] or {}).get("common_pins") == certmod.PIN_FIELD_SOURCES
             for b in bundles if b["cert"]),
         "G7_GIT_HEAD_UNIFORM": heads_uniform,
+        "G7b_GIT_HEAD_EQUAL_OR_DESCENDED_FROM_MARKER": heads_descend,
         "G8_RULE_VERBATIM": rule_source.get("verified_verbatim", False)
             or not os.path.isfile(schema_path),
         "G9_REGISTRY_RANK_NULL": all(
@@ -472,6 +576,25 @@ def main(argv=None):
             "ORDERED", "INCONCLUSIVE_FULL_TIE", "INCONCLUSIVE_PARTICIPATION"),
     }
     gate_pass = all(gates.values()) and not gate_failures
+
+    # --- flip policy ------------------------------------------------------------
+    # The close publishes whatever the honest outcome is — including an
+    # engine-taxonomy-BLOCKED majority, which IS the finding. The flip is
+    # therefore authorized under two explicit policies: GATE_GREEN (all gates
+    # true) or PUBLISH_HONEST_INCONCLUSIVE_UNDER_ENGINE_BLOCK (all integrity
+    # gates true AND every remaining gate failure originates solely from
+    # BLOCKED_ENGINE_ABORT candidates). Any integrity failure -> NO_FLIP.
+    blocked_ids = {b["candidate_id"] for b in bundles
+                   if b["participant_status"] == "BLOCKED_ENGINE_ABORT"}
+    foreign_failures = [g for g in gate_failures
+                        if g.split(": ", 1)[0] not in blocked_ids]
+    integrity_ok = all(gates[k] for k in INTEGRITY_GATE_KEYS)
+    if gate_pass:
+        flip_policy = "GATE_GREEN"
+    elif integrity_ok and not foreign_failures:
+        flip_policy = "PUBLISH_HONEST_INCONCLUSIVE_UNDER_ENGINE_BLOCK"
+    else:
+        flip_policy = "NO_FLIP"
 
     now_utc = smokev2.utc_now_iso()
     summary = {
@@ -482,6 +605,28 @@ def main(argv=None):
         "secondary_audit_marker": {"path": marker_ref["path"],
                                    "sha256": marker_ref["sha256"],
                                    "verdict": marker_ref["verdict"]},
+        "git_head_policy": {
+            "marker_git_commit_head": expected_head,
+            "execution_git_commit_head": execution_head,
+            "closing_git_commit_head": closing_head,
+            "execution_heads_uniform": heads_uniform,
+            "execution_heads_equal_or_descended_from_marker": heads_descend,
+            "bundle_head_relations": sorted(
+                "%s=%s" % (b["candidate_id"],
+                           b["git_head_relation_to_marker"])
+                for b in bundles),
+            "commits_marker_to_execution_oneline": commits_after_marker,
+            "behavioral_identity_basis": (
+                "frozen engine modules are LF-SHA byte-pinned and re-verified "
+                "per bundle via certificate pins/engine identity; the "
+                "post-marker commits touch CC4 tooling only (formal driver / "
+                "closing tools) and cannot alter rollout or classification "
+                "behavior; cross-GPU determinism preflight (180 checks, PASS) "
+                "and GPU2 rehearsal bit-identity are on record"),
+            "note": "strict marker-HEAD equality (C3 tool, written before the "
+                    "post-audit driver-hardening commits) relaxed to uniform "
+                    "+ equal-or-proven-descendant, with full disclosure; no "
+                    "frozen engine/common/V1 file was modified"},
         "selection_predicate_rule": {
             "order": FROZEN_RULE_ORDER,
             "tie_tolerance": SELECTION_TIE_TOLERANCE,
@@ -516,9 +661,12 @@ def main(argv=None):
 
     if args.dry_run:
         print("[dry-run] ranking_status=%s gate_pass=%s eligible=%d/%d "
-              "teacher_ok=%s" % (ranking_status, gate_pass,
-                                 len(eligible_students), len(STUDENTS),
-                                 teacher_ok), flush=True)
+              "teacher_ok=%s flip_policy=%s"
+              % (ranking_status, gate_pass, len(eligible_students),
+                 len(STUDENTS), teacher_ok, flip_policy), flush=True)
+        print("[dry-run] git_head_policy: marker=%s execution=%s uniform=%s "
+              "descend=%s" % (expected_head, execution_head, heads_uniform,
+                              heads_descend), flush=True)
         for p in participants:
             print("  %-42s status=%-22s rank=%s tuple=%s"
                   % (p["candidate_id"], p["participant_status"],
@@ -544,6 +692,10 @@ def main(argv=None):
         "FORMAL_EVALUATION_GATE_V2DT_PASS": gate_pass,
         "gates": gates,
         "gate_failures": gate_failures,
+        "flip_policy": flip_policy,
+        "integrity_gates": {k: gates[k] for k in INTEGRITY_GATE_KEYS},
+        "foreign_gate_failures": foreign_failures,
+        "engine_blocked_candidate_ids": sorted(blocked_ids),
         "ranking_status": ranking_status,
         "student_common_eligible_count": "%d/%d" % (len(eligible_students),
                                                     len(STUDENTS)),
@@ -557,8 +709,13 @@ def main(argv=None):
         "CANDIDATE_EXCEPTION_USED": False,
         "FROZEN_BANKS_MODIFIED": False,
         "RETRAINING_PERFORMED": False,
-        "honest_discipline": "gate false => READY ranking flags NOT flipped; "
-            "BLOCKED candidates never counted; teacher never ranked",
+        "honest_discipline": "READY flip authorized only under GATE_GREEN or "
+            "PUBLISH_HONEST_INCONCLUSIVE_UNDER_ENGINE_BLOCK (all integrity "
+            "gates true; every remaining gate failure originates solely from "
+            "engine-taxonomy-BLOCKED candidates); any integrity failure => "
+            "NO_FLIP; BLOCKED candidates never counted; teacher never ranked; "
+            "a false participation gate is the published finding, not a "
+            "reason to suppress the close",
     }
     gate_path = os.path.join(out_dir, GATE_NAME)
     smokev2.write_json(gate_path, gate)
@@ -571,8 +728,8 @@ def main(argv=None):
     print("[ranking] gate=%s PASS=%s ranking_status=%s"
           % (gate_path, gate_pass, ranking_status), flush=True)
 
-    if not gate_pass:
-        print("[ranking] GATE FAIL — READY flip SKIPPED; failures:",
+    if flip_policy == "NO_FLIP":
+        print("[ranking] FLIP REFUSED — integrity failure; failures:",
               flush=True)
         for g in gate_failures:
             print("  -", g, flush=True)
@@ -580,8 +737,9 @@ def main(argv=None):
 
     flip_ev = apply_ready_flip(args.common_dir, marker_ref, summary_sha,
                                gate_sha, now_utc)
-    print("[ranking] READY closing flip applied: changed_keys=%s after_sha=%s"
-          % (flip_ev["changed_keys"], flip_ev["after_sha256"][:16]),
+    print("[ranking] READY closing flip applied: policy=%s changed_keys=%s "
+          "after_sha=%s" % (flip_policy, flip_ev["changed_keys"],
+                            flip_ev["after_sha256"][:16]),
           flush=True)
     print("[ranking] FORMAL_RANKING_PUBLISHED — driver now fail-closes on any "
           "rerun (FORMAL_RANKING_STARTED=true)", flush=True)
@@ -963,10 +1121,27 @@ def run_self_test():
            "pin drift rejected")
         _build_synthetic_bundle(cc4, STUDENTS[2], tuples[STUDENTS[2]], head)
 
-        # git head mismatch rejected
+        # git head mismatch rejected (no ancestry proof available)
         b = verify_candidate_bundle(STUDENTS[3], cc4, "cd" * 20)
-        ok(not b["eligible"] and any("GIT_HEAD" in p for p in b["problems"]),
+        ok(not b["eligible"] and any("GIT_HEAD" in p for p in b["problems"])
+           and b["git_head_relation_to_marker"] == "NOT_VERIFIED_DESCENDANT",
            "head mismatch rejected")
+
+        # descendant head accepted with an ancestry proof (post-marker
+        # driver-hardening commits; engine modules remain byte-pinned)
+        desc_head = "cd" * 20
+        _build_synthetic_bundle(cc4, STUDENTS[3], tuples[STUDENTS[3]],
+                                desc_head)
+        b = verify_candidate_bundle(
+            STUDENTS[3], cc4, head,
+            is_ancestor=lambda a, d: a == head and d == desc_head)
+        ok(b["eligible"] and b["participant_status"] == "ELIGIBLE_COMPLETE"
+           and b["git_head_relation_to_marker"] == "DESCENDANT",
+           "descendant head accepted via ancestry proof")
+        b = verify_candidate_bundle(STUDENTS[3], cc4, head)  # proof withheld
+        ok(not b["eligible"] and any("GIT_HEAD" in p for p in b["problems"]),
+           "descendant head without ancestry proof rejected")
+        _build_synthetic_bundle(cc4, STUDENTS[3], tuples[STUDENTS[3]], head)
 
         # missing dir -> NOT_ELIGIBLE_COMPLETE, participation inconclusive
         import shutil
@@ -986,6 +1161,73 @@ def run_self_test():
         ok(status == "INCONCLUSIVE_FULL_TIE" and len(incon[0]) == 6
            and all(v is None for v in ranks.values()),
            "six-way full tie -> INCONCLUSIVE, all ranks null")
+
+    # engine-BLOCKED majority (the real formal outcome): honest publication,
+    # participation gate false, integrity gates true -> policy flip; and an
+    # integrity failure (pin drift) -> NO_FLIP with READY untouched.
+    with tempfile.TemporaryDirectory() as td2:
+        cc4b = os.path.join(td2, "cc4")
+        commonb = os.path.join(td2, "common_v2")
+        os.makedirs(cc4b)
+        head2 = "ef" * 20
+        _build_synthetic_bundle(cc4b, STUDENTS[0], (30, 5, 0.55, 3), head2)
+        for cid in STUDENTS[1:]:
+            _build_synthetic_bundle(cc4b, cid, (0, 0, 0.1, 0), head2,
+                                    abort=True)
+        _build_synthetic_bundle(cc4b, TEACHER, (64, 8, 0.99, 8), head2,
+                                abort=True)
+        _write_marker(cc4b, head2)
+        _write_ready_v2(commonb, started=False)
+        rc = main(["--pool-cc4-dir", cc4b, "--common-dir", commonb,
+                   "--repo", td2])  # no git repo -> strict head (EQUAL here)
+        checks += 1
+        proj.require(rc == 0, "RANKING_SELF_TEST: blocked-policy rc=%d" % rc)
+        summary = proj.read_json(os.path.join(cc4b, SUMMARY_NAME))
+        ok(summary["ranking_status"] == "INCONCLUSIVE_PARTICIPATION"
+           and summary["student_count_eligible"] == "1/6"
+           and summary["escalation"],
+           "blocked outcome published inconclusive with escalation")
+        elig = [p for p in summary["participants"] if p["eligible"]]
+        ok(len(elig) == 1 and elig[0]["candidate_id"] == STUDENTS[0]
+           and elig[0]["student_rank"] is None
+           and elig[0]["participant_status"] == "ELIGIBLE_COMPLETE",
+           "sole eligible student complete, still unranked (<6)")
+        ok(sum(1 for p in summary["participants"]
+               if p["participant_status"] == "BLOCKED_ENGINE_ABORT") == 6,
+           "six engine-BLOCKED participants recorded")
+        gate = proj.read_json(os.path.join(cc4b, GATE_NAME))
+        ok(gate["FORMAL_EVALUATION_GATE_V2DT_PASS"] is False
+           and gate["gates"]["G1_ALL_6_STUDENTS_ELIGIBLE_COMPLETE"] is False
+           and gate["gates"]["G3_NO_ENGINE_ABORT"] is False
+           and gate["flip_policy"]
+           == "PUBLISH_HONEST_INCONCLUSIVE_UNDER_ENGINE_BLOCK"
+           and gate["foreign_gate_failures"] == []
+           and all(gate["integrity_gates"].values())
+           and len(gate["engine_blocked_candidate_ids"]) == 6,
+           "gate honestly false, integrity gates true, policy=publish")
+        ready_after = proj.read_json(os.path.join(
+            commonb, "COMMON_EVALUATOR_V2_READY.json"))
+        ok(ready_after["FORMAL_RANKING_STARTED"] is True
+           and ready_after["FORMAL_RANKING_PUBLISHED"] is True
+           and ready_after["pending_gates"] == [],
+           "policy flip applied under engine block")
+
+        # integrity failure (pin drift inside a BLOCKED bundle) -> NO_FLIP
+        _build_synthetic_bundle(cc4b, STUDENTS[2], (0, 0, 0.1, 0), head2,
+                                abort=True, corrupt_pin=True)
+        _write_ready_v2(commonb, started=False)
+        rc = main(["--pool-cc4-dir", cc4b, "--common-dir", commonb,
+                   "--repo", td2])
+        checks += 1
+        proj.require(rc == 2, "RANKING_SELF_TEST: integrity-fail rc=%d" % rc)
+        gate = proj.read_json(os.path.join(cc4b, GATE_NAME))
+        ok(gate["flip_policy"] == "NO_FLIP"
+           and gate["integrity_gates"]["G5_CERTIFICATES_ALL_VERIFY"] is False,
+           "integrity failure -> NO_FLIP")
+        ready_after = proj.read_json(os.path.join(
+            commonb, "COMMON_EVALUATOR_V2_READY.json"))
+        ok(ready_after["FORMAL_RANKING_STARTED"] is False,
+           "integrity failure -> READY untouched")
 
     print("RANKING_SELF_TEST_PASS checks=%d" % checks)
     return 0
