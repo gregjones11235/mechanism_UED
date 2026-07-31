@@ -233,6 +233,7 @@ def main(argv=None):
     import tier3_evaluator_v2 as ev
     import tier3_event_predicates_v2 as predm
     import tier3_state_serializer as ser
+    import tier3_failure_taxonomy as taxonomy
     proj.require(predm.COMMON_EVALUATOR_PROTOCOL_VERSION
                  == COMMON_EVALUATOR_PROTOCOL_VERSION,
                  "FAIL CLOSED: predicate module protocol version %r"
@@ -448,7 +449,41 @@ def main(argv=None):
                 "episode_records_sha256": proj.sha256_bytes(
                     ("\n".join(lines) + "\n").encode("utf-8"))}
             if not (formal_abort and formal_abort["scenario"] == sc):
-                results_by_scenario[sc] = ev.evaluate(sc, eps)
+                try:
+                    results_by_scenario[sc] = ev.evaluate(sc, eps)
+                except taxonomy.FailClosed as exc:
+                    # The frozen failure taxonomy refused to CLASSIFY the
+                    # completed rollouts (e.g. NEG20 ambiguous/contradictory
+                    # terminal signals: floor-transition AND defeat_kobold).
+                    # The episode records are intact; the protocol simply
+                    # cannot produce metrics for this candidate. Same BLOCKED
+                    # discipline as a rollout-predicate abort: recorded, never
+                    # relaxed, never faked; a rerun reproduces deterministically.
+                    formal_abort = {
+                        "exception_type": "tier3_failure_taxonomy.FailClosed "
+                                          "(via frozen tier3_evaluator.evaluate)",
+                        "engine_message": str(exc),
+                        "scenario": sc,
+                        "aborted_phase": "evaluate_classification",
+                        "episode_index": None,
+                        "episodes_planned": len(seeds),
+                        "episodes_completed_before_abort": len(eps),
+                        "entry_id": None,
+                        "seed": None,
+                        "scenarios_completed_before_abort":
+                            list(records_by_scenario.keys()),
+                        "verdict": "ENGINE_TAXONOMY_REJECTED_FORMAL_EVALUATION_V2",
+                        "v2_failclosed_class": "TERMINAL_SIGNAL_AMBIGUITY "
+                            "(frozen classifier refuses contradictory terminal "
+                            "signals; NOT corruption, NOT relaxable by CC4)",
+                        "authority": "frozen engine taxonomy (not relaxable by CC4)",
+                        "consequence": "candidate BLOCKED; NOT recorded as a "
+                            "formal score; no candidate-level exemption; no "
+                            "retraining; rerun would reproduce deterministically",
+                    }
+                    print("  [%s] ENGINE TAXONOMY ABORT after %d/%d rollouts "
+                          "(recorded, candidate BLOCKED): %s"
+                          % (sc, len(eps), len(seeds), exc), flush=True)
         # flush per-scenario result immediately (legible partial evidence on
         # mid-run crash; the freshness gate quarantines any partial dir)
         _write_scenario_result(out_dir, sc, args.candidate_id, schedule[sc],
@@ -459,6 +494,21 @@ def main(argv=None):
                                rehearsal)
         if formal_abort:
             break
+    if formal_abort:
+        # flush skeleton result files for scenarios never reached, so the
+        # six-file evidence shape (and SHA256SUMS_FORMAL_V2DT) stays complete
+        # and legible: episodes_executed=0, evaluation=null
+        for sc in FORMAL_SCENARIO_ORDER:
+            if sc in timing_by_scenario:
+                continue
+            _write_scenario_result(
+                out_dir, sc, args.candidate_id, schedule[sc],
+                ev.state_entry_ids_for(
+                    sc, [int(s) for s in schedule[sc]["seeds"]][:counts[sc]]),
+                counts[sc], None, None,
+                {"episodes": [], "scenario_wall_seconds": 0.0,
+                 "peak_rss_kb": _peak_rss_kb()},
+                False, rehearsal)
 
     # --- NEG23 analog (params unchanged by the evaluation) --------------------
     params_after = proj.recompute_params_sha_owner(ctx)
@@ -645,12 +695,17 @@ def main(argv=None):
           % (args.candidate_id, evaluation_status, ready["READY_FORMAL_V2DT"],
              {k: v for k, v in gates.items() if not v} or "none"), flush=True)
     if formal_abort:
-        print("[done] BLOCKED by V2 engine predicate (corruption class): %s @ "
-              "%s episode %d/%d — recorded as minimum blocking evidence; NOT "
-              "relaxed, NOT a formal score"
-              % (args.candidate_id, formal_abort["scenario"],
-                 formal_abort["episode_index"] + 1,
-                 formal_abort["episodes_planned"]), flush=True)
+        ei = formal_abort.get("episode_index")
+        pos = ("episode %d/%d" % (ei + 1, formal_abort["episodes_planned"])
+               if ei is not None else
+               "after %d/%d rollouts (evaluate phase)"
+               % (formal_abort["episodes_completed_before_abort"],
+                  formal_abort["episodes_planned"]))
+        print("[done] BLOCKED by frozen engine: %s @ %s %s — verdict %s; "
+              "recorded as minimum blocking evidence; NOT relaxed, NOT a "
+              "formal score"
+              % (args.candidate_id, formal_abort["scenario"], pos,
+                 formal_abort["verdict"]), flush=True)
     print("[done] out=%s" % out_dir, flush=True)
     return 0
 
