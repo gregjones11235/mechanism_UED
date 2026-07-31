@@ -99,10 +99,21 @@ def _review_board_contract() -> dict:
             trajectory_supervision_guard=dict(
                 scope="EVERY role parsed output + the whole dry-run result",
                 codes=[GuardViolation.TRAJECTORY_SUPERVISION_KEY_FORBIDDEN,
-                       GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN],
+                       GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN,
+                       GuardViolation.SERIALIZED_GUARD_LIMIT_EXCEEDED],
                 failure_mode="FAIL_CLOSED",
                 forbidden_supervision_keys=sorted(
-                    C.FORBIDDEN_SUPERVISION_KEYS)),
+                    C.FORBIDDEN_SUPERVISION_KEYS),
+                forbidden_supervision_key_aliases=sorted(
+                    C.FORBIDDEN_SUPERVISION_KEY_ALIASES),
+                serialized_string_parsing=dict(
+                    policy="trim-then-JSON-looking strings are parsed and "
+                           "the full guard re-runs inside; parse failure "
+                           "falls back to plain-text NL patterns (never a "
+                           "lenient skip); limit excess fails closed",
+                    max_parse_depth=C.MAX_SERIALIZED_PARSE_DEPTH,
+                    max_string_length=C.MAX_SERIALIZED_STRING_LENGTH,
+                    max_container_items=C.MAX_SERIALIZED_CONTAINER_ITEMS)),
             formal_evaluation_leakage_guard=dict(
                 scope="board input context + evidence sources + regret inputs",
                 codes=[FormalLeakageViolation.FORMAL_EVALUATION_LEAKAGE,

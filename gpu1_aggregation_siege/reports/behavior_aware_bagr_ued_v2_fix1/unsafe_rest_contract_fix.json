@@ -1,0 +1,49 @@
+{
+  "auditable_constants": {
+    "BASE_CONFIDENCE": 0.6,
+    "BASE_SEVERITY": 0.5,
+    "HARM_CONFIDENCE_BONUS": 0.2,
+    "HARM_SEVERITY_LEVELS": [
+      [
+        "died",
+        1.0
+      ],
+      [
+        "damage_taken",
+        0.8
+      ],
+      [
+        "chased",
+        0.6
+      ]
+    ],
+    "HORIZON": 8,
+    "note": "bases are auditable class constants; harm levels reused verbatim from the v1 OUTCOME_SEVERITY table; no new hardcoded science numbers"
+  },
+  "case_a_no_harm": {
+    "anomaly_id_prefix": "unsafe_rest_near_hostile:",
+    "confidence": 0.6,
+    "finding_count": 1,
+    "realized_harm": false,
+    "severity": 0.5,
+    "unsafe_condition_observed": true
+  },
+  "case_b_harm_enhances": {
+    "confidence": 0.8,
+    "confidence_ge_noharm": true,
+    "finding_count": 1,
+    "harm_events_supplement": [
+      "damage_taken",
+      "rest_near_hostile"
+    ],
+    "realized_harm": true,
+    "severity": 0.8,
+    "severity_ge_noharm": true
+  },
+  "detector_id": "unsafe_rest_near_hostile",
+  "detector_version": "v2",
+  "finding_basis": "rest_or_sleep=true AND hostile_nearby=true AND environment_confirmed_safe=false (CONDITION-BASED)",
+  "harm_policy": "subsequent damage_taken/chased/died may ONLY raise severity, raise confidence, supplement supporting_events, and set realized_harm=true; it NEVER decides finding existence",
+  "regression_tests": "d052/tests/test_bagr_ued_unsafe_rest_contract.py (cases A-F, 8 tests) — all PASS",
+  "schema": "bagr_ued.fix1.unsafe_rest_contract.v1"
+}

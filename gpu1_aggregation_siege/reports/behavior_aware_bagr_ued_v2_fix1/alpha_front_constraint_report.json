@@ -1,0 +1,38 @@
+{
+  "auditable_bounds": {
+    "ALPHA_FRONT_MAX": 0.75,
+    "ALPHA_FRONT_MIN": 0.0,
+    "controller_default_ALPHA_FRONT": 0.5
+  },
+  "global_component_proof": {
+    "coefficient_for_alpha_0_99": 0.01,
+    "coefficient_strictly_positive": true,
+    "constant_column_component_each": 0.5,
+    "dimension": "one_minus_alpha_global_regret",
+    "note": "with alpha_front<1 the global component weight (1-alpha)*w is ALWAYS strictly positive; the channel can never be annihilated structurally",
+    "weight": 1.0,
+    "weight_positive": true
+  },
+  "regression_tests": "d052/tests/test_bagr_ued_alpha_front.py (13 tests) — all PASS",
+  "runtime_assertions": [
+    "0 <= alpha_front < 1",
+    "0 <= alpha_min <= alpha_max < 1",
+    "1 - alpha_front > 0"
+  ],
+  "runtime_cases": {
+    "alpha_front=1.0": "refused:ALPHA_FRONT_OUT_OF_BOUNDS",
+    "alpha_max=1.0": "refused:ALPHA_WINDOW_OUT_OF_BOUNDS",
+    "alpha_min>alpha_max": "refused:ALPHA_WINDOW_OUT_OF_BOUNDS",
+    "defaults(0.5,0.0,0.75)": "passed"
+  },
+  "schema": "bagr_ued.fix1.alpha_front_constraint.v1",
+  "schema_cases": {
+    "-0.1": "rejected:ValidationError",
+    "0.0": "accepted",
+    "0.5": "accepted",
+    "0.999": "accepted",
+    "1.0": "rejected:ValidationError",
+    "1.5": "rejected:ValidationError"
+  },
+  "schema_constraint": "EnvironmentScoreBundle.alpha_front: Field(ge=0.0, lt=1.0) — strict upper bound"
+}

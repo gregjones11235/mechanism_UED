@@ -58,7 +58,10 @@ class EnvironmentScoreBundle(CanonicalModel):
     diversity: float = Field(ge=0.0, le=1.0)
     global_retention: float = Field(ge=0.0, le=1.0)
     critic_penalty: float = Field(ge=0.0, le=1.0)
-    alpha_front: float = Field(ge=0.0, le=1.0)
+    #: CC1 audit fix1 (§8): alpha_front is structurally < 1.0 (strict). The
+    #: global component weight (1 - alpha_front) must ALWAYS be strictly
+    #: positive — the schema refuses alpha_front == 1.0 outright.
+    alpha_front: float = Field(ge=0.0, lt=1.0)
 
     @model_validator(mode="after")
     def _finite_all(self) -> "EnvironmentScoreBundle":

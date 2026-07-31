@@ -40,10 +40,15 @@ _PROVENANCE_KEYS = frozenset({
     "evidence_source", "bank", "bank_source",
 })
 
+#: CC1 audit fix1 (§6): bank_blob / formal_state_blob / formal_state_payload /
+#: state_payload are the same forbidden formal-state payload family — mirrored
+#: here as well as into Guard A's alias vocabulary (defense in depth: the two
+#: guards stay independent modules with independent code paths).
 _FORBIDDEN_PAYLOAD_KEYS = frozenset({
     "front_bank_states", "back_bank_states", "frozen_state", "private_state",
     "evaluation_certificate", "front_state_payload", "back_state_payload",
     "full_state_payload", "expert_action_sequence",
+    "bank_blob", "formal_state_blob", "formal_state_payload", "state_payload",
 })
 
 _FORBIDDEN_VALUE_TOKENS = frozenset(

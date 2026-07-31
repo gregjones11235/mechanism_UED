@@ -47,7 +47,17 @@ class EventRecord(CanonicalModel):
 
 
 class AnomalyCandidate(CanonicalModel):
-    """A detector-raised anomaly with full provenance (task section 4)."""
+    """A detector-raised anomaly with full provenance (task section 4).
+
+    CC1 audit fix1 contract fields (UnsafeRestNearHostileDetector v2):
+    ``unsafe_condition_observed`` states that the detector FOUND the unsafe
+    CONDITION itself (the finding's basis of existence); ``realized_harm``
+    states whether damage/chase/death subsequently materialized. Realized
+    harm may only ENHANCE a finding (severity / confidence / supporting
+    events) — it MUST NEVER decide whether the finding exists. Defaults are
+    neutral (condition observed, no realized harm, mid confidence) for the
+    other seven detectors whose findings do not use this distinction.
+    """
 
     anomaly_id: str = Field(min_length=1)
     episode_id: str = Field(min_length=1)
@@ -59,10 +69,14 @@ class AnomalyCandidate(CanonicalModel):
     counter_evidence: List[str] = Field(default_factory=list)
     detector_version: str = Field(min_length=1)
     detector_source_sha256: str = Field(min_length=64, max_length=64)
+    unsafe_condition_observed: bool = True
+    realized_harm: bool = False
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def _finite(self) -> "AnomalyCandidate":
         validate_finite(self.severity, "severity")
+        validate_finite(self.confidence, "confidence")
         return self
 
     @property
@@ -119,7 +133,10 @@ class _DetectorBase:
     def _candidate(self, ep: EpisodeEvidence, span: EvidenceSpan, *,
                    severity: float, recurrence: int,
                    supporting: List[EventRecord],
-                   counter: List[str]) -> AnomalyCandidate:
+                   counter: List[str],
+                   unsafe_condition_observed: bool = True,
+                   realized_harm: bool = False,
+                   confidence: float = 0.5) -> AnomalyCandidate:
         aid = (f"{self.detector_id}:{ep.episode_id}:{span.start_step}-"
                f"{span.end_step}:{canonical_sha256([e.model_dump() for e in supporting])[:8]}")
         return AnomalyCandidate(
@@ -133,6 +150,9 @@ class _DetectorBase:
             counter_evidence=counter,
             detector_version=self.version,
             detector_source_sha256=source_sha256(type(self)),
+            unsafe_condition_observed=unsafe_condition_observed,
+            realized_harm=realized_harm,
+            confidence=round(float(confidence), 6),
         )
 
 
@@ -141,21 +161,42 @@ class _DetectorBase:
 # ---------------------------------------------------------------------------
 
 class UnsafeRestNearHostileDetector(_DetectorBase):
-    """REST/SLEEP-class action + hostile nearby + env NOT confirmed safe,
-    followed (within horizon) by damage/chase/death."""
+    """REST/SLEEP-class action + hostile nearby + env NOT confirmed safe.
+
+    CC1 audit fix1 (v2) — the finding contract is CONDITION-BASED:
+
+        finding exists  <=>  rest_or_sleep=true AND hostile_nearby=true AND
+                             environment_confirmed_safe=false
+
+    Subsequent damage_taken / chased / died (within horizon) may ONLY:
+      * raise severity   (base -> max of the auditable HARM_SEVERITY_LEVELS),
+      * raise confidence (base + auditable HARM_CONFIDENCE_BONUS),
+      * supplement supporting_events,
+      * set realized_harm=true.
+    Harm MUST NEVER decide whether the finding exists. The candidate states
+    ``unsafe_condition_observed=true`` always and ``realized_harm`` true only
+    when harm materialized. No new hardcoded science numbers: severity and
+    confidence bases live on this class as auditable constants and the harm
+    levels reuse the pre-existing OUTCOME_SEVERITY table verbatim.
+    """
 
     detector_id = "unsafe_rest_near_hostile"
-    version = "v1"
+    version = "v2"
     behavior_pattern = "unsafe_rest_near_hostile"
     HORIZON = 8
-    OUTCOME_SEVERITY = (("died", 1.0), ("damage_taken", 0.8), ("chased", 0.6))
+    #: auditable constants — reused verbatim from the v1 outcome table.
+    HARM_SEVERITY_LEVELS = (("died", 1.0), ("damage_taken", 0.8), ("chased", 0.6))
+    BASE_SEVERITY = 0.5          # finding without realized harm
+    BASE_CONFIDENCE = 0.6        # condition-only evidence strength
+    HARM_CONFIDENCE_BONUS = 0.2  # harm realized -> confidence uplift only
 
     def detect(self, episode: EpisodeEvidence) -> List[AnomalyCandidate]:
         steps = _steps(episode)
-        incidents: List[EventRecord] = []
+        condition_events: List[EventRecord] = []
+        harm_events: List[EventRecord] = []
         rest_steps: List[StepRecord] = []
         counter: List[str] = []
-        worst = 0.0
+        worst_harm = 0.0
         for s in steps:
             if not _has_class(s, "rest_class"):
                 continue
@@ -169,32 +210,44 @@ class UnsafeRestNearHostileDetector(_DetectorBase):
                     f"step {s.step_index}: rest while env confirmed safe — "
                     f"not counted")
                 continue
-            follow = _later_events(steps, s.step_index, self.HORIZON,
-                                   frozenset({"died", "damage_taken", "chased"}))
-            if not follow:
-                counter.append(
-                    f"step {s.step_index}: risky rest but no subsequent "
-                    f"damage/chase/death within {self.HORIZON} steps")
-                continue
+            # --- finding basis: the unsafe CONDITION holds at this step ---
             rest_steps.append(s)
-            incidents.append(EventRecord(
+            condition_events.append(EventRecord(
                 event_type="rest_near_hostile", step_index=s.step_index,
                 fields={"hostile_band": _hostile_band(s),
                         "action": s.symbolic_action,
-                        "env_confirmed_safe": str(_env_safe(s))}))
-            incidents.extend(follow)
-            for ev, sev in self.OUTCOME_SEVERITY:
+                        "env_confirmed_safe": str(_env_safe(s)),
+                        "unsafe_condition_observed": "True"}))
+            # subsequent harm may ONLY enhance; it never gates the finding
+            follow = _later_events(steps, s.step_index, self.HORIZON,
+                                   frozenset({"died", "damage_taken", "chased"}))
+            harm_events.extend(follow)
+            for ev, sev in self.HARM_SEVERITY_LEVELS:
                 if any(e.event_type == ev for e in follow):
-                    worst = max(worst, sev)
+                    worst_harm = max(worst_harm, sev)
                     break
         if not rest_steps:
             return []
+        realized_harm = bool(harm_events)
+        severity = worst_harm if realized_harm else self.BASE_SEVERITY
+        confidence = self.BASE_CONFIDENCE + (
+            self.HARM_CONFIDENCE_BONUS if realized_harm else 0.0)
+        if not realized_harm:
+            counter.append(
+                f"no realized harm (damage/chase/death) within {self.HORIZON} "
+                f"steps of any unsafe rest — finding stands on the unsafe "
+                f"CONDITION alone; severity/confidence stay at base levels")
+        incidents = sorted(condition_events + harm_events,
+                           key=lambda e: (e.step_index, e.event_type))
         span = EvidenceSpan(episode_id=episode.episode_id,
                             start_step=rest_steps[0].step_index,
                             end_step=max(e.step_index for e in incidents))
-        return [self._candidate(episode, span, severity=worst,
+        return [self._candidate(episode, span, severity=severity,
                                 recurrence=len(rest_steps),
-                                supporting=incidents, counter=counter)]
+                                supporting=incidents, counter=counter,
+                                unsafe_condition_observed=True,
+                                realized_harm=realized_harm,
+                                confidence=confidence)]
 
 
 # ---------------------------------------------------------------------------

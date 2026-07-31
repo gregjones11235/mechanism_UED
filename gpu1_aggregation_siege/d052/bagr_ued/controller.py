@@ -97,6 +97,30 @@ def assert_round_authorization() -> None:
     assert C.REAL_CANONICAL_CRITIC_SELECTION_POLICY == "PENDING"
 
 
+def assert_alpha_front_bounds(alpha_front: float = ALPHA_FRONT,
+                              alpha_min: float = C.ALPHA_FRONT_MIN,
+                              alpha_max: float = C.ALPHA_FRONT_MAX) -> None:
+    """CC1 audit fix1 (§8): alpha_front MUST be structurally < 1.
+
+    Three runtime invariants, checked on every dry run before scoring:
+      1. 0 <= alpha_front < 1            (strict upper bound),
+      2. 0 <= alpha_min <= alpha_max < 1 (auditable bound window),
+      3. 1 - alpha_front > 0             (global component always nonzero).
+    The schema (EnvironmentScoreBundle) already refuses alpha_front == 1;
+    this assert is the second, independent layer.
+    """
+    assert 0.0 <= alpha_front < 1.0, (
+        f"ALPHA_FRONT_OUT_OF_BOUNDS: alpha_front={alpha_front!r} must "
+        f"satisfy 0 <= alpha_front < 1 (global component weight "
+        f"1-alpha_front must be strictly positive)")
+    assert 0.0 <= alpha_min <= alpha_max < 1.0, (
+        f"ALPHA_WINDOW_OUT_OF_BOUNDS: require 0 <= alpha_min ({alpha_min}) "
+        f"<= alpha_max ({alpha_max}) < 1")
+    assert (1.0 - alpha_front) > 0.0, (
+        "GLOBAL_COMPONENT_ZERO: 1 - alpha_front must be > 0 so the global "
+        "regret component can never vanish")
+
+
 #: fixed global anchor signatures (mock, deterministic) for diversity baseline
 ANCHOR_SIGNATURES = [
     {axis: ("low" if (i + j) % 2 == 0 else "high")
@@ -127,6 +151,11 @@ class DryRunResult(CanonicalModel):
     archive_refresh_plan: dict = Field(default_factory=dict)
     batch_plan: dict = Field(default_factory=dict)
     ued_nature_assertions: dict = Field(default_factory=dict)
+    #: CC1 audit fix1 (§3): the final batch/launch decision hard gate.
+    #: {batch_plan_ready, training_launch_authorized, launch_block_reasons,
+    #:  shortfall} — both booleans are false unless EVERY structural
+    #: condition holds at once.
+    launch_gate: dict = Field(default_factory=dict)
     dry_run_certificate: dict = Field(default_factory=dict)
 
 
@@ -152,6 +181,7 @@ class BAGRUEdController:
                     bundle_id: str = "synthetic_unsafe_rest_window",
                     total_updates: int = 8) -> DryRunResult:
         assert_round_authorization()
+        assert_alpha_front_bounds()
 
         # 1-3. evidence intake + extraction + clips
         bundle = self.adapter.adapt(
@@ -234,6 +264,10 @@ class BAGRUEdController:
 
         batch_plan: BatchPlan = BatchPlanner().plan(total_updates)
 
+        # 13. CC1 audit fix1 (§3): the final batch/launch decision hard gate
+        launch_gate = self._launch_gate(budget_plan, batch_plan, rejected,
+                                        board_out)
+
         # UED-nature assertions (section: NOT an action-guidance system)
         ued_nature = self._ued_nature_assertions(board_out, legal)
 
@@ -261,16 +295,98 @@ class BAGRUEdController:
             archive_refresh_plan=refresh,
             batch_plan=batch_plan.model_dump(),
             ued_nature_assertions=ued_nature,
+            launch_gate=launch_gate,
         )
         sup = self.supervision_guard.assert_clean(
             result.model_dump(), label="full_dry_run_result")
-        cert = self._certificate(board_out, budget_plan, sup, student_load)
+        cert = self._certificate(board_out, budget_plan, sup, student_load,
+                                 launch_gate)
         cert["certificate_hash"] = canonical_sha256(
             {k: v for k, v in cert.items() if k != "certificate_hash"})
         result.dry_run_certificate.update(cert)
         return result
 
     # ------------------------------------------------------------------
+    def _launch_gate(self, budget_plan, batch_plan, rejected_descriptors,
+                     board_out) -> dict:
+        """CC1 audit fix1 (§3): the final batch/launch decision HARD GATE.
+
+        BATCH_PLAN_READY and TRAINING_LAUNCH_AUTHORIZED both require ALL of
+        the following at once:
+          * budget_plan.status == OK (no unresolved shortfall — a plan that
+            merely "looks" 12 entries via duplication does NOT pass: the
+            BudgetPlan schema rejects duplicates and status governs),
+          * exactly UED_ACTIVE_SLOTS (12) selected UED slots,
+          * exactly the 4 fixed GLOBAL canonical anchors,
+          * total_envs == NUM_ENVS (16), rollout_length == ROLLOUT_LENGTH
+            (128), transitions_per_update == TRANSITIONS_PER_UPDATE (2048),
+          * every selected descriptor legal (no rejected descriptor),
+          * no unresolved guard violation on the board outputs.
+
+        Any failure -> BOTH flags false + structured launch_block_reasons.
+        Duplication to reach 12, slot/anchor/k/batch/transitions reduction
+        and silent continuation are all FORBIDDEN — the diagnostic dry-run
+        output is still produced, relabeled BLOCKED_DRY_RUN.
+        """
+        reasons: List[str] = []
+        shortfall = max(0, C.UED_ACTIVE_SLOTS - len(budget_plan.ued_slots))
+        if budget_plan.status != "OK":
+            reasons.append(f"budget_plan_status={budget_plan.status}")
+        if len(budget_plan.ued_slots) != C.UED_ACTIVE_SLOTS:
+            reasons.append(
+                f"selected_ued_slots={len(budget_plan.ued_slots)} "
+                f"!= {C.UED_ACTIVE_SLOTS}")
+        if len(set(budget_plan.ued_slots)) != len(budget_plan.ued_slots):
+            reasons.append("duplicate_ued_slots_forbidden")
+        if list(budget_plan.anchor_slots) != list(C.GLOBAL_CANONICAL_ANCHOR_IDS):
+            reasons.append(
+                f"canonical_anchor_slots={list(budget_plan.anchor_slots)} "
+                f"!= the {C.GLOBAL_CANONICAL_ANCHORS} fixed global anchors")
+        if batch_plan.num_envs != C.NUM_ENVS:
+            reasons.append(f"total_envs={batch_plan.num_envs} "
+                           f"!= {C.NUM_ENVS}")
+        if batch_plan.rollout_length != C.ROLLOUT_LENGTH:
+            reasons.append(f"rollout_length={batch_plan.rollout_length} "
+                           f"!= {C.ROLLOUT_LENGTH}")
+        if batch_plan.transitions_per_update != C.TRANSITIONS_PER_UPDATE:
+            reasons.append(
+                f"transitions_per_update="
+                f"{batch_plan.transitions_per_update} "
+                f"!= {C.TRANSITIONS_PER_UPDATE}")
+        if rejected_descriptors:
+            reasons.append(
+                f"illegal_descriptors={len(rejected_descriptors)} "
+                f"(all selected descriptors must be legal)")
+        if budget_plan.shortfall_note:
+            reasons.append(
+                f"unresolved_shortfall: {budget_plan.shortfall_note}")
+        if not (board_out.supervision_guard_status == "PASS"
+                and board_out.leakage_guard_status == "PASS"):
+            reasons.append(
+                f"unresolved_guard_violation: supervision="
+                f"{board_out.supervision_guard_status} leakage="
+                f"{board_out.leakage_guard_status}")
+        ready = not reasons
+        return dict(
+            batch_plan_ready=ready,
+            training_launch_authorized=ready,
+            launch_block_reasons=reasons,
+            shortfall=shortfall,
+            checks=dict(
+                budget_plan_status=budget_plan.status,
+                selected_ued_slots=len(budget_plan.ued_slots),
+                canonical_anchor_slots=len(budget_plan.anchor_slots),
+                total_envs=batch_plan.num_envs,
+                rollout_length=batch_plan.rollout_length,
+                transitions_per_update=batch_plan.transitions_per_update,
+                rejected_descriptors=len(rejected_descriptors),
+                board_supervision_guard_status=board_out.supervision_guard_status,
+                board_leakage_guard_status=board_out.leakage_guard_status),
+            note="readiness gate only; actual training additionally requires "
+                 f"TRAINING_AUTHORIZED=true (currently "
+                 f"{C.TRAINING_AUTHORIZED}); diagnostic dry-run output stays "
+                 "available and is labeled BLOCKED_DRY_RUN when not ready")
+
     def _ued_nature_assertions(self, board_out, legal) -> dict:
         tutor = self.board.parsed(board_out, C.ROLE_INTERVENTION_TUTOR)
         analyst = self.board.parsed(board_out, C.ROLE_CAUSAL_FAILURE_ANALYST)
@@ -296,11 +412,20 @@ class BAGRUEdController:
         )
 
     def _certificate(self, board_out, budget_plan, supervision_report,
-                     student_load) -> dict:
+                     student_load, launch_gate) -> dict:
+        # CC1 audit fix1 (§3): a gate that is not fully ready relabels the
+        # whole run as a BLOCKED diagnostic dry-run (training_authorized is
+        # false regardless — the director flag is never set in this package).
+        run_class = ("ENGINEERING_DRY_RUN" if launch_gate["batch_plan_ready"]
+                     else "BLOCKED_DRY_RUN")
         return dict(
             record_version="bagr_ued.dry_run_certificate.v1",
             bagr_ued_version=C.BA_BAGR_UED_VERSION,
-            run_class="ENGINEERING_DRY_RUN",
+            run_class=run_class,
+            batch_plan_ready=launch_gate["batch_plan_ready"],
+            training_launch_authorized=launch_gate["training_launch_authorized"],
+            launch_block_reasons=launch_gate["launch_block_reasons"],
+            launch_gate_shortfall=launch_gate["shortfall"],
             training_authorized=C.TRAINING_AUTHORIZED,
             performance_claim_authorized=False,
             formal_evaluation_authorized=C.FORMAL_EVALUATION_AUTHORIZED,

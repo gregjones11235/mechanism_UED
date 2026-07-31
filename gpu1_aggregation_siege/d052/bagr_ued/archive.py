@@ -5,7 +5,8 @@ ever calls ``refresh(..., dry_run=True)`` — it returns the add/update plan
 WITHOUT mutating the archive, so the 8192-transition review cadence can be
 exercised end-to-end without pretending a real curriculum archive changed.
 ``commit`` exists for the future real path and refuses to run while
-TRAINING_AUTHORIZED is false.
+TRAINING_AUTHORIZED is false; it additionally refuses while the controller
+launch gate is not fully ready (CC1 audit fix1, task §3/§4).
 """
 from __future__ import annotations
 
@@ -56,7 +57,16 @@ class ProposalArchive:
         return plan
 
     def commit(self, descriptors: List[TaskParamsDescriptor],
-               score_by_descriptor_id: Dict[str, float]) -> None:
+               score_by_descriptor_id: Dict[str, float],
+               *, launch_gate: dict | None = None) -> None:
+        # CC1 audit fix1 (§3/§4): an active-archive commit while the launch
+        # gate is not fully ready FAILS CLOSED before anything else is
+        # considered.
+        if launch_gate is not None and not launch_gate.get("batch_plan_ready"):
+            raise AssertionError(
+                "ACTIVE_ARCHIVE_COMMIT_BLOCKED: launch gate not ready: "
+                f"launch_block_reasons="
+                f"{launch_gate.get('launch_block_reasons')}")
         if not C.TRAINING_AUTHORIZED:
             raise AssertionError(
                 "ARCHIVE_COMMIT_UNAUTHORIZED: TRAINING_AUTHORIZED=false this "

@@ -44,6 +44,15 @@ GLOBAL_SIGNAL_REQUIRED = True
 GLOBAL_UED_SLOTS_MINIMUM = 1
 
 # ---------------------------------------------------------------------------
+# Soft Copeland alpha_front structural bounds (CC1 audit fix1, task §8).
+# alpha_front MUST be structurally < 1 so the global-regret component
+# (1 - alpha_front) is ALWAYS strictly positive — a global-scope method can
+# never degenerate into a front-only scorer.
+# ---------------------------------------------------------------------------
+ALPHA_FRONT_MIN = 0.0
+ALPHA_FRONT_MAX = 0.75
+
+# ---------------------------------------------------------------------------
 # 2048-transition dry-run plan (task section 14).
 # ---------------------------------------------------------------------------
 NUM_ENVS = 16
@@ -89,6 +98,36 @@ FORBIDDEN_SUPERVISION_KEYS = frozenset({
     "reward_delta",
     "reward_shaping",
 })
+
+#: Guard A alias hardening (CC1 audit fix1, task §6): renames / smuggled
+#: spellings of the same forbidden concepts. Matched AFTER normalization
+#: (casefold + separator stripping) on EVERY key of every nested mapping.
+FORBIDDEN_SUPERVISION_KEY_ALIASES = frozenset({
+    # action-advice key aliases
+    "suggested_action",
+    "suggested_actions",
+    "recommended_action",
+    "recommended_actions",
+    "recommended_move",
+    "recommended_policy",
+    "route",
+    "navigation_route",
+    "path_to_follow",
+    "expert_plan",
+    # formal-state / bank payload aliases (also mirrored into Guard B)
+    "bank_blob",
+    "formal_state_blob",
+    "formal_state_payload",
+    "state_payload",
+    # reward-shaping aliases (reward_delta / reward_shaping covered above)
+})
+
+#: Guard A serialized-string parsing limits (CC1 audit fix1, task §5): a
+#: string that looks like JSON is parsed and RE-SCANNED under these bounds;
+#: exceeding any bound is a fail-closed finding (never a lenient skip).
+MAX_SERIALIZED_PARSE_DEPTH = 12
+MAX_SERIALIZED_STRING_LENGTH = 65536
+MAX_SERIALIZED_CONTAINER_ITEMS = 4096
 
 # ---------------------------------------------------------------------------
 # Review board identity (mock backend; prompt versions are pinned, not frozen

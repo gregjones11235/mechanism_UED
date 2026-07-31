@@ -1,0 +1,149 @@
+{
+  "case_a_12_plus_4": {
+    "batch_plan_ready": true,
+    "checks": {
+      "board_leakage_guard_status": "PASS",
+      "board_supervision_guard_status": "PASS",
+      "budget_plan_status": "OK",
+      "canonical_anchor_slots": 4,
+      "rejected_descriptors": 0,
+      "rollout_length": 128,
+      "selected_ued_slots": 12,
+      "total_envs": 16,
+      "transitions_per_update": 2048
+    },
+    "launch_block_reasons": [],
+    "note": "ready, but TRAINING_AUTHORIZED=False still — no real training",
+    "shortfall": 0,
+    "training_launch_authorized": true
+  },
+  "case_b_11_plus_4": {
+    "batch_plan_ready": false,
+    "checks": {
+      "board_leakage_guard_status": "PASS",
+      "board_supervision_guard_status": "PASS",
+      "budget_plan_status": "INSUFFICIENT",
+      "canonical_anchor_slots": 4,
+      "rejected_descriptors": 0,
+      "rollout_length": 128,
+      "selected_ued_slots": 11,
+      "total_envs": 16,
+      "transitions_per_update": 2048
+    },
+    "launch_block_reasons": [
+      "budget_plan_status=INSUFFICIENT",
+      "selected_ued_slots=11 != 12",
+      "unresolved_shortfall: only 11 eligible descriptors for 12 UED slots; NO backfill / NO k-reduction / NO re-LLM"
+    ],
+    "note": "readiness gate only; actual training additionally requires TRAINING_AUTHORIZED=true (currently False); diagnostic dry-run output stays available and is labeled BLOCKED_DRY_RUN when not ready",
+    "shortfall": 1,
+    "training_launch_authorized": false
+  },
+  "case_c_3_anchors": "BudgetPlan schema refuses (ANCHOR_COUNT); gate second-layer check also refuses canonical_anchor_slots mismatch",
+  "case_d_illegal_descriptor": {
+    "batch_plan_ready": false,
+    "checks": {
+      "board_leakage_guard_status": "PASS",
+      "board_supervision_guard_status": "PASS",
+      "budget_plan_status": "OK",
+      "canonical_anchor_slots": 4,
+      "rejected_descriptors": 1,
+      "rollout_length": 128,
+      "selected_ued_slots": 12,
+      "total_envs": 16,
+      "transitions_per_update": 2048
+    },
+    "launch_block_reasons": [
+      "illegal_descriptors=1 (all selected descriptors must be legal)"
+    ],
+    "note": "readiness gate only; actual training additionally requires TRAINING_AUTHORIZED=true (currently False); diagnostic dry-run output stays available and is labeled BLOCKED_DRY_RUN when not ready",
+    "shortfall": 0,
+    "training_launch_authorized": false
+  },
+  "case_e_status_governs": {
+    "batch_plan_ready": false,
+    "checks": {
+      "board_leakage_guard_status": "PASS",
+      "board_supervision_guard_status": "PASS",
+      "budget_plan_status": "INSUFFICIENT",
+      "canonical_anchor_slots": 4,
+      "rejected_descriptors": 0,
+      "rollout_length": 128,
+      "selected_ued_slots": 12,
+      "total_envs": 16,
+      "transitions_per_update": 2048
+    },
+    "launch_block_reasons": [
+      "budget_plan_status=INSUFFICIENT",
+      "unresolved_shortfall: apparent 12 slots but status shortfall"
+    ],
+    "note": "readiness gate only; actual training additionally requires TRAINING_AUTHORIZED=true (currently False); diagnostic dry-run output stays available and is labeled BLOCKED_DRY_RUN when not ready",
+    "shortfall": 0,
+    "training_launch_authorized": false
+  },
+  "case_f_commit_blocked": "ACTIVE_ARCHIVE_COMMIT_BLOCKED: launch gate not ready: launch_block_reasons=['budget_plan_status=INSUFFICIENT', 'selected_ued_slots=11 != 12', 'unresolved_shortfall: only 11 eligible descriptors for 12 UED slots; NO backfill / NO k-reduction / NO re-LLM']",
+  "case_guard_violation": {
+    "batch_plan_ready": false,
+    "checks": {
+      "board_leakage_guard_status": "FAIL",
+      "board_supervision_guard_status": "FAIL",
+      "budget_plan_status": "OK",
+      "canonical_anchor_slots": 4,
+      "rejected_descriptors": 0,
+      "rollout_length": 128,
+      "selected_ued_slots": 12,
+      "total_envs": 16,
+      "transitions_per_update": 2048
+    },
+    "launch_block_reasons": [
+      "unresolved_guard_violation: supervision=FAIL leakage=FAIL"
+    ],
+    "note": "readiness gate only; actual training additionally requires TRAINING_AUTHORIZED=true (currently False); diagnostic dry-run output stays available and is labeled BLOCKED_DRY_RUN when not ready",
+    "shortfall": 0,
+    "training_launch_authorized": false
+  },
+  "forbidden": [
+    "duplicate candidates to reach 12",
+    "reduce UED slots / anchors / k / batch / transitions",
+    "silently continue after shortfall"
+  ],
+  "full_dry_run_certificate_excerpt": {
+    "batch_plan_ready": true,
+    "launch_block_reasons": [],
+    "run_class": "ENGINEERING_DRY_RUN",
+    "training_authorized": false,
+    "training_launch_authorized": true,
+    "training_started": false
+  },
+  "full_dry_run_launch_gate": {
+    "batch_plan_ready": true,
+    "checks": {
+      "board_leakage_guard_status": "PASS",
+      "board_supervision_guard_status": "PASS",
+      "budget_plan_status": "OK",
+      "canonical_anchor_slots": 4,
+      "rejected_descriptors": 0,
+      "rollout_length": 128,
+      "selected_ued_slots": 12,
+      "total_envs": 16,
+      "transitions_per_update": 2048
+    },
+    "launch_block_reasons": [],
+    "note": "readiness gate only; actual training additionally requires TRAINING_AUTHORIZED=true (currently False); diagnostic dry-run output stays available and is labeled BLOCKED_DRY_RUN when not ready",
+    "shortfall": 0,
+    "training_launch_authorized": true
+  },
+  "regression_tests": "d052/tests/test_bagr_ued_launch_gate.py (cases A-F + e2e, 8 tests) — all PASS",
+  "required_conditions": [
+    "budget_plan.status == OK",
+    "selected_ued_slots == 12",
+    "canonical_anchor_slots == 4 (fixed global anchors)",
+    "total_envs == 16",
+    "rollout_length == 128",
+    "transitions_per_update == 2048",
+    "all selected descriptors legal",
+    "no unresolved shortfall",
+    "no unresolved guard violation"
+  ],
+  "schema": "bagr_ued.fix1.launch_gate.v1"
+}
