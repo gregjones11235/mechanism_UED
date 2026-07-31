@@ -94,8 +94,8 @@ FROZEN_V2_ENVIRONMENT_LOCK_SHA256 = "453f1680dafe0f168c25c262f51de59ddc59559676a
 # target of the metric fix) — its SHA is the frozen V1 value.
 FROZEN_V2_ABI_DOC_SHA256 = "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a"
 FROZEN_V2_ENGINE_LF_SHA256 = {
-    "tier3_evaluator_v2.py": "7de07f1e8cec86ff11adb563a217b8695482ede92eaf873f9451744cb7196629",
-    "tier3_event_predicates_v2.py": "93e7b3d43450db7a722de863e3b7adbfe34eb859d745d32ea2ecc68ba292e3c1",
+    "tier3_evaluator_v2.py": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+    "tier3_event_predicates_v2.py": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5",
 }
 V2_ENGINE_MODULE_COUNT = len(proj.FROZEN_ENGINE_LF_SHA256) + len(FROZEN_V2_ENGINE_LF_SHA256)
 
@@ -597,8 +597,11 @@ def main(argv=None):
                 # The ONLY remaining predicate FailClosed verdicts are genuine
                 # corruption-class violations (coordinate out-of-bounds,
                 # non-finite / undecodable coordinates, player position
-                # contradicting the CURRENT map state, frozen-bank baseline
-                # unreachable). Recorded as structured minimum blocking
+                # contradicting the CURRENT map state). NOTE: an unreachable
+                # BASELINE is LEGAL under V2 (dig-required scaffold — the
+                # frozen FRONT bank contains such states; conservative
+                # progress freeze, never an abort). Recorded as structured
+                # minimum blocking
                 # evidence — never relaxed, never faked; every other exception
                 # still crashes the driver fail-closed. SCOPE: ONLY the
                 # predicate FailClosed (re-exported unchanged from the frozen
@@ -617,9 +620,12 @@ def main(argv=None):
                         list(records_by_scenario.keys()),
                     "verdict": "ENGINE_PREDICATE_REJECTED_ROLLOUT_V2",
                     "v2_failclosed_class": "CORRUPTION_CLASS_ONLY (out-of-bounds / "
-                        "non-finite / player-vs-current-map contradiction / "
-                        "baseline-unreachable bank corruption) — legal topology "
-                        "mutation is in-domain under V2_DYNAMIC_TOPOLOGY",
+                        "non-finite / undecodable / player-vs-current-map "
+                        "contradiction) — legal topology mutation (mining), "
+                        "INCLUDING dig-required scaffolds whose initial graph "
+                        "has no start -> exit path (conservative progress "
+                        "freeze, no abort), is in-domain under "
+                        "V2_DYNAMIC_TOPOLOGY",
                     "authority": "frozen engine predicate re-exported by the V2 "
                                  "module (predicate_code_sha256-bound V1 bytes; "
                                  "not relaxable by CC4)",

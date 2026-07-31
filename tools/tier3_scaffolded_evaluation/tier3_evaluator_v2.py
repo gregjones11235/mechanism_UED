@@ -20,7 +20,10 @@ for the predicate-level contract):
      legally-mined tiles are no longer SOLID_BLOCK, hence naturally walkable).
   2. Legal-position domain = the CURRENT grid (never abort on initial-graph
      membership); genuine corruption (out-of-bounds / non-finite / player-vs-
-     current-map contradiction / baseline-unreachable) still fails closed.
+     current-map contradiction) still fails closed. An unreachable BASELINE
+     is legal (a dig-required scaffold — the frozen FRONT bank contains such
+     states, e.g. state 7 seed 10007; V1 aborted there with NEG18), handled
+     by a conservative dense-progress freeze, never an abort.
   3. Target temporarily unreachable in the CURRENT dynamic graph: the episode
      CONTINUES, primary stays false, dense progress freezes (does not
      increase). A legal floor2 -> floor3 transition still gives primary
@@ -205,13 +208,18 @@ def rollout_episode(entry, start_state, scenario, policy_fn, episode_id, rng_see
             np.asarray(start_state.map)[audit.FRONT_FLOOR], ladder_tiles)
         exit_pos = view["down_ladders"].get(audit.FRONT_FLOOR)
         if exit_pos is not None:
+            # d_start_baseline MAY be None — legally: the frozen FRONT bank
+            # contains dig-required scaffolds whose initial walkable graph has
+            # no start -> exit path (empirically front_l2 bank state 7, seed
+            # 10007: valid_front_scaffold_start=True, bank content SHA
+            # 21aeb7dc… verified at load). V1 raised NEG18 and aborted the
+            # episode here — part of the §一 root cause. V2 does NOT abort:
+            # the None baseline is passed through and
+            # pred2.normalized_corridor_progress_dynamic conservatively
+            # freezes dense progress (does not increase) while the episode
+            # continues; the primary transition predicate is unaffected.
             d_start_baseline = pred2.bfs_distance(walkable_initial, start_pos,
                                                   exit_pos)
-            if d_start_baseline is None:
-                raise pred2.FailClosed(
-                    "V2_BASELINE_UNREACHABLE: frozen FRONT bank initial graph "
-                    "has no start -> exit path — bank payload corruption class "
-                    "(NEG18 corruption detector; legal play never produces this)")
 
     step_fn = _jit_step(entry)                       # 总控 §二: rollout execution path
     actions = []

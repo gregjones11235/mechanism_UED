@@ -26,8 +26,13 @@ EXACTLY THREE REPLACEMENTS (§二/§三/§四 — no other scientific change):
      fail-closed: coordinate out-of-bounds, non-finite/undecodable coordinates,
      player position contradicting the CURRENT map state (standing on a tile
      the current map says is solid — impossible via legal movement since mining
-     turns the tile walkable), missing baseline path (frozen-bank payload
-     corruption class; NEG18 retained ONLY as a corruption detector).
+     turns the tile walkable). An UNREACHABLE BASELINE is NOT corruption: the
+     frozen FRONT bank empirically contains valid start states whose initial
+     walkable graph has no start -> exit path (front_l2 bank state 7, seed
+     10007; bank content SHA 21aeb7dc… verified at load) — a dig-required
+     scaffold where the exit is reachable only through legally mined tiles.
+     V1 aborted there with NEG18 (part of the §一 root cause); V2 continues
+     the episode with dense progress conservatively frozen.
   3. UNREACHABLE HANDLING: if the target is temporarily unreachable in the
      CURRENT dynamic graph, DO NOT abort the episode: return the previous
      progress unchanged (conservative freeze — dense progress does not
@@ -98,11 +103,18 @@ def normalized_corridor_progress_dynamic(state: dict, walkable_current,
     result fields are not otherwise touched).
 
     Policies (task §三):
-      - baseline_unreachable_policy: d_start_baseline is None => the FROZEN
-        front bank's initial graph has no start -> exit path. Legal play can
-        never produce this (the frozen bank guarantees it); it is the
-        bank-payload-corruption class -> FailClosed (NEG18 retained ONLY as a
-        corruption detector, never as a legal-play abort).
+      - baseline_unreachable_policy: d_start_baseline is None => the frozen
+        FRONT bank state is a DIG-REQUIRED scaffold: its initial walkable
+        graph has no start -> exit path (empirically front_l2 bank state 7,
+        seed 10007, valid_front_scaffold_start=True, bank content SHA
+        21aeb7dc… verified at load). This is LEGAL — the exit is reachable
+        only through tiles that legal mining turns walkable. V1 raised NEG18
+        here and aborted the episode (part of the §一 root cause). V2 does
+        NOT abort: the position is still validated against the current grid
+        below, then dense progress is returned UNCHANGED (conservative
+        freeze, the same treatment as current-graph unreachability; dense
+        progress does not increase, primary success stays false unless the
+        unchanged floor2 -> floor3 transition predicate fires).
       - legal_position_policy: the position domain is the CURRENT grid. A
         player on a legally-mined current tile (outside the initial graph but
         confirmed legal by the current env state) is VALID — never abort on
@@ -117,11 +129,6 @@ def normalized_corridor_progress_dynamic(state: dict, walkable_current,
         NOT aborted; primary success stays false on the evaluator side).
       - NEG17 guard: progress must land in [0, 1].
     """
-    if d_start_baseline is None:
-        raise FailClosed("V2_BASELINE_UNREACHABLE: frozen FRONT bank initial "
-                         "graph has no start -> exit path — bank payload "
-                         "corruption class (NEG18 corruption detector; legal "
-                         "play never produces this)")
     prev = float(previous_progress)
     if not (0.0 <= prev <= 1.0):
         raise FailClosed("V2 previous_progress %r outside [0,1]" % (previous_progress,))
@@ -143,6 +150,14 @@ def normalized_corridor_progress_dynamic(state: dict, walkable_current,
     if not walkable_current[r][c]:
         raise FailClosed("invalid_position_policy: player position "
                          "contradicts current map state (non-walkable)")
+    if d_start_baseline is None:
+        # Legal dig-required scaffold (see the baseline_unreachable_policy
+        # docstring): the position is valid on the current grid, but the
+        # normalization denominator d(start, exit) is undefined on the
+        # initial graph. Conservative freeze — dense progress does not
+        # increase; the episode is NOT aborted (V1's NEG18 abort here was
+        # the §一 root-cause family).
+        return prev
     d_t = bfs_distance(walkable_current, (r, c), exit_pos)
     if d_t is None:
         # Target temporarily unreachable in the CURRENT dynamic graph: do NOT
@@ -313,12 +328,18 @@ def self_test() -> int:
         check("E_undecodable_raises", False)
     except FailClosed:
         check("E_undecodable_raises", True)
-    try:  # baseline unreachable => bank payload corruption class
-        normalized_corridor_progress_dynamic({"player_position": start},
+    # baseline unreachable = LEGAL dig-required scaffold (frozen FRONT bank
+    # state 7, seed 10007): conservative freeze, NOT corruption, NO abort.
+    check("E_baseline_none_freezes_exact",
+          normalized_corridor_progress_dynamic({"player_position": start},
+                                               walk, start, exit_pos,
+                                               None, 0.4) == 0.4)
+    try:  # ... but position validity is STILL fail-closed under baseline None
+        normalized_corridor_progress_dynamic({"player_position": (9, 9)},
                                              walk, start, exit_pos, None, 0.0)
-        check("E_baseline_none_raises", False)
+        check("E_baseline_none_position_still_checked", False)
     except FailClosed:
-        check("E_baseline_none_raises", True)
+        check("E_baseline_none_position_still_checked", True)
     try:  # previous_progress outside [0,1]
         normalized_corridor_progress_dynamic({"player_position": start},
                                              walk, start, exit_pos, d_base, 1.5)
@@ -340,7 +361,7 @@ def self_test() -> int:
           and valid_front_scaffold_start is pred_v1.valid_front_scaffold_start
           and front_floor_transition_reached is pred_v1.front_floor_transition_reached)
 
-    n_checks = 30
+    n_checks = 31
     if problems:
         print("TIER3_PREDICATES_V2_SELF_TEST_FAIL")
         for p in problems:

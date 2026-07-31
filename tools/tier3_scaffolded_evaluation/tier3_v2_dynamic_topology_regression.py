@@ -5,8 +5,14 @@ Six named tests; smoke results are NOT performance conclusions:
 
   A. STATIC_TOPOLOGY_PARITY   — a fixed, no-map-change trajectory yields
      IDENTICAL V1 vs V2 results (primary label, dense progress, terminal
-     flags, episode canonical payload). Synthetic (--self-test) + real
-     NOOP rollouts over all 8 FRONT bank states (--server-suite).
+     flags, episode canonical payload) on every initial-reachable state.
+     Synthetic (--self-test) + real NOOP rollouts over all 8 FRONT bank
+     states (--server-suite); on dig-required states (the frozen bank
+     empirically contains such: state 7, seed 10007 — its initial graph has
+     no start -> exit path) the INTENDED divergence is witnessed instead:
+     V1 aborts with NEG18 (the §一 root-cause family, reproduced) while V2
+     completes with dense progress conservatively frozen and no false
+     primary.
   B. LEGAL_DIG_NO_ABORT       — a legal dig trajectory that moves the player
      onto tiles OUTSIDE the initial walkable graph raises no
      invalid_position under V2. Synthetic + real (CONTROL greedy policy).
@@ -181,8 +187,15 @@ def pure_tests():
     check("E", "nonfinite_inf", raises((float("inf"), 2), walk))
     check("E", "undecodable_none", raises((None, 2), walk))
     check("E", "contradicts_current_map_solid", raises((0, 1), walk))
-    check("E", "baseline_unreachable_bank_corruption", raises((2, 0), walk, base=None))
     check("E", "previous_out_of_range", raises((2, 0), walk, prev=1.5))
+    # Baseline unreachable is LEGAL (dig-required scaffold — frozen FRONT bank
+    # state 7, seed 10007), NOT corruption: conservative freeze, no abort...
+    check("E", "baseline_none_legal_conservative_freeze",
+          pred2.normalized_corridor_progress_dynamic(
+              {"player_position": (2, 0)}, walk, start, exit_pos, None, 0.3) == 0.3)
+    # ... while position validity stays fail-closed even under baseline None.
+    check("E", "baseline_none_position_still_fail_closed",
+          raises((9, 9), walk, base=None))
 
     passed = not problems
     return passed, problems, details
@@ -251,37 +264,96 @@ def server_suite(args):
     npol = NoopPolicy()
     a_rows = []
     a_pass = True
+    reachable_count = dig_required_count = 0
     for i in range(args.a_states):
         st = jax.tree.map(jnp.asarray, front["states"][i])
         seed = int(mat.FROZEN_SEED_BASE + i * mat.FROZEN_SEED_STRIDE)
         eid = ev2.state_entry_ids_for(ev2.FRONT, [seed])[0]
-        r1 = ev1.rollout_episode(entry, st, ev1.FRONT, npol, eid, seed,
-                                 max_steps=args.max_steps)
+        # Per-state initial-graph classification (V1 semantics).
+        view_i = builder.normalize_envstate(st)
+        view_i["floor2_up_ladder_removed"] = True
+        grid_i = ev1._front_walkable_grid(st, view_i)
+        pi = np.asarray(st.player_position)
+        start_i = (int(pi[0]), int(pi[1]))
+        exit_i = view_i["down_ladders"].get(audit.FRONT_FLOOR)
+        d_start_i = (pred1.bfs_distance(grid_i, start_i, exit_i)
+                     if exit_i is not None else None)
+        reachable = d_start_i is not None
+        # V1 rollout (may abort by construction on dig-required states).
+        r1, v1_aborted, v1_msg = None, False, None
+        try:
+            r1 = ev1.rollout_episode(entry, st, ev1.FRONT, npol, eid, seed,
+                                     max_steps=args.max_steps)
+        except pred1.FailClosed as exc:
+            v1_aborted, v1_msg = True, str(exc)
+        # V2 rollout (must always complete — NOOP never corrupts state).
         r2 = ev2.rollout_episode(entry, st, ev2.FRONT, npol, eid, seed,
                                  max_steps=args.max_steps)
-        r1["episode_record_sha256"] = proj.sha256_bytes(proj.canonical_json_bytes(r1))
         r2["episode_record_sha256"] = proj.sha256_bytes(proj.canonical_json_bytes(r2))
-        same = r1["episode_record_sha256"] == r2["episode_record_sha256"]
-        a_pass = a_pass and same
-        a_rows.append({
-            "bank_index": i, "seed": seed, "entry_id": eid,
-            "v1_episode_record_sha256": r1["episode_record_sha256"],
-            "v2_episode_record_sha256": r2["episode_record_sha256"],
-            "identical": same,
-            "v1_v2": {k: {"v1": r1[k], "v2": r2[k],
-                          "same": r1[k] == r2[k]}
-                      for k in ("front_floor_transition_reached",
-                                "graph_distance_progress", "corridor_exit_reached",
-                                "defeat_kobold", "player_died", "timed_out",
-                                "timesteps", "valid_start", "action_sequence")},
-        })
+        if reachable:
+            reachable_count += 1
+            r1["episode_record_sha256"] = proj.sha256_bytes(
+                proj.canonical_json_bytes(r1))
+            same = r1["episode_record_sha256"] == r2["episode_record_sha256"]
+            a_pass = a_pass and same and not v1_aborted
+            a_rows.append({
+                "bank_index": i, "seed": seed, "entry_id": eid,
+                "classification": "initial_reachable", "d_start": d_start_i,
+                "v1_episode_record_sha256": r1["episode_record_sha256"],
+                "v2_episode_record_sha256": r2["episode_record_sha256"],
+                "identical": same,
+                "v1_v2": {k: {"v1": r1[k], "v2": r2[k],
+                              "same": r1[k] == r2[k]}
+                          for k in ("front_floor_transition_reached",
+                                    "graph_distance_progress",
+                                    "corridor_exit_reached", "defeat_kobold",
+                                    "player_died", "timed_out", "timesteps",
+                                    "valid_start", "action_sequence")},
+            })
+        else:
+            # DIG-REQUIRED scaffold: no initial start -> exit path (legally —
+            # the frozen bank contains such states, e.g. state 7 seed 10007).
+            # The intended V2 divergence from V1: V1 aborts (NEG18 — the §一
+            # root-cause family, reproduced here); V2 completes with dense
+            # progress conservatively frozen at 0.0 (NOOP never mines, so the
+            # current graph stays equal to the initial graph and the target
+            # stays unreachable) and no false primary.
+            dig_required_count += 1
+            ok = (v1_aborted and "NEG18" in (v1_msg or "")
+                  and r2["graph_distance_progress"] == 0.0
+                  and r2["front_floor_transition_reached"] is False
+                  and r2["timesteps"] > 0)
+            a_pass = a_pass and ok
+            a_rows.append({
+                "bank_index": i, "seed": seed, "entry_id": eid,
+                "classification": "dig_required_initial_unreachable",
+                "d_start": None,
+                "v1_aborts_NEG18_reproduced": v1_aborted,
+                "v1_engine_message": v1_msg,
+                "v2_completes": True,
+                "v2_graph_distance_progress_frozen":
+                    r2["graph_distance_progress"],
+                "v2_front_floor_transition_reached":
+                    r2["front_floor_transition_reached"],
+                "v2_timesteps": r2["timesteps"],
+                "v2_player_died": r2["player_died"],
+                "v2_episode_record_sha256": r2["episode_record_sha256"],
+                "intended_divergence_ok": ok,
+            })
     results["STATIC_TOPOLOGY_PARITY"] = {
         "verdict": "PASS" if a_pass else "FAIL",
         "kind": "real_noop_rollout_v1_vs_v2",
         "states": len(a_rows), "max_steps": args.max_steps,
-        "criterion": "identical primary label + dense progress + terminal "
-                     "flags + canonical episode payload (episode_record_sha256) "
-                     "on a fixed no-map-change trajectory",
+        "initial_reachable_states": reachable_count,
+        "dig_required_states": dig_required_count,
+        "criterion": "on initial-reachable states: identical primary label + "
+                     "dense progress + terminal flags + canonical episode "
+                     "payload (episode_record_sha256) on a fixed no-map-change "
+                     "trajectory; on dig-required states (initial graph has no "
+                     "start -> exit path — legally, e.g. state 7 seed 10007): "
+                     "V1 NEG18 abort reproduced AND V2 completes with dense "
+                     "progress frozen at 0.0 and no false primary (intended "
+                     "V2_DYNAMIC_TOPOLOGY divergence, not a parity violation)",
         "rows": a_rows,
     }
 

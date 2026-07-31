@@ -192,11 +192,17 @@ dense metric 在**初始**地图可行图(INITIAL_MAP_TOPOLOGY)上算图距离,�
 2. **合法位置域**:当前图成员资格。站到合法挖开的当前 tile / 初始图之外但当前状态确认
    合法的 tile = 有效,绝不因初始图成员资格中止。继续 fail-closed:坐标越界;非有限/
    不可解码坐标(状态腐败);玩家状态与**当前**地图矛盾(当前图仍为 solid——合法移动
-   不可能造成,因为挖开即变可走);基线路径缺失(冻结银行 payload 腐败类;NEG18 仅保留
-   为腐败探测器)。
-3. **不可达处置**:目标在当前动态图中暂不可达 → **不中止** episode、primary 保持
-   false、dense progress **保守冻结不增加**(返回上一步 progress 原值)、episode 继续。
-   合法 floor2→floor3 跃迁 → primary=true(V1 primary predicate 原对象复用,未改)。
+   不可能造成,因为挖开即变可走)。
+3. **不可达处置**(两类,均不中止):目标在当前动态图中暂不可达 → primary 保持 false、
+   dense progress **保守冻结不增加**(返回上一步 progress 原值)、episode 继续;
+   **基线** d(start, exit) 在初始图上不存在 → 同处置(分母未定义,progress 冻结于
+   前值)。合法 floor2→floor3 跃迁 → primary=true(V1 primary predicate 原对象复用,
+   未改)。
+   **实证订正(2026-07-31)**:冻结 FRONT 银行(内容 SHA `21aeb7dc…` 装载时复验)实测
+   含**合法**的挖掘必需 scaffold——state 7 / seed 10007 初始图 start→exit 不可达
+   (d_start=None)而 `valid_front_scaffold_start=True`。故基线不可达是**合法边界**而非
+   银行 payload 腐败;V1 在此以 NEG18 中止即 §一 根因同族。V2 第一版曾误将其归为腐败类
+   FailClosed,经 8 状态实景探针实测后订正为保守冻结(位置域 fail-closed 不变)。
 
 **未动(结构保证,非转写)**:progress 公式 `clip(1 - d_t/max(d_start,1), 0, 1)`、
 NEG17、bfs_distance、全部有效性/事件/primary predicate——`tier3_event_predicates_v2.py`
@@ -206,22 +212,26 @@ BACK / FULL 语义、episode 记录字段、running-max 聚合、调度、冻结
 4096 / 8-8-64)、全部候选 checkpoint、冻结状态银行、FULL 种子、BACK predicate 一律未动。
 
 **新文件(仅新增;V1 字节零改动)**:
-- `tier3_event_predicates_v2.py` — V2 dense predicate + 自检(30 项);
+- `tier3_event_predicates_v2.py` — V2 dense predicate + 自检(31 项);
 - `tier3_evaluator_v2.py` — V2 rollout(FRONT dense 块三处替换)+ V1 全表面 re-export;
 - `tier3_projection_binding_smoke_v2.py` — V2 binding 驱动(common_v2/ 钉定 + V1 冻结
-  保全复验 57/57 + 26 引擎模块 LF-SHA:24 V1 不变 + 2 新 V2;证据写
-  `cc4/<ID>/projection_binding_v2dt/`,文件 `*_v2dt.json` / `SHA256SUMS_V2DT` /
-  `READY_V2DT.json`);
+  保全复验 57/57 + 装配清单 4 引擎模块 LF-SHA 钉定:`tier3_evaluator.py` /
+  `tier3_candidate_runtime.py` 两枚 V1 冻结钉不变 + `tier3_evaluator_v2.py` /
+  `tier3_event_predicates_v2.py` 两枚新 V2 钉;V2 薄壳另行钉 4 枚引擎 LF-SHA 含
+  `tier3_event_predicates.py`;证据写 `cc4/<ID>/projection_binding_v2dt/`,文件
+  `*_v2dt.json` / `SHA256SUMS_V2DT` / `READY_V2DT.json`);
 - `tier3_v2_dynamic_topology_regression.py` — 回归 A–F(纯逻辑 `--self-test` +
   服务器实景 `--server-suite`)。
 
 **回归测试(§五,不得当性能结论)**:A STATIC_TOPOLOGY_PARITY(固定不变图轨迹 V1≡V2:
-primary/dense/terminal/episode 规范化载荷全同;合成 + 8 FRONT bank NOOP 实景);B
-LEGAL_DIG_NO_ABORT(合法挖到初始图外不中止;合成 + CONTROL 实景);C DYNAMIC_DISTANCE_UPDATE
-(挖开后 BFS 用当前图;合成 + 实景见证);D UNREACHABLE_CONTINUES(不可达不中止/不假
-primary/progress 冻结;合成权威);E TRUE_INVALID_FAIL_CLOSED(越界/非有限/矛盾/基线
-不可达仍 fail-closed;合成权威);F CONTROL_REPRODUCTION(原 CONTROL checkpoint + 原阻断
-起点 front_l2-bank0/seed=10000:V1 仍复现中止,V2 完成)。
+primary/dense/terminal/episode 规范化载荷全同;合成 + 8 FRONT bank NOOP 实景——初始可达
+状态逐字节同;挖掘必需状态按**预定分歧**见证:V1 复现 NEG18 中止、V2 完成且 progress
+冻结 0.0 无假 primary);B LEGAL_DIG_NO_ABORT(合法挖到初始图外不中止;合成 + CONTROL
+实景);C DYNAMIC_DISTANCE_UPDATE(挖开后 BFS 用当前图;合成 + 实景见证);D
+UNREACHABLE_CONTINUES(不可达不中止/不假 primary/progress 冻结;合成权威);E
+TRUE_INVALID_FAIL_CLOSED(越界/非有限/不可解码/与当前图矛盾仍 fail-closed,基线不可达
+则合法冻结——位置域校验在基线冻结下依旧 fail-closed;合成权威);F CONTROL_REPRODUCTION
+(原 CONTROL checkpoint + 原阻断起点 front_l2-bank0/seed=10000:V1 仍复现中止,V2 完成)。
 
 **服务器 common_v2/ 装配**:V2 薄壳 `common_evaluator.py`(钉 `tier3_evaluator_v2.py` +
 `tier3_event_predicates_v2.py` LF-SHA,委托 V2 模块)、V2 时间戳壳 `common_runner.py`
