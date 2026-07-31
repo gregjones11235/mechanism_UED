@@ -198,3 +198,146 @@ def test_behavior_descriptions_are_allowed(text):
     assert r["passed"] is True, (
         f"false positive on behavior description {text!r}: "
         f"{r['findings']}")
+
+
+# ===========================================================================
+# §17-§18 (CC3 audit fix2) — false-positive control: imperative/advice
+# REJECTED, objective behavior descriptions ALLOWED, ambiguity FAIL CLOSED
+# ===========================================================================
+
+# --- (1) EN imperative reject ---------------------------------------------
+@pytest.mark.parametrize("text", [
+    "Go left.",
+    "Attack the monster.",
+    "Move toward the ladder.",
+    "Don't sleep.",
+])
+def test_fix2_en_imperative_rejected(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is False, f"EN imperative {text!r} slipped through"
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)
+
+
+# --- (2) EN second-person advice reject ------------------------------------
+@pytest.mark.parametrize("text", [
+    "You should flee.",
+    "The student should attack now.",
+])
+def test_fix2_en_second_person_advice_rejected(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is False, f"EN advice {text!r} slipped through"
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)
+
+
+# --- (3) ZH imperative reject ----------------------------------------------
+@pytest.mark.parametrize("text", [
+    "攻击怪物。",
+    "向左走。",
+    "朝梯子移动。",
+    "不要睡觉。",
+    "往北走。",
+])
+def test_fix2_zh_imperative_rejected(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is False, f"ZH imperative {text!r} slipped through"
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)
+
+
+# --- (4) ZH 应该 advice reject ----------------------------------------------
+@pytest.mark.parametrize("text", [
+    "你应该逃跑。",
+    "智能体应该攻击怪物。",          # subject present but 应该 cue -> advice
+])
+def test_fix2_zh_should_advice_rejected(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is False, f"ZH 应该-advice {text!r} slipped through"
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)
+
+
+# --- (5) EN past-tense behavior descriptions ALLOW --------------------------
+@pytest.mark.parametrize("text", [
+    "The student went left for three steps.",
+    "The student attacked the monster and took damage.",
+    "The trace shows a sleep action near a hostile.",
+    "The student repeatedly attacks without effect.",
+])
+def test_fix2_en_description_allowed(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is True, (
+        f"false positive on EN description {text!r}: {r['findings']}")
+
+
+# --- (6) ZH 智能体……了 descriptions ALLOW ------------------------------------
+@pytest.mark.parametrize("text", [
+    "智能体向左走了三步。",
+    "智能体攻击怪物后受到伤害。",
+    "轨迹显示智能体在怪物附近执行睡眠动作。",
+    "智能体重复攻击但没有效果。",
+])
+def test_fix2_zh_description_allowed(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is True, (
+        f"false positive on ZH description {text!r}: {r['findings']}")
+
+
+# --- (7) detector finding text ALLOW ----------------------------------------
+@pytest.mark.parametrize("text", [
+    "Detector unsafe_rest_near_hostile flagged a rest action while a "
+    "hostile was adjacent.",
+    "检测器 unsafe_rest_near_hostile 记录到智能体在怪物相邻时休息。",
+])
+def test_fix2_detector_finding_text_allowed(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is True, (
+        f"false positive on detector text {text!r}: {r['findings']}")
+
+
+# --- (8) counterfactual ENVIRONMENT descriptions ALLOW ----------------------
+@pytest.mark.parametrize("text", [
+    "The counterfactual environment grades threat distance more steeply.",
+    "反事实环境降低了安全休息区的可用性。",
+])
+def test_fix2_counterfactual_environment_description_allowed(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is True, (
+        f"false positive on environment description {text!r}: "
+        f"{r['findings']}")
+
+
+# --- (9) advice hidden inside an explanation still REJECT -------------------
+@pytest.mark.parametrize("text", [
+    "The issue is that you should flee immediately.",
+    "根本原因是你应该攻击怪物。",
+    "In other words, go left at the fork.",
+    "建议攻击怪物然后撤离。",
+])
+def test_fix2_advice_hidden_in_explanation_rejected(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is False, (
+        f"hidden advice {text!r} slipped through")
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)
+
+
+# --- (10) serialized JSON advice still REJECT --------------------------------
+@pytest.mark.parametrize("payload", [
+    '{"note": "go left now"}',
+    '{"analysis": "攻击怪物"}',
+    '{"explanation": "你应该逃跑"}',
+])
+def test_fix2_serialized_advice_still_rejected(payload):
+    r = GUARD.scan(payload)
+    assert r["passed"] is False, (
+        f"serialized advice {payload!r} slipped through")
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)
+
+
+# --- ambiguity FAILS CLOSED (never silently allowed) ------------------------
+@pytest.mark.parametrize("text", [
+    "攻击怪物后撤离。",          # no behavior subject -> ambiguous -> reject
+    "向左走三步再说。",          # sentence-initial imperative, no subject
+])
+def test_fix2_ambiguous_zh_frame_fails_closed(text):
+    r = GUARD.scan({"free_text": text})
+    assert r["passed"] is False, (
+        f"ambiguous frame {text!r} must fail closed, got pass")
+    assert GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN in _codes(r)

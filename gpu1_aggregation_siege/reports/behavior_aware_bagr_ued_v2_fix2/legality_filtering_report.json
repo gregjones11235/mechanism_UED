@@ -1,0 +1,60 @@
+{
+  "contract": "raw proposals MAY contain illegal candidates; LegalityGate rejects+records; only legal enter scoring/selector; the final gate checks the SELECTED side only (CC3 fix2 §15-§16)",
+  "live_screen": {
+    "input": 13,
+    "legal": 12,
+    "rejected": 1,
+    "rejected_records": [
+      {
+        "descriptor_id": "CF_ENV_99",
+        "code": "ILLEGAL_PROPOSAL_SUPERVISION",
+        "message": "[ILLEGAL_PROPOSAL_SUPERVISION] descriptor CF_ENV_99 failed the TrajectorySupervisionGuard: [{'code': 'TRAJECTORY_SUPERVISION_KEY_FORBIDDEN', 'path': '$.provenance.suggested_actions', 'detail': \"forbidden supervision key 'suggested_actions' present\"}]"
+      }
+    ]
+  },
+  "unselected_illegal_recorded_in_dry_run": [],
+  "cases": {
+    "A": {
+      "legal": 12,
+      "rejected": [
+        "CF_ENV_99"
+      ],
+      "rejected_codes": [
+        "ILLEGAL_PROPOSAL_SUPERVISION"
+      ],
+      "structural_batch_ready": true,
+      "reasons": [],
+      "passed": true
+    },
+    "B": {
+      "structural_batch_ready": false,
+      "reasons": [
+        "budget_plan_status=INSUFFICIENT",
+        "unresolved_shortfall: only 11 legal descriptors; NO backfill",
+        "selected_ued_slots=11 != 12",
+        "legal_candidates=11 < 12",
+        "selected_descriptors_inconsistent_with_budget_slots: descriptors=[] slots=['CF_ENV_00', 'CF_ENV_01', 'CF_ENV_02', 'CF_ENV_03', 'CF_ENV_04', 'CF_ENV_05', 'CF_ENV_06', 'CF_ENV_07', 'CF_ENV_08', 'CF_ENV_09', 'CF_ENV_10']"
+      ],
+      "passed": true
+    },
+    "C": {
+      "reasons": [
+        "selected_descriptor_illegal: selector references rejected candidate(s) ['CF_ENV_05']"
+      ],
+      "passed": true
+    },
+    "D": {
+      "reasons": [
+        "selected_descriptor_without_legality_evidence: ['CF_ENV_11']"
+      ],
+      "passed": true
+    },
+    "E": {
+      "selected": "{'CF_ENV_02', 'CF_ENV_03', 'CF_ENV_06', 'CF_ENV_08', 'CF_ENV_01', 'CF_ENV_11', 'CF_ENV_05', 'CF_ENV_09', 'CF_ENV_04', 'CF_ENV_00', 'CF_ENV_07', 'CF_ENV_10'}",
+      "rejected": "{'CF_ENV_99'}",
+      "intersection": [],
+      "passed": true
+    }
+  },
+  "ALL_CASES_PASS": true
+}

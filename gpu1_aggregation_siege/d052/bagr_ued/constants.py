@@ -130,6 +130,19 @@ MAX_SERIALIZED_STRING_LENGTH = 65536
 MAX_SERIALIZED_CONTAINER_ITEMS = 4096
 
 # ---------------------------------------------------------------------------
+# Symbolic behavior clip bounds (CC3 audit fix2, task §11). The Review Board
+# receives BOUNDED symbolic clips — never a full 4096-step trajectory. Any
+# over-limit payload is explicitly truncated (truncation_applied=true) or
+# fails closed.
+# ---------------------------------------------------------------------------
+MAX_CLIP_STEPS = 24
+MAX_CLIPS_PER_EPISODE = 4
+MAX_CLIPS_PER_REVIEW_WINDOW = 32
+MAX_EVENT_SEMANTICS_PER_STEP = 8
+MAX_RESOURCE_FIELDS = 4
+MAX_SERIALIZED_PAYLOAD_BYTES = 65536
+
+# ---------------------------------------------------------------------------
 # Review board identity (mock backend; prompt versions are pinned, not frozen
 # canonical rules — the two REAL_CANONICAL_* rules above stay PENDING).
 # ---------------------------------------------------------------------------

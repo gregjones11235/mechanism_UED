@@ -1,0 +1,193 @@
+{
+  "contract": "imperative / second-person / advice-context detection — NOT bare keyword matching (CC3 fix2 §17-§18)",
+  "must_reject": [
+    {
+      "category": "en imperative",
+      "text": "Go left.",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "en second-person advice",
+      "text": "You should flee.",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "en imperative attack",
+      "text": "Attack the monster.",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "en imperative negation",
+      "text": "Don't sleep.",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "en imperative direction",
+      "text": "Move toward the ladder.",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "zh imperative direction",
+      "text": "向左走。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "zh should-advice",
+      "text": "你应该逃跑。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "zh imperative attack",
+      "text": "攻击怪物。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "zh imperative negation",
+      "text": "不要睡觉。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "zh imperative target",
+      "text": "朝梯子移动。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "advice hidden in explanation",
+      "text": "这个检测说明建议攻击怪物然后撤离。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "serialized JSON advice",
+      "text": "{\"note\": \"please go left at the fork\"}",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN",
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "zh should-advice with subject",
+      "text": "智能体应该攻击怪物。",
+      "rejected": true,
+      "codes": [
+        "DIRECT_ACTION_ADVICE_FORBIDDEN",
+        "DIRECT_ACTION_ADVICE_FORBIDDEN"
+      ]
+    },
+    {
+      "category": "counterfactual env description (must stay allowed)",
+      "text": "If the hostile spawns closer, early resting becomes unsafe.",
+      "rejected": false,
+      "codes": []
+    }
+  ],
+  "must_allow": [
+    {
+      "category": "en past-tense description",
+      "text": "The student went left for three steps.",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "en description with consequence",
+      "text": "The student attacked the monster and took damage.",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "en detector finding",
+      "text": "The trace shows a sleep action near a hostile.",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "en repeated-no-effect finding",
+      "text": "The student repeatedly attacks without effect.",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "zh aspect description",
+      "text": "智能体向左走了三步。",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "zh description with consequence",
+      "text": "智能体攻击怪物后受到伤害。",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "zh trace description",
+      "text": "轨迹显示智能体在怪物附近执行睡眠动作。",
+      "allowed": true,
+      "findings": []
+    },
+    {
+      "category": "zh repeated-no-effect finding",
+      "text": "智能体重复攻击但没有效果。",
+      "allowed": true,
+      "findings": []
+    }
+  ],
+  "categories_covered": [
+    "advice hidden in explanation",
+    "counterfactual env description (must stay allowed)",
+    "en description with consequence",
+    "en detector finding",
+    "en imperative",
+    "en imperative attack",
+    "en imperative direction",
+    "en imperative negation",
+    "en past-tense description",
+    "en repeated-no-effect finding",
+    "en second-person advice",
+    "serialized JSON advice",
+    "zh aspect description",
+    "zh description with consequence",
+    "zh imperative attack",
+    "zh imperative direction",
+    "zh imperative negation",
+    "zh imperative target",
+    "zh repeated-no-effect finding",
+    "zh should-advice",
+    "zh should-advice with subject",
+    "zh trace description"
+  ],
+  "note": "row 'counterfactual env description (must stay allowed)' inside the reject matrix is a tripwire: it must NOT be rejected",
+  "ALL_CASES_PASS": true
+}

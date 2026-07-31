@@ -1,0 +1,76 @@
+{
+  "suites": [
+    {
+      "label": "bagr_ued suite (-k bagr_ued)",
+      "cmd": "D:\\Anaconda\\python.exe -m pytest -q d052/tests -k bagr_ued",
+      "returncode": 0,
+      "summary": "223 passed, 312 deselected in 2.10s",
+      "passed": 223,
+      "failed": 0,
+      "failed_tests": [],
+      "tail": "........................................................................ [ 32%]\n........................................................................ [ 64%]\n........................................................................ [ 96%]\n.......                                                                  [100%]\n223 passed, 312 deselected in 2.10s"
+    },
+    {
+      "label": "full d052 minus real_bundle",
+      "cmd": "D:\\Anaconda\\python.exe -m pytest -q d052/tests --ignore=d052/tests/test_real_bundle_reconciliation.py",
+      "returncode": 0,
+      "summary": "506 passed, 2 warnings in 2.74s",
+      "passed": 506,
+      "failed": 0,
+      "failed_tests": [],
+      "tail": "........................................................................ [ 71%]\n........................................................................ [ 85%]\n........................................................................ [ 99%]\n..                                                                       [100%]\n============================== warnings summary ===============================\nd052/tests/test_protocol_version.py::test_legacy_training_is_forbidden\nd052/tests/test_protocol_version.py::test_assert_canonical_helper\n  C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\mechanism_UED_bagr_ued_fix1_worktree\\gpu1_aggregation_siege\\d052\\legacy\\protocol_version.py:229: UserWarning: D052 LEGACY protocol explicitly enabled for <config>. Legacy is deprecated, read-only, and will NOT be upgraded to 'canonical_v2'. No training is permitted.\n    version = resolve_protocol_version(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n506 passed, 2 warnings in 2.74s"
+    },
+    {
+      "label": "test_real_bundle_reconciliation.py",
+      "cmd": "D:\\Anaconda\\python.exe -m pytest -q d052/tests/test_real_bundle_reconciliation.py",
+      "returncode": 1,
+      "summary": "6 failed, 23 passed in 1.83s",
+      "passed": 23,
+      "failed": 6,
+      "failed_tests": [
+        "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+        "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+        "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+        "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+        "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged",
+        "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors"
+      ],
+      "tail": "E       AssertionError: {'agg_source_sha_matches_bundle': False, 'B_selection_hash_match': True, 'C_selection_hash_match': True, 'B_selected8_exact_set': True, ...}\nE       assert False is True\n\nd052\\tests\\test_real_bundle_reconciliation.py:513: AssertionError\n=========================== short test summary info ===========================\nFAILED d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13\nFAILED d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors\nFAILED d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels - As...\nFAILED d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged\nFAILED d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git\nFAILED d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged\n6 failed, 23 passed in 1.83s"
+    }
+  ],
+  "contract_driven_test_updates": [
+    {
+      "file": "d052/tests/test_bagr_ued_scoring.py",
+      "change": "2 tests updated to the criterion-wise contract: component keys are now the 8 RAW dimensions (+ critic_penalty_raw / alpha_front_used / pairwise weights); 'strength' assertions replaced by copeland_score comparisons",
+      "weakening": false
+    },
+    {
+      "file": "d052/tests/test_bagr_ued_alpha_front.py",
+      "change": "3 layer-3 structural tests updated: the global channel proof now targets the pairwise-level weight dimension_weights['global_regret'] == 1-alpha > 0 and the normalized component 0.5 on constant columns",
+      "weakening": false
+    },
+    {
+      "file": "d052/tests/test_bagr_ued_launch_gate.py",
+      "change": "full contract-driven rewrite for the strong-typed LaunchGate (dict-gate API removed); cases A-J of §8",
+      "weakening": false
+    }
+  ],
+  "new_test_files": [
+    "d052/tests/test_bagr_ued_soft_copeland_criterionwise.py (§1-§3)",
+    "d052/tests/test_bagr_ued_legality_filtering.py (§15-§16)",
+    "d052/tests/test_bagr_ued_symbolic_clips.py (§9-§14)",
+    "d052/tests/test_bagr_ued_guard_hardening.py +11 tests (§17-§18)"
+  ],
+  "deletions_or_weakenings": 0,
+  "skips_or_xfails_added": 0,
+  "certificate": {
+    "run_class": "ENGINEERING_FIX_VALIDATION",
+    "real_llm_calls": 0,
+    "real_environment_rollouts": 0,
+    "training_started": false,
+    "formal_evaluation_started": false,
+    "formal_banks_used": false,
+    "checkpoints_modified": false,
+    "real_integration_authorized": false
+  }
+}

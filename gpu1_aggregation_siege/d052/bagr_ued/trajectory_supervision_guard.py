@@ -18,9 +18,16 @@ of the BA-BAGR-UED pipeline, the two forbidden transformations of evidence:
      向左走 / 往北走 / 攻击怪物 / 朝梯子移动" and "don't sleep / move away /
      flee / walk left / go left / head north / move toward the ladder /
      attack the monster ..."). Behavior DESCRIPTIONS ("the student
-     repeatedly attacks without effect") are allowed; the patterns target
-     imperative/second-person advice forms. The board may describe
-     environment STRUCTURE; it may never tell the Student what to do.
+     repeatedly attacks without effect" / "智能体向左走了三步" /
+     "智能体攻击怪物后受到伤害") are allowed; the patterns target
+     imperative / second-person advice forms. CC3 audit fix2 (§17-§18):
+     the four bare-keyword zh forms (攻击<目标> / 往<方向>走 / 向<方向>走 /
+     朝<目标>移动) are CONTEXT-SENSITIVE — rejected in imperative/advice
+     frames (sentence-initial or cued by 应该/必须/请/快/要/...), allowed
+     inside an objective-description frame (behavior subject before +
+     aspect marker after), and fail closed (rejected) when ambiguous. The
+     board may describe environment STRUCTURE and OCCURRED behavior; it may
+     never tell the Student what to do.
 
 CC1 audit fix1 hardening (task §5): a string that, after trimming, looks like
 a JSON object or array is parsed and the FULL guard is re-run over the parsed
@@ -55,9 +62,13 @@ class GuardViolation(Exception):
         super().__init__(f"[{code}] {message}")
 
 
-#: (compiled pattern, human label) — imperative action advice is forbidden in
-#: ANY free-text field of ANY role output. Behavior descriptions (third
-#: person, past/present tense observation) MUST NOT match these patterns.
+#: (compiled pattern, human label) — UNAMBIGUOUS imperative action advice,
+#: forbidden in ANY free-text field of ANY role output. These forms have no
+#: objective-description reading (negation imperatives, modal advice, second
+#: person + should, EN bare imperatives whose past-tense descriptions —
+#: "went / attacked / walked" — do not match the base-verb patterns).
+#: Behavior descriptions (third person, past/present tense observation)
+#: MUST NOT match these patterns.
 _ACTION_ADVICE_PATTERNS = [
     (re.compile(p, re.IGNORECASE), label)
     for p, label in (
@@ -66,11 +77,6 @@ _ACTION_ADVICE_PATTERNS = [
         (r"应该(攻击|逃跑|向左|向右|走|移动|躲|逃)", "zh: 应该<动作>"),
         (r"必须(攻击|逃跑|移动|躲)", "zh: 必须<动作>"),
         (r"快(跑|逃|攻击)", "zh: 快跑/快攻击"),
-        # CC1 audit fix1 (§7): directional / target imperative advice
-        (r"攻击(怪物|敌人|威胁)", "zh: 攻击<目标>"),
-        (r"往(北|南|东|西|左|右|前)(走|跑|移动)", "zh: 往<方向>走"),
-        (r"向(北|南|东|西|左|右|前)(走|跑|移动)", "zh: 向<方向>走"),
-        (r"朝(梯子|出口|门|高处|低处|目标)(移动|走|跑|前进)", "zh: 朝<目标>移动"),
         (r"\bdon'?t\s+(sleep|rest|attack|fight)\b", "en: don't sleep/rest/attack"),
         (r"\bdo\s+not\s+(sleep|rest|attack|fight|approach)\b",
          "en: do not sleep/rest/attack"),
@@ -93,6 +99,52 @@ _ACTION_ADVICE_PATTERNS = [
          "en: attack the <entity>"),
     )
 ]
+
+#: CC3 audit fix2 (§17-§18): CONTEXT-SENSITIVE zh patterns. The same verb
+#: phrase is a forbidden IMPERATIVE in "攻击怪物。" / "向左走。" / "朝梯子移动。"
+#: but a permitted objective DESCRIPTION in "智能体攻击怪物后受到伤害。" /
+#: "智能体向左走了三步。". Each match is classified by its surrounding frame:
+#:   * imperative cue right before the match (应该/必须/请/快/要/去/来/建议/
+#:     推荐/需要/别/...) -> REJECT;
+#:   * a behavior subject before (智能体/学生/玩家/模型/轨迹/trace/agent/
+#:     student/...) AND an aspectual/continuation marker after (了/过/后/时/
+#:     之前/之后/期间/并/，/...) -> ALLOW (objective description of occurred
+#:     behavior);
+#:   * anything ambiguous -> FAIL CLOSED (reject).
+_CONTEXT_SENSITIVE_ZH_PATTERNS = [
+    (re.compile(p), label)
+    for p, label in (
+        (r"攻击(怪物|敌人|威胁)", "zh: 攻击<目标>"),
+        (r"往(北|南|东|西|左|右|前)(走|跑|移动)", "zh: 往<方向>走"),
+        (r"向(北|南|东|西|左|右|前)(走|跑|移动)", "zh: 向<方向>走"),
+        (r"朝(梯子|出口|门|高处|低处|目标)(移动|走|跑|前进)", "zh: 朝<目标>移动"),
+    )
+]
+
+_ZH_IMPERATIVE_CUE = re.compile(
+    r"(应该|必须|请|快|要|去|来|建议|推荐|需要|记得|别|不要|严禁)")
+_ZH_BEHAVIOR_SUBJECT = re.compile(
+    r"(智能体|学生|玩家|模型|选手|它|他|她|轨迹|回合|记录|agent|student|"
+    r"player|trace|episode)", re.IGNORECASE)
+_ZH_ASPECT_OR_CONTINUATION = re.compile(
+    r"(了|过|后|时|之前|之后|期间|并|而且|并且|，|,|;|；|、)")
+
+
+def _zh_is_objective_description(text: str, match: "re.Match") -> bool:
+    """True iff the match sits inside an objective description frame.
+
+    Requires BOTH a behavior subject shortly before the match AND an
+    aspectual/continuation marker shortly after — and NO imperative cue
+    immediately preceding the match. Ambiguous framing returns False
+    (fail closed: the advice reading wins).
+    """
+    before = text[max(0, match.start() - 16):match.start()]
+    after = text[match.end():match.end() + 10]
+    if _ZH_IMPERATIVE_CUE.search(before[-6:]):
+        return False
+    has_subject = bool(_ZH_BEHAVIOR_SUBJECT.search(before))
+    has_aspect = bool(_ZH_ASPECT_OR_CONTINUATION.search(after))
+    return has_subject and has_aspect
 
 
 def _normalize_key(k: str) -> str:
@@ -189,6 +241,19 @@ class TrajectorySupervisionGuard:
                         path=path,
                         detail=f"direct action advice pattern {desc!r} "
                                f"matched {m.group(0)!r}"))
+            # 1b. CC3 audit fix2 (§17-§18): context-sensitive zh patterns —
+            #     reject imperative/advice frames, allow objective behavior
+            #     descriptions, FAIL CLOSED on ambiguity
+            for rx, desc in _CONTEXT_SENSITIVE_ZH_PATTERNS:
+                for m in rx.finditer(obj):
+                    if not _zh_is_objective_description(obj, m):
+                        findings.append(dict(
+                            code=GuardViolation.DIRECT_ACTION_ADVICE_FORBIDDEN,
+                            path=path,
+                            detail=f"imperative-or-ambiguous action advice "
+                                   f"pattern {desc!r} matched "
+                                   f"{m.group(0)!r} (no objective-description "
+                                   f"frame: subject+aspect required)"))
             # 2. CC1 audit fix1 (§5): bounded recursive parse of strings that
             #    look like serialized JSON (object / array — the required
             #    scope — plus JSON string literals, which closes the

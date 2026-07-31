@@ -1,0 +1,55 @@
+{
+  "scenario": "A front-strong (front_regret=0.9, global_regret=0.1); B global-strong (mirror); C neutral; rest constant",
+  "alpha_075": {
+    "order": [
+      "A",
+      "C",
+      "B"
+    ],
+    "pref_A_over_B": 0.519918843,
+    "winner": "A"
+  },
+  "alpha_025": {
+    "order": [
+      "B",
+      "C",
+      "A"
+    ],
+    "pref_A_over_B": 0.480081157,
+    "winner": "B"
+  },
+  "checks": [
+    {
+      "check": "ALPHA_075_PREFERS_FRONT_STRONG_A",
+      "passed": true,
+      "evidence": "P(A>B)@0.75 = 0.519918843"
+    },
+    {
+      "check": "ALPHA_025_PREFERS_GLOBAL_STRONG_B",
+      "passed": true,
+      "evidence": "P(A>B)@0.25 = 0.480081157 (B preferred)"
+    },
+    {
+      "check": "PAIRWISE_PREFERENCE_CROSSES_HALF",
+      "passed": true,
+      "evidence": "P(A>B) crosses 0.5 between alpha=0.25 (0.480081157) and alpha=0.75 (0.519918843)"
+    },
+    {
+      "check": "ALPHA_CHANGES_RANKING",
+      "passed": true,
+      "evidence": "order@0.75=['A', 'C', 'B']; order@0.25=['B', 'C', 'A']"
+    },
+    {
+      "check": "ALPHA_MOVES_RANKING_HASH",
+      "passed": true,
+      "evidence": "distinct ranking_hash for the two alpha values"
+    },
+    {
+      "check": "NORMALIZATION_ALPHA_INDEPENDENT_RANKING_ALPHA_DEPENDENT",
+      "passed": true,
+      "evidence": "exactly the v1 defect disproven: normalization untouched by alpha, ranking flips with alpha"
+    }
+  ],
+  "ALPHA_SENSITIVITY_TEST": "PASS",
+  "ALPHA_CHANGES_PAIRWISE_PREFERENCE": true
+}

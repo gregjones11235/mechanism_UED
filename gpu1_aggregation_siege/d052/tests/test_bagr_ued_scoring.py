@@ -82,19 +82,32 @@ def test_soft_copeland_deterministic_and_order_invariant():
 
 
 def test_soft_copeland_receives_all_eight_inputs():
+    # CC3 fix2 contract update (documented in fix2 report): components now
+    # carry the eight independently NORMALIZED raw dimensions (no alpha
+    # premultiplied — the fix1 keys alpha_front_regret /
+    # one_minus_alpha_global_regret are superseded by front_regret /
+    # global_regret normalized BEFORE the alpha pairwise weighting).
     r = soft_copeland_rank([_bundle(i) for i in range(3)])
     comp = r.entries[0].components
-    assert {"alpha_front_regret", "one_minus_alpha_global_regret",
-            "behavioral_gap", "learning_progress", "learnability",
-            "diversity", "global_retention",
-            "critic_penalty_subtracted"} <= set(comp)
+    assert {"front_regret", "global_regret", "behavioral_gap",
+            "learning_progress", "learnability", "diversity",
+            "global_retention", "critic_penalty",
+            "critic_penalty_raw"} <= set(comp)
+    # the alpha split is recorded as pairwise-level weights, not as
+    # premultiplied dimension values
+    assert comp["alpha_front_used"] == pytest.approx(0.5)
+    assert comp["pairwise_weight_front_regret"] == pytest.approx(0.5)
+    assert comp["pairwise_weight_global_regret"] == pytest.approx(0.5)
 
 
-def test_critic_penalty_lowers_strength():
+def test_critic_penalty_lowers_copeland_score():
+    # CC3 fix2 contract update: there is NO pre-aggregated strength; the
+    # critic penalty is a lower-is-better CRITERION in the pairwise
+    # comparison, so penalizing env1 lowers its Copeland score.
     clean = soft_copeland_rank([_bundle(1), _bundle(2)])
     penalized = soft_copeland_rank([_bundle(1, penalty=0.9), _bundle(2)])
-    s_clean = {e.environment_id: e.strength for e in clean.entries}
-    s_pen = {e.environment_id: e.strength for e in penalized.entries}
+    s_clean = {e.environment_id: e.copeland_score for e in clean.entries}
+    s_pen = {e.environment_id: e.copeland_score for e in penalized.entries}
     assert s_pen["env1"] < s_clean["env1"]
 
 

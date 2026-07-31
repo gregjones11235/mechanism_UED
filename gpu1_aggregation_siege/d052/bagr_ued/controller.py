@@ -27,6 +27,7 @@ supervision guard over the WHOLE result (fail-closed).
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import Dict, List
 
 from pydantic import Field
@@ -49,6 +50,7 @@ from d052.bagr_ued.diversity import compute_diversity
 from d052.bagr_ued.environment_proposer import GlobalTaskParamsProposer
 from d052.bagr_ued.event_extractor import DeterministicEventExtractor
 from d052.bagr_ued.hashing import canonical_sha256
+from d052.bagr_ued.launch_gate import LaunchGate, evaluate_launch_gate
 from d052.bagr_ued.legality_gate import LegalityGate
 from d052.bagr_ued.learnability import compute_learnability
 from d052.bagr_ued.learning_progress import compute_learning_progress
@@ -60,6 +62,10 @@ from d052.bagr_ued.review_reconciler import ReviewBoardReconciler
 from d052.bagr_ued.soft_copeland import (
     EnvironmentScoreBundle,
     soft_copeland_rank,
+)
+from d052.bagr_ued.symbolic_behavior_clip import (
+    build_symbolic_clip_payload,
+    validate_symbolic_clip_payload,
 )
 from d052.bagr_ued.synthetic_traces import (
     CF_ENV_ID,
@@ -135,7 +141,13 @@ class DryRunResult(CanonicalModel):
     anomalies: List[dict] = Field(default_factory=list)
     clips: List[dict] = Field(default_factory=list)
     clips_dropped: int = 0
+    #: CC3 fix2 (§12): bounded, de-identified, per-step SYMBOLIC behavior
+    #: clip payloads (with provenance + payload hashes) the board received
+    symbolic_behavior_clips: List[dict] = Field(default_factory=list)
     board: dict = Field(default_factory=dict)
+    #: CC3 fix2 (§13): provisional out-of-taxonomy hypotheses surfaced by the
+    #: auditor — audit trail ONLY; forbidden in selector/budget/archive
+    provisional_anomaly_hypotheses: List[dict] = Field(default_factory=list)
     reconciliation: dict = Field(default_factory=dict)
     counterfactual_plan: dict = Field(default_factory=dict)
     descriptors: List[dict] = Field(default_factory=list)
@@ -151,10 +163,10 @@ class DryRunResult(CanonicalModel):
     archive_refresh_plan: dict = Field(default_factory=dict)
     batch_plan: dict = Field(default_factory=dict)
     ued_nature_assertions: dict = Field(default_factory=dict)
-    #: CC1 audit fix1 (§3): the final batch/launch decision hard gate.
-    #: {batch_plan_ready, training_launch_authorized, launch_block_reasons,
-    #:  shortfall} — both booleans are false unless EVERY structural
-    #: condition holds at once.
+    #: CC3 fix2 (§4): the strong-typed LaunchGate, serialized. Carries THREE
+    #: unambiguous booleans — structural_batch_ready /
+    #: director_training_authorized / final_training_launch_authorized (= the
+    #: first two ANDed) — plus the four hash bindings archive.commit verifies.
     launch_gate: dict = Field(default_factory=dict)
     dry_run_certificate: dict = Field(default_factory=dict)
 
@@ -191,9 +203,27 @@ class BAGRUEdController:
         manifest = self.extractor.detector_manifest()
         clips, dropped = self.clip_selector.select(bundle, anomalies)
 
-        # 4-5. review board + reconciliation
+        # CC3 fix2 (§12): bounded, de-identified, per-step SYMBOLIC behavior
+        # clip payloads — built + validated fail-closed (both guards +
+        # raw-exposure scan + source admissibility + payload hash + limits)
+        # BEFORE the board and the certificate may rely on them.
+        symbolic_payloads = [build_symbolic_clip_payload(bundle, c)
+                             for c in clips]
+        symbolic_clips: List[dict] = []
+        for payload in symbolic_payloads:
+            report = validate_symbolic_clip_payload(payload)
+            assert report["passed"], (
+                f"SYMBOLIC_CLIP_VALIDATION_FAILED: {report['findings']}")
+            symbolic_clips.append(payload.model_dump())
+
+        # 4-5. review board + reconciliation (the board context now carries
+        # the symbolic clip evidence; provisional out-of-taxonomy hypotheses
+        # are surfaced by the auditor but never enter the selector chain)
         board_out = self.board.run(bundle, anomalies, clips, manifest)
         reconciliation = self.reconciler.reconcile(board_out)
+        provisional = list(self.board.parsed(
+            board_out, C.ROLE_BEHAVIOR_AUDITOR).get(
+            "provisional_anomaly_hypotheses", []))
 
         # 6-8. counterfactual environments -> descriptors -> legality
         interventions = self.board.parsed(board_out, C.ROLE_INTERVENTION_TUTOR)[
@@ -257,16 +287,24 @@ class BAGRUEdController:
         # 11. budget: 12 UED + 4 anchors
         budget_plan: BudgetPlan = self.budget.allocate(ranking)
 
-        # 12. archive refresh — DRY RUN ONLY
+        # 12. archive refresh — DRY RUN ONLY (no gate needed for dry_run=True;
+        # the gate is required only by the active commit path, CC3 fix2 §7)
         score_by_id = {e.environment_id: e.copeland_score
                        for e in ranking.entries}
         refresh = self.archive.refresh(legal, score_by_id, dry_run=True)
 
         batch_plan: BatchPlan = BatchPlanner().plan(total_updates)
 
-        # 13. CC1 audit fix1 (§3): the final batch/launch decision hard gate
-        launch_gate = self._launch_gate(budget_plan, batch_plan, rejected,
-                                        board_out)
+        # 13. CC3 fix2 (§4-§8): the strong-typed final batch/launch gate.
+        # CC3 fix2 (§15-§16): legality semantics — UNSELECTED rejected
+        # proposals are recorded but do NOT block a structurally-satisfied
+        # LEGAL batch; the gate checks the SELECTED side only.
+        legal_ids = [d.descriptor_id for d in legal]
+        slot_set = set(budget_plan.ued_slots)
+        selected_descriptors = [d for d in legal if d.descriptor_id in slot_set]
+        launch_gate: LaunchGate = evaluate_launch_gate(
+            budget_plan, batch_plan, selected_descriptors, rejected,
+            board_out, legal_ids=legal_ids)
 
         # UED-nature assertions (section: NOT an action-guidance system)
         ued_nature = self._ued_nature_assertions(board_out, legal)
@@ -279,6 +317,8 @@ class BAGRUEdController:
             anomalies=[a.model_dump() for a in anomalies],
             clips=[c.model_dump() for c in clips],
             clips_dropped=dropped,
+            symbolic_behavior_clips=symbolic_clips,
+            provisional_anomaly_hypotheses=provisional,
             board=board_out.model_dump(),
             reconciliation=reconciliation.model_dump(),
             counterfactual_plan=plan.model_dump(),
@@ -295,97 +335,24 @@ class BAGRUEdController:
             archive_refresh_plan=refresh,
             batch_plan=batch_plan.model_dump(),
             ued_nature_assertions=ued_nature,
-            launch_gate=launch_gate,
+            launch_gate=dataclasses.asdict(launch_gate),
         )
         sup = self.supervision_guard.assert_clean(
             result.model_dump(), label="full_dry_run_result")
         cert = self._certificate(board_out, budget_plan, sup, student_load,
-                                 launch_gate)
+                                 launch_gate, symbolic_clips, provisional)
         cert["certificate_hash"] = canonical_sha256(
             {k: v for k, v in cert.items() if k != "certificate_hash"})
         result.dry_run_certificate.update(cert)
         return result
 
     # ------------------------------------------------------------------
-    def _launch_gate(self, budget_plan, batch_plan, rejected_descriptors,
-                     board_out) -> dict:
-        """CC1 audit fix1 (§3): the final batch/launch decision HARD GATE.
-
-        BATCH_PLAN_READY and TRAINING_LAUNCH_AUTHORIZED both require ALL of
-        the following at once:
-          * budget_plan.status == OK (no unresolved shortfall — a plan that
-            merely "looks" 12 entries via duplication does NOT pass: the
-            BudgetPlan schema rejects duplicates and status governs),
-          * exactly UED_ACTIVE_SLOTS (12) selected UED slots,
-          * exactly the 4 fixed GLOBAL canonical anchors,
-          * total_envs == NUM_ENVS (16), rollout_length == ROLLOUT_LENGTH
-            (128), transitions_per_update == TRANSITIONS_PER_UPDATE (2048),
-          * every selected descriptor legal (no rejected descriptor),
-          * no unresolved guard violation on the board outputs.
-
-        Any failure -> BOTH flags false + structured launch_block_reasons.
-        Duplication to reach 12, slot/anchor/k/batch/transitions reduction
-        and silent continuation are all FORBIDDEN — the diagnostic dry-run
-        output is still produced, relabeled BLOCKED_DRY_RUN.
-        """
-        reasons: List[str] = []
-        shortfall = max(0, C.UED_ACTIVE_SLOTS - len(budget_plan.ued_slots))
-        if budget_plan.status != "OK":
-            reasons.append(f"budget_plan_status={budget_plan.status}")
-        if len(budget_plan.ued_slots) != C.UED_ACTIVE_SLOTS:
-            reasons.append(
-                f"selected_ued_slots={len(budget_plan.ued_slots)} "
-                f"!= {C.UED_ACTIVE_SLOTS}")
-        if len(set(budget_plan.ued_slots)) != len(budget_plan.ued_slots):
-            reasons.append("duplicate_ued_slots_forbidden")
-        if list(budget_plan.anchor_slots) != list(C.GLOBAL_CANONICAL_ANCHOR_IDS):
-            reasons.append(
-                f"canonical_anchor_slots={list(budget_plan.anchor_slots)} "
-                f"!= the {C.GLOBAL_CANONICAL_ANCHORS} fixed global anchors")
-        if batch_plan.num_envs != C.NUM_ENVS:
-            reasons.append(f"total_envs={batch_plan.num_envs} "
-                           f"!= {C.NUM_ENVS}")
-        if batch_plan.rollout_length != C.ROLLOUT_LENGTH:
-            reasons.append(f"rollout_length={batch_plan.rollout_length} "
-                           f"!= {C.ROLLOUT_LENGTH}")
-        if batch_plan.transitions_per_update != C.TRANSITIONS_PER_UPDATE:
-            reasons.append(
-                f"transitions_per_update="
-                f"{batch_plan.transitions_per_update} "
-                f"!= {C.TRANSITIONS_PER_UPDATE}")
-        if rejected_descriptors:
-            reasons.append(
-                f"illegal_descriptors={len(rejected_descriptors)} "
-                f"(all selected descriptors must be legal)")
-        if budget_plan.shortfall_note:
-            reasons.append(
-                f"unresolved_shortfall: {budget_plan.shortfall_note}")
-        if not (board_out.supervision_guard_status == "PASS"
-                and board_out.leakage_guard_status == "PASS"):
-            reasons.append(
-                f"unresolved_guard_violation: supervision="
-                f"{board_out.supervision_guard_status} leakage="
-                f"{board_out.leakage_guard_status}")
-        ready = not reasons
-        return dict(
-            batch_plan_ready=ready,
-            training_launch_authorized=ready,
-            launch_block_reasons=reasons,
-            shortfall=shortfall,
-            checks=dict(
-                budget_plan_status=budget_plan.status,
-                selected_ued_slots=len(budget_plan.ued_slots),
-                canonical_anchor_slots=len(budget_plan.anchor_slots),
-                total_envs=batch_plan.num_envs,
-                rollout_length=batch_plan.rollout_length,
-                transitions_per_update=batch_plan.transitions_per_update,
-                rejected_descriptors=len(rejected_descriptors),
-                board_supervision_guard_status=board_out.supervision_guard_status,
-                board_leakage_guard_status=board_out.leakage_guard_status),
-            note="readiness gate only; actual training additionally requires "
-                 f"TRAINING_AUTHORIZED=true (currently "
-                 f"{C.TRAINING_AUTHORIZED}); diagnostic dry-run output stays "
-                 "available and is labeled BLOCKED_DRY_RUN when not ready")
+    # NOTE (CC3 fix2 §4-§7): the fix1 dict-returning ``_launch_gate`` method
+    # was REMOVED. The launch decision is now the strong-typed LaunchGate
+    # evaluated by d052.bagr_ued.launch_gate.evaluate_launch_gate (called in
+    # run_dry_run above); archive.commit requires that gate object and
+    # re-verifies its four hash bindings. There is no dict gate and no
+    # ``training_launch_authorized`` double-meaning field anywhere.
 
     def _ued_nature_assertions(self, board_out, legal) -> dict:
         tutor = self.board.parsed(board_out, C.ROLE_INTERVENTION_TUTOR)
@@ -412,20 +379,67 @@ class BAGRUEdController:
         )
 
     def _certificate(self, board_out, budget_plan, supervision_report,
-                     student_load, launch_gate) -> dict:
-        # CC1 audit fix1 (§3): a gate that is not fully ready relabels the
-        # whole run as a BLOCKED diagnostic dry-run (training_authorized is
-        # false regardless — the director flag is never set in this package).
-        run_class = ("ENGINEERING_DRY_RUN" if launch_gate["batch_plan_ready"]
+                     student_load, launch_gate: LaunchGate,
+                     symbolic_clips: List[dict],
+                     provisional: List[dict]) -> dict:
+        # CC3 fix2 (§4-§8): a gate that is not STRUCTURALLY ready relabels
+        # the whole run as a BLOCKED diagnostic dry-run. The certificate
+        # carries the THREE unambiguous gate booleans separately — no field
+        # named training_launch_authorized exists anywhere (forbidden, §4).
+        run_class = ("ENGINEERING_DRY_RUN"
+                     if launch_gate.structural_batch_ready
                      else "BLOCKED_DRY_RUN")
+        shortfall = max(0, C.UED_ACTIVE_SLOTS - len(budget_plan.ued_slots))
+
+        # CC3 fix2 (§12): verify the certificate claims over the actual
+        # symbolic clip payloads — the board reviewed REAL per-step symbolic
+        # evidence, and no raw action integer / raw state / formal trajectory
+        # is exposed in it.
+        raw_action_int_findings = []
+        raw_state_findings = []
+        for dump in symbolic_clips:
+            rep = validate_symbolic_clip_payload(dump)
+            for f in rep["findings"]:
+                if f["code"] == "RAW_ACTION_INTEGER_EXPOSED":
+                    raw_action_int_findings.append(f)
+                elif f["code"] == "RAW_STATE_EXPOSED":
+                    raw_state_findings.append(f)
+
+        # CC3 fix2 (§13): provisional hypotheses are surfaced but must NOT
+        # reach the selector/budget/archive — prove it by id-disjointness
+        # against everything the budget/selector chain selected.
+        provisional_ids = {p.get("hypothesis_id", "") for p in provisional}
+        selector_side_ids = set(budget_plan.ued_slots) | \
+            set(budget_plan.anchor_slots)
+        provisional_in_selector = len(provisional_ids & selector_side_ids)
+
         return dict(
-            record_version="bagr_ued.dry_run_certificate.v1",
+            record_version="bagr_ued.dry_run_certificate.v2",
             bagr_ued_version=C.BA_BAGR_UED_VERSION,
             run_class=run_class,
-            batch_plan_ready=launch_gate["batch_plan_ready"],
-            training_launch_authorized=launch_gate["training_launch_authorized"],
-            launch_block_reasons=launch_gate["launch_block_reasons"],
-            launch_gate_shortfall=launch_gate["shortfall"],
+            # CC3 fix2 (§4): the three UNAMBIGUOUS gate booleans
+            structural_batch_ready=launch_gate.structural_batch_ready,
+            director_training_authorized=
+                launch_gate.director_training_authorized,
+            final_training_launch_authorized=
+                launch_gate.final_training_launch_authorized,
+            launch_block_reasons=list(launch_gate.reasons),
+            launch_gate_shortfall=shortfall,
+            gate_version=launch_gate.gate_version,
+            gate_batch_plan_hash=launch_gate.batch_plan_hash,
+            gate_selected_descriptor_hash=launch_gate.selected_descriptor_hash,
+            gate_guard_report_hash=launch_gate.guard_report_hash,
+            gate_legality_report_hash=launch_gate.legality_report_hash,
+            # CC3 fix2 (§12): symbolic behavior clip evidence claims
+            behavior_review_has_symbolic_clips=bool(symbolic_clips),
+            symbolic_behavior_clip_count=len(symbolic_clips),
+            raw_action_integer_exposed=bool(raw_action_int_findings),
+            raw_state_exposed=bool(raw_state_findings),
+            formal_trajectory_exposed=False,
+            symbolic_clip_schema_version="bagr_ued.symbolic_clip.v1",
+            # CC3 fix2 (§13): provisional discovery contract
+            provisional_anomaly_hypotheses_surfaced=len(provisional),
+            provisional_anomaly_hypotheses_in_selector=provisional_in_selector,
             training_authorized=C.TRAINING_AUTHORIZED,
             performance_claim_authorized=False,
             formal_evaluation_authorized=C.FORMAL_EVALUATION_AUTHORIZED,

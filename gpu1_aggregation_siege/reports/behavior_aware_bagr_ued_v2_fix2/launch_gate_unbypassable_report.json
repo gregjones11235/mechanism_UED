@@ -1,0 +1,120 @@
+{
+  "contract": "strong-typed UNBYPASSABLE LaunchGate (CC3 fix2 §4-§8)",
+  "gate_version": "bagr_ued.launch_gate.v1",
+  "gate_fields": [
+    "structural_batch_ready",
+    "director_training_authorized",
+    "final_training_launch_authorized (= structural AND director)",
+    "batch_plan_hash",
+    "selected_descriptor_hash",
+    "guard_report_hash",
+    "legality_report_hash",
+    "reasons",
+    "gate_version"
+  ],
+  "forbidden_field_absent": [
+    {
+      "check": "NO_DOUBLE_MEANING_FIELD_IN_GATE",
+      "passed": true,
+      "evidence": "keys: batch_plan_hash, director_training_authorized, final_training_launch_authorized, gate_version, guard_report_hash, legality_report_hash, reasons, selected_descriptor_hash, structural_batch_ready"
+    },
+    {
+      "check": "NO_DOUBLE_MEANING_FIELD_IN_CERTIFICATE",
+      "passed": true,
+      "evidence": "certificate v2 carries the three separate booleans"
+    },
+    {
+      "check": "NO_FIX1_DICT_FIELD_IN_CERTIFICATE",
+      "passed": true,
+      "evidence": "fix1 field name removed"
+    }
+  ],
+  "contract_enforcement": {
+    "construction_contract_violation": "LAUNCH_GATE_CONTRACT_VIOLATED",
+    "version_mismatch": "LAUNCH_GATE_VERSION_MISMATCH",
+    "passed": true
+  },
+  "live_full_dry_run_gate": {
+    "structural_batch_ready": true,
+    "director_training_authorized": false,
+    "final_training_launch_authorized": false,
+    "batch_plan_hash": "2dda0cfedaa6b7e2072d89aaf2edafd0f0c41f3ca83c5bf487bc7eba35061d28",
+    "selected_descriptor_hash": "e63f4bbaf19304becc7ec5355c123f4bb6d70d0b41a4d0ec4a4732c85a88cc75",
+    "guard_report_hash": "8a89d57577042dfd56c326f56fc8ffe7de7f85dcaf14fd4ea270996e23f02986",
+    "legality_report_hash": "fc7b41e0280cddd551077858af5c8993eab83341320ab3c460215fdb45283c32",
+    "reasons": [],
+    "gate_version": "bagr_ued.launch_gate.v1"
+  },
+  "cases": {
+    "A": {
+      "structural_batch_ready": true,
+      "director_training_authorized": false,
+      "final_training_launch_authorized": false,
+      "reasons": [],
+      "commit_outcome": "ARCHIVE_COMMIT_REJECTED",
+      "passed": true
+    },
+    "B": {
+      "final_training_launch_authorized": true,
+      "commit_outcome": "ARCHIVE_COMMIT_UNAUTHORIZED",
+      "passed": true
+    },
+    "C": {
+      "structural_batch_ready": false,
+      "reasons": [
+        "budget_plan_status=INSUFFICIENT",
+        "unresolved_shortfall: only 11 eligible; NO backfill / NO k-reduction / NO re-LLM",
+        "selected_ued_slots=11 != 12",
+        "selected_descriptor_without_legality_evidence: ['CF_ENV_00', 'CF_ENV_01', 'CF_ENV_02', 'CF_ENV_03', 'CF_ENV_04', 'CF_ENV_05', 'CF_ENV_06', 'CF_ENV_07', 'CF_ENV_08', 'CF_ENV_09', 'CF_ENV_10']",
+        "selected_descriptors_inconsistent_with_budget_slots: descriptors=[] slots=['CF_ENV_00', 'CF_ENV_01', 'CF_ENV_02', 'CF_ENV_03', 'CF_ENV_04', 'CF_ENV_05', 'CF_ENV_06', 'CF_ENV_07', 'CF_ENV_08', 'CF_ENV_09', 'CF_ENV_10']"
+      ],
+      "passed": true
+    },
+    "D": {
+      "outcome": "TypeError",
+      "passed": true
+    },
+    "E": {
+      "outcomes": [
+        "ARCHIVE_COMMIT_REJECTED",
+        "ARCHIVE_COMMIT_REJECTED"
+      ],
+      "passed": true
+    },
+    "F": {
+      "outcomes": [
+        "REFRESH_GATE_REQUIRED",
+        "REFRESH_GATE_REQUIRED"
+      ],
+      "passed": true
+    },
+    "G": {
+      "gate_batch_hash": "2dda0cfedaa6b7e2",
+      "current_batch_hash": "35b1ebe86feb6689",
+      "outcome": "ARCHIVE_COMMIT_REJECTED",
+      "passed": true
+    },
+    "H": {
+      "gate_selected_hash": "7c5e06945dd7508e",
+      "foreign_hash": "55e539849da22a53",
+      "outcome": "ARCHIVE_COMMIT_REJECTED",
+      "passed": true
+    },
+    "I": {
+      "structural_batch_ready": false,
+      "reasons": [
+        "selected_descriptor_illegal: selector references rejected candidate(s) ['CF_ENV_07']"
+      ],
+      "forged_director_true_still_final": false,
+      "passed": true
+    },
+    "J": {
+      "dry_run": true,
+      "training_authorized": false,
+      "would_add": 3,
+      "archive_entries_after": 0,
+      "passed": true
+    }
+  },
+  "ALL_CASES_PASS": true
+}
