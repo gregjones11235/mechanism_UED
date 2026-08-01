@@ -1,0 +1,649 @@
+{
+  "aborted_in_scenario": false,
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "entry_ids_planned": [
+    "full-seed200000",
+    "full-seed200001",
+    "full-seed200002",
+    "full-seed200003",
+    "full-seed200004",
+    "full-seed200005",
+    "full-seed200006",
+    "full-seed200007",
+    "full-seed200008",
+    "full-seed200009",
+    "full-seed200010",
+    "full-seed200011",
+    "full-seed200012",
+    "full-seed200013",
+    "full-seed200014",
+    "full-seed200015",
+    "full-seed200016",
+    "full-seed200017",
+    "full-seed200018",
+    "full-seed200019",
+    "full-seed200020",
+    "full-seed200021",
+    "full-seed200022",
+    "full-seed200023",
+    "full-seed200024",
+    "full-seed200025",
+    "full-seed200026",
+    "full-seed200027",
+    "full-seed200028",
+    "full-seed200029",
+    "full-seed200030",
+    "full-seed200031",
+    "full-seed200032",
+    "full-seed200033",
+    "full-seed200034",
+    "full-seed200035",
+    "full-seed200036",
+    "full-seed200037",
+    "full-seed200038",
+    "full-seed200039",
+    "full-seed200040",
+    "full-seed200041",
+    "full-seed200042",
+    "full-seed200043",
+    "full-seed200044",
+    "full-seed200045",
+    "full-seed200046",
+    "full-seed200047",
+    "full-seed200048",
+    "full-seed200049",
+    "full-seed200050",
+    "full-seed200051",
+    "full-seed200052",
+    "full-seed200053",
+    "full-seed200054",
+    "full-seed200055",
+    "full-seed200056",
+    "full-seed200057",
+    "full-seed200058",
+    "full-seed200059",
+    "full-seed200060",
+    "full-seed200061",
+    "full-seed200062",
+    "full-seed200063"
+  ],
+  "episode_records_sha256": "3c6b80d4ad5c42b35a7a88bb2a01269b238e7fe5e06c9835682c667fbc7ad8c9",
+  "episodes_executed": 64,
+  "episodes_planned": 64,
+  "evaluation": {
+    "checkpoint_params_sha256": null,
+    "contract": {
+      "action_mode": "greedy_argmax",
+      "action_space": "canonical_craftax_action_set",
+      "identical_for_all_arms": true,
+      "max_timesteps": 4096,
+      "observation_schema": "canonical_craftax_symbolic"
+    },
+    "episode_count": 64,
+    "failure_rule_version": "tier3_failure_rules/v1",
+    "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+    "metrics": {
+      "dense": {
+        "median": null,
+        "metric": "GRAPH_DISTANCE_PROGRESS",
+        "note": "dense progress defined for front_l2 only",
+        "per_state_progress": [],
+        "scenario": "full",
+        "value": null
+      },
+      "primary": {
+        "conditional_on": "valid_start",
+        "diagnostic_only": false,
+        "metric": "DEFEAT_KOBOLD_SR",
+        "scenario": "full",
+        "successes": 19,
+        "valid_starts": 64,
+        "value": 0.296875
+      },
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_metrics/v1"
+    },
+    "result_version": "tier3_evaluation_result/v1",
+    "rollout_status": "REAL_ENV_INTERFACE_READY",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "full",
+    "schema": "mechanism_UED.tier3_evaluation_result/v1",
+    "terminal_label_counts": {
+      "DIED_BEFORE_KOBOLD": 45,
+      "SUCCESS_DEFEAT_KOBOLD": 19
+    },
+    "valid_start_count": 64
+  },
+  "generated_at_utc": "2026-07-31T17:31:18.906436+00:00",
+  "rehearsal": false,
+  "run_class": "FORMAL_EVALUATION",
+  "scenario": "full",
+  "schedule": {
+    "base": 200000,
+    "count": 64,
+    "kind": "canonical_reset_seeds_held_out",
+    "seeds": [
+      200000,
+      200001,
+      200002,
+      200003,
+      200004,
+      200005,
+      200006,
+      200007,
+      200008,
+      200009,
+      200010,
+      200011,
+      200012,
+      200013,
+      200014,
+      200015,
+      200016,
+      200017,
+      200018,
+      200019,
+      200020,
+      200021,
+      200022,
+      200023,
+      200024,
+      200025,
+      200026,
+      200027,
+      200028,
+      200029,
+      200030,
+      200031,
+      200032,
+      200033,
+      200034,
+      200035,
+      200036,
+      200037,
+      200038,
+      200039,
+      200040,
+      200041,
+      200042,
+      200043,
+      200044,
+      200045,
+      200046,
+      200047,
+      200048,
+      200049,
+      200050,
+      200051,
+      200052,
+      200053,
+      200054,
+      200055,
+      200056,
+      200057,
+      200058,
+      200059,
+      200060,
+      200061,
+      200062,
+      200063
+    ]
+  },
+  "schema": "mechanism_UED.tier3_formal_evaluation_result/v2dt",
+  "timing": {
+    "episodes": [
+      {
+        "entry_id": "full-seed200000",
+        "episode_id": "full-seed200000",
+        "seed": 200000,
+        "timesteps": 1389,
+        "wall_seconds": 382.402668
+      },
+      {
+        "entry_id": "full-seed200001",
+        "episode_id": "full-seed200001",
+        "seed": 200001,
+        "timesteps": 284,
+        "wall_seconds": 61.46567
+      },
+      {
+        "entry_id": "full-seed200002",
+        "episode_id": "full-seed200002",
+        "seed": 200002,
+        "timesteps": 300,
+        "wall_seconds": 64.827577
+      },
+      {
+        "entry_id": "full-seed200003",
+        "episode_id": "full-seed200003",
+        "seed": 200003,
+        "timesteps": 1190,
+        "wall_seconds": 256.436809
+      },
+      {
+        "entry_id": "full-seed200004",
+        "episode_id": "full-seed200004",
+        "seed": 200004,
+        "timesteps": 2383,
+        "wall_seconds": 510.317348
+      },
+      {
+        "entry_id": "full-seed200005",
+        "episode_id": "full-seed200005",
+        "seed": 200005,
+        "timesteps": 93,
+        "wall_seconds": 20.509821
+      },
+      {
+        "entry_id": "full-seed200006",
+        "episode_id": "full-seed200006",
+        "seed": 200006,
+        "timesteps": 306,
+        "wall_seconds": 65.925404
+      },
+      {
+        "entry_id": "full-seed200007",
+        "episode_id": "full-seed200007",
+        "seed": 200007,
+        "timesteps": 1634,
+        "wall_seconds": 348.733084
+      },
+      {
+        "entry_id": "full-seed200008",
+        "episode_id": "full-seed200008",
+        "seed": 200008,
+        "timesteps": 1010,
+        "wall_seconds": 214.531492
+      },
+      {
+        "entry_id": "full-seed200009",
+        "episode_id": "full-seed200009",
+        "seed": 200009,
+        "timesteps": 1182,
+        "wall_seconds": 252.494156
+      },
+      {
+        "entry_id": "full-seed200010",
+        "episode_id": "full-seed200010",
+        "seed": 200010,
+        "timesteps": 821,
+        "wall_seconds": 176.27243
+      },
+      {
+        "entry_id": "full-seed200011",
+        "episode_id": "full-seed200011",
+        "seed": 200011,
+        "timesteps": 810,
+        "wall_seconds": 173.787585
+      },
+      {
+        "entry_id": "full-seed200012",
+        "episode_id": "full-seed200012",
+        "seed": 200012,
+        "timesteps": 568,
+        "wall_seconds": 119.950708
+      },
+      {
+        "entry_id": "full-seed200013",
+        "episode_id": "full-seed200013",
+        "seed": 200013,
+        "timesteps": 2833,
+        "wall_seconds": 604.639393
+      },
+      {
+        "entry_id": "full-seed200014",
+        "episode_id": "full-seed200014",
+        "seed": 200014,
+        "timesteps": 1037,
+        "wall_seconds": 220.30406
+      },
+      {
+        "entry_id": "full-seed200015",
+        "episode_id": "full-seed200015",
+        "seed": 200015,
+        "timesteps": 807,
+        "wall_seconds": 171.523649
+      },
+      {
+        "entry_id": "full-seed200016",
+        "episode_id": "full-seed200016",
+        "seed": 200016,
+        "timesteps": 704,
+        "wall_seconds": 150.865974
+      },
+      {
+        "entry_id": "full-seed200017",
+        "episode_id": "full-seed200017",
+        "seed": 200017,
+        "timesteps": 229,
+        "wall_seconds": 48.62316
+      },
+      {
+        "entry_id": "full-seed200018",
+        "episode_id": "full-seed200018",
+        "seed": 200018,
+        "timesteps": 737,
+        "wall_seconds": 158.033195
+      },
+      {
+        "entry_id": "full-seed200019",
+        "episode_id": "full-seed200019",
+        "seed": 200019,
+        "timesteps": 1365,
+        "wall_seconds": 288.373321
+      },
+      {
+        "entry_id": "full-seed200020",
+        "episode_id": "full-seed200020",
+        "seed": 200020,
+        "timesteps": 1296,
+        "wall_seconds": 275.822712
+      },
+      {
+        "entry_id": "full-seed200021",
+        "episode_id": "full-seed200021",
+        "seed": 200021,
+        "timesteps": 685,
+        "wall_seconds": 145.854401
+      },
+      {
+        "entry_id": "full-seed200022",
+        "episode_id": "full-seed200022",
+        "seed": 200022,
+        "timesteps": 621,
+        "wall_seconds": 132.004645
+      },
+      {
+        "entry_id": "full-seed200023",
+        "episode_id": "full-seed200023",
+        "seed": 200023,
+        "timesteps": 477,
+        "wall_seconds": 102.09129
+      },
+      {
+        "entry_id": "full-seed200024",
+        "episode_id": "full-seed200024",
+        "seed": 200024,
+        "timesteps": 1527,
+        "wall_seconds": 324.380177
+      },
+      {
+        "entry_id": "full-seed200025",
+        "episode_id": "full-seed200025",
+        "seed": 200025,
+        "timesteps": 928,
+        "wall_seconds": 196.849072
+      },
+      {
+        "entry_id": "full-seed200026",
+        "episode_id": "full-seed200026",
+        "seed": 200026,
+        "timesteps": 120,
+        "wall_seconds": 25.64777
+      },
+      {
+        "entry_id": "full-seed200027",
+        "episode_id": "full-seed200027",
+        "seed": 200027,
+        "timesteps": 2056,
+        "wall_seconds": 439.310128
+      },
+      {
+        "entry_id": "full-seed200028",
+        "episode_id": "full-seed200028",
+        "seed": 200028,
+        "timesteps": 667,
+        "wall_seconds": 141.758205
+      },
+      {
+        "entry_id": "full-seed200029",
+        "episode_id": "full-seed200029",
+        "seed": 200029,
+        "timesteps": 730,
+        "wall_seconds": 154.934877
+      },
+      {
+        "entry_id": "full-seed200030",
+        "episode_id": "full-seed200030",
+        "seed": 200030,
+        "timesteps": 153,
+        "wall_seconds": 32.820452
+      },
+      {
+        "entry_id": "full-seed200031",
+        "episode_id": "full-seed200031",
+        "seed": 200031,
+        "timesteps": 192,
+        "wall_seconds": 40.875446
+      },
+      {
+        "entry_id": "full-seed200032",
+        "episode_id": "full-seed200032",
+        "seed": 200032,
+        "timesteps": 578,
+        "wall_seconds": 122.501794
+      },
+      {
+        "entry_id": "full-seed200033",
+        "episode_id": "full-seed200033",
+        "seed": 200033,
+        "timesteps": 260,
+        "wall_seconds": 55.18618
+      },
+      {
+        "entry_id": "full-seed200034",
+        "episode_id": "full-seed200034",
+        "seed": 200034,
+        "timesteps": 248,
+        "wall_seconds": 52.366072
+      },
+      {
+        "entry_id": "full-seed200035",
+        "episode_id": "full-seed200035",
+        "seed": 200035,
+        "timesteps": 178,
+        "wall_seconds": 38.178203
+      },
+      {
+        "entry_id": "full-seed200036",
+        "episode_id": "full-seed200036",
+        "seed": 200036,
+        "timesteps": 557,
+        "wall_seconds": 119.463215
+      },
+      {
+        "entry_id": "full-seed200037",
+        "episode_id": "full-seed200037",
+        "seed": 200037,
+        "timesteps": 1437,
+        "wall_seconds": 304.7326
+      },
+      {
+        "entry_id": "full-seed200038",
+        "episode_id": "full-seed200038",
+        "seed": 200038,
+        "timesteps": 67,
+        "wall_seconds": 14.770259
+      },
+      {
+        "entry_id": "full-seed200039",
+        "episode_id": "full-seed200039",
+        "seed": 200039,
+        "timesteps": 567,
+        "wall_seconds": 121.127152
+      },
+      {
+        "entry_id": "full-seed200040",
+        "episode_id": "full-seed200040",
+        "seed": 200040,
+        "timesteps": 703,
+        "wall_seconds": 147.815706
+      },
+      {
+        "entry_id": "full-seed200041",
+        "episode_id": "full-seed200041",
+        "seed": 200041,
+        "timesteps": 738,
+        "wall_seconds": 156.14226
+      },
+      {
+        "entry_id": "full-seed200042",
+        "episode_id": "full-seed200042",
+        "seed": 200042,
+        "timesteps": 629,
+        "wall_seconds": 134.112986
+      },
+      {
+        "entry_id": "full-seed200043",
+        "episode_id": "full-seed200043",
+        "seed": 200043,
+        "timesteps": 737,
+        "wall_seconds": 156.428687
+      },
+      {
+        "entry_id": "full-seed200044",
+        "episode_id": "full-seed200044",
+        "seed": 200044,
+        "timesteps": 2546,
+        "wall_seconds": 539.625497
+      },
+      {
+        "entry_id": "full-seed200045",
+        "episode_id": "full-seed200045",
+        "seed": 200045,
+        "timesteps": 591,
+        "wall_seconds": 124.489146
+      },
+      {
+        "entry_id": "full-seed200046",
+        "episode_id": "full-seed200046",
+        "seed": 200046,
+        "timesteps": 173,
+        "wall_seconds": 37.159095
+      },
+      {
+        "entry_id": "full-seed200047",
+        "episode_id": "full-seed200047",
+        "seed": 200047,
+        "timesteps": 832,
+        "wall_seconds": 174.435053
+      },
+      {
+        "entry_id": "full-seed200048",
+        "episode_id": "full-seed200048",
+        "seed": 200048,
+        "timesteps": 1416,
+        "wall_seconds": 299.844692
+      },
+      {
+        "entry_id": "full-seed200049",
+        "episode_id": "full-seed200049",
+        "seed": 200049,
+        "timesteps": 231,
+        "wall_seconds": 48.649254
+      },
+      {
+        "entry_id": "full-seed200050",
+        "episode_id": "full-seed200050",
+        "seed": 200050,
+        "timesteps": 423,
+        "wall_seconds": 89.461692
+      },
+      {
+        "entry_id": "full-seed200051",
+        "episode_id": "full-seed200051",
+        "seed": 200051,
+        "timesteps": 155,
+        "wall_seconds": 32.883238
+      },
+      {
+        "entry_id": "full-seed200052",
+        "episode_id": "full-seed200052",
+        "seed": 200052,
+        "timesteps": 181,
+        "wall_seconds": 38.659483
+      },
+      {
+        "entry_id": "full-seed200053",
+        "episode_id": "full-seed200053",
+        "seed": 200053,
+        "timesteps": 2018,
+        "wall_seconds": 426.763844
+      },
+      {
+        "entry_id": "full-seed200054",
+        "episode_id": "full-seed200054",
+        "seed": 200054,
+        "timesteps": 155,
+        "wall_seconds": 33.087155
+      },
+      {
+        "entry_id": "full-seed200055",
+        "episode_id": "full-seed200055",
+        "seed": 200055,
+        "timesteps": 1928,
+        "wall_seconds": 406.665023
+      },
+      {
+        "entry_id": "full-seed200056",
+        "episode_id": "full-seed200056",
+        "seed": 200056,
+        "timesteps": 728,
+        "wall_seconds": 152.665007
+      },
+      {
+        "entry_id": "full-seed200057",
+        "episode_id": "full-seed200057",
+        "seed": 200057,
+        "timesteps": 114,
+        "wall_seconds": 24.105984
+      },
+      {
+        "entry_id": "full-seed200058",
+        "episode_id": "full-seed200058",
+        "seed": 200058,
+        "timesteps": 182,
+        "wall_seconds": 38.248895
+      },
+      {
+        "entry_id": "full-seed200059",
+        "episode_id": "full-seed200059",
+        "seed": 200059,
+        "timesteps": 92,
+        "wall_seconds": 19.681027
+      },
+      {
+        "entry_id": "full-seed200060",
+        "episode_id": "full-seed200060",
+        "seed": 200060,
+        "timesteps": 1180,
+        "wall_seconds": 247.839313
+      },
+      {
+        "entry_id": "full-seed200061",
+        "episode_id": "full-seed200061",
+        "seed": 200061,
+        "timesteps": 293,
+        "wall_seconds": 62.517764
+      },
+      {
+        "entry_id": "full-seed200062",
+        "episode_id": "full-seed200062",
+        "seed": 200062,
+        "timesteps": 173,
+        "wall_seconds": 37.131594
+      },
+      {
+        "entry_id": "full-seed200063",
+        "episode_id": "full-seed200063",
+        "seed": 200063,
+        "timesteps": 295,
+        "wall_seconds": 61.372615
+      }
+    ],
+    "peak_rss_kb": 3911852,
+    "scenario_wall_seconds": 10640.590911
+  }
+}

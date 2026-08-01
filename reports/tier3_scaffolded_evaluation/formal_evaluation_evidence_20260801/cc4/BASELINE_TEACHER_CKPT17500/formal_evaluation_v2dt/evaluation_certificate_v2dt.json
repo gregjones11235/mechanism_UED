@@ -1,0 +1,997 @@
+{
+  "action_dim": 43,
+  "action_mode": "greedy_argmax",
+  "audit": {
+    "authorization_note": "formal run authorized by SECONDARY_AUDIT_PASS marker (verdict PASS_FOR_FORMAL_GLOBAL_PERFORMANCE_EVALUATION_START); interface smoke evidence is NOT a performance result",
+    "binding_gate_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+    "common_v2_ready_sha256_at_run_time": "b468e1cf9e66fef60783d9757eee84494b48acdd8ccf8bb75b1142ec433dc94c",
+    "secondary_audit_marker": {
+      "binding_gate_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+      "path": "/home/oseasy/student_pool_v1/cc4/SECONDARY_AUDIT_PASS.json",
+      "recorded_at_utc": "2026-07-31T10:09:36.565527+00:00",
+      "sha256": "b08c1a9bf7055ac6b4a200c6f561374a0c34c2dee9ce6dd799212de3eb5f8351",
+      "verdict": "PASS_FOR_FORMAL_GLOBAL_PERFORMANCE_EVALUATION_START"
+    }
+  },
+  "back_episode_count": 8,
+  "bfs_graph_source": "CURRENT_ENVIRONMENT_STATE_TOPOLOGY",
+  "bound_owner_runtime_sha256": {
+    "candidate_runtime.py": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+    "dicode/network.py": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    "gtrxl128_reference_runtime.py": "d3d4e55259cbe7cd57112bb26bfc765cae96ae88b170397ea3e76fe2fd0196b1"
+  },
+  "budget_class": "UNMATCHED_REFERENCE",
+  "candidate_class": "TEACHER_REFERENCE",
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "candidate_manifest_sha256": "addee6e757edf52d12302844901ae7f29e22e0772656c6938820f9f926fc7041",
+  "candidate_runtime_sha256": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+  "capsule_file_verification": {
+    "candidate_manifest.json": {
+      "capsule_sums": "addee6e757edf52d12302844901ae7f29e22e0772656c6938820f9f926fc7041",
+      "declared": "addee6e757edf52d12302844901ae7f29e22e0772656c6938820f9f926fc7041",
+      "live": "addee6e757edf52d12302844901ae7f29e22e0772656c6938820f9f926fc7041",
+      "match": true
+    },
+    "candidate_runtime.py": {
+      "capsule_sums": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+      "declared": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+      "live": "ed1a5c3f85dc79093149a3a9aece92ad99524ffb881e1a10e95adb9d77b1305b",
+      "match": true
+    },
+    "checkpoint_contract.json": {
+      "capsule_sums": "58f5623d54f1941b3bd38c37a0096479f885369459dcaa52cd5be48e372f58cd",
+      "declared": "58f5623d54f1941b3bd38c37a0096479f885369459dcaa52cd5be48e372f58cd",
+      "live": "58f5623d54f1941b3bd38c37a0096479f885369459dcaa52cd5be48e372f58cd",
+      "match": true
+    },
+    "evaluate_candidate.py": {
+      "capsule_sums": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+      "declared": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+      "live": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+      "match": true
+    }
+  },
+  "cert_version": "tier3_evaluation_certificate/v2dt",
+  "checkpoint_contract_sha256": "58f5623d54f1941b3bd38c37a0096479f885369459dcaa52cd5be48e372f58cd",
+  "checkpoint_file_hash_protocol": "sha256 of pkl file bytes (contract file_sha256_method)",
+  "checkpoint_file_sha256": "a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01",
+  "checkpoint_file_sha256_declaration_source": "teacher capsule checkpoint_contract.json (file_sha256_method='sha256 of file bytes'); CC4 pool-readiness round already recomputed this value MATCH",
+  "checkpoint_file_sha256_owner_declared": "a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "common_pins": {
+    "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+    "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+    "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+    "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+    "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+    "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+    "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde"
+  },
+  "common_root": "/home/oseasy/student_pool_v1/common_v2",
+  "common_sha_match_status": "PASS (7/7)",
+  "counts_toward_student_binding_count": false,
+  "dicode_resolution": {
+    "dicode_network_matches_cc1_policy_source": true,
+    "dicode_network_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    "dicode_package_file": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src/dicode/__init__.py",
+    "dicode_src": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src"
+  },
+  "engine_identity": {
+    "engine_lf_sha256_v1_frozen": {
+      "tier3_candidate_runtime.py": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+      "tier3_evaluator.py": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715"
+    },
+    "engine_lf_sha256_v2": {
+      "tier3_evaluator_v2.py": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+      "tier3_event_predicates_v2.py": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+    },
+    "engine_modules_verified_by_stage1": 4,
+    "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+    "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+  },
+  "entry_ids_by_scenario": {
+    "front_l2": [
+      "front_l2-bank0",
+      "front_l2-bank1",
+      "front_l2-bank2",
+      "front_l2-bank3",
+      "front_l2-bank4",
+      "front_l2-bank5",
+      "front_l2-bank6",
+      "front_l2-bank7"
+    ],
+    "full": [
+      "full-seed200000",
+      "full-seed200001",
+      "full-seed200002",
+      "full-seed200003",
+      "full-seed200004",
+      "full-seed200005",
+      "full-seed200006",
+      "full-seed200007",
+      "full-seed200008",
+      "full-seed200009",
+      "full-seed200010",
+      "full-seed200011",
+      "full-seed200012",
+      "full-seed200013",
+      "full-seed200014",
+      "full-seed200015",
+      "full-seed200016",
+      "full-seed200017",
+      "full-seed200018",
+      "full-seed200019",
+      "full-seed200020",
+      "full-seed200021",
+      "full-seed200022",
+      "full-seed200023",
+      "full-seed200024",
+      "full-seed200025",
+      "full-seed200026",
+      "full-seed200027",
+      "full-seed200028",
+      "full-seed200029",
+      "full-seed200030",
+      "full-seed200031",
+      "full-seed200032",
+      "full-seed200033",
+      "full-seed200034",
+      "full-seed200035",
+      "full-seed200036",
+      "full-seed200037",
+      "full-seed200038",
+      "full-seed200039",
+      "full-seed200040",
+      "full-seed200041",
+      "full-seed200042",
+      "full-seed200043",
+      "full-seed200044",
+      "full-seed200045",
+      "full-seed200046",
+      "full-seed200047",
+      "full-seed200048",
+      "full-seed200049",
+      "full-seed200050",
+      "full-seed200051",
+      "full-seed200052",
+      "full-seed200053",
+      "full-seed200054",
+      "full-seed200055",
+      "full-seed200056",
+      "full-seed200057",
+      "full-seed200058",
+      "full-seed200059",
+      "full-seed200060",
+      "full-seed200061",
+      "full-seed200062",
+      "full-seed200063"
+    ]
+  },
+  "episode_records_jsonl_sha256": "68cff469b082e8b3e8830014274889fc9791d11c3d406dc3f6b1d146c24a7ef2",
+  "episodes_executed": {
+    "back_l2": 0,
+    "front_l2": 8,
+    "full": 64
+  },
+  "evaluate_candidate_sha256": "55569c02c8fe758279310d9fc247d1408e3ae5f6d4f5f52ba3c21f3941f568e6",
+  "evaluation_status": "BLOCKED",
+  "formal_abort": {
+    "aborted_phase": "evaluate_classification",
+    "authority": "frozen engine taxonomy (not relaxable by CC4)",
+    "consequence": "candidate BLOCKED; NOT recorded as a formal score; no candidate-level exemption; no retraining; rerun would reproduce deterministically",
+    "engine_message": "FAIL CLOSED (NEG20): ambiguous/contradictory terminal signals ['front_l2 floor transition AND defeat_kobold (front ends at the transition)']; refusing to silently assign a single label",
+    "entry_id": null,
+    "episode_index": null,
+    "episodes_completed_before_abort": 8,
+    "episodes_planned": 8,
+    "exception_type": "tier3_failure_taxonomy.FailClosed (via frozen tier3_evaluator.evaluate)",
+    "scenario": "front_l2",
+    "scenarios_completed_before_abort": [
+      "full",
+      "front_l2"
+    ],
+    "seed": null,
+    "v2_failclosed_class": "TERMINAL_SIGNAL_AMBIGUITY (frozen classifier refuses contradictory terminal signals; NOT corruption, NOT relaxable by CC4)",
+    "verdict": "ENGINE_TAXONOMY_REJECTED_FORMAL_EVALUATION_V2"
+  },
+  "formal_performance_results_authorized_by_secondary_audit": true,
+  "formal_student_ranking_eligible": false,
+  "front_episode_count": 8,
+  "full_episode_count": 64,
+  "generated_at_utc": "2026-07-31T18:00:25.411080+00:00",
+  "gpu": {
+    "cuda_visible_devices": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+    "gpu_allowlist_cc4": [
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+      "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "nvidia_smi_L": [
+      "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+      "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+      "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+      "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ]
+  },
+  "interface_smoke_substituted_for_performance": false,
+  "max_steps": 4096,
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC1",
+  "params_hash_protocol": "gtrxl128_reference_runtime.params_sha256 (eval_bakeoff convention; same as CONTROL)",
+  "params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "params_sha256_declaration_source": "teacher capsule checkpoint_contract.json expected_params_sha256 (== canonical base params)",
+  "params_sha256_owner_declared": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "params_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "params_unchanged": true,
+  "performance_evaluation_executed": true,
+  "policy_adapter": {
+    "batch1_workaround": {
+      "applied": true,
+      "effective_batch": 2,
+      "fidelity_basis": "forward_eval rows are fully independent (per-row encoder/attention, no cross-batch op) -> duplicated-row batch 2 with row-0 readout is numerically identical to B=1",
+      "owner_code_modified": false,
+      "readout_row": 0,
+      "reason": "owner dicode transformerXL.forward_eval x.squeeze() removes the batch dim at B=1 (layer-2 concat TypeError (1,128,256) vs (256,1)); owner harness is always vectorized (smoke_batch_size>=2, NUM_ENVS=256) and never hits B=1",
+      "rows_duplicated": true
+    },
+    "boundary_unit_check": null,
+    "class": "GTrXL128ProjectionPolicy"
+  },
+  "provenance": {
+    "argv": [
+      "tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py",
+      "--candidate-id",
+      "BASELINE_TEACHER_CKPT17500"
+    ],
+    "cwd": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+    "device_identity": {
+      "craftax_version": "1.4.5",
+      "flax_version": "0.8.5",
+      "jax_default_backend": "gpu",
+      "jax_devices": "[cuda(id=0)]",
+      "jax_version": "0.4.30",
+      "jaxlib_version": "0.4.30",
+      "numpy_version": "1.26.4",
+      "python_version": "3.11.15"
+    },
+    "git_commit_head": "6f5e270559b67c63ea55d733f9606283c52dad2f",
+    "host": "i-00000226",
+    "pid": 2595717,
+    "scenario_wall_seconds": {
+      "front_l2": 1746.403396,
+      "full": 10640.590911
+    },
+    "timing_by_scenario": {
+      "front_l2": {
+        "episodes": [
+          {
+            "entry_id": "front_l2-bank0",
+            "episode_id": "front_l2-bank0",
+            "seed": 10000,
+            "timesteps": 1252,
+            "wall_seconds": 269.251752
+          },
+          {
+            "entry_id": "front_l2-bank1",
+            "episode_id": "front_l2-bank1",
+            "seed": 10001,
+            "timesteps": 117,
+            "wall_seconds": 25.262723
+          },
+          {
+            "entry_id": "front_l2-bank2",
+            "episode_id": "front_l2-bank2",
+            "seed": 10002,
+            "timesteps": 342,
+            "wall_seconds": 73.302312
+          },
+          {
+            "entry_id": "front_l2-bank3",
+            "episode_id": "front_l2-bank3",
+            "seed": 10003,
+            "timesteps": 222,
+            "wall_seconds": 46.973994
+          },
+          {
+            "entry_id": "front_l2-bank4",
+            "episode_id": "front_l2-bank4",
+            "seed": 10004,
+            "timesteps": 888,
+            "wall_seconds": 189.275728
+          },
+          {
+            "entry_id": "front_l2-bank5",
+            "episode_id": "front_l2-bank5",
+            "seed": 10005,
+            "timesteps": 622,
+            "wall_seconds": 132.318765
+          },
+          {
+            "entry_id": "front_l2-bank6",
+            "episode_id": "front_l2-bank6",
+            "seed": 10006,
+            "timesteps": 661,
+            "wall_seconds": 140.660038
+          },
+          {
+            "entry_id": "front_l2-bank7",
+            "episode_id": "front_l2-bank7",
+            "seed": 10007,
+            "timesteps": 4096,
+            "wall_seconds": 869.209842
+          }
+        ],
+        "peak_rss_kb": 3913752,
+        "scenario_wall_seconds": 1746.403396
+      },
+      "full": {
+        "episodes": [
+          {
+            "entry_id": "full-seed200000",
+            "episode_id": "full-seed200000",
+            "seed": 200000,
+            "timesteps": 1389,
+            "wall_seconds": 382.402668
+          },
+          {
+            "entry_id": "full-seed200001",
+            "episode_id": "full-seed200001",
+            "seed": 200001,
+            "timesteps": 284,
+            "wall_seconds": 61.46567
+          },
+          {
+            "entry_id": "full-seed200002",
+            "episode_id": "full-seed200002",
+            "seed": 200002,
+            "timesteps": 300,
+            "wall_seconds": 64.827577
+          },
+          {
+            "entry_id": "full-seed200003",
+            "episode_id": "full-seed200003",
+            "seed": 200003,
+            "timesteps": 1190,
+            "wall_seconds": 256.436809
+          },
+          {
+            "entry_id": "full-seed200004",
+            "episode_id": "full-seed200004",
+            "seed": 200004,
+            "timesteps": 2383,
+            "wall_seconds": 510.317348
+          },
+          {
+            "entry_id": "full-seed200005",
+            "episode_id": "full-seed200005",
+            "seed": 200005,
+            "timesteps": 93,
+            "wall_seconds": 20.509821
+          },
+          {
+            "entry_id": "full-seed200006",
+            "episode_id": "full-seed200006",
+            "seed": 200006,
+            "timesteps": 306,
+            "wall_seconds": 65.925404
+          },
+          {
+            "entry_id": "full-seed200007",
+            "episode_id": "full-seed200007",
+            "seed": 200007,
+            "timesteps": 1634,
+            "wall_seconds": 348.733084
+          },
+          {
+            "entry_id": "full-seed200008",
+            "episode_id": "full-seed200008",
+            "seed": 200008,
+            "timesteps": 1010,
+            "wall_seconds": 214.531492
+          },
+          {
+            "entry_id": "full-seed200009",
+            "episode_id": "full-seed200009",
+            "seed": 200009,
+            "timesteps": 1182,
+            "wall_seconds": 252.494156
+          },
+          {
+            "entry_id": "full-seed200010",
+            "episode_id": "full-seed200010",
+            "seed": 200010,
+            "timesteps": 821,
+            "wall_seconds": 176.27243
+          },
+          {
+            "entry_id": "full-seed200011",
+            "episode_id": "full-seed200011",
+            "seed": 200011,
+            "timesteps": 810,
+            "wall_seconds": 173.787585
+          },
+          {
+            "entry_id": "full-seed200012",
+            "episode_id": "full-seed200012",
+            "seed": 200012,
+            "timesteps": 568,
+            "wall_seconds": 119.950708
+          },
+          {
+            "entry_id": "full-seed200013",
+            "episode_id": "full-seed200013",
+            "seed": 200013,
+            "timesteps": 2833,
+            "wall_seconds": 604.639393
+          },
+          {
+            "entry_id": "full-seed200014",
+            "episode_id": "full-seed200014",
+            "seed": 200014,
+            "timesteps": 1037,
+            "wall_seconds": 220.30406
+          },
+          {
+            "entry_id": "full-seed200015",
+            "episode_id": "full-seed200015",
+            "seed": 200015,
+            "timesteps": 807,
+            "wall_seconds": 171.523649
+          },
+          {
+            "entry_id": "full-seed200016",
+            "episode_id": "full-seed200016",
+            "seed": 200016,
+            "timesteps": 704,
+            "wall_seconds": 150.865974
+          },
+          {
+            "entry_id": "full-seed200017",
+            "episode_id": "full-seed200017",
+            "seed": 200017,
+            "timesteps": 229,
+            "wall_seconds": 48.62316
+          },
+          {
+            "entry_id": "full-seed200018",
+            "episode_id": "full-seed200018",
+            "seed": 200018,
+            "timesteps": 737,
+            "wall_seconds": 158.033195
+          },
+          {
+            "entry_id": "full-seed200019",
+            "episode_id": "full-seed200019",
+            "seed": 200019,
+            "timesteps": 1365,
+            "wall_seconds": 288.373321
+          },
+          {
+            "entry_id": "full-seed200020",
+            "episode_id": "full-seed200020",
+            "seed": 200020,
+            "timesteps": 1296,
+            "wall_seconds": 275.822712
+          },
+          {
+            "entry_id": "full-seed200021",
+            "episode_id": "full-seed200021",
+            "seed": 200021,
+            "timesteps": 685,
+            "wall_seconds": 145.854401
+          },
+          {
+            "entry_id": "full-seed200022",
+            "episode_id": "full-seed200022",
+            "seed": 200022,
+            "timesteps": 621,
+            "wall_seconds": 132.004645
+          },
+          {
+            "entry_id": "full-seed200023",
+            "episode_id": "full-seed200023",
+            "seed": 200023,
+            "timesteps": 477,
+            "wall_seconds": 102.09129
+          },
+          {
+            "entry_id": "full-seed200024",
+            "episode_id": "full-seed200024",
+            "seed": 200024,
+            "timesteps": 1527,
+            "wall_seconds": 324.380177
+          },
+          {
+            "entry_id": "full-seed200025",
+            "episode_id": "full-seed200025",
+            "seed": 200025,
+            "timesteps": 928,
+            "wall_seconds": 196.849072
+          },
+          {
+            "entry_id": "full-seed200026",
+            "episode_id": "full-seed200026",
+            "seed": 200026,
+            "timesteps": 120,
+            "wall_seconds": 25.64777
+          },
+          {
+            "entry_id": "full-seed200027",
+            "episode_id": "full-seed200027",
+            "seed": 200027,
+            "timesteps": 2056,
+            "wall_seconds": 439.310128
+          },
+          {
+            "entry_id": "full-seed200028",
+            "episode_id": "full-seed200028",
+            "seed": 200028,
+            "timesteps": 667,
+            "wall_seconds": 141.758205
+          },
+          {
+            "entry_id": "full-seed200029",
+            "episode_id": "full-seed200029",
+            "seed": 200029,
+            "timesteps": 730,
+            "wall_seconds": 154.934877
+          },
+          {
+            "entry_id": "full-seed200030",
+            "episode_id": "full-seed200030",
+            "seed": 200030,
+            "timesteps": 153,
+            "wall_seconds": 32.820452
+          },
+          {
+            "entry_id": "full-seed200031",
+            "episode_id": "full-seed200031",
+            "seed": 200031,
+            "timesteps": 192,
+            "wall_seconds": 40.875446
+          },
+          {
+            "entry_id": "full-seed200032",
+            "episode_id": "full-seed200032",
+            "seed": 200032,
+            "timesteps": 578,
+            "wall_seconds": 122.501794
+          },
+          {
+            "entry_id": "full-seed200033",
+            "episode_id": "full-seed200033",
+            "seed": 200033,
+            "timesteps": 260,
+            "wall_seconds": 55.18618
+          },
+          {
+            "entry_id": "full-seed200034",
+            "episode_id": "full-seed200034",
+            "seed": 200034,
+            "timesteps": 248,
+            "wall_seconds": 52.366072
+          },
+          {
+            "entry_id": "full-seed200035",
+            "episode_id": "full-seed200035",
+            "seed": 200035,
+            "timesteps": 178,
+            "wall_seconds": 38.178203
+          },
+          {
+            "entry_id": "full-seed200036",
+            "episode_id": "full-seed200036",
+            "seed": 200036,
+            "timesteps": 557,
+            "wall_seconds": 119.463215
+          },
+          {
+            "entry_id": "full-seed200037",
+            "episode_id": "full-seed200037",
+            "seed": 200037,
+            "timesteps": 1437,
+            "wall_seconds": 304.7326
+          },
+          {
+            "entry_id": "full-seed200038",
+            "episode_id": "full-seed200038",
+            "seed": 200038,
+            "timesteps": 67,
+            "wall_seconds": 14.770259
+          },
+          {
+            "entry_id": "full-seed200039",
+            "episode_id": "full-seed200039",
+            "seed": 200039,
+            "timesteps": 567,
+            "wall_seconds": 121.127152
+          },
+          {
+            "entry_id": "full-seed200040",
+            "episode_id": "full-seed200040",
+            "seed": 200040,
+            "timesteps": 703,
+            "wall_seconds": 147.815706
+          },
+          {
+            "entry_id": "full-seed200041",
+            "episode_id": "full-seed200041",
+            "seed": 200041,
+            "timesteps": 738,
+            "wall_seconds": 156.14226
+          },
+          {
+            "entry_id": "full-seed200042",
+            "episode_id": "full-seed200042",
+            "seed": 200042,
+            "timesteps": 629,
+            "wall_seconds": 134.112986
+          },
+          {
+            "entry_id": "full-seed200043",
+            "episode_id": "full-seed200043",
+            "seed": 200043,
+            "timesteps": 737,
+            "wall_seconds": 156.428687
+          },
+          {
+            "entry_id": "full-seed200044",
+            "episode_id": "full-seed200044",
+            "seed": 200044,
+            "timesteps": 2546,
+            "wall_seconds": 539.625497
+          },
+          {
+            "entry_id": "full-seed200045",
+            "episode_id": "full-seed200045",
+            "seed": 200045,
+            "timesteps": 591,
+            "wall_seconds": 124.489146
+          },
+          {
+            "entry_id": "full-seed200046",
+            "episode_id": "full-seed200046",
+            "seed": 200046,
+            "timesteps": 173,
+            "wall_seconds": 37.159095
+          },
+          {
+            "entry_id": "full-seed200047",
+            "episode_id": "full-seed200047",
+            "seed": 200047,
+            "timesteps": 832,
+            "wall_seconds": 174.435053
+          },
+          {
+            "entry_id": "full-seed200048",
+            "episode_id": "full-seed200048",
+            "seed": 200048,
+            "timesteps": 1416,
+            "wall_seconds": 299.844692
+          },
+          {
+            "entry_id": "full-seed200049",
+            "episode_id": "full-seed200049",
+            "seed": 200049,
+            "timesteps": 231,
+            "wall_seconds": 48.649254
+          },
+          {
+            "entry_id": "full-seed200050",
+            "episode_id": "full-seed200050",
+            "seed": 200050,
+            "timesteps": 423,
+            "wall_seconds": 89.461692
+          },
+          {
+            "entry_id": "full-seed200051",
+            "episode_id": "full-seed200051",
+            "seed": 200051,
+            "timesteps": 155,
+            "wall_seconds": 32.883238
+          },
+          {
+            "entry_id": "full-seed200052",
+            "episode_id": "full-seed200052",
+            "seed": 200052,
+            "timesteps": 181,
+            "wall_seconds": 38.659483
+          },
+          {
+            "entry_id": "full-seed200053",
+            "episode_id": "full-seed200053",
+            "seed": 200053,
+            "timesteps": 2018,
+            "wall_seconds": 426.763844
+          },
+          {
+            "entry_id": "full-seed200054",
+            "episode_id": "full-seed200054",
+            "seed": 200054,
+            "timesteps": 155,
+            "wall_seconds": 33.087155
+          },
+          {
+            "entry_id": "full-seed200055",
+            "episode_id": "full-seed200055",
+            "seed": 200055,
+            "timesteps": 1928,
+            "wall_seconds": 406.665023
+          },
+          {
+            "entry_id": "full-seed200056",
+            "episode_id": "full-seed200056",
+            "seed": 200056,
+            "timesteps": 728,
+            "wall_seconds": 152.665007
+          },
+          {
+            "entry_id": "full-seed200057",
+            "episode_id": "full-seed200057",
+            "seed": 200057,
+            "timesteps": 114,
+            "wall_seconds": 24.105984
+          },
+          {
+            "entry_id": "full-seed200058",
+            "episode_id": "full-seed200058",
+            "seed": 200058,
+            "timesteps": 182,
+            "wall_seconds": 38.248895
+          },
+          {
+            "entry_id": "full-seed200059",
+            "episode_id": "full-seed200059",
+            "seed": 200059,
+            "timesteps": 92,
+            "wall_seconds": 19.681027
+          },
+          {
+            "entry_id": "full-seed200060",
+            "episode_id": "full-seed200060",
+            "seed": 200060,
+            "timesteps": 1180,
+            "wall_seconds": 247.839313
+          },
+          {
+            "entry_id": "full-seed200061",
+            "episode_id": "full-seed200061",
+            "seed": 200061,
+            "timesteps": 293,
+            "wall_seconds": 62.517764
+          },
+          {
+            "entry_id": "full-seed200062",
+            "episode_id": "full-seed200062",
+            "seed": 200062,
+            "timesteps": 173,
+            "wall_seconds": 37.131594
+          },
+          {
+            "entry_id": "full-seed200063",
+            "episode_id": "full-seed200063",
+            "seed": 200063,
+            "timesteps": 295,
+            "wall_seconds": 61.372615
+          }
+        ],
+        "peak_rss_kb": 3911852,
+        "scenario_wall_seconds": 10640.590911
+      }
+    }
+  },
+  "records_sha256_by_scenario": {
+    "front_l2": "0c750c358e169c96b007313eefec8c0be3a5463d50b3b6f09f4a72de1d0e4edb",
+    "full": "3c6b80d4ad5c42b35a7a88bb2a01269b238e7fe5e06c9835682c667fbc7ad8c9"
+  },
+  "reference_only": true,
+  "rehearsal": {
+    "is_rehearsal": false,
+    "limits": null,
+    "note": "formal run at the frozen full schedule (FULL 64 + FRONT 8 + BACK 8, max_steps=4096)"
+  },
+  "results_by_scenario": {
+    "full": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 64,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "full",
+          "value": null
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": false,
+          "metric": "DEFEAT_KOBOLD_SR",
+          "scenario": "full",
+          "successes": 19,
+          "valid_starts": 64,
+          "value": 0.296875
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "full",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "DIED_BEFORE_KOBOLD": 45,
+        "SUCCESS_DEFEAT_KOBOLD": 19
+      },
+      "valid_start_count": 64
+    }
+  },
+  "run_class": "FORMAL_EVALUATION",
+  "runtime_family": "gtrxl128_cc1_teacher_reference_projection",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenario_order": [
+    "full",
+    "front_l2",
+    "back_l2"
+  ],
+  "schedule": {
+    "back_l2": {
+      "count": 8,
+      "kind": "frozen_bank_state_each_once",
+      "seed_base": 10000,
+      "seeds": [
+        1010000,
+        1010001,
+        1010002,
+        1010003,
+        1010004,
+        1010005,
+        1010006,
+        1010007
+      ],
+      "stride": 1
+    },
+    "front_l2": {
+      "count": 8,
+      "kind": "frozen_bank_state_each_once",
+      "seed_base": 10000,
+      "seeds": [
+        10000,
+        10001,
+        10002,
+        10003,
+        10004,
+        10005,
+        10006,
+        10007
+      ],
+      "stride": 1
+    },
+    "full": {
+      "base": 200000,
+      "count": 64,
+      "kind": "canonical_reset_seeds_held_out",
+      "seeds": [
+        200000,
+        200001,
+        200002,
+        200003,
+        200004,
+        200005,
+        200006,
+        200007,
+        200008,
+        200009,
+        200010,
+        200011,
+        200012,
+        200013,
+        200014,
+        200015,
+        200016,
+        200017,
+        200018,
+        200019,
+        200020,
+        200021,
+        200022,
+        200023,
+        200024,
+        200025,
+        200026,
+        200027,
+        200028,
+        200029,
+        200030,
+        200031,
+        200032,
+        200033,
+        200034,
+        200035,
+        200036,
+        200037,
+        200038,
+        200039,
+        200040,
+        200041,
+        200042,
+        200043,
+        200044,
+        200045,
+        200046,
+        200047,
+        200048,
+        200049,
+        200050,
+        200051,
+        200052,
+        200053,
+        200054,
+        200055,
+        200056,
+        200057,
+        200058,
+        200059,
+        200060,
+        200061,
+        200062,
+        200063
+      ]
+    }
+  },
+  "schema": "mechanism_UED.tier3_evaluation_certificate/v2dt",
+  "scientific_claim_authorized": false,
+  "scientific_claim_status": "FORMAL_SCIENTIFIC_CLAIM: NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc1/BASELINE_TEACHER_CKPT17500",
+  "strong_student_selection_eligible": false,
+  "student_rank": null,
+  "student_rank_publication": "FORMAL_RANKING_SUMMARY_V2DT.json only; the registry self-test forbids writing ranks into the registry and this certificate is SHA256SUMS-bound and immutable after creation",
+  "teacher_included_in_student_ranking": false,
+  "training_seed": 42,
+  "training_steps": 17500,
+  "v1_supersession": {
+    "COMMON_EVALUATOR_V1_DRIVER": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+    "COMMON_EVALUATOR_V1_STATUS": "SUPERSEDED_PRE_RANKING",
+    "v1_common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "v1_common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "v1_evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "v1_formal_ranking_ever_authorized": false,
+    "v1_metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "v1_preservation_reverified": {
+      "v1_common_root": "/home/oseasy/student_pool_v1/common",
+      "v1_driver_commit": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+      "v1_formal_ranking_authorized": false,
+      "v1_sha256sums_self_check": "PASS (57/57)",
+      "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+      "v1_status": "SUPERSEDED_PRE_RANKING"
+    },
+    "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e"
+  },
+  "valid_start_counts": {
+    "back_l2": 0,
+    "front_l2": 0,
+    "full": 64
+  }
+}

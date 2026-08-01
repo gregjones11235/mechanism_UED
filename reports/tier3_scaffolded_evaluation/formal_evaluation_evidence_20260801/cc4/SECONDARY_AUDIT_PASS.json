@@ -1,0 +1,44 @@
+{
+  "audit_authority": "INDEPENDENT_SECONDARY_AUDIT (authorized by 总控)",
+  "common_dir": "/home/oseasy/student_pool_v1/common_v2",
+  "evidence": {
+    "binding_gate_file": "POOL_BINDING_GATE_V2DT.json",
+    "binding_gate_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+    "closing_evidence_commit": "b736c8c",
+    "common_evaluator_v2_ready_sha256": "b468e1cf9e66fef60783d9757eee84494b48acdd8ccf8bb75b1142ec433dc94c",
+    "offline_verifier": "verify_v2dt_closing_evidence.py",
+    "offline_verifier_result": "164/164 PASS"
+  },
+  "git_commit_head": "b0d7e9237a9e096c53665c523ce9e04df19bbff6",
+  "grounds": [
+    "COMMON_EVALUATOR_V2_READY=true",
+    "STUDENT_COMMON_BINDING_PASS_COUNT=6/6",
+    "TEACHER_REFERENCE_BINDING=PASS",
+    "gate_failures=[]",
+    "verify_v2dt_closing_evidence.py 164/164 PASS",
+    "CHECKPOINTS_MODIFIED=false",
+    "CONTROL_RETRAINED=false",
+    "CANDIDATE_EXCEPTION_USED=false"
+  ],
+  "note": "pre-run authorization record; the READY ranking-flag flip happens once at closing via tier3_formal_ranking_v2dt.py (single READY writer)",
+  "pins_snapshot": {
+    "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+    "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+    "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+    "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+    "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+    "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+    "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde"
+  },
+  "pins_snapshot_sha256": "3eb5d9fc71b02816a6f13a937253617714fcd44a0f05ad66de62ecfaf5803825",
+  "pool_cc4_dir": "/home/oseasy/student_pool_v1/cc4",
+  "pool_root": "/home/oseasy/student_pool_v1",
+  "recorded_at_utc": "2026-07-31T10:09:36.565527+00:00",
+  "schema": "mechanism_UED.tier3_secondary_audit_marker/v2dt",
+  "start_precondition": "FORMAL_RANKING_STARTED=false",
+  "verdict": "PASS_FOR_FORMAL_GLOBAL_PERFORMANCE_EVALUATION_START"
+}

@@ -1,0 +1,75 @@
+{
+  "schema": "mechanism_UED.tier3_cross_gpu_determinism_preflight/v2dt",
+  "verdict": "CROSS_GPU_DETERMINISM_PREFLIGHT=PASS",
+  "checks": 180,
+  "authorization": "GPU0/GPU1 unban (总控 ruling 2026-07-31) conditioned on this preflight (runbook 5.1)",
+  "candidate": "CONTROL_CONTINUOUS_98304",
+  "schedule_rehearsal": {
+    "full": 1,
+    "front_l2": 1,
+    "back_l2": 1,
+    "max_timesteps": 4096,
+    "action_mode": "greedy_argmax"
+  },
+  "episodes_verified_bit_identical": [
+    "full-seed200000",
+    "front_l2-bank0",
+    "back_l2-bank0"
+  ],
+  "gpus": {
+    "GPU0": {
+      "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+      "dir": "/home/oseasy/student_pool_v1/cc4/_preflight_gpu0_20260731",
+      "git_commit_head": "b0d7e9237a9e096c53665c523ce9e04df19bbff6"
+    },
+    "GPU1": {
+      "uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+      "dir": "/home/oseasy/student_pool_v1/cc4/_preflight_gpu1_20260731",
+      "git_commit_head": "b0d7e9237a9e096c53665c523ce9e04df19bbff6"
+    },
+    "GPU2_baseline": {
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "dir": "/home/oseasy/student_pool_v1/cc4/_rehearsal_20260731T092931Z",
+      "git_commit_head": "b313973c7d27ea9b7499f3a06a34f2b26371b7d9",
+      "note": "2/2/2 rehearsal; ancestor of formal head; aggregate metrics legitimately differ on episode count"
+    }
+  },
+  "canonical_fields_verified": [
+    "action_sequence",
+    "terminal_label",
+    "timesteps",
+    "valid_start",
+    "graph_distance_progress",
+    "player_died",
+    "defeat_kobold",
+    "kobold_engaged",
+    "front_floor_transition_reached",
+    "corridor_exit_reached",
+    "timed_out",
+    "episode_record_sha256",
+    "primary/dense payload values (shared episodes)",
+    "bank_content_sha256",
+    "checkpoint_file_sha256",
+    "params_sha256",
+    "common_pins (12)",
+    "engine module SHAs"
+  ],
+  "volatile_fields_excluded": [
+    "wall_seconds/timing",
+    "peak_rss_kb",
+    "pid/host/argv/cwd",
+    "generated_at_utc",
+    "device_identity (per-GPU bus ids)",
+    "episode-records hashes (episode-count dependent; GPU0==GPU1 cross-verified)"
+  ],
+  "comparator": {
+    "script": "/home/oseasy/cc4_tier3_eval_20260730/preflight_compare.py",
+    "sha256": "b125c6a28ca772ef446666773eb8c6a6021b4ef1396d57f474d344a0500a0fc4"
+  },
+  "preflight_logs": [
+    "/home/oseasy/student_pool_v1/cc4/preflight_logs/preflight_gpu0.log",
+    "/home/oseasy/student_pool_v1/cc4/preflight_logs/preflight_gpu1.log"
+  ],
+  "recorded_at_utc": "2026-07-31T10:09:36Z",
+  "conclusion": "GPU0/GPU1 CLEARED for formal evaluation queues (runbook 6)"
+}

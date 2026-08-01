@@ -1,0 +1,1010 @@
+{
+  "action_dim": 43,
+  "action_mode": "greedy_argmax",
+  "audit": {
+    "authorization_note": "formal run authorized by SECONDARY_AUDIT_PASS marker (verdict PASS_FOR_FORMAL_GLOBAL_PERFORMANCE_EVALUATION_START); interface smoke evidence is NOT a performance result",
+    "binding_gate_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+    "common_v2_ready_sha256_at_run_time": "b468e1cf9e66fef60783d9757eee84494b48acdd8ccf8bb75b1142ec433dc94c",
+    "secondary_audit_marker": {
+      "binding_gate_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+      "path": "/home/oseasy/student_pool_v1/cc4/SECONDARY_AUDIT_PASS.json",
+      "recorded_at_utc": "2026-07-31T10:09:36.565527+00:00",
+      "sha256": "b08c1a9bf7055ac6b4a200c6f561374a0c34c2dee9ce6dd799212de3eb5f8351",
+      "verdict": "PASS_FOR_FORMAL_GLOBAL_PERFORMANCE_EVALUATION_START"
+    }
+  },
+  "back_episode_count": 8,
+  "bfs_graph_source": "CURRENT_ENVIRONMENT_STATE_TOPOLOGY",
+  "bound_owner_runtime_sha256": {
+    "candidate_runtime.py": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+    "slowgru_network.py (arm_src)": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "slowgru_runtime.py": "d3b74d2ed6aee1affd54bb3a39bdb50162afa81dac0cab5866e4ed6450fcb24b"
+  },
+  "boundary_semantics": "on_segment_boundary: memory returned UNCHANGED (FULL_CARRY_NO_CLEAR) — cross-segment carry preserved",
+  "budget_class": "MATCHED_98304",
+  "candidate_class": "STUDENT",
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "candidate_manifest_sha256": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+  "candidate_runtime_sha256": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+  "capsule_file_verification": {
+    "candidate_manifest.json": {
+      "capsule_sums": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+      "declared": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+      "live": "8f74a3182f392704441aa36c3d94d0748a13a3273cc409af17379d88d86b9412",
+      "match": true
+    },
+    "candidate_runtime.py": {
+      "capsule_sums": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+      "declared": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+      "live": "a450029c9da347d975a515e7baf9a2c678e6e4ce159d83c9e9883243cadd25e4",
+      "match": true
+    },
+    "checkpoint_contract.json": {
+      "capsule_sums": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+      "declared": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+      "live": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+      "match": true
+    },
+    "evaluate_candidate.py": {
+      "capsule_sums": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+      "declared": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+      "live": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+      "match": true
+    }
+  },
+  "carry_mode": "PERSISTENT",
+  "cert_version": "tier3_evaluation_certificate/v2dt",
+  "checkpoint_contract_sha256": "7f0e731b4f4605ba4e39f7a23168a4604ebde23a12658080338a7c55a02d1ae9",
+  "checkpoint_file_hash_protocol": "sha256 of pkl file bytes",
+  "checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checkpoint_file_sha256_declaration_source": "cc3 capsule checkpoint_contract.json checkpoint_file_sha256 (sha256 of pkl bytes)",
+  "checkpoint_file_sha256_owner_declared": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "common_pins": {
+    "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+    "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+    "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+    "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+    "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+    "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+    "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde"
+  },
+  "common_root": "/home/oseasy/student_pool_v1/common_v2",
+  "common_sha_match_status": "PASS (7/7)",
+  "counts_toward_student_binding_count": true,
+  "dicode_resolution": {
+    "dicode_network_matches_cc1_policy_source": true,
+    "dicode_network_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    "dicode_package_file": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src/dicode/__init__.py",
+    "dicode_src": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src"
+  },
+  "engine_identity": {
+    "engine_lf_sha256_v1_frozen": {
+      "tier3_candidate_runtime.py": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+      "tier3_evaluator.py": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715"
+    },
+    "engine_lf_sha256_v2": {
+      "tier3_evaluator_v2.py": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+      "tier3_event_predicates_v2.py": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+    },
+    "engine_modules_verified_by_stage1": 4,
+    "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+    "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+  },
+  "entry_ids_by_scenario": {
+    "front_l2": [
+      "front_l2-bank0",
+      "front_l2-bank1",
+      "front_l2-bank2",
+      "front_l2-bank3",
+      "front_l2-bank4",
+      "front_l2-bank5",
+      "front_l2-bank6",
+      "front_l2-bank7"
+    ],
+    "full": [
+      "full-seed200000",
+      "full-seed200001",
+      "full-seed200002",
+      "full-seed200003",
+      "full-seed200004",
+      "full-seed200005",
+      "full-seed200006",
+      "full-seed200007",
+      "full-seed200008",
+      "full-seed200009",
+      "full-seed200010",
+      "full-seed200011",
+      "full-seed200012",
+      "full-seed200013",
+      "full-seed200014",
+      "full-seed200015",
+      "full-seed200016",
+      "full-seed200017",
+      "full-seed200018",
+      "full-seed200019",
+      "full-seed200020",
+      "full-seed200021",
+      "full-seed200022",
+      "full-seed200023",
+      "full-seed200024",
+      "full-seed200025",
+      "full-seed200026",
+      "full-seed200027",
+      "full-seed200028",
+      "full-seed200029",
+      "full-seed200030",
+      "full-seed200031",
+      "full-seed200032",
+      "full-seed200033",
+      "full-seed200034",
+      "full-seed200035",
+      "full-seed200036",
+      "full-seed200037",
+      "full-seed200038",
+      "full-seed200039",
+      "full-seed200040",
+      "full-seed200041",
+      "full-seed200042",
+      "full-seed200043",
+      "full-seed200044",
+      "full-seed200045",
+      "full-seed200046",
+      "full-seed200047",
+      "full-seed200048",
+      "full-seed200049",
+      "full-seed200050",
+      "full-seed200051",
+      "full-seed200052",
+      "full-seed200053",
+      "full-seed200054",
+      "full-seed200055",
+      "full-seed200056",
+      "full-seed200057",
+      "full-seed200058",
+      "full-seed200059",
+      "full-seed200060",
+      "full-seed200061",
+      "full-seed200062",
+      "full-seed200063"
+    ]
+  },
+  "episode_records_jsonl_sha256": "e42fa433936314253fdfb72fee96c860a69a2bf418f7675f14a1cac95d530e91",
+  "episodes_executed": {
+    "back_l2": 0,
+    "front_l2": 8,
+    "full": 64
+  },
+  "evaluate_candidate_sha256": "001f93c19e311825a21e8f3b015e3f83e742f30f99c656d9d2a918d79a32ff6f",
+  "evaluation_status": "BLOCKED",
+  "formal_abort": {
+    "aborted_phase": "evaluate_classification",
+    "authority": "frozen engine taxonomy (not relaxable by CC4)",
+    "consequence": "candidate BLOCKED; NOT recorded as a formal score; no candidate-level exemption; no retraining; rerun would reproduce deterministically",
+    "engine_message": "FAIL CLOSED (NEG20): ambiguous/contradictory terminal signals ['front_l2 floor transition AND defeat_kobold (front ends at the transition)']; refusing to silently assign a single label",
+    "entry_id": null,
+    "episode_index": null,
+    "episodes_completed_before_abort": 8,
+    "episodes_planned": 8,
+    "exception_type": "tier3_failure_taxonomy.FailClosed (via frozen tier3_evaluator.evaluate)",
+    "scenario": "front_l2",
+    "scenarios_completed_before_abort": [
+      "full",
+      "front_l2"
+    ],
+    "seed": null,
+    "v2_failclosed_class": "TERMINAL_SIGNAL_AMBIGUITY (frozen classifier refuses contradictory terminal signals; NOT corruption, NOT relaxable by CC4)",
+    "verdict": "ENGINE_TAXONOMY_REJECTED_FORMAL_EVALUATION_V2"
+  },
+  "formal_performance_results_authorized_by_secondary_audit": true,
+  "formal_student_ranking_eligible": true,
+  "front_episode_count": 8,
+  "full_episode_count": 64,
+  "generated_at_utc": "2026-07-31T14:17:42.046736+00:00",
+  "gpu": {
+    "cuda_visible_devices": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+    "gpu_allowlist_cc4": [
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+      "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "nvidia_smi_L": [
+      "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+      "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+      "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+      "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ]
+  },
+  "interface_smoke_substituted_for_performance": false,
+  "max_steps": 4096,
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC3",
+  "params_hash_protocol": "slowgru_runtime.params_sha_packed over the pkl-embedded (leaves, treedef): sha256 of per-leaf ascontiguousarray.tobytes()",
+  "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "params_sha256_declaration_source": "cc3 capsule checkpoint_contract.json (contract sha 7f0e731b…); owner loader triple fail-closed gate; load_candidate raises CARRY_MODE_MISMATCH on any drift",
+  "params_sha256_owner_declared": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "params_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "params_unchanged": true,
+  "performance_evaluation_executed": true,
+  "policy_adapter": {
+    "batch1_workaround": {
+      "applied": true,
+      "effective_batch": 2,
+      "fidelity_basis": "all ops per-row: transformerXL.forward_eval per-row encoder/attention; owner _slow_update own comment 'vectorised over env axis; no cross-env mixing' (per-row buffer/pooling/GRUCell); fast-memory roll axis=1; mask mechanics per-row; on_segment_boundary per-row -> duplicated-row batch 2 with row-0 readout numerically identical to B=1, including section-4 boundary semantics",
+      "owner_code_modified": false,
+      "readout_row": 0,
+      "reason": "owner slowgru_network.forward_eval -> dicode transformerXL.forward_eval x.squeeze() removes the batch dim at B=1 (layer-2 concat TypeError (1,128,256) vs (256,1) at transformerXL.py:194 — SAME crash site and byte-identical module as CC1 GTrXL128); owner trainer is always vectorized (PPO _env_step over E envs) and never hits B=1",
+      "rows_duplicated": true
+    },
+    "boundary_unit_check": {
+      "boundary_info": {
+        "boundary_action": "FULL_CARRY_NO_CLEAR"
+      },
+      "carry_mode": "PERSISTENT",
+      "fast_memories_carried": true,
+      "longstate_full_carried": true,
+      "longstate_restored_to_init": false,
+      "segment_boundary_steps": 128
+    },
+    "class": "SlowGRUProjectionPolicy"
+  },
+  "provenance": {
+    "argv": [
+      "tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py",
+      "--candidate-id",
+      "SLOWGRU_PERSISTENT_CANONICAL_98304"
+    ],
+    "cwd": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+    "device_identity": {
+      "craftax_version": "1.4.5",
+      "flax_version": "0.8.5",
+      "jax_default_backend": "gpu",
+      "jax_devices": "[cuda(id=0)]",
+      "jax_version": "0.4.30",
+      "jaxlib_version": "0.4.30",
+      "numpy_version": "1.26.4",
+      "python_version": "3.11.15"
+    },
+    "git_commit_head": "6f5e270559b67c63ea55d733f9606283c52dad2f",
+    "host": "i-00000226",
+    "pid": 2457851,
+    "scenario_wall_seconds": {
+      "front_l2": 195.189845,
+      "full": 1114.749597
+    },
+    "timing_by_scenario": {
+      "front_l2": {
+        "episodes": [
+          {
+            "entry_id": "front_l2-bank0",
+            "episode_id": "front_l2-bank0",
+            "seed": 10000,
+            "timesteps": 750,
+            "wall_seconds": 13.931334
+          },
+          {
+            "entry_id": "front_l2-bank1",
+            "episode_id": "front_l2-bank1",
+            "seed": 10001,
+            "timesteps": 84,
+            "wall_seconds": 1.783589
+          },
+          {
+            "entry_id": "front_l2-bank2",
+            "episode_id": "front_l2-bank2",
+            "seed": 10002,
+            "timesteps": 154,
+            "wall_seconds": 3.227912
+          },
+          {
+            "entry_id": "front_l2-bank3",
+            "episode_id": "front_l2-bank3",
+            "seed": 10003,
+            "timesteps": 1604,
+            "wall_seconds": 30.327713
+          },
+          {
+            "entry_id": "front_l2-bank4",
+            "episode_id": "front_l2-bank4",
+            "seed": 10004,
+            "timesteps": 1631,
+            "wall_seconds": 31.817987
+          },
+          {
+            "entry_id": "front_l2-bank5",
+            "episode_id": "front_l2-bank5",
+            "seed": 10005,
+            "timesteps": 1228,
+            "wall_seconds": 23.78964
+          },
+          {
+            "entry_id": "front_l2-bank6",
+            "episode_id": "front_l2-bank6",
+            "seed": 10006,
+            "timesteps": 1198,
+            "wall_seconds": 22.245512
+          },
+          {
+            "entry_id": "front_l2-bank7",
+            "episode_id": "front_l2-bank7",
+            "seed": 10007,
+            "timesteps": 3856,
+            "wall_seconds": 67.906459
+          }
+        ],
+        "peak_rss_kb": 4094612,
+        "scenario_wall_seconds": 195.189845
+      },
+      "full": {
+        "episodes": [
+          {
+            "entry_id": "full-seed200000",
+            "episode_id": "full-seed200000",
+            "seed": 200000,
+            "timesteps": 152,
+            "wall_seconds": 83.769723
+          },
+          {
+            "entry_id": "full-seed200001",
+            "episode_id": "full-seed200001",
+            "seed": 200001,
+            "timesteps": 793,
+            "wall_seconds": 13.893755
+          },
+          {
+            "entry_id": "full-seed200002",
+            "episode_id": "full-seed200002",
+            "seed": 200002,
+            "timesteps": 201,
+            "wall_seconds": 3.658228
+          },
+          {
+            "entry_id": "full-seed200003",
+            "episode_id": "full-seed200003",
+            "seed": 200003,
+            "timesteps": 4096,
+            "wall_seconds": 69.590089
+          },
+          {
+            "entry_id": "full-seed200004",
+            "episode_id": "full-seed200004",
+            "seed": 200004,
+            "timesteps": 258,
+            "wall_seconds": 4.827684
+          },
+          {
+            "entry_id": "full-seed200005",
+            "episode_id": "full-seed200005",
+            "seed": 200005,
+            "timesteps": 132,
+            "wall_seconds": 2.839548
+          },
+          {
+            "entry_id": "full-seed200006",
+            "episode_id": "full-seed200006",
+            "seed": 200006,
+            "timesteps": 402,
+            "wall_seconds": 7.033884
+          },
+          {
+            "entry_id": "full-seed200007",
+            "episode_id": "full-seed200007",
+            "seed": 200007,
+            "timesteps": 613,
+            "wall_seconds": 10.778883
+          },
+          {
+            "entry_id": "full-seed200008",
+            "episode_id": "full-seed200008",
+            "seed": 200008,
+            "timesteps": 1919,
+            "wall_seconds": 33.668764
+          },
+          {
+            "entry_id": "full-seed200009",
+            "episode_id": "full-seed200009",
+            "seed": 200009,
+            "timesteps": 1093,
+            "wall_seconds": 20.414842
+          },
+          {
+            "entry_id": "full-seed200010",
+            "episode_id": "full-seed200010",
+            "seed": 200010,
+            "timesteps": 2584,
+            "wall_seconds": 46.418262
+          },
+          {
+            "entry_id": "full-seed200011",
+            "episode_id": "full-seed200011",
+            "seed": 200011,
+            "timesteps": 344,
+            "wall_seconds": 6.333156
+          },
+          {
+            "entry_id": "full-seed200012",
+            "episode_id": "full-seed200012",
+            "seed": 200012,
+            "timesteps": 1243,
+            "wall_seconds": 22.370634
+          },
+          {
+            "entry_id": "full-seed200013",
+            "episode_id": "full-seed200013",
+            "seed": 200013,
+            "timesteps": 210,
+            "wall_seconds": 3.881329
+          },
+          {
+            "entry_id": "full-seed200014",
+            "episode_id": "full-seed200014",
+            "seed": 200014,
+            "timesteps": 3414,
+            "wall_seconds": 59.587928
+          },
+          {
+            "entry_id": "full-seed200015",
+            "episode_id": "full-seed200015",
+            "seed": 200015,
+            "timesteps": 480,
+            "wall_seconds": 9.099349
+          },
+          {
+            "entry_id": "full-seed200016",
+            "episode_id": "full-seed200016",
+            "seed": 200016,
+            "timesteps": 423,
+            "wall_seconds": 7.66046
+          },
+          {
+            "entry_id": "full-seed200017",
+            "episode_id": "full-seed200017",
+            "seed": 200017,
+            "timesteps": 327,
+            "wall_seconds": 5.877437
+          },
+          {
+            "entry_id": "full-seed200018",
+            "episode_id": "full-seed200018",
+            "seed": 200018,
+            "timesteps": 670,
+            "wall_seconds": 11.816796
+          },
+          {
+            "entry_id": "full-seed200019",
+            "episode_id": "full-seed200019",
+            "seed": 200019,
+            "timesteps": 286,
+            "wall_seconds": 5.446792
+          },
+          {
+            "entry_id": "full-seed200020",
+            "episode_id": "full-seed200020",
+            "seed": 200020,
+            "timesteps": 301,
+            "wall_seconds": 5.513743
+          },
+          {
+            "entry_id": "full-seed200021",
+            "episode_id": "full-seed200021",
+            "seed": 200021,
+            "timesteps": 287,
+            "wall_seconds": 5.506411
+          },
+          {
+            "entry_id": "full-seed200022",
+            "episode_id": "full-seed200022",
+            "seed": 200022,
+            "timesteps": 101,
+            "wall_seconds": 2.046272
+          },
+          {
+            "entry_id": "full-seed200023",
+            "episode_id": "full-seed200023",
+            "seed": 200023,
+            "timesteps": 1245,
+            "wall_seconds": 20.523592
+          },
+          {
+            "entry_id": "full-seed200024",
+            "episode_id": "full-seed200024",
+            "seed": 200024,
+            "timesteps": 430,
+            "wall_seconds": 7.599684
+          },
+          {
+            "entry_id": "full-seed200025",
+            "episode_id": "full-seed200025",
+            "seed": 200025,
+            "timesteps": 702,
+            "wall_seconds": 12.392565
+          },
+          {
+            "entry_id": "full-seed200026",
+            "episode_id": "full-seed200026",
+            "seed": 200026,
+            "timesteps": 139,
+            "wall_seconds": 2.811871
+          },
+          {
+            "entry_id": "full-seed200027",
+            "episode_id": "full-seed200027",
+            "seed": 200027,
+            "timesteps": 4096,
+            "wall_seconds": 68.48648
+          },
+          {
+            "entry_id": "full-seed200028",
+            "episode_id": "full-seed200028",
+            "seed": 200028,
+            "timesteps": 4096,
+            "wall_seconds": 69.353803
+          },
+          {
+            "entry_id": "full-seed200029",
+            "episode_id": "full-seed200029",
+            "seed": 200029,
+            "timesteps": 1525,
+            "wall_seconds": 26.289565
+          },
+          {
+            "entry_id": "full-seed200030",
+            "episode_id": "full-seed200030",
+            "seed": 200030,
+            "timesteps": 153,
+            "wall_seconds": 3.141889
+          },
+          {
+            "entry_id": "full-seed200031",
+            "episode_id": "full-seed200031",
+            "seed": 200031,
+            "timesteps": 1051,
+            "wall_seconds": 18.552637
+          },
+          {
+            "entry_id": "full-seed200032",
+            "episode_id": "full-seed200032",
+            "seed": 200032,
+            "timesteps": 267,
+            "wall_seconds": 4.928405
+          },
+          {
+            "entry_id": "full-seed200033",
+            "episode_id": "full-seed200033",
+            "seed": 200033,
+            "timesteps": 610,
+            "wall_seconds": 10.270437
+          },
+          {
+            "entry_id": "full-seed200034",
+            "episode_id": "full-seed200034",
+            "seed": 200034,
+            "timesteps": 1558,
+            "wall_seconds": 28.336332
+          },
+          {
+            "entry_id": "full-seed200035",
+            "episode_id": "full-seed200035",
+            "seed": 200035,
+            "timesteps": 1291,
+            "wall_seconds": 22.184337
+          },
+          {
+            "entry_id": "full-seed200036",
+            "episode_id": "full-seed200036",
+            "seed": 200036,
+            "timesteps": 3618,
+            "wall_seconds": 61.330391
+          },
+          {
+            "entry_id": "full-seed200037",
+            "episode_id": "full-seed200037",
+            "seed": 200037,
+            "timesteps": 211,
+            "wall_seconds": 4.036154
+          },
+          {
+            "entry_id": "full-seed200038",
+            "episode_id": "full-seed200038",
+            "seed": 200038,
+            "timesteps": 166,
+            "wall_seconds": 3.166058
+          },
+          {
+            "entry_id": "full-seed200039",
+            "episode_id": "full-seed200039",
+            "seed": 200039,
+            "timesteps": 622,
+            "wall_seconds": 11.085705
+          },
+          {
+            "entry_id": "full-seed200040",
+            "episode_id": "full-seed200040",
+            "seed": 200040,
+            "timesteps": 1479,
+            "wall_seconds": 25.300541
+          },
+          {
+            "entry_id": "full-seed200041",
+            "episode_id": "full-seed200041",
+            "seed": 200041,
+            "timesteps": 1194,
+            "wall_seconds": 21.538972
+          },
+          {
+            "entry_id": "full-seed200042",
+            "episode_id": "full-seed200042",
+            "seed": 200042,
+            "timesteps": 268,
+            "wall_seconds": 5.156834
+          },
+          {
+            "entry_id": "full-seed200043",
+            "episode_id": "full-seed200043",
+            "seed": 200043,
+            "timesteps": 254,
+            "wall_seconds": 4.596522
+          },
+          {
+            "entry_id": "full-seed200044",
+            "episode_id": "full-seed200044",
+            "seed": 200044,
+            "timesteps": 1862,
+            "wall_seconds": 33.253018
+          },
+          {
+            "entry_id": "full-seed200045",
+            "episode_id": "full-seed200045",
+            "seed": 200045,
+            "timesteps": 649,
+            "wall_seconds": 11.79441
+          },
+          {
+            "entry_id": "full-seed200046",
+            "episode_id": "full-seed200046",
+            "seed": 200046,
+            "timesteps": 750,
+            "wall_seconds": 12.835773
+          },
+          {
+            "entry_id": "full-seed200047",
+            "episode_id": "full-seed200047",
+            "seed": 200047,
+            "timesteps": 126,
+            "wall_seconds": 2.331928
+          },
+          {
+            "entry_id": "full-seed200048",
+            "episode_id": "full-seed200048",
+            "seed": 200048,
+            "timesteps": 104,
+            "wall_seconds": 2.373639
+          },
+          {
+            "entry_id": "full-seed200049",
+            "episode_id": "full-seed200049",
+            "seed": 200049,
+            "timesteps": 167,
+            "wall_seconds": 3.288913
+          },
+          {
+            "entry_id": "full-seed200050",
+            "episode_id": "full-seed200050",
+            "seed": 200050,
+            "timesteps": 166,
+            "wall_seconds": 3.140538
+          },
+          {
+            "entry_id": "full-seed200051",
+            "episode_id": "full-seed200051",
+            "seed": 200051,
+            "timesteps": 155,
+            "wall_seconds": 2.976211
+          },
+          {
+            "entry_id": "full-seed200052",
+            "episode_id": "full-seed200052",
+            "seed": 200052,
+            "timesteps": 342,
+            "wall_seconds": 6.404724
+          },
+          {
+            "entry_id": "full-seed200053",
+            "episode_id": "full-seed200053",
+            "seed": 200053,
+            "timesteps": 1353,
+            "wall_seconds": 22.844283
+          },
+          {
+            "entry_id": "full-seed200054",
+            "episode_id": "full-seed200054",
+            "seed": 200054,
+            "timesteps": 179,
+            "wall_seconds": 3.637183
+          },
+          {
+            "entry_id": "full-seed200055",
+            "episode_id": "full-seed200055",
+            "seed": 200055,
+            "timesteps": 769,
+            "wall_seconds": 12.965956
+          },
+          {
+            "entry_id": "full-seed200056",
+            "episode_id": "full-seed200056",
+            "seed": 200056,
+            "timesteps": 260,
+            "wall_seconds": 4.671348
+          },
+          {
+            "entry_id": "full-seed200057",
+            "episode_id": "full-seed200057",
+            "seed": 200057,
+            "timesteps": 124,
+            "wall_seconds": 2.616222
+          },
+          {
+            "entry_id": "full-seed200058",
+            "episode_id": "full-seed200058",
+            "seed": 200058,
+            "timesteps": 954,
+            "wall_seconds": 16.493926
+          },
+          {
+            "entry_id": "full-seed200059",
+            "episode_id": "full-seed200059",
+            "seed": 200059,
+            "timesteps": 83,
+            "wall_seconds": 1.84199
+          },
+          {
+            "entry_id": "full-seed200060",
+            "episode_id": "full-seed200060",
+            "seed": 200060,
+            "timesteps": 1262,
+            "wall_seconds": 21.779606
+          },
+          {
+            "entry_id": "full-seed200061",
+            "episode_id": "full-seed200061",
+            "seed": 200061,
+            "timesteps": 235,
+            "wall_seconds": 4.450307
+          },
+          {
+            "entry_id": "full-seed200062",
+            "episode_id": "full-seed200062",
+            "seed": 200062,
+            "timesteps": 1739,
+            "wall_seconds": 30.126889
+          },
+          {
+            "entry_id": "full-seed200063",
+            "episode_id": "full-seed200063",
+            "seed": 200063,
+            "timesteps": 1250,
+            "wall_seconds": 21.950694
+          }
+        ],
+        "peak_rss_kb": 4092600,
+        "scenario_wall_seconds": 1114.749597
+      }
+    }
+  },
+  "records_sha256_by_scenario": {
+    "front_l2": "bb61fe875b11ae95f5d8a4630fbd300a97c4dbc980322729e2b00ba92672431e",
+    "full": "059a9189590fa6b1199ca054a4e75337da75dffdd8aab81699f7875437cf42c7"
+  },
+  "reference_only": false,
+  "rehearsal": {
+    "is_rehearsal": false,
+    "limits": null,
+    "note": "formal run at the frozen full schedule (FULL 64 + FRONT 8 + BACK 8, max_steps=4096)"
+  },
+  "results_by_scenario": {
+    "full": {
+      "checkpoint_params_sha256": null,
+      "contract": {
+        "action_mode": "greedy_argmax",
+        "action_space": "canonical_craftax_action_set",
+        "identical_for_all_arms": true,
+        "max_timesteps": 4096,
+        "observation_schema": "canonical_craftax_symbolic"
+      },
+      "episode_count": 64,
+      "failure_rule_version": "tier3_failure_rules/v1",
+      "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "full",
+          "value": null
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": false,
+          "metric": "DEFEAT_KOBOLD_SR",
+          "scenario": "full",
+          "successes": 17,
+          "valid_starts": 64,
+          "value": 0.265625
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "full",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "result_version": "tier3_evaluation_result/v1",
+      "rollout_status": "REAL_ENV_INTERFACE_READY",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_evaluation_result/v1",
+      "terminal_label_counts": {
+        "DIED_BEFORE_KOBOLD": 44,
+        "SUCCESS_DEFEAT_KOBOLD": 17,
+        "TIMEOUT_NO_KOBOLD": 3
+      },
+      "valid_start_count": 64
+    }
+  },
+  "run_class": "FORMAL_EVALUATION",
+  "runtime_family": "slowgru_persistent_cc3_projection",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenario_order": [
+    "full",
+    "front_l2",
+    "back_l2"
+  ],
+  "schedule": {
+    "back_l2": {
+      "count": 8,
+      "kind": "frozen_bank_state_each_once",
+      "seed_base": 10000,
+      "seeds": [
+        1010000,
+        1010001,
+        1010002,
+        1010003,
+        1010004,
+        1010005,
+        1010006,
+        1010007
+      ],
+      "stride": 1
+    },
+    "front_l2": {
+      "count": 8,
+      "kind": "frozen_bank_state_each_once",
+      "seed_base": 10000,
+      "seeds": [
+        10000,
+        10001,
+        10002,
+        10003,
+        10004,
+        10005,
+        10006,
+        10007
+      ],
+      "stride": 1
+    },
+    "full": {
+      "base": 200000,
+      "count": 64,
+      "kind": "canonical_reset_seeds_held_out",
+      "seeds": [
+        200000,
+        200001,
+        200002,
+        200003,
+        200004,
+        200005,
+        200006,
+        200007,
+        200008,
+        200009,
+        200010,
+        200011,
+        200012,
+        200013,
+        200014,
+        200015,
+        200016,
+        200017,
+        200018,
+        200019,
+        200020,
+        200021,
+        200022,
+        200023,
+        200024,
+        200025,
+        200026,
+        200027,
+        200028,
+        200029,
+        200030,
+        200031,
+        200032,
+        200033,
+        200034,
+        200035,
+        200036,
+        200037,
+        200038,
+        200039,
+        200040,
+        200041,
+        200042,
+        200043,
+        200044,
+        200045,
+        200046,
+        200047,
+        200048,
+        200049,
+        200050,
+        200051,
+        200052,
+        200053,
+        200054,
+        200055,
+        200056,
+        200057,
+        200058,
+        200059,
+        200060,
+        200061,
+        200062,
+        200063
+      ]
+    }
+  },
+  "schema": "mechanism_UED.tier3_evaluation_certificate/v2dt",
+  "scientific_claim_authorized": false,
+  "scientific_claim_status": "FORMAL_SCIENTIFIC_CLAIM: NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+  "segment_boundary_steps": 128,
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "student_rank_publication": "FORMAL_RANKING_SUMMARY_V2DT.json only; the registry self-test forbids writing ranks into the registry and this certificate is SHA256SUMS-bound and immutable after creation",
+  "teacher_included_in_student_ranking": false,
+  "training_seed": 42,
+  "training_steps": 98304,
+  "v1_supersession": {
+    "COMMON_EVALUATOR_V1_DRIVER": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+    "COMMON_EVALUATOR_V1_STATUS": "SUPERSEDED_PRE_RANKING",
+    "v1_common_evaluator_sha256": "a47ff97f9dc745c4f0cf015966b777f90c6dd6c7fe934b9b552a542df188a344",
+    "v1_common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "v1_evaluation_profile_sha256": "7147370115621bda0500d55d8fd506a119ef8d6467a08329aaf6e088fbf9ea73",
+    "v1_formal_ranking_ever_authorized": false,
+    "v1_metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "v1_preservation_reverified": {
+      "v1_common_root": "/home/oseasy/student_pool_v1/common",
+      "v1_driver_commit": "d0d05ff26ffd1ea0bfd80e4c0364edfe6f5616d4",
+      "v1_formal_ranking_authorized": false,
+      "v1_sha256sums_self_check": "PASS (57/57)",
+      "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e",
+      "v1_status": "SUPERSEDED_PRE_RANKING"
+    },
+    "v1_sha256sums_sha256": "14892443e8a063f2a4dffc8ff3eb31b54959535308411a7ecc6388f9afe0a72e"
+  },
+  "valid_start_counts": {
+    "back_l2": 0,
+    "front_l2": 0,
+    "full": 64
+  }
+}

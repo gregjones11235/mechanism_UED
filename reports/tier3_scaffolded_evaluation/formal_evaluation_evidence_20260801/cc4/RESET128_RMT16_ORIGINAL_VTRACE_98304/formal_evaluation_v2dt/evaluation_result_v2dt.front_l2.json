@@ -1,0 +1,102 @@
+{
+  "aborted_in_scenario": true,
+  "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "entry_ids_planned": [
+    "front_l2-bank0",
+    "front_l2-bank1",
+    "front_l2-bank2",
+    "front_l2-bank3",
+    "front_l2-bank4",
+    "front_l2-bank5",
+    "front_l2-bank6",
+    "front_l2-bank7"
+  ],
+  "episode_records_sha256": "d75992184277f124b6e24cb190e92afef7ea48ecef3461965d0a74473457db56",
+  "episodes_executed": 8,
+  "episodes_planned": 8,
+  "evaluation": null,
+  "generated_at_utc": "2026-07-31T18:12:18.453798+00:00",
+  "rehearsal": false,
+  "run_class": "FORMAL_EVALUATION",
+  "scenario": "front_l2",
+  "schedule": {
+    "count": 8,
+    "kind": "frozen_bank_state_each_once",
+    "seed_base": 10000,
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007
+    ],
+    "stride": 1
+  },
+  "schema": "mechanism_UED.tier3_formal_evaluation_result/v2dt",
+  "timing": {
+    "episodes": [
+      {
+        "entry_id": "front_l2-bank0",
+        "episode_id": "front_l2-bank0",
+        "seed": 10000,
+        "timesteps": 934,
+        "wall_seconds": 250.148449
+      },
+      {
+        "entry_id": "front_l2-bank1",
+        "episode_id": "front_l2-bank1",
+        "seed": 10001,
+        "timesteps": 180,
+        "wall_seconds": 47.514189
+      },
+      {
+        "entry_id": "front_l2-bank2",
+        "episode_id": "front_l2-bank2",
+        "seed": 10002,
+        "timesteps": 833,
+        "wall_seconds": 221.85712
+      },
+      {
+        "entry_id": "front_l2-bank3",
+        "episode_id": "front_l2-bank3",
+        "seed": 10003,
+        "timesteps": 368,
+        "wall_seconds": 97.591452
+      },
+      {
+        "entry_id": "front_l2-bank4",
+        "episode_id": "front_l2-bank4",
+        "seed": 10004,
+        "timesteps": 355,
+        "wall_seconds": 94.584455
+      },
+      {
+        "entry_id": "front_l2-bank5",
+        "episode_id": "front_l2-bank5",
+        "seed": 10005,
+        "timesteps": 631,
+        "wall_seconds": 166.91677
+      },
+      {
+        "entry_id": "front_l2-bank6",
+        "episode_id": "front_l2-bank6",
+        "seed": 10006,
+        "timesteps": 1133,
+        "wall_seconds": 301.644763
+      },
+      {
+        "entry_id": "front_l2-bank7",
+        "episode_id": "front_l2-bank7",
+        "seed": 10007,
+        "timesteps": 34,
+        "wall_seconds": 9.461552
+      }
+    ],
+    "peak_rss_kb": 3953596,
+    "scenario_wall_seconds": 1189.868255
+  }
+}

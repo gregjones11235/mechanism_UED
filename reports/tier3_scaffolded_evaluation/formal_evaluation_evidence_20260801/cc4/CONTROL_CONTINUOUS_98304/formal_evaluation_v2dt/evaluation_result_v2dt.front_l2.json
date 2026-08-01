@@ -1,0 +1,185 @@
+{
+  "aborted_in_scenario": false,
+  "candidate_id": "CONTROL_CONTINUOUS_98304",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "entry_ids_planned": [
+    "front_l2-bank0",
+    "front_l2-bank1",
+    "front_l2-bank2",
+    "front_l2-bank3",
+    "front_l2-bank4",
+    "front_l2-bank5",
+    "front_l2-bank6",
+    "front_l2-bank7"
+  ],
+  "episode_records_sha256": "28a14531576bed2b31bf58fbd7aafc569c79cf910d6acb7b02530b80613c4056",
+  "episodes_executed": 8,
+  "episodes_planned": 8,
+  "evaluation": {
+    "checkpoint_params_sha256": null,
+    "contract": {
+      "action_mode": "greedy_argmax",
+      "action_space": "canonical_craftax_action_set",
+      "identical_for_all_arms": true,
+      "max_timesteps": 4096,
+      "observation_schema": "canonical_craftax_symbolic"
+    },
+    "episode_count": 8,
+    "failure_rule_version": "tier3_failure_rules/v1",
+    "materialization_status": "JAX_CRAFTAX_AVAILABLE",
+    "metrics": {
+      "dense": {
+        "is_success_substitute": false,
+        "median": 0.38289473684210523,
+        "metric": "GRAPH_DISTANCE_PROGRESS",
+        "monotonicity_guaranteed": false,
+        "per_state_progress": [
+          {
+            "graph_distance_progress": 0.3157894736842105,
+            "state_entry_id": "front_l2-bank0"
+          },
+          {
+            "graph_distance_progress": 1.0,
+            "state_entry_id": "front_l2-bank1"
+          },
+          {
+            "graph_distance_progress": 0.05660377358490565,
+            "state_entry_id": "front_l2-bank2"
+          },
+          {
+            "graph_distance_progress": 0.6875,
+            "state_entry_id": "front_l2-bank3"
+          },
+          {
+            "graph_distance_progress": 0.44999999999999996,
+            "state_entry_id": "front_l2-bank4"
+          },
+          {
+            "graph_distance_progress": 0.5714285714285714,
+            "state_entry_id": "front_l2-bank5"
+          },
+          {
+            "graph_distance_progress": 0.27586206896551724,
+            "state_entry_id": "front_l2-bank6"
+          },
+          {
+            "graph_distance_progress": 0.0,
+            "state_entry_id": "front_l2-bank7"
+          }
+        ],
+        "range": [
+          0,
+          1
+        ],
+        "scenario": "front_l2",
+        "scored": 8,
+        "valid_starts": 8,
+        "value": 0.4196479859579006
+      },
+      "primary": {
+        "conditional_on": "valid_start",
+        "diagnostic_only": true,
+        "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+        "scenario": "front_l2",
+        "successes": 0,
+        "valid_starts": 8,
+        "value": 0.0
+      },
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_metrics/v1"
+    },
+    "result_version": "tier3_evaluation_result/v1",
+    "rollout_status": "REAL_ENV_INTERFACE_READY",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "front_l2",
+    "schema": "mechanism_UED.tier3_evaluation_result/v1",
+    "terminal_label_counts": {
+      "DIED_IN_CORRIDOR": 8
+    },
+    "valid_start_count": 8
+  },
+  "generated_at_utc": "2026-07-31T13:35:39.451348+00:00",
+  "rehearsal": false,
+  "run_class": "FORMAL_EVALUATION",
+  "scenario": "front_l2",
+  "schedule": {
+    "count": 8,
+    "kind": "frozen_bank_state_each_once",
+    "seed_base": 10000,
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007
+    ],
+    "stride": 1
+  },
+  "schema": "mechanism_UED.tier3_formal_evaluation_result/v2dt",
+  "timing": {
+    "episodes": [
+      {
+        "entry_id": "front_l2-bank0",
+        "episode_id": "front_l2-bank0",
+        "seed": 10000,
+        "timesteps": 510,
+        "wall_seconds": 109.949835
+      },
+      {
+        "entry_id": "front_l2-bank1",
+        "episode_id": "front_l2-bank1",
+        "seed": 10001,
+        "timesteps": 1040,
+        "wall_seconds": 221.475017
+      },
+      {
+        "entry_id": "front_l2-bank2",
+        "episode_id": "front_l2-bank2",
+        "seed": 10002,
+        "timesteps": 1015,
+        "wall_seconds": 218.58078
+      },
+      {
+        "entry_id": "front_l2-bank3",
+        "episode_id": "front_l2-bank3",
+        "seed": 10003,
+        "timesteps": 94,
+        "wall_seconds": 20.269362
+      },
+      {
+        "entry_id": "front_l2-bank4",
+        "episode_id": "front_l2-bank4",
+        "seed": 10004,
+        "timesteps": 980,
+        "wall_seconds": 209.640778
+      },
+      {
+        "entry_id": "front_l2-bank5",
+        "episode_id": "front_l2-bank5",
+        "seed": 10005,
+        "timesteps": 750,
+        "wall_seconds": 157.751817
+      },
+      {
+        "entry_id": "front_l2-bank6",
+        "episode_id": "front_l2-bank6",
+        "seed": 10006,
+        "timesteps": 42,
+        "wall_seconds": 9.273943
+      },
+      {
+        "entry_id": "front_l2-bank7",
+        "episode_id": "front_l2-bank7",
+        "seed": 10007,
+        "timesteps": 780,
+        "wall_seconds": 165.112617
+      }
+    ],
+    "peak_rss_kb": 4174008,
+    "scenario_wall_seconds": 1112.205129
+  }
+}

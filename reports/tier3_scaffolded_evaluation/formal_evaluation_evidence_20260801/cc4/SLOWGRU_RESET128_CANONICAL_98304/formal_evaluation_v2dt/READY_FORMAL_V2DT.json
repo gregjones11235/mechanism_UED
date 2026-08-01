@@ -1,0 +1,72 @@
+{
+  "READY_FORMAL_V2DT": false,
+  "candidate_class": "STUDENT",
+  "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "counts_toward_student_binding_count": true,
+  "evaluation_status": "BLOCKED",
+  "evidence_files": [
+    "episode_records.jsonl",
+    "provenance.json",
+    "evaluation_certificate_v2dt.json",
+    "evaluation_result_v2dt.full.json",
+    "evaluation_result_v2dt.front_l2.json",
+    "evaluation_result_v2dt.back_l2.json",
+    "SHA256SUMS_FORMAL_V2DT"
+  ],
+  "formal_abort": {
+    "aborted_phase": "evaluate_classification",
+    "authority": "frozen engine taxonomy (not relaxable by CC4)",
+    "consequence": "candidate BLOCKED; NOT recorded as a formal score; no candidate-level exemption; no retraining; rerun would reproduce deterministically",
+    "engine_message": "FAIL CLOSED (NEG20): ambiguous/contradictory terminal signals ['front_l2 floor transition AND defeat_kobold (front ends at the transition)']; refusing to silently assign a single label",
+    "entry_id": null,
+    "episode_index": null,
+    "episodes_completed_before_abort": 8,
+    "episodes_planned": 8,
+    "exception_type": "tier3_failure_taxonomy.FailClosed (via frozen tier3_evaluator.evaluate)",
+    "scenario": "front_l2",
+    "scenarios_completed_before_abort": [
+      "full",
+      "front_l2"
+    ],
+    "seed": null,
+    "v2_failclosed_class": "TERMINAL_SIGNAL_AMBIGUITY (frozen classifier refuses contradictory terminal signals; NOT corruption, NOT relaxable by CC4)",
+    "verdict": "ENGINE_TAXONOMY_REJECTED_FORMAL_EVALUATION_V2"
+  },
+  "gates": {
+    "G10_PROTOCOL_VERSION_V2": true,
+    "G11_SECONDARY_AUDIT_MARKER_VERIFIED": true,
+    "G12_CERTIFICATE_VERIFIED": true,
+    "G13_BOUNDARY_SEMANTICS_UNIT_CHECK": true,
+    "G1_CAPSULE_FILE_SHA_MATCH": true,
+    "G2_CHECKPOINT_FILE_SHA_OWNER_RECOMPUTE_MATCH": true,
+    "G3_PARAMS_SHA_OWNER_RECOMPUTE_MATCH": true,
+    "G4_FORMAL_SCHEDULE_COMPLETE": false,
+    "G5_PARAMS_UNCHANGED": true,
+    "G6_COMMON_V2_SUMS": true,
+    "G7_EPISODE_COUNTS_FROM_V2_PROFILE": true,
+    "G8_GPU_ALLOWED": true,
+    "G9_V1_FROZEN_PRESERVED": true
+  },
+  "generated_at_utc": "2026-07-31T14:16:50.009357+00:00",
+  "honest_false_discipline": "ANY failed gate keeps READY_FORMAL_V2DT false; a BLOCKED candidate is never recorded as a formal score; interface smoke is not a performance result",
+  "performance_evaluation_executed": false,
+  "ranking_publication": "FORMAL_RANKING_SUMMARY_V2DT.json (published by tier3_formal_ranking_v2dt.py after ALL runs; certificates are never rewritten)",
+  "reference_only": false,
+  "rehearsal": false,
+  "rehearsal_limits": null,
+  "run_class": "FORMAL_EVALUATION",
+  "runtime_family": "slowgru_reset128_cc3_projection",
+  "scaffolded_results_can_replace_full_task": false,
+  "schema": "mechanism_UED.tier3_formal_ready/v2dt",
+  "scientific_claim_authorized": false,
+  "secondary_audit_marker": {
+    "binding_gate_sha256": "cec167117a7aa8e67a3d5eb60839e711e72d950135553e4035a87e6c9859a352",
+    "path": "/home/oseasy/student_pool_v1/cc4/SECONDARY_AUDIT_PASS.json",
+    "recorded_at_utc": "2026-07-31T10:09:36.565527+00:00",
+    "sha256": "b08c1a9bf7055ac6b4a200c6f561374a0c34c2dee9ce6dd799212de3eb5f8351",
+    "verdict": "PASS_FOR_FORMAL_GLOBAL_PERFORMANCE_EVALUATION_START"
+  },
+  "student_rank": null,
+  "teacher_included_in_student_ranking": false
+}

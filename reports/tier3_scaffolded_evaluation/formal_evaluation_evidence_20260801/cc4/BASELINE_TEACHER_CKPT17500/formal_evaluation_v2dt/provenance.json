@@ -1,0 +1,64 @@
+{
+  "argv": [
+    "tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v2dt.py",
+    "--candidate-id",
+    "BASELINE_TEACHER_CKPT17500"
+  ],
+  "binding_driver_module_sha256": "a939a4df554512d2e3bb5a365099a25e3b017739dd0d0fe86d650956e6ce7eab",
+  "certificate_module_sha256": "28aa8ef760f991a722055ec8c02e5a9f77e1e0d94e6cdc7bf7490d8b3255e4ff",
+  "cwd": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+  "device_identity": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "gpu",
+    "jax_devices": "[cuda(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "driver_module_lf_sha256": "ddeda9478b600d1e78475ccc828732d20f00c29d359df6f37671ace5eae06841",
+  "driver_module_sha256": "ddeda9478b600d1e78475ccc828732d20f00c29d359df6f37671ace5eae06841",
+  "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+  "generated_at_utc": "2026-07-31T18:00:25.400736+00:00",
+  "git_commit_head": "6f5e270559b67c63ea55d733f9606283c52dad2f",
+  "gpu": {
+    "cuda_visible_devices": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+    "gpu_allowlist_cc4": [
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+      "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "nvidia_smi_L": [
+      "GPU 0: NVIDIA RTX A6000 (UUID: GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6)",
+      "GPU 1: NVIDIA RTX A6000 (UUID: GPU-3c7a2864-755b-7045-b293-6f80e748283f)",
+      "GPU 2: NVIDIA RTX A6000 (UUID: GPU-8df11537-ab79-722d-606f-411966196c4c)",
+      "GPU 3: NVIDIA RTX A6000 (UUID: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd)"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ]
+  },
+  "host": "i-00000226",
+  "peak_rss_kb": 3932976,
+  "pid": 2595717,
+  "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5",
+  "projection_module_lf_sha256": "3a2de588cd29a920ace90ad7419bb64979aa3d8ac283f048034942ca63635e8c",
+  "projection_module_sha256": "3a2de588cd29a920ace90ad7419bb64979aa3d8ac283f048034942ca63635e8c",
+  "python_executable": "/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python",
+  "runtime_versions": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "scenario_wall_seconds": {
+    "front_l2": 1746.403396,
+    "full": 10640.590911
+  },
+  "schema": "mechanism_UED.tier3_formal_provenance/v2dt",
+  "xla_jax_env": {}
+}
