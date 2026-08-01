@@ -142,7 +142,18 @@ def verify_v3_repair_start(common_dir, pool_cc4_dir):
     """The V3 start-authorization gate (stage 1b). Independent of the V2 READY.
     The V3_REPAIR_AUTHORIZATION marker must exist, its SHA sidecar must match, and
     it must record the verbatim 总控 ruling task + verdict + V2 archive SHAs + pin
-    snapshot + git HEAD. Fail-closed on ANY deviation."""
+    snapshot + git HEAD. Fail-closed on ANY deviation.
+
+    Rerun guard: once the V3 ranking is published (COMMON_EVALUATOR_V3_READY.json
+    carries FORMAL_RANKING_STARTED=true), V3 runs fail-close — the closing flip is
+    the single point after which formal runs cannot silently repeat."""
+    ready_v3_path = os.path.join(pool_cc4_dir, READY_V3_NAME)
+    if os.path.isfile(ready_v3_path):
+        ready_v3 = proj.read_json(ready_v3_path)
+        proj.require(ready_v3.get("FORMAL_RANKING_STARTED") is not True,
+                     "FAIL CLOSED (V3_REPAIR_START): %s already records "
+                     "FORMAL_RANKING_STARTED=true — the V3 ranking is published; "
+                     "V3 runs must not repeat after the closing flip" % READY_V3_NAME)
     marker_path = os.path.join(pool_cc4_dir, V3_REPAIR_MARKER_NAME)
     proj.require(os.path.isfile(marker_path),
                  "FAIL CLOSED (V3_REPAIR_START): %s missing — the V3 repair-"
@@ -1125,6 +1136,16 @@ def run_self_test():
             ok(False, "wrong V2 archive sha accepted")
         except proj.FailClosed:
             checks += 1
+        # rerun guard: once READY_V3 records FORMAL_RANKING_STARTED=true, a valid
+        # marker is still rejected (V3 runs cannot repeat after the closing flip)
+        _write_test_marker(cc4d, git_head="0" * 40)
+        smokev2.write_json(os.path.join(cc4d, READY_V3_NAME),
+                           {"FORMAL_RANKING_STARTED": True})
+        try:
+            verify_v3_repair_start(common, cc4d)
+            ok(False, "post-closing V3 rerun accepted")
+        except proj.FailClosed as exc:
+            ok("FORMAL_RANKING_STARTED" in str(exc), "rerun guard fires")
 
     # --- rehearsal arg gates (pure) -------------------------------------------
     is_r, lim = check_rehearsal_args(None, None, None, None)
