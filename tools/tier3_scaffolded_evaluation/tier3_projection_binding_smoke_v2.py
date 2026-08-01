@@ -107,7 +107,36 @@ def utc_now_iso():
 # ---------------------------------------------------------------------------
 # Stage 1 — V2 engine + V2 common identity + V1 preservation proof
 # ---------------------------------------------------------------------------
-def verify_engine_and_common_v2(common_dir, v1_common_dir, tools_dir):
+def _check_v2_ready_start_policy(ready, policy):
+    """The COMMON_EVALUATOR_V2_READY.json start-authorization policy (pure).
+
+    policy="not_started" (the V2 task): V2 formal ranking must NOT yet have
+    started — FORMAL_RANKING_STARTED is absent or false. This is the original V2
+    behavior, preserved verbatim as the default.
+
+    policy="closed" (the V3 composite-event repair task): V2 must ALREADY be
+    closed/archived — FORMAL_RANKING_STARTED is true AND COMMON_EVALUATOR_V2_READY
+    is true. The V3 repair evaluation legitimately runs only AFTER V2 closed
+    (V2_STATUS=CLOSED_INCONCLUSIVE_PARTICIPATION, V2_WINNER=null); its start
+    precondition is the exact OPPOSITE of V2's. Raises proj.FailClosed on breach.
+    """
+    if policy == "closed":
+        proj.require(ready.get("FORMAL_RANKING_STARTED") is True,
+                     "FAIL CLOSED (V3_PRECONDITION): V2 READY FORMAL_RANKING_STARTED "
+                     "must be true (V2 must be CLOSED before the V3 repair "
+                     "evaluation may run)")
+        proj.require(ready.get("COMMON_EVALUATOR_V2_READY") is True,
+                     "FAIL CLOSED (V3_PRECONDITION): V2 READY "
+                     "COMMON_EVALUATOR_V2_READY must be true (V2 closed)")
+    else:
+        if ready.get("FORMAL_RANKING_STARTED") is not None:
+            proj.require(ready["FORMAL_RANKING_STARTED"] is False,
+                         "FAIL CLOSED: V2 READY FORMAL_RANKING_STARTED must be "
+                         "false (this task may not start formal ranking)")
+
+
+def verify_engine_and_common_v2(common_dir, v1_common_dir, tools_dir,
+                                _v2_ready_policy="not_started"):
     ev = {}
 
     def _require_pins_filled():
@@ -286,14 +315,15 @@ def verify_engine_and_common_v2(common_dir, v1_common_dir, tools_dir):
                 proj.require(ready[key] == want,
                              "FAIL CLOSED: V2 READY marker %s %r != frozen %s"
                              % (key, ready[key], want))
-        if ready.get("FORMAL_RANKING_STARTED") is not None:
-            proj.require(ready["FORMAL_RANKING_STARTED"] is False,
-                         "FAIL CLOSED: V2 READY FORMAL_RANKING_STARTED must be "
-                         "false (this task may not start formal ranking)")
+        _check_v2_ready_start_policy(ready, _v2_ready_policy)
         ev["v2_ready_marker_present"] = True
         ev["common_evaluator_v2_ready_at_binding_time"] = bool(
             ready.get("COMMON_EVALUATOR_V2_READY"))
     else:
+        proj.require(_v2_ready_policy != "closed",
+                     "FAIL CLOSED (V3_PRECONDITION): COMMON_EVALUATOR_V2_READY.json "
+                     "absent — V2 must be CLOSED (marker present) before the V3 "
+                     "repair evaluation may run")
         ev["v2_ready_marker_present"] = False
         ev["common_evaluator_v2_ready_at_binding_time"] = False
 
@@ -332,6 +362,21 @@ def verify_engine_and_common_v2(common_dir, v1_common_dir, tools_dir):
         "v1_status": SUPERSEDED_V1_STATUS,
     }
     return ev
+
+
+def verify_engine_and_common_for_v3(common_dir, v1_common_dir, tools_dir):
+    """The V3 composite-event repair evaluation's frozen-preservation tripwire.
+
+    Identical frozen-engine + common_v2/ byte-identity + V1-preservation proof as
+    verify_engine_and_common_v2 (same checks, same frozen pins, same returned ev
+    shape), with ONE semantic difference: the V2 READY start gate runs in
+    "closed" policy — it REQUIRES V2 to already be closed/archived
+    (FORMAL_RANKING_STARTED=true, COMMON_EVALUATOR_V2_READY=true) instead of
+    requiring V2 ranking to be un-started. The V3 repair runs only after V2
+    closed; the default V2 entry point is untouched (policy="not_started").
+    """
+    return verify_engine_and_common_v2(common_dir, v1_common_dir, tools_dir,
+                                       _v2_ready_policy="closed")
 
 
 # ---------------------------------------------------------------------------

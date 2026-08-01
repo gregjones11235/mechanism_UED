@@ -448,13 +448,16 @@ def main(argv=None):
                  "FAIL CLOSED (BLOCKED_ENVIRONMENT): JAX+craftax required "
                  "(jax=%s, craftax=%s)" % (ser.have_jax(), ser.have_craftax()))
     print("[stage1] verifying frozen engine + common_v2/ identity + V1 "
-          "preservation ...", flush=True)
-    common_ev = smokev2.verify_engine_and_common_v2(args.common_dir,
-                                                    args.v1_common_dir, tools_dir)
-    print("[stage1] %s; engine modules LF-SHA %d; v1 %s"
+          "preservation + V2-CLOSED precondition ...", flush=True)
+    common_ev = smokev2.verify_engine_and_common_for_v3(args.common_dir,
+                                                        args.v1_common_dir,
+                                                        tools_dir)
+    print("[stage1] %s; engine modules LF-SHA %d; v1 %s; v2_ready_at_binding=%s "
+          "(V3 requires V2 CLOSED)"
           % (common_ev["common_v2_sha256sums_self_check"],
              common_ev["engine_modules_lf_sha_verified"],
-             common_ev["v1_preservation"]["v1_status"]), flush=True)
+             common_ev["v1_preservation"]["v1_status"],
+             common_ev["common_evaluator_v2_ready_at_binding_time"]), flush=True)
 
     # --- Stage 1b: V3 repair-authorization marker gate -----------------------
     marker_ref = None
@@ -1049,6 +1052,33 @@ def run_self_test():
     try:
         verify_gpu_v3([])
         ok(False, "empty GPU accepted")
+    except proj.FailClosed:
+        checks += 1
+
+    # --- V2-CLOSED start precondition (stage1 policy gate, pure) --------------
+    # The V3 driver runs ONLY after V2 closed: stage1 uses the "closed" policy,
+    # the exact opposite of V2's "not_started" default. This is the bug the
+    # preflight exposed (a V2-archive READY tripped the V2 not-started guard).
+    pol = smokev2._check_v2_ready_start_policy
+    ok(hasattr(smokev2, "verify_engine_and_common_for_v3"),
+       "V3 preservation entry point exists")
+    V2_CLOSED = {"FORMAL_RANKING_STARTED": True, "COMMON_EVALUATOR_V2_READY": True}
+    V2_OPEN = {"FORMAL_RANKING_STARTED": False, "COMMON_EVALUATOR_V2_READY": True}
+    # closed policy: V2 closed passes; V2 open / half-closed fail
+    pol(V2_CLOSED, "closed"); checks += 1
+    for bad in (V2_OPEN,
+                {"FORMAL_RANKING_STARTED": True, "COMMON_EVALUATOR_V2_READY": False},
+                {"COMMON_EVALUATOR_V2_READY": True},
+                {}):
+        try:
+            pol(bad, "closed"); ok(False, "V3 accepted non-closed V2 %r" % bad)
+        except proj.FailClosed:
+            checks += 1
+    # not_started policy (V2 default, unchanged): open/absent pass; closed fails
+    pol(V2_OPEN, "not_started"); checks += 1
+    pol({}, "not_started"); checks += 1
+    try:
+        pol(V2_CLOSED, "not_started"); ok(False, "V2 default accepted started")
     except proj.FailClosed:
         checks += 1
 
