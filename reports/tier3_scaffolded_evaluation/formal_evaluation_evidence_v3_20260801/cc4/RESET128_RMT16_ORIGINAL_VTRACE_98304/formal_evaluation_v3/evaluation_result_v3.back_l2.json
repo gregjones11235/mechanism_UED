@@ -1,0 +1,263 @@
+{
+  "aborted_in_scenario": false,
+  "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+  "common_evaluator_protocol_version": "V3_COMPOSITE_EVENT",
+  "entry_ids_planned": [
+    "back_l2-bank0",
+    "back_l2-bank1",
+    "back_l2-bank2",
+    "back_l2-bank3",
+    "back_l2-bank4",
+    "back_l2-bank5",
+    "back_l2-bank6",
+    "back_l2-bank7"
+  ],
+  "episode_records_sha256": "3132cf342568753f2c7ee3aed8df65c83ef2ab44f3ad72001bcc91939989b5a9",
+  "episodes_executed": 8,
+  "episodes_planned": 8,
+  "evaluation": {
+    "composite_event_layer": {
+      "composite_episode_count": 0,
+      "per_episode": [
+        {
+          "episode_id": "back_l2-bank0",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank1",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank2",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank3",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank4",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank5",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank6",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "back_l2-bank7",
+          "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD",
+            "KOBOLD_ENGAGED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        }
+      ],
+      "primary_outcome_counts": {
+        "BACK_DEFEAT_KOBOLD_SUCCESS": 8
+      },
+      "secondary_event_counts": {
+        "DEFEAT_KOBOLD": 8,
+        "KOBOLD_ENGAGED": 8
+      },
+      "secondary_event_vocabulary": [
+        "CORRIDOR_EXIT_REACHED",
+        "DEFEAT_KOBOLD",
+        "KOBOLD_ENGAGED",
+        "PLAYER_DIED",
+        "TIMED_OUT"
+      ]
+    },
+    "episode_count": 8,
+    "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+    "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+    "metrics": {
+      "dense": {
+        "median": null,
+        "metric": "GRAPH_DISTANCE_PROGRESS",
+        "note": "dense progress defined for front_l2 only",
+        "per_state_progress": [],
+        "scenario": "back_l2",
+        "value": null
+      },
+      "diagnostics": {
+        "damage": null,
+        "failure_taxonomy": {
+          "SUCCESS_DEFEAT_KOBOLD": 8
+        },
+        "kobold_engaged_count": 8,
+        "schema_note": "time_to_first_engagement / time_to_kill / damage are not fields of the frozen episode record schema (mechanism_UED.tier3_evaluation_result/v1); reported as null rather than expanding the schema",
+        "survival": {
+          "defeat_count": 8,
+          "died_count": 0,
+          "max_timesteps_observed": 77,
+          "mean_timesteps": 29.875
+        },
+        "time_to_first_engagement": null,
+        "time_to_kill": null,
+        "valid_starts": 8
+      },
+      "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+      "na_metrics": [
+        "boss_area_reached",
+        "time_to_boss_area",
+        "BACK_BOSS_NOT_FOUND"
+      ],
+      "na_reason": "BACK start is already on floor 3 next to a live Kobold; boss-area search is not exercised by this scaffold",
+      "primary": {
+        "conditional_on": "valid_start",
+        "diagnostic_only": true,
+        "metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+        "scenario": "back_l2",
+        "successes": 8,
+        "valid_starts": 8,
+        "value": 1.0
+      },
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "back_l2",
+      "schema": "mechanism_UED.tier3_metrics/v1"
+    },
+    "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "back_l2",
+    "schema": "mechanism_UED.tier3_taxonomy_v3_summary/v1",
+    "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+    "terminal_label_counts": {
+      "SUCCESS_DEFEAT_KOBOLD": 8
+    },
+    "valid_start_count": 8
+  },
+  "generated_at_utc": "2026-08-01T03:35:25.933824+00:00",
+  "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+  "rehearsal": false,
+  "reuse_provenance": {
+    "classification_only": false,
+    "completion_note": "first-run completion of 0/8 V2 skeletons at the identical frozen profile; NOT a retry",
+    "environment_rerun": true,
+    "reuse_status": "COMPLETED",
+    "source": "V3_FRESH_COMPLETION_RUN",
+    "source_v2_episode_sha256": null,
+    "v3_classifier_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+    "v3_result_sha256": "5b4be011e4203b98688221fbf882dbf003d224a6b218b40a569f8a3e6b105715"
+  },
+  "run_class": "FORMAL_EVALUATION",
+  "scenario": "back_l2",
+  "schedule": {
+    "count": 8,
+    "kind": "frozen_bank_state_each_once",
+    "seed_base": 10000,
+    "seeds": [
+      1010000,
+      1010001,
+      1010002,
+      1010003,
+      1010004,
+      1010005,
+      1010006,
+      1010007
+    ],
+    "stride": 1
+  },
+  "schema": "mechanism_UED.tier3_formal_evaluation_result/v3",
+  "timing": {
+    "episodes": [
+      {
+        "entry_id": "back_l2-bank0",
+        "episode_id": "back_l2-bank0",
+        "seed": 1010000,
+        "timesteps": 24,
+        "wall_seconds": 84.876678
+      },
+      {
+        "entry_id": "back_l2-bank1",
+        "episode_id": "back_l2-bank1",
+        "seed": 1010001,
+        "timesteps": 77,
+        "wall_seconds": 20.825722
+      },
+      {
+        "entry_id": "back_l2-bank2",
+        "episode_id": "back_l2-bank2",
+        "seed": 1010002,
+        "timesteps": 6,
+        "wall_seconds": 2.103121
+      },
+      {
+        "entry_id": "back_l2-bank3",
+        "episode_id": "back_l2-bank3",
+        "seed": 1010003,
+        "timesteps": 58,
+        "wall_seconds": 16.569045
+      },
+      {
+        "entry_id": "back_l2-bank4",
+        "episode_id": "back_l2-bank4",
+        "seed": 1010004,
+        "timesteps": 8,
+        "wall_seconds": 2.570327
+      },
+      {
+        "entry_id": "back_l2-bank5",
+        "episode_id": "back_l2-bank5",
+        "seed": 1010005,
+        "timesteps": 16,
+        "wall_seconds": 4.676275
+      },
+      {
+        "entry_id": "back_l2-bank6",
+        "episode_id": "back_l2-bank6",
+        "seed": 1010006,
+        "timesteps": 23,
+        "wall_seconds": 6.606055
+      },
+      {
+        "entry_id": "back_l2-bank7",
+        "episode_id": "back_l2-bank7",
+        "seed": 1010007,
+        "timesteps": 27,
+        "wall_seconds": 7.689933
+      }
+    ],
+    "peak_rss_kb": 3551608,
+    "scenario_wall_seconds": 146.070024
+  }
+}

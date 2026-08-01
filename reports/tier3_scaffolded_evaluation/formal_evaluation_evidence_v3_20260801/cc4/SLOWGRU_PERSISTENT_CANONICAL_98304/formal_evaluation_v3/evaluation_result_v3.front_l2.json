@@ -1,0 +1,229 @@
+{
+  "aborted_in_scenario": false,
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "common_evaluator_protocol_version": "V3_COMPOSITE_EVENT",
+  "entry_ids_planned": [
+    "front_l2-bank0",
+    "front_l2-bank1",
+    "front_l2-bank2",
+    "front_l2-bank3",
+    "front_l2-bank4",
+    "front_l2-bank5",
+    "front_l2-bank6",
+    "front_l2-bank7"
+  ],
+  "episode_records_sha256": "bb61fe875b11ae95f5d8a4630fbd300a97c4dbc980322729e2b00ba92672431e",
+  "episodes_executed": 8,
+  "episodes_planned": 8,
+  "evaluation": {
+    "composite_event_layer": {
+      "composite_episode_count": 2,
+      "per_episode": [
+        {
+          "episode_id": "front_l2-bank0",
+          "primary_outcome": "FRONT_NO_TRANSITION",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank1",
+          "primary_outcome": "FRONT_TRANSITION_SUCCESS",
+          "secondary_events": [
+            "CORRIDOR_EXIT_REACHED",
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_COMPOSITE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank2",
+          "primary_outcome": "FRONT_NO_TRANSITION",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank3",
+          "primary_outcome": "FRONT_NO_TRANSITION",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank4",
+          "primary_outcome": "FRONT_NO_TRANSITION",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank5",
+          "primary_outcome": "FRONT_NO_TRANSITION",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank6",
+          "primary_outcome": "FRONT_TRANSITION_SUCCESS",
+          "secondary_events": [
+            "CORRIDOR_EXIT_REACHED",
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_COMPOSITE_EVENT"
+        },
+        {
+          "episode_id": "front_l2-bank7",
+          "primary_outcome": "FRONT_NO_TRANSITION",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        }
+      ],
+      "primary_outcome_counts": {
+        "FRONT_NO_TRANSITION": 6,
+        "FRONT_TRANSITION_SUCCESS": 2
+      },
+      "secondary_event_counts": {
+        "CORRIDOR_EXIT_REACHED": 2,
+        "DEFEAT_KOBOLD": 1,
+        "PLAYER_DIED": 7
+      },
+      "secondary_event_vocabulary": [
+        "CORRIDOR_EXIT_REACHED",
+        "DEFEAT_KOBOLD",
+        "KOBOLD_ENGAGED",
+        "PLAYER_DIED",
+        "TIMED_OUT"
+      ]
+    },
+    "episode_count": 8,
+    "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+    "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+    "metrics": {
+      "dense": {
+        "is_success_substitute": false,
+        "median": 0.75,
+        "metric": "GRAPH_DISTANCE_PROGRESS",
+        "monotonicity_guaranteed": false,
+        "per_state_progress": [
+          {
+            "graph_distance_progress": 0.8947368421052632,
+            "state_entry_id": "front_l2-bank0"
+          },
+          {
+            "graph_distance_progress": 1.0,
+            "state_entry_id": "front_l2-bank1"
+          },
+          {
+            "graph_distance_progress": 0.2075471698113207,
+            "state_entry_id": "front_l2-bank2"
+          },
+          {
+            "graph_distance_progress": 0.75,
+            "state_entry_id": "front_l2-bank3"
+          },
+          {
+            "graph_distance_progress": 0.75,
+            "state_entry_id": "front_l2-bank4"
+          },
+          {
+            "graph_distance_progress": 0.0,
+            "state_entry_id": "front_l2-bank5"
+          },
+          {
+            "graph_distance_progress": 1.0,
+            "state_entry_id": "front_l2-bank6"
+          },
+          {
+            "graph_distance_progress": 0.0,
+            "state_entry_id": "front_l2-bank7"
+          }
+        ],
+        "range": [
+          0,
+          1
+        ],
+        "scenario": "front_l2",
+        "scored": 8,
+        "valid_starts": 8,
+        "value": 0.575285501489573
+      },
+      "primary": {
+        "conditional_on": "valid_start",
+        "diagnostic_only": true,
+        "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+        "scenario": "front_l2",
+        "successes": 2,
+        "valid_starts": 8,
+        "value": 0.25
+      },
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_metrics/v1"
+    },
+    "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "front_l2",
+    "schema": "mechanism_UED.tier3_taxonomy_v3_summary/v1",
+    "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+    "terminal_label_counts": {
+      "DIED_IN_CORRIDOR": 6,
+      "FRONT_FLOOR_TRANSITION_REACHED": 2
+    },
+    "valid_start_count": 8
+  },
+  "generated_at_utc": "2026-08-01T03:32:53.602696+00:00",
+  "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+  "rehearsal": false,
+  "reuse_provenance": {
+    "classification_only": true,
+    "composite_episode_count": 2,
+    "environment_rerun": false,
+    "per_record_source_sha256": {
+      "front_l2-bank0": "fa39af469f8a35da5bc43c96909965308c20ddf7653aa2307b92315050031ee1",
+      "front_l2-bank1": "8105c0896801a6cf5e6d71c5406e37c59b73e4c269669709754100b2a7df8e20",
+      "front_l2-bank2": "cb08f4ed60ac0ed7424a0ed2e2c714a559b98ccb88689c201ed57ee4854ea897",
+      "front_l2-bank3": "b0c5806b39c516d963bb912d4521ba76724ca760b6a201d78cd04e4e90e60842",
+      "front_l2-bank4": "0407eb406144f73a31d3949c3dd8b173161945a36f0c092bf89d9fb32b943261",
+      "front_l2-bank5": "4085a78a78c04655f3e652cebb6cf2f840a133ed3adee8f9db2b85be98da77bc",
+      "front_l2-bank6": "9e347fa149a18009a2647f2daf010a3482608f8756d493e4edc3c083b5d60aa8",
+      "front_l2-bank7": "0b4d089a6a9593b16c140645e98fd7ca9bde45ac219a26b3617432afe03ffaa4"
+    },
+    "reuse_status": "REUSED_RECLASSIFIED",
+    "source": "V2_COMMITTED_EVIDENCE",
+    "source_v2_episode_sha256": "e42fa433936314253fdfb72fee96c860a69a2bf418f7675f14a1cac95d530e91",
+    "v3_classifier_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+    "v3_result_sha256": "99a89c53150e6c438112af5a8d131e7660199730fd3b8ec963eb7e574cd17ecb"
+  },
+  "run_class": "FORMAL_EVALUATION",
+  "scenario": "front_l2",
+  "schedule": {
+    "count": 8,
+    "kind": "frozen_bank_state_each_once",
+    "seed_base": 10000,
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007
+    ],
+    "stride": 1
+  },
+  "schema": "mechanism_UED.tier3_formal_evaluation_result/v3",
+  "timing": {
+    "episodes": [],
+    "note": "offline reclassification; no rollout",
+    "scenario_wall_seconds": 0.002316
+  }
+}

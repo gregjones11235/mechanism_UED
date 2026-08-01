@@ -1,0 +1,51 @@
+{
+  "evidence": {
+    "git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082",
+    "pins_snapshot": {
+      "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+      "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+      "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+      "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+      "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+      "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+      "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+      "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+      "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+      "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+      "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde"
+    },
+    "taxonomy_v3_lf_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+    "v2_archive_gate_sha256": "51d3d6fb8efbc978875823cdc4576443c4d61f308840462c1bfa12da52fddc5b",
+    "v2_archive_summary_sha256": "3e8186417aefeb25729324ce5fb4bc6b56a58087c8d1ee67bc088ad37d5c1ac3",
+    "v2_evidence_modified_by_v3": false,
+    "v2_status": "CLOSED_INCONCLUSIVE_PARTICIPATION",
+    "v2_winner": null
+  },
+  "pool_cc4_dir": "/home/oseasy/student_pool_v1/cc4",
+  "recorded_at_utc": "2026-08-01T03:22:55.900130+00:00",
+  "ruling": {
+    "authorization_scope": "repair the frozen failure classifier's NEG20 handling of the legitimate composite event (floor transition AND defeat_kobold) and complete the formal evaluation as V3",
+    "new_protocols": {
+      "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+      "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS"
+    },
+    "new_representation": "primary_outcome + secondary_events[] + taxonomy_status",
+    "prohibitions": [
+      "NO_RETRAINING",
+      "NO_CHECKPOINT_MODIFICATION",
+      "NO_CANDIDATE_LEVEL_EXEMPTION",
+      "NO_SUBMETRIC_RANKING_DOWNGRADE",
+      "NO_V2_EVIDENCE_DELETE_OVERWRITE_REWRITE",
+      "NO_MERGE_REBASE_AMEND_FORCE_PUSH",
+      "NO_PERFORMANCE_RETRY",
+      "NO_SMOKE_SUBSTITUTION_FOR_PERFORMANCE",
+      "NO_FULL_ONLY_OR_BACK_ONLY_RANKING"
+    ],
+    "ranking_rule": "frozen order [full success_count, front_l2 transition_count, front_l2 mean graph_distance_progress, back_l2 defeat_count], tie tolerance 1e-12, full four-level tie => INCONCLUSIVE",
+    "task_name": "CC4_REPAIR_NEG20_COMPOSITE_EVENT_SEMANTICS_AND_COMPLETE_FORMAL_EVALUATION_V3",
+    "verbatim": "维持 Student、checkpoint、runtime、state bank、FULL seeds、episode 数、horizon、greedy policy 和排名规则不变。授权修复冻结失败分类器 NEG20 对合法复合事件 floor transition AND defeat_kobold 无法赋单一标签的问题。不得重训 Student，不得采用候选级豁免，不得降级为子指标排名。V2 归档：FORMAL_GLOBAL_PERFORMANCE_EVALUATION=CLOSED_INCONCLUSIVE_PARTICIPATION，V2_WINNER=null，V2_STUDENT_RANKING_VALID=false。不得删除/覆盖/改写 V2 证据。V3 = 新的可审计 evaluator semantic repair。复合事件语义：primary_outcome / secondary_events[] / taxonomy_status；FRONT 过渡成功为 primary，同时 defeat_kobold 为 secondary，taxonomy_status=VALID_COMPOSITE_EVENT，不得 FailClosed；BACK/FULL 以 DEFEAT_KOBOLD 为 primary。FailClosed 只保留：状态损坏/必需字段缺失/互相矛盾且无法由事件时序解释的数据/非法值/证据哈希不匹配/未注册事件类型。新协议 FORMAL_EVALUATOR_PROTOCOL=V3_COMPOSITE_EVENT，NEG20_PROTOCOL=NEG20_V3_PRIMARY_SECONDARY_EVENTS。排名仍按冻结顺序，四级全平 INCONCLUSIVE。禁止：重训/改 checkpoint/候选级豁免/删 CONTROL/只排 5 个/FULL-only 或 BACK-only 排名/改 bank/改 seeds/改 episode 数/改 horizon/性能重试/smoke 替代/覆盖 V2 证据/force push/rebase/amend/merge。"
+  },
+  "ruling_task": "CC4_REPAIR_NEG20_COMPOSITE_EVENT_SEMANTICS_AND_COMPLETE_FORMAL_EVALUATION_V3",
+  "schema": "mechanism_UED.tier3_v3_repair_authorization/v1",
+  "verdict": "AUTHORIZED_COMPOSITE_EVENT_SEMANTIC_REPAIR_V3"
+}

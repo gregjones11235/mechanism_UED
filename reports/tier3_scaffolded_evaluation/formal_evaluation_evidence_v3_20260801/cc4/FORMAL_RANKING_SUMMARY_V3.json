@@ -1,0 +1,437 @@
+{
+  "FORMAL_RANKING_AUTHORIZED_V3": true,
+  "common_evaluator_protocol_version": "V3_COMPOSITE_EVENT",
+  "composite_event_summary": {
+    "disclosure": "every FRONT transition∧defeat_kobold episode is a VALID_COMPOSITE_EVENT (primary=FRONT_TRANSITION_SUCCESS, secondary includes DEFEAT_KOBOLD); no such episode is FailClosed under V3",
+    "total_composite_episodes": 13
+  },
+  "escalation": null,
+  "formal_winner": null,
+  "gate_failures": [],
+  "generated_at_utc": "2026-08-01T03:46:00.289995+00:00",
+  "git_head_policy": {
+    "behavioral_identity_basis": "frozen engine modules are LF-SHA byte-pinned and re-verified per bundle via certificate pins/engine identity; the V3 semantic repair touches ONLY the taxonomy representation / composite-event classification / certificate fields — never the frozen engine, banks, seeds, episode counts, horizon, or ranking rule",
+    "bundle_head_relations": [
+      "BASELINE_TEACHER_CKPT17500=EQUAL",
+      "BASE_GTRXL_ORIGINAL_VTRACE_98304=EQUAL",
+      "CONTROL_CONTINUOUS_98304=EQUAL",
+      "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304=EQUAL",
+      "RESET128_RMT16_ORIGINAL_VTRACE_98304=EQUAL",
+      "SLOWGRU_PERSISTENT_CANONICAL_98304=EQUAL",
+      "SLOWGRU_RESET128_CANONICAL_98304=EQUAL"
+    ],
+    "closing_git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082",
+    "commits_marker_to_execution_oneline": [],
+    "execution_git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082",
+    "execution_heads_equal_or_descended_from_marker": true,
+    "execution_heads_uniform": true,
+    "marker_git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082"
+  },
+  "inconclusive_groups": [
+    [
+      "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+      "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+    ]
+  ],
+  "interface_smoke_substituted_for_performance": false,
+  "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+  "ordered_by_strict_rule": [
+    "SLOWGRU_PERSISTENT_CANONICAL_98304",
+    "SLOWGRU_RESET128_CANONICAL_98304",
+    "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "CONTROL_CONTINUOUS_98304"
+  ],
+  "participants": [
+    {
+      "candidate_class": "STUDENT",
+      "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+      "certificate_sha256": "7fd1a51acc7436bc077cbaade818d197e6dd4224c3e256fbc01358e0b0fd8ecc",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 3,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": false,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/PERSISTENT_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      ],
+      "participant_status": "ELIGIBLE_COMPLETE",
+      "problems": [],
+      "reference_only": false,
+      "reuse_status_by_scenario": {
+        "back_l2": "COMPLETED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.5905970705064548,
+        "front_l2 transition_count": 3,
+        "full success_count": 9
+      },
+      "runtime_family": "rmt16_gtrxl_cc2_persistent_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 7,
+          "KOBOLD_ENGAGED": 8,
+          "PLAYER_DIED": 1
+        },
+        "front_l2": {
+          "CORRIDOR_EXIT_REACHED": 3,
+          "DEFEAT_KOBOLD": 1,
+          "PLAYER_DIED": 7
+        },
+        "full": {
+          "DEFEAT_KOBOLD": 9,
+          "PLAYER_DIED": 53,
+          "TIMED_OUT": 2
+        }
+      },
+      "student_rank": 5
+    },
+    {
+      "candidate_class": "STUDENT",
+      "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+      "certificate_sha256": "5394b8260e9a57f58197bb92e3c2b0cf2dd4316db60aaf3ee5caebd9e234c4d2",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 2,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": false,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      ],
+      "participant_status": "ELIGIBLE_COMPLETE",
+      "problems": [],
+      "reference_only": false,
+      "reuse_status_by_scenario": {
+        "back_l2": "COMPLETED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 8,
+        "front_l2 mean graph_distance_progress": 0.5650157181747473,
+        "front_l2 transition_count": 2,
+        "full success_count": 14
+      },
+      "runtime_family": "rmt16_gtrxl_cc2_reset128_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 8,
+          "KOBOLD_ENGAGED": 8
+        },
+        "front_l2": {
+          "CORRIDOR_EXIT_REACHED": 2,
+          "DEFEAT_KOBOLD": 2,
+          "PLAYER_DIED": 6
+        },
+        "full": {
+          "DEFEAT_KOBOLD": 14,
+          "PLAYER_DIED": 49,
+          "TIMED_OUT": 1
+        }
+      },
+      "student_rank": null
+    },
+    {
+      "candidate_class": "STUDENT",
+      "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+      "certificate_sha256": "6a14a3b3b6f2630714feebb9b1b8e25c3f6723d6fee94c66a7c0190128b805f9",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 2,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": false,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      ],
+      "participant_status": "ELIGIBLE_COMPLETE",
+      "problems": [],
+      "reference_only": false,
+      "reuse_status_by_scenario": {
+        "back_l2": "COMPLETED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 8,
+        "front_l2 mean graph_distance_progress": 0.5650157181747473,
+        "front_l2 transition_count": 2,
+        "full success_count": 14
+      },
+      "runtime_family": "base_gtrxl_cc2_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 8,
+          "KOBOLD_ENGAGED": 8
+        },
+        "front_l2": {
+          "CORRIDOR_EXIT_REACHED": 2,
+          "DEFEAT_KOBOLD": 2,
+          "PLAYER_DIED": 6
+        },
+        "full": {
+          "DEFEAT_KOBOLD": 14,
+          "PLAYER_DIED": 49,
+          "TIMED_OUT": 1
+        }
+      },
+      "student_rank": null
+    },
+    {
+      "candidate_class": "STUDENT",
+      "candidate_id": "CONTROL_CONTINUOUS_98304",
+      "certificate_sha256": "9bcf386fd013a787aa95c666b66f7aeac569b4ed1da197d1d0c2b63e4357881f",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 0,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": false,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/CONTROL_CONTINUOUS_98304/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      ],
+      "participant_status": "ELIGIBLE_COMPLETE",
+      "problems": [],
+      "reference_only": false,
+      "reuse_status_by_scenario": {
+        "back_l2": "REUSED_RESIGNED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.4196479859579006,
+        "front_l2 transition_count": 0,
+        "full success_count": 0
+      },
+      "runtime_family": "gtrxl128_cc1_control_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 7,
+          "KOBOLD_ENGAGED": 8,
+          "PLAYER_DIED": 1
+        },
+        "front_l2": {
+          "PLAYER_DIED": 8
+        },
+        "full": {
+          "PLAYER_DIED": 64
+        }
+      },
+      "student_rank": 6
+    },
+    {
+      "candidate_class": "STUDENT",
+      "candidate_id": "SLOWGRU_RESET128_CANONICAL_98304",
+      "certificate_sha256": "4d2662535bf3c4754e9aa8942fca2d799bad581e09c871e1f28900766e800f64",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 2,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": false,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/SLOWGRU_RESET128_CANONICAL_98304/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      ],
+      "participant_status": "ELIGIBLE_COMPLETE",
+      "problems": [],
+      "reference_only": false,
+      "reuse_status_by_scenario": {
+        "back_l2": "COMPLETED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.5236034412438056,
+        "front_l2 transition_count": 2,
+        "full success_count": 17
+      },
+      "runtime_family": "slowgru_reset128_cc3_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 7,
+          "KOBOLD_ENGAGED": 8,
+          "PLAYER_DIED": 1
+        },
+        "front_l2": {
+          "CORRIDOR_EXIT_REACHED": 2,
+          "DEFEAT_KOBOLD": 1,
+          "PLAYER_DIED": 7
+        },
+        "full": {
+          "DEFEAT_KOBOLD": 17,
+          "PLAYER_DIED": 47
+        }
+      },
+      "student_rank": 2
+    },
+    {
+      "candidate_class": "STUDENT",
+      "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+      "certificate_sha256": "9a748bbcba11b2889531f1a23f0b17cbc81a5b2f9381a1612931605a935268ba",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 2,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": false,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      ],
+      "participant_status": "ELIGIBLE_COMPLETE",
+      "problems": [],
+      "reference_only": false,
+      "reuse_status_by_scenario": {
+        "back_l2": "COMPLETED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 6,
+        "front_l2 mean graph_distance_progress": 0.575285501489573,
+        "front_l2 transition_count": 2,
+        "full success_count": 17
+      },
+      "runtime_family": "slowgru_persistent_cc3_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 6,
+          "KOBOLD_ENGAGED": 8,
+          "PLAYER_DIED": 2
+        },
+        "front_l2": {
+          "CORRIDOR_EXIT_REACHED": 2,
+          "DEFEAT_KOBOLD": 1,
+          "PLAYER_DIED": 7
+        },
+        "full": {
+          "DEFEAT_KOBOLD": 17,
+          "PLAYER_DIED": 44,
+          "TIMED_OUT": 3
+        }
+      },
+      "student_rank": 1
+    },
+    {
+      "candidate_class": "TEACHER_REFERENCE",
+      "candidate_id": "BASELINE_TEACHER_CKPT17500",
+      "certificate_sha256": "4d80bc83998b5cb5f9cb75b231e7c867f945031d8aa6b5615d388d21ab0d2d91",
+      "composite_episode_count_by_scenario": {
+        "back_l2": 0,
+        "front_l2": 2,
+        "full": 0
+      },
+      "counts_toward_student_binding_count": null,
+      "eligible": true,
+      "excluded_from_student_ranking": true,
+      "formal_dir": "/home/oseasy/student_pool_v1/cc4/BASELINE_TEACHER_CKPT17500/formal_evaluation_v3",
+      "gpu_uuids": [
+        "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      ],
+      "participant_status": "TEACHER_REFERENCE_ONLY",
+      "problems": [],
+      "reference_only": true,
+      "reuse_status_by_scenario": {
+        "back_l2": "COMPLETED",
+        "front_l2": "REUSED_RECLASSIFIED",
+        "full": "REUSED_PASS"
+      },
+      "rule_tuple": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.5805684102905279,
+        "front_l2 transition_count": 2,
+        "full success_count": 19
+      },
+      "runtime_family": "gtrxl128_cc1_teacher_reference_projection",
+      "secondary_event_counts_by_scenario": {
+        "back_l2": {
+          "DEFEAT_KOBOLD": 7,
+          "KOBOLD_ENGAGED": 8,
+          "PLAYER_DIED": 1
+        },
+        "front_l2": {
+          "CORRIDOR_EXIT_REACHED": 2,
+          "DEFEAT_KOBOLD": 2,
+          "PLAYER_DIED": 5,
+          "TIMED_OUT": 1
+        },
+        "full": {
+          "DEFEAT_KOBOLD": 19,
+          "PLAYER_DIED": 45
+        }
+      },
+      "student_rank": null
+    }
+  ],
+  "ranking_status": "INCONCLUSIVE_FULL_TIE",
+  "run_class": "FORMAL_EVALUATION",
+  "scaffolded_results_can_replace_full_task": false,
+  "schema": "mechanism_UED.tier3_formal_ranking_summary/v3",
+  "scientific_claim_authorized": false,
+  "scientific_claim_status": "FORMAL_SCIENTIFIC_CLAIM: NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+  "selection_predicate_rule": {
+    "all_equal_result": "INCONCLUSIVE",
+    "note": "frozen lexicographic comparator from metric_schema.json (sha-pinned), imported verbatim from tier3_formal_ranking_v2dt; PROVISIONAL-class rule; no scientific-superiority claim, multi-seed confirmation required",
+    "order": [
+      "full success_count",
+      "front_l2 transition_count",
+      "front_l2 mean graph_distance_progress",
+      "back_l2 defeat_count"
+    ],
+    "source": {
+      "machinery_source": "tier3_formal_ranking_v2dt (imported verbatim; object identity)",
+      "schema_file": "/home/oseasy/student_pool_v1/common_v2/metric_schema.json",
+      "schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+      "verified_verbatim": true
+    },
+    "tie_tolerance": 1e-12
+  },
+  "student_count_eligible": "6/6",
+  "teacher_included_in_student_ranking": false,
+  "top_ranked_student_id": null,
+  "v2_archive": {
+    "note": "V2 is archived CLOSED_INCONCLUSIVE_PARTICIPATION under the frozen single-label classifier; V3 is a distinct evaluator semantic repair and does not overwrite/delete/rewrite any V2 evidence",
+    "v2_archive_live_rehash": {
+      "checked": false,
+      "gate_match": null,
+      "summary_match": null
+    },
+    "v2_evidence_modified_by_v3": false,
+    "v2_gate_sha256": "51d3d6fb8efbc978875823cdc4576443c4d61f308840462c1bfa12da52fddc5b",
+    "v2_ranking_valid": false,
+    "v2_status": "CLOSED_INCONCLUSIVE_PARTICIPATION",
+    "v2_summary_sha256": "3e8186417aefeb25729324ce5fb4bc6b56a58087c8d1ee67bc088ad37d5c1ac3",
+    "v2_winner": null
+  },
+  "v3_repair_marker": {
+    "path": "/home/oseasy/student_pool_v1/cc4/V3_REPAIR_AUTHORIZATION.json",
+    "ruling_task": "CC4_REPAIR_NEG20_COMPOSITE_EVENT_SEMANTICS_AND_COMPLETE_FORMAL_EVALUATION_V3",
+    "sha256": "efa68c85f95fa7e7ced144ea81040fec5d849cd97e61fd7b8a39ed97dc835e6a",
+    "verdict": "AUTHORIZED_COMPOSITE_EVENT_SEMANTIC_REPAIR_V3"
+  }
+}

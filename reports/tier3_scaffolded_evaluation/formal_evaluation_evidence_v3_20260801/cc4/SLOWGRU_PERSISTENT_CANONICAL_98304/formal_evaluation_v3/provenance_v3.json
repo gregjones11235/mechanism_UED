@@ -1,0 +1,55 @@
+{
+  "argv": [
+    "tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v3.py",
+    "--candidate-id",
+    "SLOWGRU_PERSISTENT_CANONICAL_98304"
+  ],
+  "certificate_v3_module_sha256": "7c25abf7da30b4c04f45d1532c5b9f7930a3428965bdd7510514d5eb0afcd4ee",
+  "cwd": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+  "device_identity": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_default_backend": "gpu",
+    "jax_devices": "[cuda(id=0)]",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "driver_module_lf_sha256": "15cd05b553ac7be91d4cf90f471e8ea1e5c023f0803eaabaae5f41a6232da560",
+  "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+  "generated_at_utc": "2026-08-01T03:32:53.577596+00:00",
+  "git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082",
+  "gpu": {
+    "g16_gpu_v3_only": true,
+    "v3_gpu_allowlist": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ]
+  },
+  "host": "i-00000226",
+  "peak_rss_kb": 3694708,
+  "pid": 1122313,
+  "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5",
+  "projection_module_lf_sha256": "3a2de588cd29a920ace90ad7419bb64979aa3d8ac283f048034942ca63635e8c",
+  "python_executable": "/home/oseasy/cc4_tier3_eval_20260730/venv/bin/python",
+  "runtime_versions": {
+    "craftax_version": "1.4.5",
+    "flax_version": "0.8.5",
+    "jax_version": "0.4.30",
+    "jaxlib_version": "0.4.30",
+    "numpy_version": "1.26.4",
+    "python_version": "3.11.15"
+  },
+  "scenario_wall_seconds": {
+    "back_l2": 97.011426,
+    "front_l2": 0.002316,
+    "full": 0.042737
+  },
+  "schema": "mechanism_UED.tier3_formal_provenance/v3",
+  "taxonomy_v3_module_lf_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+  "xla_jax_env": {}
+}

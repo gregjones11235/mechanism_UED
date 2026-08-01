@@ -1,0 +1,90 @@
+{
+  "schema": "mechanism_UED.tier3_metric_schema/v1",
+  "schema_version": "tier3_metric_schema/v1",
+  "_note": "FROZEN PUBLIC METRIC SCHEMA (closing contract §2/§7/§8). The authoritative description of which quantities are SCIENTIFIC PREDICATES and which are diagnostics, mirrored byte-for-byte from tools/tier3_scaffolded_evaluation/tier3_metrics.py (bound by LF-SHA below; the metrics module self-test fails closed on ANY drift). Scientific predicates / terminal labels / metric aggregation belong ONLY to the common evaluator; candidate runtimes must NOT define their own success conditions. Cross-GPU agreement requirements for the determinism preflight are fixed in bit_agreement_policy.",
+  "metrics_source": "tools/tier3_scaffolded_evaluation/tier3_metrics.py",
+  "metrics_source_sha256": "1e8fc33fc3d51fdaa429d8e8f7037c48e01c2cc46ec716569885dacb328f4c16",
+  "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+  "metrics_module_schema_id": "mechanism_UED.tier3_metrics/v1",
+  "common_evaluation_invariants": {
+    "max_timesteps": 4096,
+    "action_mode": "greedy_argmax",
+    "observation_shape": [8335],
+    "action_dim": 43
+  },
+  "scenarios": {
+    "full": {
+      "primary_metric": "DEFEAT_KOBOLD_SR",
+      "primary_semantics": "P(defeat kobold | valid full start) over the frozen held-out canonical reset seeds 200000..200063",
+      "dense_metric": null,
+      "diagnostics_role": "diagnostic_only",
+      "can_replace_full_task": true,
+      "is_the_full_task": true
+    },
+    "front_l2": {
+      "primary_metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+      "primary_semantics": "P(player level 2 -> 3 | valid frozen FRONT start), conditional on the frozen 8-state FRONT bank",
+      "dense_metric": "GRAPH_DISTANCE_PROGRESS",
+      "dense_semantics": "frozen graph-distance progress in [0,1]; diagnostic progress measure, NOT a success substitute (is_success_substitute=false)",
+      "diagnostics_role": "diagnostic_only",
+      "pending_equivalence_alias_note": "corridor_exit_reached is reported only as PENDING_EQUIVALENCE_ALIAS, never primary",
+      "can_replace_full_task": false
+    },
+    "back_l2": {
+      "primary_metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+      "primary_semantics": "P(defeat kobold | valid frozen BACK start), conditional on the frozen 8-state BACK bank; a CONDITIONAL combat predicate, never a boss-search claim",
+      "dense_metric": null,
+      "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+      "boss_search_claimed": false,
+      "na_metrics": ["boss_area_reached", "time_to_boss_area", "BACK_BOSS_NOT_FOUND"],
+      "diagnostics_role": "diagnostic_only (kobold_engaged / survival diagnostics never override the primary)",
+      "can_replace_full_task": false
+    }
+  },
+  "selection_predicate_rule": {
+    "_note": "frozen lexicographic cross-arm comparator (tier3_provisional_selection); PROVISIONAL only this round; no scientific-superiority claim, multi-seed confirmation required.",
+    "order": ["full success_count", "front_l2 transition_count", "front_l2 mean graph_distance_progress", "back_l2 defeat_count"],
+    "all_equal_result": "INCONCLUSIVE",
+    "winner_label": "RMT16_CARRY_MODE_WINNER ∈ {PERSISTENT, RESET128, INCONCLUSIVE}",
+    "SCIENTIFIC_SUPERIORITY_CLAIM": false
+  },
+  "bit_agreement_policy": {
+    "_note": "closing contract §8 cross-GPU determinism preflight. Canonical fields below MUST be BIT-IDENTICAL across two GPUs for the same checkpoint + same frozen bank + same canonical world; the FIRST canonical mismatch stops the preflight with CROSS_GPU_DETERMINISM_PREFLIGHT=FAIL (no regeneration of the bank to dodge a difference; no loosening). Non-canonical fields may legitimately differ and are never preflight predicates.",
+    "canonical_fields_bit_exact": true,
+    "bit_exact_fields": [
+      "action_sequence",
+      "terminal_label",
+      "timesteps",
+      "valid_start",
+      "primary_metric_payload_values",
+      "dense_metric_payload_values",
+      "episode_record_sha256",
+      "episode_records_sha256",
+      "bank_content_sha256",
+      "checkpoint_file_sha256",
+      "params_sha256"
+    ],
+    "non_canonical_fields_may_differ": [
+      "wall_clock_ms",
+      "ms_per_step",
+      "device_counters",
+      "process_pid",
+      "timestamps"
+    ],
+    "jax_float_diagnostic_rule": "if a JAX float value that is NOT part of the canonical episode record differs non-bitwise across GPUs, FIRST check whether this schema / the metric module makes it a preflight predicate (it does not, unless listed in bit_exact_fields); report it as an observed diagnostic note without failing the preflight; any field listed above failing to agree is a HARD FAIL"
+  },
+  "prohibitions": [
+    "candidate runtimes defining their own FRONT/BACK/FULL success conditions",
+    "new dense substitutes for DEFEAT_KOBOLD_SR",
+    "boss-search or boss-area-reach claims from BACK scaffolds",
+    "ad-hoc seed sets not frozen in configs/tier3_evaluation_profile_v1.json"
+  ],
+  "common_evaluator_protocol_version": "V2_DYNAMIC_TOPOLOGY",
+  "v2_dynamic_topology_amendment": {
+    "formal_ranking_started": false,
+    "front_dense_metric_source": "tier3_event_predicates_v2.normalized_corridor_progress_dynamic (LF-SHA 79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5), consumed by tier3_evaluator_v2.rollout_episode (LF-SHA c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9); amended: a None baseline denominator is a legal dig-required scaffold (conservative dense-progress freeze, never an abort), not corruption",
+    "supersedes_v1_metric_schema_sha256": "3a1712c4074dcb8fe8043c5a67e3ad7c730f252c533ad148a7181ba28f953da0",
+    "task": "CC4_FIX_FRONT_DYNAMIC_TOPOLOGY_METRIC_AND_REBIND_FORMAL_POOL_V2",
+    "v1_fields_retained_note": "V1 'predicate_code_sha256' and 'metrics_source_sha256' fields are retained byte-identical: the V1 modules remain frozen in the pool and are still the source of every UNCHANGED predicate/metric; the FRONT dense corridor path is the ONLY metric moved to the V2 modules above"
+  }
+}

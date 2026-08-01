@@ -1,0 +1,1513 @@
+{
+  "action_dim": 43,
+  "action_mode": "greedy_argmax",
+  "audit": {
+    "authorization_note": "V3 formal run authorized by V3_REPAIR_AUTHORIZATION marker recording the 总控 ruling (composite-event semantic repair); interface smoke evidence is NOT a performance result",
+    "binding_gate_sha256": "5f035ed238171729a47633b5c54f0b14da059082",
+    "repair_authorization_marker": {
+      "git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082",
+      "path": "/home/oseasy/student_pool_v1/cc4/V3_REPAIR_AUTHORIZATION.json",
+      "recorded_at_utc": "2026-08-01T03:22:55.900130+00:00",
+      "ruling_task": "CC4_REPAIR_NEG20_COMPOSITE_EVENT_SEMANTICS_AND_COMPLETE_FORMAL_EVALUATION_V3",
+      "sha256": "efa68c85f95fa7e7ced144ea81040fec5d849cd97e61fd7b8a39ed97dc835e6a",
+      "verdict": "AUTHORIZED_COMPOSITE_EVENT_SEMANTIC_REPAIR_V3"
+    }
+  },
+  "back_episode_count": 8,
+  "bfs_graph_source": "CURRENT_ENVIRONMENT_STATE_TOPOLOGY",
+  "bound_owner_runtime_sha256": {
+    "candidate_runtime.py": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+    "common_runner.py (frozen V1)": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+    "tier3_candidate_runtime.py (frozen engine LF-SHA)": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f"
+  },
+  "budget_class": "MATCHED_98304",
+  "candidate_class": "STUDENT",
+  "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+  "candidate_manifest_sha256": "d79a04e817395c8db8fa935235492a1c30f4cdd12346c00eef3f7ba9c3d77fe4",
+  "candidate_runtime_sha256": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+  "capsule_file_verification": {
+    "candidate_manifest.json": {
+      "capsule_sums": "d79a04e817395c8db8fa935235492a1c30f4cdd12346c00eef3f7ba9c3d77fe4",
+      "declared": "d79a04e817395c8db8fa935235492a1c30f4cdd12346c00eef3f7ba9c3d77fe4",
+      "live": "d79a04e817395c8db8fa935235492a1c30f4cdd12346c00eef3f7ba9c3d77fe4",
+      "match": true
+    },
+    "candidate_runtime.py": {
+      "capsule_sums": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+      "declared": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+      "live": "6d69902213a6051d2b2d40e1ad4975deca635d47bf441b3cd5aee54252bcf72c",
+      "match": true
+    },
+    "checkpoint_contract.json": {
+      "capsule_sums": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+      "declared": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+      "live": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+      "match": true
+    },
+    "evaluate_candidate.py": {
+      "capsule_sums": "fb7a1d321ebed135a4d28fd16676f44385159fa9604624f0e557430774fe736e",
+      "declared": "fb7a1d321ebed135a4d28fd16676f44385159fa9604624f0e557430774fe736e",
+      "live": "fb7a1d321ebed135a4d28fd16676f44385159fa9604624f0e557430774fe736e",
+      "match": true
+    }
+  },
+  "carry_mode": "reset128",
+  "cert_version": "tier3_evaluation_certificate/v3",
+  "checkpoint_contract_sha256": "1517483077ec9905030d36d401d216f995b5596f1eea2993bc28fcacbadca4d7",
+  "checkpoint_file_hash_protocol": "sha256 of pkl file bytes",
+  "checkpoint_file_sha256": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+  "checkpoint_file_sha256_declaration_source": "cc4 capsule candidate_manifest.json checkpoint_file_sha256 + checkpoint_contract.json arms.reset128.checkpoint_file_sha256 (sha256 of pkl bytes)",
+  "checkpoint_file_sha256_owner_declared": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+  "checkpoint_file_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "common_evaluator_protocol_version": "V3_COMPOSITE_EVENT",
+  "common_pins": {
+    "assembly_manifest_v2_sha256": "aa18d2f4927d9c268b029d324381eaae6e485b9e81b07a3a5927e1ce5cad4420",
+    "back_bank_content_sha256": "c632e30dcabea7ff812fa07ce855809ec54e7cbca87747fa2d5ab775431f2566",
+    "candidate_runtime_abi_sha256": "61e52af6ff64a3071f8b64916c80906275dcb201d37feaa0382ed988d03d7f6a",
+    "common_evaluator_sha256": "2978a0f625bc94e18c99649959e8c090f964cd66e5dafd6b93245f144a317037",
+    "common_runner_sha256": "4113e666c7d6f582b5a158d89cec1972ecf40a478b9ea189ec80901c78cd51f6",
+    "environment_lock_sha256": "453f1680dafe0f168c25c262f51de59ddc59559676aecd05f8f17389015c2ad3",
+    "evaluation_profile_sha256": "0f1d2c1a17ea9802243583fdaa0f7966662dc87738705a9583eca2f566639069",
+    "front_bank_content_sha256": "21aeb7dcdcb4ffccfb1eedc80f2c6daec1995c242822a0efbec9b947e275d687",
+    "full_profile_sha256": "2eceb288785a589f3f7f8b6989be7876bbe8da299128363ee008397d79039c1f",
+    "metric_schema_sha256": "8ec4adcdfa6844b276f5f253470e14ea8ad52f1e64c398e5e2658e8a066645c7",
+    "sha256sums_v2_sha256": "190624ea399bdf420413339d8ca0b2defdf7bec05b2971d303eac3f44670abde"
+  },
+  "common_root": "/home/oseasy/student_pool_v1/common_v2",
+  "common_sha_match_status": "PASS (7/7)",
+  "composite_event_disclosure": {
+    "composite_episode_count_by_scenario": {
+      "back_l2": 0,
+      "front_l2": 2,
+      "full": 0
+    },
+    "primary_outcome_counts_by_scenario": {
+      "back_l2": {
+        "BACK_DEFEAT_KOBOLD_SUCCESS": 8
+      },
+      "front_l2": {
+        "FRONT_NO_TRANSITION": 6,
+        "FRONT_TRANSITION_SUCCESS": 2
+      },
+      "full": {
+        "FULL_DEFEAT_KOBOLD_SUCCESS": 14,
+        "FULL_NO_DEFEAT": 50
+      }
+    },
+    "secondary_event_counts_by_scenario": {
+      "back_l2": {
+        "DEFEAT_KOBOLD": 8,
+        "KOBOLD_ENGAGED": 8
+      },
+      "front_l2": {
+        "CORRIDOR_EXIT_REACHED": 2,
+        "DEFEAT_KOBOLD": 2,
+        "PLAYER_DIED": 6
+      },
+      "full": {
+        "DEFEAT_KOBOLD": 14,
+        "PLAYER_DIED": 49,
+        "TIMED_OUT": 1
+      }
+    }
+  },
+  "counts_toward_student_binding_count": true,
+  "dicode_resolution": {
+    "dicode_network_matches_cc1_policy_source": true,
+    "dicode_network_sha256": "172e1cd427bee8a31946bcf2936ea960c68e7ce3f5a71c55c377cf92c7c4c3c9",
+    "dicode_package_file": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src/dicode/__init__.py",
+    "dicode_src": "/home/oseasy/cc4_tier3_eval_20260730/repo/dicode_src/src"
+  },
+  "engine_identity": {
+    "engine_lf_sha256_v1_frozen": {
+      "tier3_candidate_runtime.py": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+      "tier3_evaluator.py": "54ae18db24c6a826d91bfc7ea49dee39a777b800e24dcc9b8897398def8da715"
+    },
+    "engine_lf_sha256_v2": {
+      "tier3_evaluator_v2.py": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+      "tier3_event_predicates_v2.py": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+    },
+    "engine_modules_verified_by_stage1": 4,
+    "evaluate_v1_called_by_v3": false,
+    "evaluator_v2_module_sha256": "c2e96258dccb37a5ad100dab213b808c81c5cea7168084bd606d165a957f56a9",
+    "predicates_v2_module_sha256": "79a2a21ed9d9c3cfb284b18321a59de8995e586077df3f721d754481094539c5"
+  },
+  "engine_runtime_family": "rmt16_gtrxl_cc2",
+  "entry_ids_by_scenario": {
+    "back_l2": [
+      "back_l2-bank0",
+      "back_l2-bank1",
+      "back_l2-bank2",
+      "back_l2-bank3",
+      "back_l2-bank4",
+      "back_l2-bank5",
+      "back_l2-bank6",
+      "back_l2-bank7"
+    ],
+    "front_l2": [
+      "front_l2-bank0",
+      "front_l2-bank1",
+      "front_l2-bank2",
+      "front_l2-bank3",
+      "front_l2-bank4",
+      "front_l2-bank5",
+      "front_l2-bank6",
+      "front_l2-bank7"
+    ],
+    "full": [
+      "full-seed200000",
+      "full-seed200001",
+      "full-seed200002",
+      "full-seed200003",
+      "full-seed200004",
+      "full-seed200005",
+      "full-seed200006",
+      "full-seed200007",
+      "full-seed200008",
+      "full-seed200009",
+      "full-seed200010",
+      "full-seed200011",
+      "full-seed200012",
+      "full-seed200013",
+      "full-seed200014",
+      "full-seed200015",
+      "full-seed200016",
+      "full-seed200017",
+      "full-seed200018",
+      "full-seed200019",
+      "full-seed200020",
+      "full-seed200021",
+      "full-seed200022",
+      "full-seed200023",
+      "full-seed200024",
+      "full-seed200025",
+      "full-seed200026",
+      "full-seed200027",
+      "full-seed200028",
+      "full-seed200029",
+      "full-seed200030",
+      "full-seed200031",
+      "full-seed200032",
+      "full-seed200033",
+      "full-seed200034",
+      "full-seed200035",
+      "full-seed200036",
+      "full-seed200037",
+      "full-seed200038",
+      "full-seed200039",
+      "full-seed200040",
+      "full-seed200041",
+      "full-seed200042",
+      "full-seed200043",
+      "full-seed200044",
+      "full-seed200045",
+      "full-seed200046",
+      "full-seed200047",
+      "full-seed200048",
+      "full-seed200049",
+      "full-seed200050",
+      "full-seed200051",
+      "full-seed200052",
+      "full-seed200053",
+      "full-seed200054",
+      "full-seed200055",
+      "full-seed200056",
+      "full-seed200057",
+      "full-seed200058",
+      "full-seed200059",
+      "full-seed200060",
+      "full-seed200061",
+      "full-seed200062",
+      "full-seed200063"
+    ]
+  },
+  "episode_records_jsonl_sha256": "4ebaba7348cdda69c7d9f99f4ef24be31e272d66430c0f667c85218c94a664fd",
+  "episodes_executed": {
+    "back_l2": 8,
+    "front_l2": 8,
+    "full": 64
+  },
+  "evaluate_candidate_sha256": "fb7a1d321ebed135a4d28fd16676f44385159fa9604624f0e557430774fe736e",
+  "evaluation_status": "PASS",
+  "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+  "formal_abort": null,
+  "formal_performance_results_authorized_by_repair_marker": true,
+  "formal_student_ranking_eligible": true,
+  "front_episode_count": 8,
+  "full_episode_count": 64,
+  "generated_at_utc": "2026-08-01T03:35:25.934316+00:00",
+  "gpu": {
+    "g16_gpu_v3_only": true,
+    "v3_gpu_allowlist": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    ],
+    "visible_gpu_uuids": [
+      "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    ]
+  },
+  "interface_smoke_substituted_for_performance": false,
+  "max_steps": 4096,
+  "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+  "observation_shape": [
+    8335
+  ],
+  "owner": "CC4 capsule over CC2 original-vtrace arm",
+  "params_hash_protocol": "tier3_checkpoint_adapter.load_full_params_readonly (frozen engine verification path): CC2 canonical params sha256 — sha256 over per-leaf np.ascontiguousarray(np.asarray(leaf)).tobytes() in jax tree_leaves order, recomputed from the pkl bytes",
+  "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+  "params_sha256_declaration_source": "cc4 capsule candidate_manifest.json params_sha256 + checkpoint_contract.json arms.reset128.params_sha256 (contract content sha 7dda2bc7…); the frozen engine family loader recomputes it from the pkl bytes and gates it against the contract (verify_checkpoint_against_contract)",
+  "params_sha256_owner_declared": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+  "params_sha256_status": "CC4_RECOMPUTED_MATCH_VIA_OWNER_PROTOCOL",
+  "params_unchanged": true,
+  "performance_evaluation_executed": true,
+  "policy_adapter": {
+    "batch1_workaround": {
+      "applied": false,
+      "owner_code_modified": false,
+      "reason": "engine CandidateRuntime enforces batch==1 (check_batch_size fails closed) and the owner CC2 rmt_step_forward pads 1->2 internally; done_mask=None is the engine ABI default"
+    },
+    "boundary_unit_check": null,
+    "class": "Rmt16CapsuleProjectionPolicy"
+  },
+  "provenance": {
+    "argv": [
+      "tools/tier3_scaffolded_evaluation/tier3_formal_evaluation_v3.py",
+      "--candidate-id",
+      "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+    ],
+    "cwd": "/home/oseasy/cc4_tier3_eval_20260730/repo",
+    "device_identity": {
+      "craftax_version": "1.4.5",
+      "flax_version": "0.8.5",
+      "jax_default_backend": "gpu",
+      "jax_devices": "[cuda(id=0)]",
+      "jax_version": "0.4.30",
+      "jaxlib_version": "0.4.30",
+      "numpy_version": "1.26.4",
+      "python_version": "3.11.15"
+    },
+    "git_commit_head": "5f035ed238171729a47633b5c54f0b14da059082",
+    "host": "i-00000226",
+    "pid": 1129287,
+    "scenario_wall_seconds": {
+      "back_l2": 146.070024,
+      "front_l2": 0.001405,
+      "full": 0.034703
+    },
+    "timing_by_scenario": {
+      "back_l2": {
+        "episodes": [
+          {
+            "entry_id": "back_l2-bank0",
+            "episode_id": "back_l2-bank0",
+            "seed": 1010000,
+            "timesteps": 24,
+            "wall_seconds": 84.876678
+          },
+          {
+            "entry_id": "back_l2-bank1",
+            "episode_id": "back_l2-bank1",
+            "seed": 1010001,
+            "timesteps": 77,
+            "wall_seconds": 20.825722
+          },
+          {
+            "entry_id": "back_l2-bank2",
+            "episode_id": "back_l2-bank2",
+            "seed": 1010002,
+            "timesteps": 6,
+            "wall_seconds": 2.103121
+          },
+          {
+            "entry_id": "back_l2-bank3",
+            "episode_id": "back_l2-bank3",
+            "seed": 1010003,
+            "timesteps": 58,
+            "wall_seconds": 16.569045
+          },
+          {
+            "entry_id": "back_l2-bank4",
+            "episode_id": "back_l2-bank4",
+            "seed": 1010004,
+            "timesteps": 8,
+            "wall_seconds": 2.570327
+          },
+          {
+            "entry_id": "back_l2-bank5",
+            "episode_id": "back_l2-bank5",
+            "seed": 1010005,
+            "timesteps": 16,
+            "wall_seconds": 4.676275
+          },
+          {
+            "entry_id": "back_l2-bank6",
+            "episode_id": "back_l2-bank6",
+            "seed": 1010006,
+            "timesteps": 23,
+            "wall_seconds": 6.606055
+          },
+          {
+            "entry_id": "back_l2-bank7",
+            "episode_id": "back_l2-bank7",
+            "seed": 1010007,
+            "timesteps": 27,
+            "wall_seconds": 7.689933
+          }
+        ],
+        "peak_rss_kb": 3551608,
+        "scenario_wall_seconds": 146.070024
+      },
+      "front_l2": {
+        "episodes": [],
+        "note": "offline reclassification; no rollout",
+        "scenario_wall_seconds": 0.001405
+      },
+      "full": {
+        "episodes": [],
+        "note": "offline reuse; no rollout",
+        "scenario_wall_seconds": 0.034703
+      }
+    }
+  },
+  "records_sha256_by_scenario": {
+    "back_l2": "3132cf342568753f2c7ee3aed8df65c83ef2ab44f3ad72001bcc91939989b5a9",
+    "front_l2": "d75992184277f124b6e24cb190e92afef7ea48ecef3461965d0a74473457db56",
+    "full": "f15ea127318549a31127f9ce20a8ee915d57c99a1f28831ad76fa59088a7022a"
+  },
+  "reference_only": false,
+  "rehearsal": {
+    "is_rehearsal": false,
+    "limits": null,
+    "note": "formal run at the frozen full schedule (FULL 64 + FRONT 8 + BACK 8, max_steps=4096)"
+  },
+  "results_by_scenario": {
+    "back_l2": {
+      "composite_event_layer": {
+        "composite_episode_count": 0,
+        "per_episode": [
+          {
+            "episode_id": "back_l2-bank0",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank1",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank2",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank3",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank4",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank5",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank6",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "back_l2-bank7",
+            "primary_outcome": "BACK_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD",
+              "KOBOLD_ENGAGED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          }
+        ],
+        "primary_outcome_counts": {
+          "BACK_DEFEAT_KOBOLD_SUCCESS": 8
+        },
+        "secondary_event_counts": {
+          "DEFEAT_KOBOLD": 8,
+          "KOBOLD_ENGAGED": 8
+        },
+        "secondary_event_vocabulary": [
+          "CORRIDOR_EXIT_REACHED",
+          "DEFEAT_KOBOLD",
+          "KOBOLD_ENGAGED",
+          "PLAYER_DIED",
+          "TIMED_OUT"
+        ]
+      },
+      "episode_count": 8,
+      "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+      "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "back_l2",
+          "value": null
+        },
+        "diagnostics": {
+          "damage": null,
+          "failure_taxonomy": {
+            "SUCCESS_DEFEAT_KOBOLD": 8
+          },
+          "kobold_engaged_count": 8,
+          "schema_note": "time_to_first_engagement / time_to_kill / damage are not fields of the frozen episode record schema (mechanism_UED.tier3_evaluation_result/v1); reported as null rather than expanding the schema",
+          "survival": {
+            "defeat_count": 8,
+            "died_count": 0,
+            "max_timesteps_observed": 77,
+            "mean_timesteps": 29.875
+          },
+          "time_to_first_engagement": null,
+          "time_to_kill": null,
+          "valid_starts": 8
+        },
+        "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+        "na_metrics": [
+          "boss_area_reached",
+          "time_to_boss_area",
+          "BACK_BOSS_NOT_FOUND"
+        ],
+        "na_reason": "BACK start is already on floor 3 next to a live Kobold; boss-area search is not exercised by this scaffold",
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+          "scenario": "back_l2",
+          "successes": 8,
+          "valid_starts": 8,
+          "value": 1.0
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "back_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "back_l2",
+      "schema": "mechanism_UED.tier3_taxonomy_v3_summary/v1",
+      "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+      "terminal_label_counts": {
+        "SUCCESS_DEFEAT_KOBOLD": 8
+      },
+      "valid_start_count": 8
+    },
+    "front_l2": {
+      "composite_event_layer": {
+        "composite_episode_count": 2,
+        "per_episode": [
+          {
+            "episode_id": "front_l2-bank0",
+            "primary_outcome": "FRONT_NO_TRANSITION",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank1",
+            "primary_outcome": "FRONT_TRANSITION_SUCCESS",
+            "secondary_events": [
+              "CORRIDOR_EXIT_REACHED",
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_COMPOSITE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank2",
+            "primary_outcome": "FRONT_NO_TRANSITION",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank3",
+            "primary_outcome": "FRONT_NO_TRANSITION",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank4",
+            "primary_outcome": "FRONT_TRANSITION_SUCCESS",
+            "secondary_events": [
+              "CORRIDOR_EXIT_REACHED",
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_COMPOSITE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank5",
+            "primary_outcome": "FRONT_NO_TRANSITION",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank6",
+            "primary_outcome": "FRONT_NO_TRANSITION",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "front_l2-bank7",
+            "primary_outcome": "FRONT_NO_TRANSITION",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          }
+        ],
+        "primary_outcome_counts": {
+          "FRONT_NO_TRANSITION": 6,
+          "FRONT_TRANSITION_SUCCESS": 2
+        },
+        "secondary_event_counts": {
+          "CORRIDOR_EXIT_REACHED": 2,
+          "DEFEAT_KOBOLD": 2,
+          "PLAYER_DIED": 6
+        },
+        "secondary_event_vocabulary": [
+          "CORRIDOR_EXIT_REACHED",
+          "DEFEAT_KOBOLD",
+          "KOBOLD_ENGAGED",
+          "PLAYER_DIED",
+          "TIMED_OUT"
+        ]
+      },
+      "episode_count": 8,
+      "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+      "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+      "metrics": {
+        "dense": {
+          "is_success_substitute": false,
+          "median": 0.6261343012704175,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "monotonicity_guaranteed": false,
+          "per_state_progress": [
+            {
+              "graph_distance_progress": 0.631578947368421,
+              "state_entry_id": "front_l2-bank0"
+            },
+            {
+              "graph_distance_progress": 1.0,
+              "state_entry_id": "front_l2-bank1"
+            },
+            {
+              "graph_distance_progress": 1.0,
+              "state_entry_id": "front_l2-bank2"
+            },
+            {
+              "graph_distance_progress": 0.125,
+              "state_entry_id": "front_l2-bank3"
+            },
+            {
+              "graph_distance_progress": 1.0,
+              "state_entry_id": "front_l2-bank4"
+            },
+            {
+              "graph_distance_progress": 0.1428571428571429,
+              "state_entry_id": "front_l2-bank5"
+            },
+            {
+              "graph_distance_progress": 0.6206896551724138,
+              "state_entry_id": "front_l2-bank6"
+            },
+            {
+              "graph_distance_progress": 0.0,
+              "state_entry_id": "front_l2-bank7"
+            }
+          ],
+          "range": [
+            0,
+            1
+          ],
+          "scenario": "front_l2",
+          "scored": 8,
+          "valid_starts": 8,
+          "value": 0.5650157181747473
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": true,
+          "metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+          "scenario": "front_l2",
+          "successes": 2,
+          "valid_starts": 8,
+          "value": 0.25
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "front_l2",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_taxonomy_v3_summary/v1",
+      "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+      "terminal_label_counts": {
+        "DIED_IN_CORRIDOR": 6,
+        "FRONT_FLOOR_TRANSITION_REACHED": 2
+      },
+      "valid_start_count": 8
+    },
+    "full": {
+      "composite_event_layer": {
+        "composite_episode_count": 0,
+        "per_episode": [
+          {
+            "episode_id": "full-seed200000",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200001",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200002",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200003",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200004",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200005",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200006",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200007",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200008",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200009",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200010",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200011",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200012",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200013",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200014",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200015",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200016",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200017",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200018",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200019",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200020",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "TIMED_OUT"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200021",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200022",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200023",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200024",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200025",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200026",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200027",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200028",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200029",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200030",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200031",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200032",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200033",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200034",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200035",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200036",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200037",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200038",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200039",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200040",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200041",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200042",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200043",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200044",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200045",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200046",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200047",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200048",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200049",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200050",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200051",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200052",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200053",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200054",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200055",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200056",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200057",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200058",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200059",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200060",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200061",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200062",
+            "primary_outcome": "FULL_NO_DEFEAT",
+            "secondary_events": [
+              "PLAYER_DIED"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          },
+          {
+            "episode_id": "full-seed200063",
+            "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+            "secondary_events": [
+              "DEFEAT_KOBOLD"
+            ],
+            "taxonomy_status": "VALID_SINGLE_EVENT"
+          }
+        ],
+        "primary_outcome_counts": {
+          "FULL_DEFEAT_KOBOLD_SUCCESS": 14,
+          "FULL_NO_DEFEAT": 50
+        },
+        "secondary_event_counts": {
+          "DEFEAT_KOBOLD": 14,
+          "PLAYER_DIED": 49,
+          "TIMED_OUT": 1
+        },
+        "secondary_event_vocabulary": [
+          "CORRIDOR_EXIT_REACHED",
+          "DEFEAT_KOBOLD",
+          "KOBOLD_ENGAGED",
+          "PLAYER_DIED",
+          "TIMED_OUT"
+        ]
+      },
+      "episode_count": 64,
+      "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+      "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+      "metrics": {
+        "dense": {
+          "median": null,
+          "metric": "GRAPH_DISTANCE_PROGRESS",
+          "note": "dense progress defined for front_l2 only",
+          "per_state_progress": [],
+          "scenario": "full",
+          "value": null
+        },
+        "primary": {
+          "conditional_on": "valid_start",
+          "diagnostic_only": false,
+          "metric": "DEFEAT_KOBOLD_SR",
+          "scenario": "full",
+          "successes": 14,
+          "valid_starts": 64,
+          "value": 0.21875
+        },
+        "scaffolded_results_can_replace_full_task": false,
+        "scenario": "full",
+        "schema": "mechanism_UED.tier3_metrics/v1"
+      },
+      "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_taxonomy_v3_summary/v1",
+      "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+      "terminal_label_counts": {
+        "DIED_BEFORE_KOBOLD": 49,
+        "SUCCESS_DEFEAT_KOBOLD": 14,
+        "TIMEOUT_NO_KOBOLD": 1
+      },
+      "valid_start_count": 64
+    }
+  },
+  "reuse_provenance_by_scenario": {
+    "back_l2": {
+      "classification_only": false,
+      "completion_note": "first-run completion of 0/8 V2 skeletons at the identical frozen profile; NOT a retry",
+      "environment_rerun": true,
+      "reuse_status": "COMPLETED",
+      "source": "V3_FRESH_COMPLETION_RUN",
+      "source_v2_episode_sha256": null,
+      "v3_classifier_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+      "v3_result_sha256": "5b4be011e4203b98688221fbf882dbf003d224a6b218b40a569f8a3e6b105715"
+    },
+    "front_l2": {
+      "classification_only": true,
+      "composite_episode_count": 2,
+      "environment_rerun": false,
+      "per_record_source_sha256": {
+        "front_l2-bank0": "2bcad0bc613ec4d0891695285d6eea5ffff87b58aee7acdfc2befcbc96e485f3",
+        "front_l2-bank1": "71ca4b4e5f9df5da690e6c5412ab52e44064910f172121973675176777d44da4",
+        "front_l2-bank2": "56d86dde0b1652104081ba6b83a6e88e47966c9e799e8fa366f008be21ff60f8",
+        "front_l2-bank3": "e0363bb6b23bea99f94202f53269b49d802c74d86d2b0af9c736ed00e94e138f",
+        "front_l2-bank4": "0523f892b2829486e1f3a529bd3f3d61d0e707ad9fd1de773398945361dd6771",
+        "front_l2-bank5": "9b27d9af6dfb15a49868c5929aec76090b0ac821f0186e974c69ede576aaef57",
+        "front_l2-bank6": "e6252af790cb995c8275a03e6fc1235eba035878c4a6c29bce966f619eb81144",
+        "front_l2-bank7": "41d56f5fcd2b011168d2afba02b8b74cc67df54c89a5ca7c11c028063eecb38f"
+      },
+      "reuse_status": "REUSED_RECLASSIFIED",
+      "source": "V2_COMMITTED_EVIDENCE",
+      "source_v2_episode_sha256": "36f0916fee2a433d7f1b890ebf3cde539d949faf15d180476e1e26e0a85c76c0",
+      "v3_classifier_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+      "v3_result_sha256": "de564a0c2a9d6942f440fedc9bb194e62dd21745825be13ca7a6747365096bf2"
+    },
+    "full": {
+      "classification_only": true,
+      "environment_rerun": false,
+      "reuse_gate": {
+        "R1_EPISODES_COMPLETE": true,
+        "R2_RECORD_SHA_RECOMPUTE": true,
+        "R3_V2_SUMS_REHASH": true,
+        "R4_CHECKPOINT_PARAMS_OWNER_MATCH": true,
+        "R5_RUNTIME_CAPSULE_MATCH": true,
+        "R6_SCHEDULE_FROZEN": true,
+        "R7_NO_PERFORMANCE_EARLY_STOP": true,
+        "R8_ENGINE_LF_SHA_FROZEN": true,
+        "R9_V3_RECLASSIFY_REPRODUCIBLE": true
+      },
+      "reuse_status": "REUSED_PASS",
+      "source": "V2_COMMITTED_EVIDENCE",
+      "source_v2_episode_sha256": "36f0916fee2a433d7f1b890ebf3cde539d949faf15d180476e1e26e0a85c76c0",
+      "v3_classifier_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+      "v3_result_sha256": "bd9250953efa7f312cf179bbde0ad207d8ced26349960d9efcb913adbc00b754"
+    }
+  },
+  "rmt16_common_runner_sha256": "135332d3b30c60cb7b29c620dc931da852e99b2ca256c7a77dbf365dfc94075b",
+  "rmt16_engine_lf_sha256": "6af09be4efdb3eef66ef68579177085ac7d410109b40e10359160fbec23f681f",
+  "rmt16_engine_metadata": {
+    "abi_methods": [
+      "load_candidate",
+      "init_memory",
+      "policy_step",
+      "reset_memory",
+      "candidate_metadata"
+    ],
+    "abi_version": "candidate_runtime_abi/v1",
+    "action_dim": 43,
+    "action_mode": "greedy_argmax",
+    "arm": "reset128",
+    "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+    "batch_size_supported": 1,
+    "boundary_note": "scientific predicates / state bank / terminal labels / metrics / certificates are computed ONLY by the common evaluator (closing contract §3)",
+    "carry_mode": "reset128",
+    "cc2_policy_source_sha256": "31c1092c037577c56ba0eba9d51ea40cc6a97210bbcbc98fe047762daed2f46f",
+    "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+    "checkpoint_file_sha256": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+    "checkpoint_path": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl",
+    "checkpoint_step": 98304,
+    "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "memory_fields": [
+      "memories",
+      "mem_mask",
+      "mem_idx",
+      "rmt_st"
+    ],
+    "observation_shape": [
+      8335
+    ],
+    "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+    "runtime_family": "rmt16_gtrxl_cc2",
+    "schema": "mechanism_UED.candidate_runtime_abi/v1",
+    "scientific_predicates_defined_here": false,
+    "trainable": false
+  },
+  "rmt16_frozen_identities": {
+    "arm": "reset128",
+    "base_checkpoint_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+    "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+    "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5",
+    "checkpoint_file_sha256": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+    "immutable": true,
+    "params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+    "runtime_family": "rmt16_gtrxl_cc2",
+    "scientific_predicates_defined_here": false,
+    "trainable": false
+  },
+  "run_class": "FORMAL_EVALUATION",
+  "runtime_family": "rmt16_gtrxl_cc2_reset128_projection",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenario_order": [
+    "full",
+    "front_l2",
+    "back_l2"
+  ],
+  "schedule": {
+    "back_l2": {
+      "count": 8,
+      "kind": "frozen_bank_state_each_once",
+      "seed_base": 10000,
+      "seeds": [
+        1010000,
+        1010001,
+        1010002,
+        1010003,
+        1010004,
+        1010005,
+        1010006,
+        1010007
+      ],
+      "stride": 1
+    },
+    "front_l2": {
+      "count": 8,
+      "kind": "frozen_bank_state_each_once",
+      "seed_base": 10000,
+      "seeds": [
+        10000,
+        10001,
+        10002,
+        10003,
+        10004,
+        10005,
+        10006,
+        10007
+      ],
+      "stride": 1
+    },
+    "full": {
+      "base": 200000,
+      "count": 64,
+      "kind": "canonical_reset_seeds_held_out",
+      "seeds": [
+        200000,
+        200001,
+        200002,
+        200003,
+        200004,
+        200005,
+        200006,
+        200007,
+        200008,
+        200009,
+        200010,
+        200011,
+        200012,
+        200013,
+        200014,
+        200015,
+        200016,
+        200017,
+        200018,
+        200019,
+        200020,
+        200021,
+        200022,
+        200023,
+        200024,
+        200025,
+        200026,
+        200027,
+        200028,
+        200029,
+        200030,
+        200031,
+        200032,
+        200033,
+        200034,
+        200035,
+        200036,
+        200037,
+        200038,
+        200039,
+        200040,
+        200041,
+        200042,
+        200043,
+        200044,
+        200045,
+        200046,
+        200047,
+        200048,
+        200049,
+        200050,
+        200051,
+        200052,
+        200053,
+        200054,
+        200055,
+        200056,
+        200057,
+        200058,
+        200059,
+        200060,
+        200061,
+        200062,
+        200063
+      ]
+    }
+  },
+  "schema": "mechanism_UED.tier3_evaluation_certificate/v3",
+  "scientific_claim_authorized": false,
+  "scientific_claim_status": "FORMAL_SCIENTIFIC_CLAIM: NOT_AUTHORIZED_SINGLE_TRAINING_SEED",
+  "source_capsule_root": "/home/oseasy/student_pool_v1/cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304",
+  "strong_student_selection_eligible": true,
+  "student_rank": null,
+  "student_rank_publication": "FORMAL_RANKING_SUMMARY_V3.json only; the registry self-test forbids writing ranks into the registry and this certificate is SHA256SUMS_FORMAL_V3-bound and immutable after creation",
+  "taxonomy_v3_lf_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+  "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+  "teacher_included_in_student_ranking": false,
+  "training_seed": 42,
+  "training_steps": 98304,
+  "v2_archive": {
+    "note": "V2 is archived CLOSED_INCONCLUSIVE_PARTICIPATION under the frozen single-label classifier; V3 is a distinct, separately-auditable evaluator semantic repair and does not overwrite, delete, or rewrite any V2 evidence",
+    "v2_evidence_modified_by_v3": false,
+    "v2_gate_sha256": "51d3d6fb8efbc978875823cdc4576443c4d61f308840462c1bfa12da52fddc5b",
+    "v2_ranking_valid": false,
+    "v2_status": "CLOSED_INCONCLUSIVE_PARTICIPATION",
+    "v2_summary_sha256": "3e8186417aefeb25729324ce5fb4bc6b56a58087c8d1ee67bc088ad37d5c1ac3",
+    "v2_winner": null
+  },
+  "valid_start_counts": {
+    "back_l2": 8,
+    "front_l2": 8,
+    "full": 64
+  }
+}

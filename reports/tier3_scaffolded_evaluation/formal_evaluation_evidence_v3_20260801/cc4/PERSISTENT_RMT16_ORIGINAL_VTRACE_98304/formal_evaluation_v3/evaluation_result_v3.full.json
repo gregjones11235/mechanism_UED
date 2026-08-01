@@ -1,0 +1,747 @@
+{
+  "aborted_in_scenario": false,
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "common_evaluator_protocol_version": "V3_COMPOSITE_EVENT",
+  "entry_ids_planned": [
+    "full-seed200000",
+    "full-seed200001",
+    "full-seed200002",
+    "full-seed200003",
+    "full-seed200004",
+    "full-seed200005",
+    "full-seed200006",
+    "full-seed200007",
+    "full-seed200008",
+    "full-seed200009",
+    "full-seed200010",
+    "full-seed200011",
+    "full-seed200012",
+    "full-seed200013",
+    "full-seed200014",
+    "full-seed200015",
+    "full-seed200016",
+    "full-seed200017",
+    "full-seed200018",
+    "full-seed200019",
+    "full-seed200020",
+    "full-seed200021",
+    "full-seed200022",
+    "full-seed200023",
+    "full-seed200024",
+    "full-seed200025",
+    "full-seed200026",
+    "full-seed200027",
+    "full-seed200028",
+    "full-seed200029",
+    "full-seed200030",
+    "full-seed200031",
+    "full-seed200032",
+    "full-seed200033",
+    "full-seed200034",
+    "full-seed200035",
+    "full-seed200036",
+    "full-seed200037",
+    "full-seed200038",
+    "full-seed200039",
+    "full-seed200040",
+    "full-seed200041",
+    "full-seed200042",
+    "full-seed200043",
+    "full-seed200044",
+    "full-seed200045",
+    "full-seed200046",
+    "full-seed200047",
+    "full-seed200048",
+    "full-seed200049",
+    "full-seed200050",
+    "full-seed200051",
+    "full-seed200052",
+    "full-seed200053",
+    "full-seed200054",
+    "full-seed200055",
+    "full-seed200056",
+    "full-seed200057",
+    "full-seed200058",
+    "full-seed200059",
+    "full-seed200060",
+    "full-seed200061",
+    "full-seed200062",
+    "full-seed200063"
+  ],
+  "episode_records_sha256": "1223f8fde24aa196ac196e6ab6d9b799f01a181bcf6d2b347aac74f59d5aad78",
+  "episodes_executed": 64,
+  "episodes_planned": 64,
+  "evaluation": {
+    "composite_event_layer": {
+      "composite_episode_count": 0,
+      "per_episode": [
+        {
+          "episode_id": "full-seed200000",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200001",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200002",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200003",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200004",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200005",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200006",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "TIMED_OUT"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200007",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200008",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200009",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200010",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200011",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200012",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200013",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200014",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200015",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200016",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200017",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200018",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200019",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200020",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200021",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200022",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200023",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200024",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200025",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200026",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200027",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200028",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200029",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200030",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200031",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200032",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200033",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200034",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200035",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200036",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200037",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200038",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200039",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200040",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "TIMED_OUT"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200041",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200042",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200043",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200044",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200045",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200046",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200047",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200048",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200049",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200050",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200051",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200052",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200053",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200054",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200055",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200056",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200057",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200058",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200059",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200060",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200061",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200062",
+          "primary_outcome": "FULL_NO_DEFEAT",
+          "secondary_events": [
+            "PLAYER_DIED"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        },
+        {
+          "episode_id": "full-seed200063",
+          "primary_outcome": "FULL_DEFEAT_KOBOLD_SUCCESS",
+          "secondary_events": [
+            "DEFEAT_KOBOLD"
+          ],
+          "taxonomy_status": "VALID_SINGLE_EVENT"
+        }
+      ],
+      "primary_outcome_counts": {
+        "FULL_DEFEAT_KOBOLD_SUCCESS": 9,
+        "FULL_NO_DEFEAT": 55
+      },
+      "secondary_event_counts": {
+        "DEFEAT_KOBOLD": 9,
+        "PLAYER_DIED": 53,
+        "TIMED_OUT": 2
+      },
+      "secondary_event_vocabulary": [
+        "CORRIDOR_EXIT_REACHED",
+        "DEFEAT_KOBOLD",
+        "KOBOLD_ENGAGED",
+        "PLAYER_DIED",
+        "TIMED_OUT"
+      ]
+    },
+    "episode_count": 64,
+    "failure_rule_version_v3": "tier3_failure_rules_v3/v1",
+    "formal_evaluator_protocol": "V3_COMPOSITE_EVENT",
+    "metrics": {
+      "dense": {
+        "median": null,
+        "metric": "GRAPH_DISTANCE_PROGRESS",
+        "note": "dense progress defined for front_l2 only",
+        "per_state_progress": [],
+        "scenario": "full",
+        "value": null
+      },
+      "primary": {
+        "conditional_on": "valid_start",
+        "diagnostic_only": false,
+        "metric": "DEFEAT_KOBOLD_SR",
+        "scenario": "full",
+        "successes": 9,
+        "valid_starts": 64,
+        "value": 0.140625
+      },
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "full",
+      "schema": "mechanism_UED.tier3_metrics/v1"
+    },
+    "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+    "scaffolded_results_can_replace_full_task": false,
+    "scenario": "full",
+    "schema": "mechanism_UED.tier3_taxonomy_v3_summary/v1",
+    "taxonomy_version_v3": "tier3_taxonomy_v3/v1",
+    "terminal_label_counts": {
+      "DIED_BEFORE_KOBOLD": 53,
+      "SUCCESS_DEFEAT_KOBOLD": 9,
+      "TIMEOUT_NO_KOBOLD": 2
+    },
+    "valid_start_count": 64
+  },
+  "generated_at_utc": "2026-08-01T03:32:45.829427+00:00",
+  "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+  "rehearsal": false,
+  "reuse_provenance": {
+    "classification_only": true,
+    "environment_rerun": false,
+    "reuse_gate": {
+      "R1_EPISODES_COMPLETE": true,
+      "R2_RECORD_SHA_RECOMPUTE": true,
+      "R3_V2_SUMS_REHASH": true,
+      "R4_CHECKPOINT_PARAMS_OWNER_MATCH": true,
+      "R5_RUNTIME_CAPSULE_MATCH": true,
+      "R6_SCHEDULE_FROZEN": true,
+      "R7_NO_PERFORMANCE_EARLY_STOP": true,
+      "R8_ENGINE_LF_SHA_FROZEN": true,
+      "R9_V3_RECLASSIFY_REPRODUCIBLE": true
+    },
+    "reuse_status": "REUSED_PASS",
+    "source": "V2_COMMITTED_EVIDENCE",
+    "source_v2_episode_sha256": "7984d5f008c8738cefe626f873f44e3777269bfc74ea50a62e709c82c74f7114",
+    "v3_classifier_sha256": "01f06d09190a70898b11165aed016d5f7f96a1e0ca9366acc81dbd4d9d6a3da2",
+    "v3_result_sha256": "1a6fe89aada79d2fb63375f65510ccd0a3ad490b307169a3a74d1baccc17bf20"
+  },
+  "run_class": "FORMAL_EVALUATION",
+  "scenario": "full",
+  "schedule": {
+    "base": 200000,
+    "count": 64,
+    "kind": "canonical_reset_seeds_held_out",
+    "seeds": [
+      200000,
+      200001,
+      200002,
+      200003,
+      200004,
+      200005,
+      200006,
+      200007,
+      200008,
+      200009,
+      200010,
+      200011,
+      200012,
+      200013,
+      200014,
+      200015,
+      200016,
+      200017,
+      200018,
+      200019,
+      200020,
+      200021,
+      200022,
+      200023,
+      200024,
+      200025,
+      200026,
+      200027,
+      200028,
+      200029,
+      200030,
+      200031,
+      200032,
+      200033,
+      200034,
+      200035,
+      200036,
+      200037,
+      200038,
+      200039,
+      200040,
+      200041,
+      200042,
+      200043,
+      200044,
+      200045,
+      200046,
+      200047,
+      200048,
+      200049,
+      200050,
+      200051,
+      200052,
+      200053,
+      200054,
+      200055,
+      200056,
+      200057,
+      200058,
+      200059,
+      200060,
+      200061,
+      200062,
+      200063
+    ]
+  },
+  "schema": "mechanism_UED.tier3_formal_evaluation_result/v3",
+  "timing": {
+    "episodes": [],
+    "note": "offline reuse; no rollout",
+    "scenario_wall_seconds": 0.03071
+  }
+}

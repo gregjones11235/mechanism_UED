@@ -1,0 +1,35 @@
+{
+  "COMMON_EVALUATOR_V3_READY": true,
+  "FORMAL_RANKING_AUTHORIZED_V3": true,
+  "FORMAL_RANKING_PUBLISHED": true,
+  "FORMAL_RANKING_STARTED": true,
+  "common_evaluator_protocol_version": "V3_COMPOSITE_EVENT",
+  "flip_policy": "V3_GATE_GREEN",
+  "formal_evaluation_gate_sha256": "c529ebf3ddbf37085b85b0a79018d9cc06ce5a096dc744d18a97a3e0c8b72528",
+  "formal_evaluation_started_at_utc": "2026-08-01T03:22:55.900130+00:00",
+  "formal_ranking_published_at_utc": "2026-08-01T03:46:00.289995+00:00",
+  "formal_ranking_summary_sha256": "dab522cf7bcc43ed74f0bc1e9cab20c01c98d972d7edceb2717f9dc18445b659",
+  "formal_winner": null,
+  "neg20_protocol": "NEG20_V3_PRIMARY_SECONDARY_EVENTS",
+  "pending_gates": [],
+  "ranking_status": "INCONCLUSIVE_FULL_TIE",
+  "run_class": "FORMAL_EVALUATION",
+  "schema": "mechanism_UED.tier3_common_evaluator_v3_ready/v1",
+  "scientific_claim_authorized": false,
+  "single_training_seed": true,
+  "teacher_included_in_student_ranking": false,
+  "v2_archive": {
+    "v2_evidence_modified_by_v3": false,
+    "v2_gate_sha256": "51d3d6fb8efbc978875823cdc4576443c4d61f308840462c1bfa12da52fddc5b",
+    "v2_ranking_valid": false,
+    "v2_status": "CLOSED_INCONCLUSIVE_PARTICIPATION",
+    "v2_summary_sha256": "3e8186417aefeb25729324ce5fb4bc6b56a58087c8d1ee67bc088ad37d5c1ac3",
+    "v2_winner": null
+  },
+  "v3_repair_marker": {
+    "path": "/home/oseasy/student_pool_v1/cc4/V3_REPAIR_AUTHORIZATION.json",
+    "ruling_task": "CC4_REPAIR_NEG20_COMPOSITE_EVENT_SEMANTICS_AND_COMPLETE_FORMAL_EVALUATION_V3",
+    "sha256": "efa68c85f95fa7e7ced144ea81040fec5d849cd97e61fd7b8a39ed97dc835e6a",
+    "verdict": "AUTHORIZED_COMPOSITE_EVENT_SEMANTIC_REPAIR_V3"
+  }
+}
