@@ -24,7 +24,7 @@
 - **环境**：同一 MiniCraftaxTrain（survive 任务族）与同一 EnvParams 构造约定（构造与步进共用同一 `EnvParams(max_timesteps=K)`）。
 - **reset 协议**：standard-reset 采集一律走 `STANDARD_RESET` 协议字段，锚点协议由总控共享 manifest 冻结。
 - **评估接口**：统一经 `StudentAdapter` 协议（obs=8335 / action=43 身份门禁 + memory_spec），不各自私设评估口径。
-- **provenance**：所有 Frontier 采集 rollout 携带 `TRAINING_DISCOVERY`，与冻结正式评估 bank/worlds 结构性隔离。
+- **provenance**：所有 Frontier 采集 rollout 携带 `TRAINING_DISCOVERY`，与冻结正式评估 bank/worlds 结构性隔离；采集输入经 `DiscoveryProvenanceRegistry` allowlist 绑定 + 冻结正式资产身份（canonical id + SHA）清扫双层验证。真实冻结身份集未获总控注入前，隔离只计 `CONTRACT_READY`，状态 `BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY`。
 
 **被研究的机制变量（唯一不对齐项）**：记忆机制（persistent carry / reset-128 / continuous GTrXL128）。
 

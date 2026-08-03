@@ -7,7 +7,7 @@
 
 | 段 | 内容 | 本轮状态 |
 |---|---|---|
-| R1 | 高能力 Student 标准 reset rollout（`TRAINING_DISCOVERY` provenance；正式评估协议/bank/worlds 结构性隔离） | 契约就位（discovery_provenance），未运行 |
+| R1 | 高能力 Student 标准 reset rollout（`TRAINING_DISCOVERY` provenance；正式评估协议/bank/worlds 结构性隔离） | 契约就位（discovery_provenance，已加固为注册表绑定），未运行 |
 | R2 | 关键状态捕获（确定性捕获准则 + CaptureProvenance 校验） | 契约就位，未运行 |
 | R3 | Frontier Archive 保存 EnvState + RNG + wrapper state + memory/history（StateBundle 全字段 + Student 身份绑定 + discovery_provenance） | StateBundle/Archive 加性字段就位 |
 | R4a | env 侧 restore validation（逐叶全等 + dynamics parity） | **PASS（Stage 1）**：`reports/simulator_frontier_cc1/phase1/` |
@@ -22,7 +22,7 @@
 ## 2. 审核五条件并入（逐条强制）
 
 1. **R4 联合 fresh-process 门禁**：`combined_restore_contract.py`——9 组件（params/optimizer/global_step/train_rng/env_state/env_rng/wrapper_state/policy_memory/history）+ 交叉核验（policy_step_next_replay）；**env-only PASS ∧ ckpt-only PASS ≠ 联合证明**，`evaluate_verdict` 机械强制该区分；本轮 `COMBINED_FRESH_PROCESS_RESTORE=false`。
-2. **TRAINING_DISCOVERY 隔离**：`discovery_provenance.py` + `CaptureProvenance` fail-closed 校验；FORMAL_FRONT/BACK/FULL bank 标识与 formal world 标识进入采集请求即 raise；与 `FormalDataLeakageGuard` 消费者集合联动。本轮为契约+测试级证明（真实采集未运行）。
+2. **TRAINING_DISCOVERY 隔离**：`discovery_provenance.py` + `CaptureProvenance` fail-closed 校验；FORMAL_FRONT/BACK/FULL bank 标识与 formal world 标识进入采集请求即 raise；与 `FormalDataLeakageGuard` 消费者集合联动。**2026-08-04 按总控 PASS_WITH_BLOCKER 加固**：隔离改为两层——① 所有 discovery 输入（bank ref / world set id / world set hash）必须解析到显式 `DiscoveryProvenanceRegistry` 的 allowlist 记录（中性别名/未注册串一律 fail-closed）；② 总控注入的冻结正式资产身份集（canonical id + sha256）对全部文本字段做大小写不敏感清扫（含嵌套 notes）。缺 registry / registry 无效 → raise，绝不猜测。**诚实状态**：真实冻结正式资产身份集本轮未获总控注入 → `DISCOVERY_FORMAL_PROVENANCE_ISOLATED=false`，只可声称 `DISCOVERY_PROVENANCE_CONTRACT_READY=true` + 状态 `BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY`；测试中的注册表均为合成 fixture，非真实隔离证明。
 3. **TWO_LLM_GATE 语义限定**：`TWO_LLM_GATE_CONTRACT_ONLY=true` **仅** = CONTRACT_AND_FAKE_CLIENT_TEST_READY；`REAL_TWO_LLM_CALL_EXECUTED=false`（本轮恒 false）；所有测试命名带 `fake_client`/`contract`。
 4. **FOUNDATION_READY 表述边界**：只表示 A–D 基础门禁（见 `sota_launch_gate.json`）；蕴含规则钉死：`ACTUAL_N_READY=false ∨ REAL_TRAINING_UPDATE_EXECUTED=false ⇒ SOTA_INTEGRATION_READY=false`；`FOUNDATION_SCOPE_HONEST` 自检表述合规。
 5. **共享 anchor manifest**：四锚点为三方向共享冻结 manifest；CC4 只提供 schema/绑定接口（`anchor_manifest.py`），绝不自拟科学内容；未获总控 manifest → `SHARED_ANCHOR_MANIFEST_BOUND=false` + `BLOCKED_SHARED_ANCHOR_MANIFEST`。
@@ -57,7 +57,8 @@
 - Frontier 采集用 standard-reset rollout 一律携带 `DiscoveryProvenance.TRAINING_DISCOVERY`（唯一合法采集来源枚举）。
 - 与冻结 formal evaluation bank/worlds **结构性隔离**：正式数据不得进入 Archive/Gate/LLM/selector（`FormalDataLeakageGuard` 在 frontier/curriculum/optimizer 消费点强制）。
 - Archive entry 携带 `discovery_provenance` 加性字段；空值绑定即 raise。
-- 本轮无真实采集运行；隔离证明 = 契约 + 负例测试（`DISCOVERY_FORMAL_PROVENANCE_ISOLATED=true` 仅指契约与测试级）。
+- 隔离验证采用**注册表绑定 + 冻结身份清扫**两层（见第 2 节条件 2 加固说明）：bank/world 引用必须命中 discovery allowlist；forbidden formal identity（canonical id + SHA，大小写不敏感、含嵌套文本）命中即 raise。
+- 本轮无真实采集运行，且**真实冻结正式资产身份集未获总控注入** → 只可声称 `DISCOVERY_PROVENANCE_CONTRACT_READY=true`（契约 + 绕过封闭负例测试级）；`DISCOVERY_FORMAL_PROVENANCE_ISOLATED=false`，状态 `BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY`；待总控注入真实 registry 并绑定后方可升级。
 
 ## 7. 本轮边界声明
 
