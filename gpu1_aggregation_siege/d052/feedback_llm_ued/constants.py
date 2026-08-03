@@ -19,6 +19,8 @@ decision outside this package and is refused here regardless.
 """
 from __future__ import annotations
 
+from d052.bagr_ued.hashing import canonical_sha256
+
 # ---------------------------------------------------------------------------
 # Authorization state (THIS ROUND). NEVER True inside this package.
 # ---------------------------------------------------------------------------
@@ -38,6 +40,18 @@ SEED_POLICY_NONE_SYMBOLIC = "NONE_SYMBOLIC"
 SEED_POLICY_JAX_PRNG_SEEDED = "JAX_PRNG_SEEDED"
 SEED_POLICIES = frozenset({SEED_POLICY_NONE_SYMBOLIC,
                            SEED_POLICY_JAX_PRNG_SEEDED})
+
+#: The shuffled-mode feedback permutation is FROZEN and recomputable: it is
+#: derived ONLY from (mode, board window, SEED_SCHEDULE_HASH) plus the record
+#: set — never from runtime randomness. This round is seedless (deterministic
+#: symbolic probe + mock backend), so the seed schedule is a fixed declaration
+#: rather than a random draw, and its hash is a compile-time constant. Any
+#: future real-seed round must replace this with the real frozen schedule hash.
+SEED_SCHEDULE_HASH = canonical_sha256(dict(
+    schedule="seedless_symbolic_deterministic",
+    probe_seed_policy=SEED_POLICY_NONE_SYMBOLIC,
+    shuffle_derivation="feedback_llm_ued.permutation.v1",
+))
 
 # ---------------------------------------------------------------------------
 # Round status flags (director review board). Everything whose truth would
@@ -77,8 +91,16 @@ NEXT_WINDOW_REVISION_ONLY = True
 #: feedback_k is staged raises SAME_WINDOW_REVISION_FORBIDDEN (fail closed);
 #: negative tests prove the refusal.
 SAME_WINDOW_REVISION_REJECTED = True
-STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
-SHUFFLE_PERMUTATION_FROZEN = False
+#: C9 earned: the static-no-feedback mode binds the board to a
+#: NullFeedbackView that holds NO reference to the SimulatorFeedbackStore at
+#: the type level — the board context is structurally empty, not merely
+#: prompt-omitted; negative tests assert a zero feedback payload.
+STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = True
+#: C9 earned: the shuffled-feedback permutation is frozen and recomputable
+#: (derived only from (mode, board window, SEED_SCHEDULE_HASH) + record set,
+#: never runtime randomness) and presents anonymized ids so the real
+#: candidate<->feedback pairing is unrecoverable from the board context.
+SHUFFLE_PERMUTATION_FROZEN = True
 
 #: flags that must NEVER be True this round (authorization posture re-asserts)
 NEVER_TRUE_REAL_CAPABILITY_FLAGS = (

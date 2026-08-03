@@ -15,16 +15,26 @@ simulator transitions per window; static never cites feedback, normal revises
 on honest probe feedback, and shuffling the candidate<->feedback binding
 changes the resulting plans.
 
-C8 re-baseline (6 windows, deterministic mock): 42 LLM-family calls and
+C9 isolation: the FeedbackStore is HONEST in every mode; the isolation lives
+in the view the board receives — static reads the structurally empty
+NullFeedbackView (zero feedback payload in every board prompt), shuffled
+reads a frozen recomputable PermutedFeedbackView (anonymized ids, identity
+side channels masked; only the controller resolves citations back to store
+ids), normal reads the honest snapshot.
+
+C9 re-baseline (6 windows, deterministic mock): 42 LLM-family calls and
 368640 simulator transitions per mode; normal coverage 0.6667 with
-{MUTATE: 7, RETIRE: 13}; shuffled coverage 0.8047 with {MUTATE: 6,
-RETAIN: 5, RETIRE: 9}; static keeps a single plan signature and 0.0 coverage.
+{MUTATE: 7, RETIRE: 13} and 5 unique plan signatures; shuffled coverage
+0.8047 with {MUTATE: 6, RETIRE: 12, RETAIN: 2}, six unique plan signatures
+and anon-citation resolution into honest ledger/revision ids; static keeps a
+single plan signature and 0.0 coverage.
 """
 import json
 
 import pytest
 
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.behavior_failure import assemble_board_context
 from d052.feedback_llm_ued.causal_failure_analyst import BoardHypothesisVerdict
 from d052.feedback_llm_ued.controller import (
     PHASE_BOARD,
@@ -35,6 +45,10 @@ from d052.feedback_llm_ued.controller import (
     StateMachineViolation,
 )
 from d052.feedback_llm_ued.plan_revision import FEEDBACK_DRIVEN_LABEL
+from d052.feedback_llm_ued.review_board import (
+    build_board_prompt_context,
+    normalize_hypothesis_inputs,
+)
 from d052.feedback_llm_ued.simulator_probe import (
     DeterministicSymbolicProbeRunner,
 )
@@ -109,6 +123,10 @@ class TestAuthorizationPosture:
         # C8 double-window flags are ON
         assert C.NEXT_WINDOW_REVISION_ONLY is True
         assert C.SAME_WINDOW_REVISION_REJECTED is True
+        # C9 isolation flags are ON
+        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is True
+        assert C.SHUFFLE_PERMUTATION_FROZEN is True
+        assert len(C.SEED_SCHEDULE_HASH) == 64
 
     def test_controller_refuses_any_true_flag(self, monkeypatch):
         monkeypatch.setattr(C, "TRAINING_AUTHORIZED", True)
@@ -381,6 +399,37 @@ class TestStaticBaseline:
         assert statuses[C.HYPOTHESIS_SUPPORTED] == []
         assert statuses[C.HYPOTHESIS_REFUTED] == []
 
+    def test_assembled_board_context_carries_a_zero_feedback_payload(self,
+                                                                      runs):
+        """STATIC_FEEDBACK_STRUCTURALLY_HIDDEN: the store DOES accumulate
+        feedback in the static run (64 records per window), yet the board
+        context assembled by the SAME path run_review_board uses carries an
+        EMPTY feedback array under the null view. The isolation is
+        structural (the view holds nothing), not prompt discipline."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_STATIC_LLM]
+        assert len(list(ctl.store.ids())) == 64 * WINDOWS   # store NOT empty…
+        for window in range(WINDOWS):
+            view = ctl._feedback_view(window)
+            assert view.label == "null"
+            assert view.records() == []
+            assert view.to_prompt_payload() == []
+        # windows >= 1: rebuild the exact context run_review_board assembles
+        # (window 0's board ran before any record existed, so its evidence
+        # slice is not rebuildable after the fact)
+        for window in range(1, WINDOWS):
+            view = ctl._feedback_view(window)
+            context = build_board_prompt_context(
+                window=window, mode=C.MODE_STATIC_LLM,
+                board_context=assemble_board_context(
+                    ctl.store, window=window - 1,
+                    mode=C.MODE_STATIC_LLM,
+                    feedback_view_label=view.label),
+                view=view,
+                hypotheses=normalize_hypothesis_inputs(ctl.ledger.all()))
+            assert context["feedback"] == []          # …but the board sees 0
+            assert context["feedback_view_label"] == "null"
+
 
 # ------------------------------------------------------------- normal mode
 class TestNormalFeedbackLoop:
@@ -469,21 +518,61 @@ class TestNormalFeedbackLoop:
 
 # ---------------------------------------------------------- shuffled mode
 class TestShuffledFeedback:
-    def test_binding_labelled_shuffled(self, runs):
-        ctls, _sums = runs
+    def test_store_stays_honest_only_the_view_is_permuted(self, runs):
+        """C9: the permutation never touches the store — every record keeps
+        its HONEST candidate<->feedback binding; only the board's view is
+        permuted + anonymized (label 'permuted:<seed[:16]>', one frozen
+        permutation seed per board window)."""
+        ctls, sums = runs
         ctl = ctls[C.MODE_SHUFFLED_FEEDBACK]
         for rec in ctl.store.all():
-            assert rec.provenance["binding"] == "shuffled"
+            assert rec.provenance["binding"] == "normal"
+        labels = [w["feedback_view_label"]
+                  for w in sums[C.MODE_SHUFFLED_FEEDBACK].windows]
+        assert len(labels) == WINDOWS
+        for label in labels:
+            prefix, seed16 = label.split(":")
+            assert prefix == "permuted"
+            assert len(seed16) == 16
+            int(seed16, 16)                          # hex
+        # frozen per board window: six distinct permutation seeds
+        assert len(set(labels)) == WINDOWS
+
+    def test_board_citations_resolve_to_honest_store_ids(self, runs):
+        """The six roles cite ANONYMIZED ids; the controller resolves them
+        back to store ids — so every ledger binding and revision citation is
+        a real SimulatorFeedbackStore id, and every cited record still lags
+        its verdict by at least one window."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_SHUFFLED_FEEDBACK]
+        all_ids = set(ctl.store.ids())
+        cited_any = False
+        for rev in ctl.revisions:
+            for fid in rev.based_on_feedback_ids:
+                assert fid in all_ids
+                assert not fid.startswith("anon-")
+                cited_any = True
+        assert cited_any
+        for rec in ctl.ledger.all():
+            for entry in rec.revision_history:
+                for fid in entry["feedback_ids"]:
+                    assert fid in all_ids
+                    assert ctl.store.get(fid).window <= int(entry["window"]) - 1
 
     def test_rebaselined_shuffled_numbers(self, runs):
         _ctls, sums = runs
         s = sums[C.MODE_SHUFFLED_FEEDBACK]
         assert s.feedback_citation_coverage == 0.8047
         assert s.decision_distribution == {C.DECISION_MUTATE: 6,
-                                           C.DECISION_RETAIN: 5,
-                                           C.DECISION_RETIRE: 9}
+                                           C.DECISION_RETIRE: 12,
+                                           C.DECISION_RETAIN: 2}
         assert s.supported_retention_rate == 1.0
         assert s.refuted_retirement_rate == 1.0
+        assert len(set(s.plan_signature_hashes)) == 6
+        assert [w["global_risk"] for w in s.windows] == \
+            ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
+        assert [w["request_control"] for w in s.windows] == \
+            [False] + [True] * (WINDOWS - 1)
 
     def test_shuffling_changes_plans(self, runs):
         _ctls, sums = runs
@@ -509,6 +598,18 @@ class TestDeterminism:
         first = json.dumps(sums[C.MODE_NORMAL_FEEDBACK].to_dict(),
                            sort_keys=True)
         ctl = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+        again = json.dumps(ctl.run(max_windows=WINDOWS).to_dict(),
+                           sort_keys=True)
+        assert first == again
+
+    def test_shuffled_runs_are_reproducible(self, runs):
+        """SHUFFLE_PERMUTATION_FROZEN: a second shuffled run reproduces the
+        first one byte-for-byte — the permutation is derived from the frozen
+        seed schedule, never from runtime randomness."""
+        _ctls, sums = runs
+        first = json.dumps(sums[C.MODE_SHUFFLED_FEEDBACK].to_dict(),
+                           sort_keys=True)
+        ctl = FeedbackUEDController(C.MODE_SHUFFLED_FEEDBACK)
         again = json.dumps(ctl.run(max_windows=WINDOWS).to_dict(),
                            sort_keys=True)
         assert first == again

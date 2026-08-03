@@ -6,7 +6,8 @@ still runs its complete six roles):
     A. EVIDENCE  — behavior-failure evidence of window k-1 probes +
                    FeedbackView over ONLY frozen feedback from windows
                    <= k-1 (static mode gets the structurally empty
-                   NullFeedbackView);
+                   NullFeedbackView; shuffled mode the frozen permuted +
+                   anonymized PermutedFeedbackView);
     B. BOARD     — six-role Review Board, always all six calls: verdicts on
                    <= k-1 feedback (explicit feedback_id / hypothesis_id /
                    prediction-signature citations) + new PENDING hypotheses
@@ -34,10 +35,17 @@ training seam / seeds / budget:
 * ``static_llm``        — the board reads the structurally empty
                           NullFeedbackView; every revision is EXPLORATION;
 * ``normal_feedback``   — honest candidate<->feedback binding;
-* ``shuffled_feedback`` — identical, except the candidate<->feedback metric
-                          binding is deterministically rotated at freeze
-                          time (C9 moves this into the frozen permuted view),
-                          proving the plan really is a function of the
+* ``shuffled_feedback`` — the FeedbackStore stays HONEST in every mode; the
+                          isolation happens at view time: the board reads a
+                          PermutedFeedbackView — a frozen, recomputable
+                          permutation of the frozen records presented under
+                          anonymized ids with all identity side channels
+                          masked, so the real candidate<->feedback pairing
+                          is unrecoverable from the board context. The board
+                          cites anonymized ids; only this controller (the
+                          honest bookkeeper) resolves them back to store ids
+                          when applying verdicts / closing proposals. This
+                          proves the plan really is a function of the
                           feedback and not of window order.
 
 Honesty posture re-asserted at construction: every real-world authorization
@@ -70,10 +78,13 @@ from d052.feedback_llm_ued.feedback_contracts import (
     ProbeMetrics,
     plan_signature_hash,
 )
+from d052.feedback_llm_ued.causal_failure_analyst import BoardHypothesisVerdict
 from d052.feedback_llm_ued.feedback_view import (
     NormalFeedbackView,
     NullFeedbackView,
+    PermutedFeedbackView,
 )
+from d052.feedback_llm_ued.intervention_tutor import FamilyProposal
 from d052.feedback_llm_ued.formal_isolation import FormalSourceIsolationGuard
 from d052.feedback_llm_ued.hypothesis_ledger import (
     HypothesisLedger,
@@ -275,8 +286,8 @@ class FeedbackUEDController:
 
         # -- C. REVISION phase: verdicts -> ledger; proposals -> plan_k -----
         self._set_phase(window, PHASE_REVISION)
-        self.apply_board_verdicts(window, board.verdicts)
-        plan, revision = self.revise_plan(window, board)
+        self.apply_board_verdicts(window, board.verdicts, view=view)
+        plan, revision = self.revise_plan(window, board, view=view)
         training = self.training_seam.execute_training_step(window)
         self.training_log.append(training)
 
@@ -352,14 +363,22 @@ class FeedbackUEDController:
     def _feedback_view(self, window: int):
         """The ONLY surface through which the board touches feedback.
 
-        static: NullFeedbackView (structural — holds no store reference).
-        normal/shuffled (C8): read-only snapshot of frozen windows <= k-1.
-        C9 replaces the shuffled path with the frozen PermutedFeedbackView.
+        static:   NullFeedbackView (structural — holds no store reference).
+        normal:   read-only snapshot of frozen windows <= k-1.
+        shuffled: PermutedFeedbackView over the SAME honest records — a
+                  frozen, recomputable permutation presented under
+                  anonymized ids with the identity side channels masked
+                  (the store itself is never permuted).
         """
         if self.mode == C.MODE_STATIC_LLM:
             return NullFeedbackView()
         records = [r for r in self.store.all() if r.window <= window - 1]
-        return NormalFeedbackView(records, window_scope=max(0, window - 1))
+        scope = max(0, window - 1)
+        if self.mode == C.MODE_SHUFFLED_FEEDBACK:
+            return PermutedFeedbackView(
+                records, window_scope=scope, board_window=window,
+                mode=self.mode, seed_schedule_hash=C.SEED_SCHEDULE_HASH)
+        return NormalFeedbackView(records, window_scope=scope)
 
     # ------------------------------------------------- revision (phase C)
     def validate_verdict_citations(self, window: int, verdicts) -> None:
@@ -425,12 +444,33 @@ class FeedbackUEDController:
                         f"{rec.source_plan_id!r} which this run never "
                         f"generated")
 
-    def apply_board_verdicts(self, window: int, verdicts) -> None:
-        """Apply the board's verdicts to the ledger — ONLY in the REVISION
-        phase (double-window state machine)."""
-        self._assert_revision_allowed(window)
-        self.validate_verdict_citations(window, verdicts)
+    def _resolved_verdicts(self, window: int, verdicts, view):
+        """De-anonymize the board's citations through the window's view.
+
+        Under the shuffled mode the six roles cite ANONYMIZED feedback ids
+        (that is what the PermutedFeedbackView showed them); only this
+        controller-side path may map them back to store ids — fail closed on
+        anything the view did not present. Under normal/static modes this is
+        an identity check (the view still must hold every citation).
+        """
+        resolved = []
         for v in verdicts:
+            dump = v.model_dump()
+            dump["cited_feedback_ids"] = [
+                view.resolve_citation(fid) for fid in v.cited_feedback_ids]
+            resolved.append(BoardHypothesisVerdict(**dump))
+        return resolved
+
+    def apply_board_verdicts(self, window: int, verdicts, view=None) -> None:
+        """Apply the board's verdicts to the ledger — ONLY in the REVISION
+        phase (double-window state machine). Board citations are resolved
+        through the window's FeedbackView first (de-anonymization under the
+        shuffled mode); the ledger only ever records real store ids."""
+        self._assert_revision_allowed(window)
+        view = view if view is not None else self._feedback_view(window)
+        resolved = self._resolved_verdicts(window, verdicts, view)
+        self.validate_verdict_citations(window, resolved)
+        for v in resolved:
             for fid in v.cited_feedback_ids:
                 rec = self.store.get(fid)
                 agrees = rec.expected_observed_match == \
@@ -441,13 +481,22 @@ class FeedbackUEDController:
                 reason=v.reason, feedback_ids=list(v.cited_feedback_ids),
                 confidence=v.new_confidence)
 
-    def revise_plan(self, window: int, board: BoardOutput
+    def revise_plan(self, window: int, board: BoardOutput, view=None
                     ) -> Tuple[CurriculumPlan, PlanRevisionRecord]:
         """Close the board's family proposals into plan_k — ONLY in the
-        REVISION phase (double-window state machine)."""
+        REVISION phase (double-window state machine). Proposal citations are
+        resolved through the window's FeedbackView first, so the Reconciler
+        and the PlanRevisionRecord only ever carry real store ids."""
         self._assert_revision_allowed(window)
-        allocations = [self._proposal_to_allocation(p)
-                       for p in board.family_proposals]
+        view = view if view is not None else self._feedback_view(window)
+        proposals = []
+        for p in board.family_proposals:
+            dump = p.model_dump()
+            dump["based_on_feedback_ids"] = [
+                view.resolve_citation(fid)
+                for fid in p.based_on_feedback_ids]
+            proposals.append(FamilyProposal(**dump))
+        allocations = [self._proposal_to_allocation(p) for p in proposals]
         previous = self._plans_by_window.get(window - 1)
         previous_plan_id = previous.plan_id if previous else ""
         previous_slots = ({a.environment_family: a.slots
@@ -500,6 +549,10 @@ class FeedbackUEDController:
         Staged records are NOT visible to anything yet: they enter the store
         only in the atomic freeze (phase E). This is what makes window k's
         feedback unreadable to window k's own revision path.
+
+        The store is HONEST in every mode (binding="normal" always): the
+        shuffled-mode isolation happens at view time (PermutedFeedbackView),
+        never by mutating what the probe observed.
         """
         hyp_by_family: Dict[str, List[str]] = {}
         for h in self.ledger.all():
@@ -515,11 +568,6 @@ class FeedbackUEDController:
                     for r in batch.stage1_results}
         full_obs = {r["candidate_id"]: r["metrics"]
                     for r in batch.stage2_results}
-        if self.mode == C.MODE_SHUFFLED_FEEDBACK:
-            # C8 keeps the probe-time rotation; C9 moves the permutation
-            # into the frozen PermutedFeedbackView (view-time, recomputable)
-            fast_obs = self._rotate_binding(fast_obs)
-            full_obs = self._rotate_binding(full_obs)
 
         staged: List[SimulatorFeedbackRecord] = []
         for cid in sorted(fast_obs):
@@ -544,8 +592,10 @@ class FeedbackUEDController:
                     plan_id=plan.plan_id, window=window,
                     runner_id=self.runner.runner_id,
                     real_adapter_status=C.REAL_SIMULATOR_PROBE_STATUS,
-                    binding=("shuffled" if self.mode
-                             == C.MODE_SHUFFLED_FEEDBACK else "normal")),
+                    #: the store always records the HONEST binding; the
+                    #: shuffled mode permutes only the board's VIEW of these
+                    #: records (PermutedFeedbackView), never the records
+                    binding="normal"),
                 student_identity_hash=self.student_binding.identity_hash,
                 student_parameter_tree_hash=(
                     self.student_binding.parameter_tree_hash),
@@ -556,18 +606,6 @@ class FeedbackUEDController:
                 record.model_dump(), label=f"feedback:{fid}")
             staged.append(record)
         return staged, batch
-
-    @staticmethod
-    def _rotate_binding(obs: Dict[str, dict]) -> Dict[str, dict]:
-        """Deterministic candidate<->feedback metric rotation (shuffled)."""
-        ids = sorted(obs)
-        n = len(ids)
-        if n <= 1:
-            return dict(obs)
-        shift = n // 2
-        values = [obs[cid] for cid in ids]
-        rotated = values[shift:] + values[:shift]
-        return {cid: rotated[i] for i, cid in enumerate(ids)}
 
     def _expected_signature(self, cand) -> Dict[str, float]:
         merged: Dict[str, float] = {}
