@@ -155,18 +155,42 @@ class BoardContext(CanonicalModel):
     #: empty k-1 evidence set, which is legal.
     student_success_rate_ci: float = Field(default=1.0, ge=0.0)
     feedback_view_label: str = FEEDBACK_VIEW_UNBOUND
+    #: C10 RETIRE lifecycle — the families the board must NOT propose for:
+    #: retired families past the cooldown awaiting reopen authorization, and
+    #: retired families still inside the RETIRE cooldown window (hard block;
+    #: the Reconciler re-checks and fails closed with FAMILY_IN_COOLDOWN).
+    retired_families: List[str] = Field(default_factory=list)
+    families_in_cooldown: List[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate(self) -> "BoardContext":
         if self.mode not in C.FEEDBACK_MODES:
             raise ValueError(f"UNKNOWN_MODE: {self.mode!r}")
+        for label, families in (("retired_families", self.retired_families),
+                                ("families_in_cooldown",
+                                 self.families_in_cooldown)):
+            for fam in families:
+                if fam not in C.ENVIRONMENT_FAMILIES:
+                    raise ValueError(
+                        f"UNKNOWN_ENVIRONMENT_FAMILY: {label} entry "
+                        f"{fam!r}")
+            if len(set(families)) != len(families):
+                raise ValueError(f"DUPLICATE_FAMILY_IN_{label.upper()}: "
+                                 f"{families}")
         return self
 
 
 def assemble_board_context(store, *, window: int, mode: str,
                            feedback_view_label: str = FEEDBACK_VIEW_UNBOUND,
+                           retired_families=(),
+                           families_in_cooldown=(),
                            z: float = Z_95) -> BoardContext:
-    """Phase-A assembly: window-k evidence + pooled-episode uncertainty."""
+    """Phase-A assembly: window-k evidence + pooled-episode uncertainty.
+
+    ``retired_families`` / ``families_in_cooldown`` carry the controller's
+    C10 RETIRE lifecycle state into the board context so the six roles skip
+    blocked families by construction (the Reconciler re-checks fail closed).
+    """
     evidence = extract_window_evidence(store, window)
     pooled = 0
     for record in store.for_window(window):
@@ -185,4 +209,7 @@ def assemble_board_context(store, *, window: int, mode: str,
                         pooled_episodes=pooled,
                         pooled_student_success_rate=mean_sr,
                         student_success_rate_ci=round(ci, 6),
-                        feedback_view_label=feedback_view_label)
+                        feedback_view_label=feedback_view_label,
+                        retired_families=sorted(set(retired_families)),
+                        families_in_cooldown=sorted(
+                            set(families_in_cooldown)))

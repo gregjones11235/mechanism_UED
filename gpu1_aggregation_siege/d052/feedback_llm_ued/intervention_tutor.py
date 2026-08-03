@@ -10,6 +10,12 @@ feedback-driven; a proposal with NO citation may only be EXPLORATION
 (MUTATE, is_exploration=True). A REQUEST_CONTROL proposal must cite the
 evidence that triggered it.
 
+C10 RETIRE lifecycle: families the board context lists under
+``retired_families`` / ``families_in_cooldown`` are skipped ENTIRELY — no
+proposal of any decision targets them, and in particular a STALE verdict
+can never re-open a retired family as uncited exploration (resurrection is
+structurally impossible; the Reconciler re-checks fail closed).
+
 ENGINEERING_SCAFFOLD: deterministic mock rule; no real LLM call this round.
 """
 from __future__ import annotations
@@ -142,10 +148,18 @@ def mock_rule(context: dict) -> dict:
        because every seeded line of inquiry was retired (the Reconciler
        still applies the exploration cap; these are proposals, rules
        dispose).
+
+    C10: families listed under ``retired_families`` /
+    ``families_in_cooldown`` in the board context are skipped in BOTH
+    sources — a retired family receives no proposal of any decision until
+    the controller reopens it (a STALE verdict cannot resurrect it).
     """
     window = int(context.get("window", 0))
     hypotheses = context.get("hypotheses", [])
     feedback = context.get("feedback", [])
+    board_context = context.get("board_context", {})
+    blocked = set(board_context.get("retired_families", [])) | \
+        set(board_context.get("families_in_cooldown", []))
 
     by_hyp: dict = {}
     for fb in feedback:
@@ -159,6 +173,11 @@ def mock_rule(context: dict) -> dict:
     for hid in sorted(hyp_family):
         fam = hyp_family[hid]
         if fam in seen_families:
+            continue
+        if fam in blocked:
+            # retired / in cooldown: no proposal of any decision — STALE
+            # exploration in particular must not resurrect the family
+            seen_families.add(fam)
             continue
         recs = by_hyp.get(hid, [])
         agree = sum(1 for r in recs
@@ -195,7 +214,7 @@ def mock_rule(context: dict) -> dict:
     # families with no hypothesis at all: bounded exploration so the dynamic
     # budget is never empty when all seeded lines of inquiry were retired
     for fam in C.ENVIRONMENT_FAMILIES:
-        if fam in seen_families:
+        if fam in seen_families or fam in blocked:
             continue
         proposals.append(dict(
             environment_family=fam, decision=C.DECISION_MUTATE,
@@ -206,7 +225,8 @@ def mock_rule(context: dict) -> dict:
         seen_families.add(fam)
 
     rationale = (f"window {window}: {len(proposals)} family proposal(s) "
-                 f"from {len(feedback)} visible feedback record(s)")
+                 f"from {len(feedback)} visible feedback record(s); "
+                 f"skipped retired/cooldown families: {sorted(blocked)}")
     return dict(window=window, family_proposals=proposals,
                 rationale=rationale)
 

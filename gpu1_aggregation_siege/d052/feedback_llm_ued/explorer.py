@@ -155,9 +155,20 @@ def _treatment_for(family: str, worst: dict, window: int
 
 
 def mock_rule(context: dict) -> dict:
-    """Deterministically derive controlled directives from visible feedback."""
+    """Deterministically derive controlled directives from visible feedback.
+
+    C10: families listed under ``retired_families`` /
+    ``families_in_cooldown`` in the board context emit NO directives —
+    they cannot be funded this window (the Reconciler fails closed on any
+    proposal targeting them), so specifying axis movements for them would
+    only produce dead code. The FUNDED_FAMILY_WITHOUT_DIRECTIVE invariant
+    is untouched: funded families are never blocked.
+    """
     window = int(context.get("window", 0))
     feedback = context.get("feedback", [])
+    board_context = context.get("board_context", {})
+    blocked = set(board_context.get("retired_families", [])) | \
+        set(board_context.get("families_in_cooldown", []))
 
     fam_records: dict = {}
     for fb in feedback:
@@ -167,6 +178,8 @@ def mock_rule(context: dict) -> dict:
     directives: List[dict] = []
     for family in sorted(fam_records):
         if family not in C.ENVIRONMENT_FAMILIES:
+            continue
+        if family in blocked:
             continue
         worst = sorted(fam_records[family],
                        key=lambda r: (float(r.get("student_success_rate", 0.0))
@@ -181,7 +194,7 @@ def mock_rule(context: dict) -> dict:
     for family in C.ENVIRONMENT_FAMILIES:
         if explored >= C.MAX_EXPLORATION_PROPOSALS:
             break
-        if family in fam_records:
+        if family in fam_records or family in blocked:
             continue
         axis = FAMILY_AXES[family][0]
         held = {a: "medium" for a in FAMILY_AXES[family] if a != axis}
@@ -202,7 +215,8 @@ def mock_rule(context: dict) -> dict:
 
     summary = (f"window {window}: {len(directives)} directive(s) from "
                f"{len(fam_records)} evidenced family(ies) + "
-               f"{explored} exploration")
+               f"{explored} exploration; skipped retired/cooldown "
+               f"families: {sorted(blocked)}")
     return dict(window=window, directives=directives,
                 exploration_summary=summary)
 

@@ -198,6 +198,15 @@ DESIGNER_DECISIONS = frozenset({
 EXPLORATION_DECISIONS = frozenset({DECISION_MUTATE, DECISION_EXPAND_BUDGET})
 EXPLORATION_LABEL = "EXPLORATION"
 
+#: C10 RETIRE lifecycle: a family retired at window w is in COOLDOWN for the
+#: next RETIRE_COOLDOWN_WINDOWS windows (w+1 .. w+RETIRE_COOLDOWN_WINDOWS);
+#: any proposal of any decision targeting it during cooldown fails closed
+#: (FAMILY_IN_COOLDOWN). Past the cooldown the family STAYS retired until
+#: explicitly reopened — either human authorization (human_reopen_families)
+#: or ALL distinguishing probe evidence postdating the retirement window.
+#: A STALE verdict can therefore never resurrect a retired family.
+RETIRE_COOLDOWN_WINDOWS = 3
+
 # ---------------------------------------------------------------------------
 # Three comparison modes (task §5)
 # ---------------------------------------------------------------------------

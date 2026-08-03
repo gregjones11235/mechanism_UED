@@ -273,3 +273,99 @@ class TestReconciler:
                                 proposals=props, known_feedback_ids=self.known)
         assert sum(a.slots for a in rc.plan.allocations) == C.DYNAMIC_UED_SLOTS
         assert any(e["rule"] == "leftover_top_up" for e in rc.log)
+
+
+class TestReconcilerRetireLifecycle:
+    """C10: the RETIRE cooldown + reopen gate are fail-closed re-checks —
+    the board skips blocked families by construction, but if a proposal for
+    a blocked family ever reaches the Reconciler it RAISES (never silently
+    dropped, never resurrected)."""
+
+    def setup_method(self):
+        self.rec = DeterministicReconciler()
+        self.known = {"fb-1", "fb-2"}
+
+    def _budget(self):
+        """A legal budget-bearing proposal for an unblocked family so the
+        lifecycle checks are isolated from the empty-budget rule."""
+        return _alloc(FAM2, C.DECISION_RETAIN, 4, ["fb-2"])
+
+    def test_every_decision_for_a_cooldown_family_fails_closed(self):
+        # retired at window 2; window 4 sits inside the 3-window cooldown
+        cases = [
+            _alloc(FAM, C.DECISION_RETAIN, 4, ["fb-1"]),
+            _alloc(FAM, C.DECISION_MUTATE, 4, ["fb-1"]),
+            _alloc(FAM, C.DECISION_EXPAND_BUDGET, 4, ["fb-1"]),
+            _alloc(FAM, C.DECISION_RETIRE, 0, ["fb-1"]),
+            _alloc(FAM, C.DECISION_REQUEST_CONTROL, 0, ["fb-1"]),
+            _alloc(FAM, C.DECISION_MUTATE, 4, [], exploration=True),
+        ]
+        for proposal in cases:
+            with pytest.raises(ValueError, match="FAMILY_IN_COOLDOWN"):
+                self.rec.reconcile(
+                    window=4, mode=C.MODE_NORMAL_FEEDBACK,
+                    proposals=[proposal, self._budget()],
+                    known_feedback_ids=self.known,
+                    retired_windows={FAM: 2})
+
+    def test_cooldown_boundary_windows(self):
+        # gap == RETIRE_COOLDOWN_WINDOWS (window 5, retired 2): still blocked
+        with pytest.raises(ValueError, match="FAMILY_IN_COOLDOWN"):
+            self.rec.reconcile(
+                window=2 + C.RETIRE_COOLDOWN_WINDOWS,
+                mode=C.MODE_NORMAL_FEEDBACK,
+                proposals=[_alloc(FAM, C.DECISION_RETAIN, 4, ["fb-1"]),
+                           self._budget()],
+                known_feedback_ids=self.known,
+                retired_windows={FAM: 2})
+        # gap == RETIRE_COOLDOWN_WINDOWS + 1: cooldown over -> reopen gate
+        with pytest.raises(ValueError, match="FAMILY_NOT_REOPENED"):
+            self.rec.reconcile(
+                window=2 + C.RETIRE_COOLDOWN_WINDOWS + 1,
+                mode=C.MODE_NORMAL_FEEDBACK,
+                proposals=[_alloc(FAM, C.DECISION_RETAIN, 4, ["fb-1"]),
+                           self._budget()],
+                known_feedback_ids=self.known,
+                retired_windows={FAM: 2})
+
+    def test_past_cooldown_without_reopen_fails_closed(self):
+        with pytest.raises(ValueError, match="FAMILY_NOT_REOPENED"):
+            self.rec.reconcile(window=9, mode=C.MODE_NORMAL_FEEDBACK,
+                               proposals=[_alloc(FAM, C.DECISION_MUTATE, 4,
+                                                 ["fb-1"]),
+                                          self._budget()],
+                               known_feedback_ids=self.known,
+                               retired_windows={FAM: 1})
+
+    def test_reopened_family_is_admitted_and_logged(self):
+        rc = self.rec.reconcile(window=9, mode=C.MODE_NORMAL_FEEDBACK,
+                                proposals=[_alloc(FAM, C.DECISION_MUTATE, 4,
+                                                  ["fb-1"]),
+                                           self._budget()],
+                                known_feedback_ids=self.known,
+                                retired_windows={FAM: 1},
+                                reopened_families=[FAM])
+        assert {a.environment_family
+                for a in rc.plan.allocations} == {FAM, FAM2}
+        assert any(e.get("rule") == "reopened_family_admitted"
+                   and e.get("family") == FAM for e in rc.log)
+
+    def test_reopened_family_can_be_retired_again(self):
+        rc = self.rec.reconcile(window=9, mode=C.MODE_NORMAL_FEEDBACK,
+                                proposals=[_alloc(FAM, C.DECISION_RETIRE, 0,
+                                                  ["fb-1"]),
+                                           self._budget()],
+                                known_feedback_ids=self.known,
+                                retired_windows={FAM: 1},
+                                reopened_families=[FAM])
+        assert rc.plan.retired_families == [FAM]
+
+    def test_unretired_families_are_unaffected(self):
+        rc = self.rec.reconcile(window=9, mode=C.MODE_NORMAL_FEEDBACK,
+                                proposals=[_alloc(FAM, C.DECISION_RETAIN, 4,
+                                                  ["fb-1"]),
+                                           self._budget()],
+                                known_feedback_ids=self.known,
+                                retired_windows={FAM3: 8})
+        assert {a.environment_family
+                for a in rc.plan.allocations} == {FAM, FAM2}

@@ -48,6 +48,16 @@ training seam / seeds / budget:
                           proves the plan really is a function of the
                           feedback and not of window order.
 
+C10 RETIRE lifecycle: the controller is the sole keeper of the retirement
+registry (family -> retirement window). A retired family is in COOLDOWN for
+the next ``RETIRE_COOLDOWN_WINDOWS`` windows; the board context carries the
+blocked lists so the six roles skip those families by construction, and the
+Reconciler re-checks fail closed (FAMILY_IN_COOLDOWN / FAMILY_NOT_REOPENED).
+Past the cooldown a family STAYS retired until reopened — either through the
+explicit ``human_reopen_families`` constructor authorization or because ALL
+distinguishing probe evidence postdates the retirement window. A STALE
+verdict can therefore never resurrect a retired family.
+
 Honesty posture re-asserted at construction: every real-world authorization
 flag must be False this round; the loop runs on the deterministic mock LLM
 backend + the deterministic symbolic probe runner and says so in every
@@ -56,7 +66,7 @@ record (ENGINEERING_SCAFFOLD).
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.behavior_failure import assemble_board_context
@@ -202,10 +212,19 @@ def _assert_authorization_posture() -> None:
 class FeedbackUEDController:
     """Deterministic, replayable driver of the double-window loop."""
 
-    def __init__(self, mode: str, *, backend=None, probe_runner=None) -> None:
+    def __init__(self, mode: str, *, backend=None, probe_runner=None,
+                 human_reopen_families=()) -> None:
         if mode not in C.FEEDBACK_MODES:
             raise ValueError(f"UNKNOWN_MODE: {mode!r}")
         _assert_authorization_posture()
+        for fam in human_reopen_families:
+            if fam not in C.ENVIRONMENT_FAMILIES:
+                raise ValueError(
+                    f"UNKNOWN_ENVIRONMENT_FAMILY: human_reopen_families "
+                    f"entry {fam!r}")
+        #: C10: explicit human authorization to reopen retired families once
+        #: their cooldown has passed (the only non-evidence reopen path)
+        self.human_reopen_families = frozenset(human_reopen_families)
         self.mode = mode
         self.launch_gate = FeedbackLaunchGate(EXECUTION_MODE_MOCK_DRY_RUN)
         self.launch_decision = self.launch_gate.evaluate()
@@ -235,6 +254,10 @@ class FeedbackUEDController:
         self._phases: Dict[int, str] = {}
         self._sequence = 0
         self._summary: Optional[RunSummary] = None
+        #: C10 RETIRE lifecycle registry: family -> window it was retired at.
+        #: Sole keeper is this controller; the board reads blocked lists via
+        #: the board context, the Reconciler re-checks fail closed.
+        self._retired_at: Dict[str, int] = {}
 
     # ------------------------------------------------------------------ seeds
     def _seed(self) -> None:
@@ -270,9 +293,13 @@ class FeedbackUEDController:
         self._set_phase(window, PHASE_EVIDENCE)
         evidence_window = max(0, window - 1)
         view = self._feedback_view(window)
+        in_cooldown, blocked_retired, _reopened = \
+            self._retirement_state(window)
         board_context = assemble_board_context(
             self.store, window=evidence_window, mode=self.mode,
-            feedback_view_label=view.label)
+            feedback_view_label=view.label,
+            families_in_cooldown=in_cooldown,
+            retired_families=blocked_retired)
 
         # -- B. six-role Review Board (always all six calls) ----------------
         self._set_phase(window, PHASE_BOARD)
@@ -379,6 +406,53 @@ class FeedbackUEDController:
                 records, window_scope=scope, board_window=window,
                 mode=self.mode, seed_schedule_hash=C.SEED_SCHEDULE_HASH)
         return NormalFeedbackView(records, window_scope=scope)
+
+    # ------------------------------------------- C10 RETIRE lifecycle state
+    def _reopen_eligible(self, window: int, retired_windows: Mapping[str, int]
+                         ) -> Tuple[str, ...]:
+        """Families whose cooldown is over AND that are authorized to come
+        back this window — either through the explicit human authorization
+        (``human_reopen_families``) or because ALL distinguishing probe
+        evidence postdates the retirement window (genuinely new evidence;
+        an empty evidence set authorizes nothing)."""
+        reopened = set()
+        for fam, ret_window in retired_windows.items():
+            if window - ret_window <= C.RETIRE_COOLDOWN_WINDOWS:
+                continue                       # still inside the cooldown
+            if fam in self.human_reopen_families:
+                reopened.add(fam)
+                continue
+            hids = {h.hypothesis_id for h in self.ledger.all()
+                    if h.environment_family == fam}
+            recs = [r for r in self.store.all()
+                    if hids and
+                    set(r.distinguishes_hypothesis_ids) & hids]
+            if recs and all(r.window > ret_window for r in recs):
+                reopened.add(fam)
+        return tuple(sorted(reopened))
+
+    def _retirement_state(self, window: int
+                          ) -> Tuple[List[str], List[str], Tuple[str, ...]]:
+        """The window's RETIRE lifecycle partition, derived ONLY from the
+        registry + store + human authorization (pure, recomputable):
+
+        * ``families_in_cooldown`` — retired within the last
+          RETIRE_COOLDOWN_WINDOWS windows: hard block;
+        * ``retired_families``     — cooldown over but NOT reopened: still
+          blocked (a retired family stays retired until reopened);
+        * ``reopened``             — cooldown over AND authorized: behaves
+          like a normal family this window.
+        """
+        retired_windows: Mapping[str, int] = dict(self._retired_at)
+        reopened = self._reopen_eligible(window, retired_windows)
+        in_cooldown = sorted(
+            fam for fam, w in retired_windows.items()
+            if 1 <= window - w <= C.RETIRE_COOLDOWN_WINDOWS)
+        blocked_retired = sorted(
+            fam for fam, w in retired_windows.items()
+            if window - w > C.RETIRE_COOLDOWN_WINDOWS
+            and fam not in reopened)
+        return in_cooldown, blocked_retired, reopened
 
     # ------------------------------------------------- revision (phase C)
     def validate_verdict_citations(self, window: int, verdicts) -> None:
@@ -501,14 +575,29 @@ class FeedbackUEDController:
         previous_plan_id = previous.plan_id if previous else ""
         previous_slots = ({a.environment_family: a.slots
                            for a in previous.allocations} if previous else {})
+        retired_windows: Mapping[str, int] = dict(self._retired_at)
+        reopened = self._reopen_eligible(window, retired_windows)
         rc = self.reconciler.reconcile(
             window=window, mode=self.mode, proposals=allocations,
             known_feedback_ids=set(self.store.ids()),
             previous_plan_id=previous_plan_id,
-            previous_slots=previous_slots)
+            previous_slots=previous_slots,
+            retired_windows=retired_windows,
+            reopened_families=reopened)
         plan = rc.plan
         self.plans[plan.plan_id] = plan
         self._plans_by_window[window] = plan
+        # C10 registry update (after the plan is fixed): fresh retirements
+        # stamp the current window and WIN over a same-window reopen; a
+        # reopened family that was actually funded and not re-retired leaves
+        # the registry (the reopen was consumed); a reopened family that got
+        # no budget stays retired (the authorization is per-window).
+        for fam in plan.retired_families:
+            self._retired_at[fam] = window
+        funded = {a.environment_family for a in plan.allocations}
+        for fam in reopened:
+            if fam in funded and fam not in plan.retired_families:
+                self._retired_at.pop(fam, None)
         cited = sorted({fid for m in rc.modifications
                         for fid in m["based_on_feedback_ids"]})
         revision = PlanRevisionRecord(

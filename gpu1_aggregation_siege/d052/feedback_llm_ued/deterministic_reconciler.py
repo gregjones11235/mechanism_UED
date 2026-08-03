@@ -16,6 +16,13 @@ Rules (in application order):
     an allocation citing feedback while flagged exploration is a masquerade
     and raises; a RETIRE without cited feedback raises as well (retirement
     is a verdict, not exploration);
+ 3a. RETIRE lifecycle (C10): a family retired at window w is in cooldown
+    for the next RETIRE_COOLDOWN_WINDOWS windows — ANY allocation targeting
+    it (any decision, incl. RETIRE / REQUEST_CONTROL) raises
+    FAMILY_IN_COOLDOWN; past the cooldown the family stays retired until
+    reopened (``reopened_families``), else FAMILY_NOT_REOPENED raises. The
+    board skips blocked families by construction; these checks are the
+    fail-closed re-verification;
  4. REQUEST_CONTROL escalates to a human: logged, zero budget;
  5. RETIRE removes a family from the dynamic budget (cites feedback);
     if a family is both retired and re-proposed active, retirement wins;
@@ -78,7 +85,9 @@ class DeterministicReconciler:
                   proposals: Sequence[Proposal],
                   known_feedback_ids,
                   previous_plan_id: str = "",
-                  previous_slots: Optional[Mapping[str, int]] = None
+                  previous_slots: Optional[Mapping[str, int]] = None,
+                  retired_windows: Optional[Mapping[str, int]] = None,
+                  reopened_families=(),
                   ) -> ReconciledPlan:
         log: List[dict] = []
         allocs = [self._coerce(p, i) for i, p in enumerate(proposals)]
@@ -116,6 +125,35 @@ class DeterministicReconciler:
                     f"{a.environment_family!r} cites feedback and may not be "
                     f"flagged exploration")
             fixed.append(a)
+
+        # -- 3a. RETIRE lifecycle (C10): cooldown + reopen gate -------------
+        # The board skips blocked families by construction; this is the
+        # fail-closed re-verification — no silent drop, no resurrection.
+        retired_windows = dict(retired_windows or {})
+        reopened = set(reopened_families)
+        for a in fixed:
+            fam = a.environment_family
+            if fam not in retired_windows:
+                continue
+            retired_at = int(retired_windows[fam])
+            gap = window - retired_at
+            if gap <= C.RETIRE_COOLDOWN_WINDOWS:
+                raise ValueError(
+                    f"FAMILY_IN_COOLDOWN: family {fam!r} was retired at "
+                    f"window {retired_at}; window {window} is inside the "
+                    f"{C.RETIRE_COOLDOWN_WINDOWS}-window RETIRE cooldown — "
+                    f"no proposal of any decision may target it (earliest "
+                    f"reopen candidate: window "
+                    f"{retired_at + C.RETIRE_COOLDOWN_WINDOWS + 1})")
+            if fam not in reopened:
+                raise ValueError(
+                    f"FAMILY_NOT_REOPENED: family {fam!r} was retired at "
+                    f"window {retired_at} and stays retired past the "
+                    f"cooldown until human_reopen_families authorizes it or "
+                    f"ALL distinguishing probe evidence postdates the "
+                    f"retirement window")
+            log.append(dict(rule="reopened_family_admitted", family=fam,
+                            retired_at=retired_at))
 
         # -- 4/5. escalations + retirements ---------------------------------
         request_control = False

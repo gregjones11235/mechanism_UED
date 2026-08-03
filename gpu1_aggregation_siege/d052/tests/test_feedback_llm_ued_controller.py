@@ -22,12 +22,22 @@ reads a frozen recomputable PermutedFeedbackView (anonymized ids, identity
 side channels masked; only the controller resolves citations back to store
 ids), normal reads the honest snapshot.
 
-C9 re-baseline (6 windows, deterministic mock): 42 LLM-family calls and
-368640 simulator transitions per mode; normal coverage 0.6667 with
-{MUTATE: 7, RETIRE: 13} and 5 unique plan signatures; shuffled coverage
-0.8047 with {MUTATE: 6, RETIRE: 12, RETAIN: 2}, six unique plan signatures
-and anon-citation resolution into honest ledger/revision ids; static keeps a
-single plan signature and 0.0 coverage.
+C10 RETIRE lifecycle: a retired family enters a RETIRE_COOLDOWN_WINDOWS=3
+cooldown (hard block, FAMILY_IN_COOLDOWN fail closed at the Reconciler),
+then STAYS retired until reopened (human_reopen_families or all-new
+evidence) — so each family retires at most ONCE per run, a STALE verdict
+can never resurrect it, and the board context carries the blocked lists so
+the six roles skip cooldown/retired families by construction.
+
+C10 re-baseline (6 windows, deterministic mock): 42 LLM-family calls and
+368640 simulator transitions per mode; normal coverage 0.8047 with
+{MUTATE: 7, RETIRE: 2, RETAIN: 6} and six unique plan signatures —
+threat_distance retired once at window 1 and day_night_rest_need once at
+window 4, never re-retired; shuffled coverage 0.8047 with
+{MUTATE: 7, RETIRE: 2, RETAIN: 4}, six unique plan signatures (retires
+threat_distance@1, resource_pressure@2 — a DIFFERENT family set than
+normal) and anon-citation resolution into honest ledger/revision ids;
+static keeps a single plan signature and 0.0 coverage.
 """
 import json
 
@@ -127,6 +137,8 @@ class TestAuthorizationPosture:
         assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is True
         assert C.SHUFFLE_PERMUTATION_FROZEN is True
         assert len(C.SEED_SCHEDULE_HASH) == 64
+        # C10 RETIRE lifecycle constant
+        assert C.RETIRE_COOLDOWN_WINDOWS == 3
 
     def test_controller_refuses_any_true_flag(self, monkeypatch):
         monkeypatch.setattr(C, "TRAINING_AUTHORIZED", True)
@@ -460,12 +472,15 @@ class TestNormalFeedbackLoop:
     def test_rebaselined_summary_numbers(self, runs):
         _ctls, sums = runs
         s = sums[C.MODE_NORMAL_FEEDBACK]
-        assert s.feedback_citation_coverage == 0.6667
+        assert s.feedback_citation_coverage == 0.8047
         assert s.decision_distribution == {C.DECISION_MUTATE: 7,
-                                           C.DECISION_RETIRE: 13}
-        assert s.supported_retention_rate == 0.0    # no SUPPORTED this run
-        assert s.refuted_retirement_rate == 1.0     # every REFUTE retires
-        assert len(set(s.plan_signature_hashes)) == 5
+                                           C.DECISION_RETIRE: 2,
+                                           C.DECISION_RETAIN: 6}
+        assert s.supported_retention_rate == 1.0
+        # C10 lifecycle: a family retires at most ONCE — later re-refutations
+        # of the already-retired line find it blocked (2 of 7 refutations)
+        assert s.refuted_retirement_rate == 0.2857
+        assert len(set(s.plan_signature_hashes)) == 6
         assert [w["global_risk"] for w in s.windows] == \
             ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
         assert [w["request_control"] for w in s.windows] == \
@@ -563,11 +578,12 @@ class TestShuffledFeedback:
         _ctls, sums = runs
         s = sums[C.MODE_SHUFFLED_FEEDBACK]
         assert s.feedback_citation_coverage == 0.8047
-        assert s.decision_distribution == {C.DECISION_MUTATE: 6,
-                                           C.DECISION_RETIRE: 12,
-                                           C.DECISION_RETAIN: 2}
+        assert s.decision_distribution == {C.DECISION_MUTATE: 7,
+                                           C.DECISION_RETIRE: 2,
+                                           C.DECISION_RETAIN: 4}
         assert s.supported_retention_rate == 1.0
-        assert s.refuted_retirement_rate == 1.0
+        # C10 lifecycle: 2 of 9 refutations retire (each family at most once)
+        assert s.refuted_retirement_rate == 0.2222
         assert len(set(s.plan_signature_hashes)) == 6
         assert [w["global_risk"] for w in s.windows] == \
             ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
@@ -589,6 +605,175 @@ class TestShuffledFeedback:
             comparison["static_llm_calls"] == 7 * WINDOWS
         assert comparison["static_revision_rate"] == 1.0
         assert comparison["static_plan_difference_vs_normal"] >= 1
+
+
+# --------------------------------------------------------- C10 RETIRE lifecycle
+class TestRetireLifecycle:
+    """RETIRE is a lifecycle, not a per-window event: cooldown block ->
+    retired-until-reopened -> reopen only via human authorization or
+    all-new distinguishing evidence. STALE verdicts cannot resurrect."""
+
+    def test_each_family_retires_at_most_once(self, runs):
+        ctls, _sums = runs
+        for mode in (C.MODE_NORMAL_FEEDBACK, C.MODE_SHUFFLED_FEEDBACK):
+            ctl = ctls[mode]
+            retired_ever = {}
+            for window in sorted(ctl._plans_by_window):
+                plan = ctl._plans_by_window[window]
+                for fam in plan.retired_families:
+                    assert fam not in retired_ever, (mode, fam, window)
+                    retired_ever[fam] = window
+            # no reopen happened in the base runs: registry == history
+            assert retired_ever == ctl._retired_at
+
+    def test_retirement_partition_over_the_run(self, runs):
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_NORMAL_FEEDBACK]
+        fam = FAM0                                   # retired at window 1
+        assert ctl._retired_at[fam] == 1
+        for window in range(2, 5):                   # cooldown windows 2..4
+            in_cooldown, blocked_retired, reopened = \
+                ctl._retirement_state(window)
+            assert fam in in_cooldown
+            assert fam not in blocked_retired
+            assert fam not in reopened
+        in_cooldown, blocked_retired, reopened = ctl._retirement_state(5)
+        assert fam not in in_cooldown                # cooldown over at w5...
+        assert fam in blocked_retired                # ...but NOT reopened
+        assert reopened == ()
+        # the loop never funded a blocked family in any window
+        for window in range(WINDOWS):
+            plan = ctl._plans_by_window[window]
+            funded = {a.environment_family for a in plan.allocations}
+            in_cooldown, blocked_retired, _r = ctl._retirement_state(window)
+            assert not funded & (set(in_cooldown) | set(blocked_retired))
+
+    def test_board_skips_blocked_families_entirely(self, runs):
+        """From the retirement window onwards the six roles emit NO proposal
+        and NO directive for the blocked family (tutor + explorer skip)."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_NORMAL_FEEDBACK]
+        fam = FAM0                                   # retired at window 1
+        for window in range(2, WINDOWS):
+            board = ctl.boards[window]
+            assert all(p.environment_family != fam
+                       for p in board.family_proposals), window
+            assert all(d.environment_family != fam
+                       for d in board.directives), window
+
+    def test_stale_verdict_cannot_resurrect_retired_family(self):
+        """Unit: a blocked family whose hypothesis has NO visible records
+        (the STALE branch) receives no exploration proposal — resurrection
+        is structurally impossible."""
+        from d052.feedback_llm_ued import intervention_tutor
+        fam = FAM0
+        context = dict(window=3,
+                       hypotheses=[{"hypothesis_id": "hyp-00",
+                                    "environment_family": fam}],
+                       feedback=[],                  # nothing visible: STALE
+                       board_context={"retired_families": [],
+                                      "families_in_cooldown": [fam]})
+        out = intervention_tutor.mock_rule(context)
+        fams = [p["environment_family"] for p in out["family_proposals"]]
+        assert fam not in fams
+        assert "skipped retired/cooldown families" in out["rationale"]
+        # identical context WITHOUT the block does propose exploration
+        context["board_context"] = {"retired_families": [],
+                                    "families_in_cooldown": []}
+        out = intervention_tutor.mock_rule(context)
+        fams = [p["environment_family"] for p in out["family_proposals"]]
+        assert fam in fams
+
+    def test_explorer_emits_no_directives_for_blocked_families(self):
+        from d052.feedback_llm_ued import explorer
+        fam, fam2 = FAM0, FAM1
+        rec = {"student_success_rate": 0.4, "reference_success_rate": 0.9,
+               "axis_values": {}, "distinguishes_hypothesis_ids": []}
+        context = dict(window=3,
+                       feedback=[dict(rec, feedback_id="fb-x",
+                                      environment_family=fam),
+                                 dict(rec, feedback_id="fb-y",
+                                      environment_family=fam2)],
+                       board_context={"retired_families": [fam],
+                                      "families_in_cooldown": []})
+        out = explorer.mock_rule(context)
+        fams = {d["environment_family"] for d in out["directives"]}
+        assert fam not in fams
+        assert fam2 in fams
+
+    def test_board_context_validates_retirement_lists(self):
+        from d052.feedback_llm_ued.behavior_failure import BoardContext
+        with pytest.raises(ValueError, match="UNKNOWN_ENVIRONMENT_FAMILY"):
+            BoardContext(window=0, mode=C.MODE_NORMAL_FEEDBACK,
+                         retired_families=["not_a_family"])
+        with pytest.raises(ValueError, match="DUPLICATE_FAMILY_IN"):
+            BoardContext(window=0, mode=C.MODE_NORMAL_FEEDBACK,
+                         families_in_cooldown=[FAM0, FAM0])
+
+    def test_human_reopen_authorizes_a_comeback_window(self):
+        ctl = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK,
+                                    human_reopen_families=[FAM0])
+        s = ctl.run(max_windows=WINDOWS)
+        # retired at w1, cooldown w2..w4, human-reopened at w5 — the board
+        # proposes for it again and the fresh REFUTED verdict re-retires it
+        assert ctl._retired_at[FAM0] == WINDOWS - 1
+        props = [p for p in ctl.boards[WINDOWS - 1].family_proposals
+                 if p.environment_family == FAM0]
+        assert len(props) == 1
+        assert props[0].decision == C.DECISION_RETIRE
+        assert props[0].based_on_feedback_ids           # cited, not STALE
+        assert ctl._plans_by_window[WINDOWS - 1].retired_families == [FAM0]
+        # the intermediate windows kept the family fully blocked
+        for window in range(2, WINDOWS - 1):
+            assert all(p.environment_family != FAM0
+                       for p in ctl.boards[window].family_proposals)
+        # lifecycle invariants hold under reopen: compute-matched + no
+        # double retirement before the reopen window
+        assert s.n_llm_calls == 7 * WINDOWS
+        assert s.total_simulator_transitions == \
+            WINDOWS * TRANSITIONS_PER_PROBED_WINDOW
+        assert s.decision_distribution[C.DECISION_RETIRE] == 3
+
+    def test_illegal_human_reopen_family_refused(self):
+        with pytest.raises(ValueError, match="UNKNOWN_ENVIRONMENT_FAMILY"):
+            FeedbackUEDController(C.MODE_NORMAL_FEEDBACK,
+                                  human_reopen_families=["not_a_family"])
+
+    def test_reopen_eligibility_rules(self):
+        """The reopen gate: human authorization OR genuinely new evidence —
+        an empty or stale evidence set authorizes nothing."""
+        retired = {FAM0: 1}
+        ctl = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+        ctl._seed()                                   # hyp-00 -> FAM0
+        # (a) no evidence + no authorization -> stays retired
+        assert ctl._reopen_eligible(5, retired) == ()
+        # (b) human authorization reopens regardless of evidence state
+        ctl.human_reopen_families = frozenset({FAM0})
+        assert ctl._reopen_eligible(5, retired) == (FAM0,)
+        ctl.human_reopen_families = frozenset()
+        # (c) OLD distinguishing evidence blocks the evidence path
+        cand = synthetic_candidate(candidate_id="cand-r1", family=FAM0)
+        ctl.store.add(synthetic_feedback_record(
+            feedback_id="fb-r-old", candidate=cand, plan_id="plan-x",
+            window=0, student_success_rate=0.4,
+            expected_signature={"student_success_rate": 0.47},
+            distinguishes_hypothesis_ids=["hyp-00"]))
+        assert ctl._reopen_eligible(5, retired) == ()
+        # (d) ALL distinguishing evidence strictly after the retirement
+        # window reopens the family
+        fresh = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+        fresh._seed()
+        for i, window in enumerate((2, 3)):
+            cand = synthetic_candidate(candidate_id=f"cand-r{i + 2}",
+                                       family=FAM0)
+            fresh.store.add(synthetic_feedback_record(
+                feedback_id=f"fb-r-new{i}", candidate=cand, plan_id="plan-x",
+                window=window, student_success_rate=0.4,
+                expected_signature={"student_success_rate": 0.47},
+                distinguishes_hypothesis_ids=["hyp-00"]))
+        assert fresh._reopen_eligible(5, retired) == (FAM0,)
+        # ...but never inside the cooldown, new evidence or not
+        assert fresh._reopen_eligible(3, retired) == ()
 
 
 # -------------------------------------------------------------- determinism
