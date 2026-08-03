@@ -1,0 +1,35 @@
+# Student profile — logical identity and interface parameters ONLY.
+# Teacher is a P3 reference candidate: smoke/reference only, NEVER part of the
+# 98304 formal ranking. Canonical artifact = bakeoff-era params pickle
+# (ckpt17500_params.pkl, loader THIN_GTRXL128_PICKLE_CONTROL); the canonical
+# pickle is NOT local this round (recorded MISSING; orbax raw dir is local as
+# read-only reference only).
+
+candidate_id: BASELINE_TEACHER_CKPT17500
+architecture_family: GTRXL128
+checkpoint_format: BAKEOFF_PKL
+global_step: 17500
+# total_env_steps is recorded in NO owner contract; sentinel 0 means
+# UNRECORDED (teacher is reference-only; see notes).
+total_env_steps: 0
+params_sha256: d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5
+source_commit: "src-sha256:d3d4e55259cbe7cd57112bb26bfc765cae96ae88b170397ea3e76fe2fd0196b1"
+observation_shape: [8335]
+action_count: 43
+
+memory:
+  mode: CONTINUOUS
+  fields:
+    memories: {shape: [null, 128, 2, 256], dtype: float32}
+    mmask:    {shape: [null, 8, 1, 129],   dtype: bool}
+    midx:     {shape: [null],              dtype: int32}
+
+notes:
+  role: teacher_reference_smoke_only
+  canonical_artifact_status: MISSING_LOCAL (bakeoff params pickle not on this host this round)
+  checkpoint_file_sha256: a87924a34d898fceed874c16e7332703fe960f02abaa2f8443efaecdb7482d01
+  params_sha256_regime: eval_bakeoff leaf-concatenation convention (== canonical base params)
+  canonical_base_params_sha256: d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5
+  total_env_steps_semantics: unrecorded; 0 is a sentinel, not a claim of zero training
+  source_commit_semantics: no git commit; owner-bound reference runtime source sha
+  runtime_family: gtrxl128_cc1_teacher_reference_projection

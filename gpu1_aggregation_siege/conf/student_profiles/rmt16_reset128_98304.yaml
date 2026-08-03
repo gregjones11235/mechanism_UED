@@ -1,0 +1,38 @@
+# Student profile — logical identity and interface parameters ONLY.
+# Identity values transcribed from the frozen CC4 contract
+# configs/tier3_cc2_final98304_checkpoint_contract_v1.json (contract sha
+# 7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5) and the
+# V3 evaluation certificate; all are re-verified at mount time (fail closed).
+
+candidate_id: RESET128_RMT16_ORIGINAL_VTRACE_98304
+architecture_family: RMT16
+checkpoint_format: CC2_PKL
+global_step: 98304
+total_env_steps: 98304
+params_sha256: 78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2
+source_commit: "src-sha256:453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc"
+observation_shape: [8335]
+action_count: 43
+
+memory:
+  # Same memory tree as the persistent arm; ONLY the carry policy differs:
+  # mem_tokens are cleared to zero at every 128-step segment boundary.
+  mode: RESET128
+  fields:
+    memories:        {shape: [null, 128, 2, 256], dtype: float32}
+    mem_mask:        {shape: [null, 8, 1, 129],   dtype: bool}
+    mem_idx:         {shape: [null],              dtype: int32}
+    rmt.mem_tokens:  {shape: [null, 16, 256],     dtype: float32}
+    rmt.seg_buf:     {shape: [null, 128, 256],    dtype: float32}
+    rmt.seg_count:   {shape: [null],              dtype: int32}
+
+notes:
+  carry_mode: reset128
+  replay_mode: original_vtrace
+  training_seed: "42"
+  checkpoint_file_sha256: de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638
+  checkpoint_contract_sha256: 7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5
+  params_sha256_regime: cc2_params_sha256 (jax tree_leaves order, leaf bytes concatenated)
+  source_commit_semantics: no git commit; frozen training-driver source sha
+  cc2_pkl_top_level: exactly params + manifest (manifest has no optimizer, rng or memory)
+  r4c_joint_proof_status: unavailable on optimizer, rng and memory sides for this family

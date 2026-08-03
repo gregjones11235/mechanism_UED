@@ -1,0 +1,31 @@
+# Student profile — logical identity and interface parameters ONLY.
+# Identity values transcribed from the V3 evaluation certificate and the CC1
+# owner capsule (gtrxl128_cc1_control_projection); re-verified at mount time.
+# Checkpoint is an orbax training-checkpoint directory (flat TrainState).
+
+candidate_id: CONTROL_CONTINUOUS_98304
+architecture_family: GTRXL128
+checkpoint_format: ORBAX_FLAT_TRAINSTATE
+global_step: 98304
+total_env_steps: 98304
+params_sha256: 4c313c58d2d01f44c98ceb2e18580577e7735cd210e5c3d9b4ee3db3b286d505
+# No git commit exists for the server training run; the commit field carries
+# the owner-bound reference runtime source sha (gtrxl128_reference_runtime.py).
+source_commit: "src-sha256:d3d4e55259cbe7cd57112bb26bfc765cae96ae88b170397ea3e76fe2fd0196b1"
+observation_shape: [8335]
+action_count: 43
+
+memory:
+  mode: CONTINUOUS
+  fields:
+    memories: {shape: [null, 128, 2, 256], dtype: float32}
+    mmask:    {shape: [null, 8, 1, 129],   dtype: bool}
+    midx:     {shape: [null],              dtype: int32}
+
+notes:
+  carry_mode: continuous
+  checkpoint_dir_sha256: 34819d779ad91e59cd62836c803ba9226ffa3623368c12d74044e58cd6db9913
+  checkpoint_dir_sha_protocol: sha256 over sorted (relpath, file_sha256) pairs (CC1 orbax directory protocol)
+  params_sha256_regime: owner CC1 interface smoke (eval_bakeoff leaf-concatenation convention)
+  source_commit_semantics: no git commit; owner-bound reference runtime source sha
+  runtime_family: gtrxl128_cc1_control_projection
