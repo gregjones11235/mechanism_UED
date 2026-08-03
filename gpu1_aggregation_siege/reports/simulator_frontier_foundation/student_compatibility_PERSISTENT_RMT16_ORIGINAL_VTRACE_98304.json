@@ -166,14 +166,14 @@
   },
   "fresh_process_recheck": {
     "returncode": 0,
-    "elapsed_s": 0.731,
+    "elapsed_s": 0.602,
     "executable": "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\sim_frontier_venv\\Scripts\\python.exe",
     "in_process_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
     "fresh_process_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
     "match": true
   },
   "verdict": "PASS",
-  "elapsed_s": 36.13,
+  "elapsed_s": 33.81,
   "environment": {
     "python": "3.12.4",
     "platform": "Windows-11-10.0.26200-SP0",
