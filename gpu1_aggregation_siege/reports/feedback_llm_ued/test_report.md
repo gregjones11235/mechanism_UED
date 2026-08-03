@@ -1,46 +1,51 @@
-# 测试报告（test_report）— feedback_llm_ued
+# 测试报告（test_report）— feedback_llm_ued（六角色 + 双窗口状态机版）
 
 全部命令在 worktree
 `C:/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree/gpu1_aggregation_siege`
-下执行，Python 为 `/d/Anaconda/python`（3.12.4）。结果为真实运行输出，未修饰。
+下执行，Python 为 `/d/Anaconda/python`（3.12.4，无 jax/flax/orbax），
+`PYTHONPATH=.`。结果为真实运行输出，未修饰。
 
 ## 1. 测试命令
 
 ```bash
 cd /c/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree/gpu1_aggregation_siege
 
-# 新方向测试（6 个文件）
-/d/Anaconda/python -m pytest \
-  d052/tests/test_feedback_llm_ued_contracts.py \
-  d052/tests/test_feedback_llm_ued_ledger_store.py \
-  d052/tests/test_feedback_llm_ued_compare_gate_reconcile.py \
-  d052/tests/test_feedback_llm_ued_roles.py \
-  d052/tests/test_feedback_llm_ued_probe.py \
-  d052/tests/test_feedback_llm_ued_controller.py -q
+# 方向二全部测试（16 个文件）
+PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests/test_feedback_llm_ued_*.py -q
 
 # d052 全量套件
-/d/Anaconda/python -m pytest d052/tests -q
+PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests -q
 ```
 
-## 2. 新方向测试结果：109 passed / 0 failed
+## 2. 方向二测试结果：366 passed / 0 failed
 
 ```
-109 passed in 0.60s
+366 passed in 5.97s
 ```
 
-| 文件 | 用例数 | 覆盖内容 |
+| 文件 | 用例数 | 覆盖内容（摘要） |
 |---|---|---|
-| `test_feedback_llm_ued_contracts.py` | 16 | 候选哈希稳定性、族/轴合法性、真实适配器状态诚实、ProbeMetrics 正式源拒绝、计划签名与顺序无关、PlanModification/PlanRevisionRecord 全部诚实性错误码（EXPLORATION_LABEL_REQUIRED / EXPLORATION_DECISION_ONLY / MASQUERADE_FORBIDDEN / REVISION_LABEL_FORCED / FEEDBACK_ID_MISMATCH / UNKNOWN_FEEDBACK_ID）、prompt 上下文块往返 |
-| `test_feedback_llm_ued_ledger_store.py` | 18 | 假设生命周期（PENDING→各 verdict）、修订历史哈希链（previous_record_hash 逐条衔接）、bind_feedback 重哈希、非法状态/置信度拒绝；store 重复 id、REFERENCE_FIELD_FORBIDDEN、REFERENCE_CARRIER_FORBIDDEN、FORMAL_SOURCE_FORBIDDEN（构造时即 raise）、候选哈希 sha256 校验、bind_match 重哈希与 graded 过滤 |
-| `test_feedback_llm_ued_compare_gate_reconcile.py` | 27 | 比较器 agree/neutral/opposite 阈值、counter 语义、MAJORITY 总体判定、无重叠→neutral、NO_PROBE_METRICS；gate 8 条 must-invoke 条件逐条独立触发 + 阈值严格性 + 顺序确定性；reconciler 预算恰好 12、探索预留不被饿死、探索上限、悬空引用、RETIRE_REQUIRES_FEEDBACK、伪装禁止、retire-overrides-active、REQUEST_CONTROL 零预算、重复去重、空提案 fail-closed、确定性 plan_id |
-| `test_feedback_llm_ued_roles.py` | 17 | Diagnostician verdict 由反馈绑定派生（SUPPORTED/REFUTED/INCONCLUSIVE/STALE + 置信度漂移 + 风险升级 HIGH/MEDIUM/LOW）；Designer verdict→决策映射、STALE→诚实探索、高风险→REQUEST_CONTROL、输出诚实性校验；Reviewer 7 条触发器逐条 + 过度自信关注 + 族冲突强制退休 + 探索越界；mock 后端 real_calls=0、未知角色拒绝、三角色全部分派、envelope 哈希绑定与确定性 |
-| `test_feedback_llm_ued_probe.py` | 15 | 静态合法性 3 分支、符号探针确定性与 Reference 载荷干净、非法 stage/episode 预算全部 raise、真实 Craftax 接缝 ProbeRunnerBlocked（BLOCKED_NO_LOCAL_CRAFTAX）、漏斗形状 64→64→24→24→12+4=16、转移数 61440 精确核算、跨 runner 确定性、raw 上限、哈希去重、静态拒绝记录、生成器 64 候选合法性与假设绑定 |
-| `test_feedback_llm_ued_controller.py` | 16 | 端到端三模式（6 窗/模式）：授权旗标全 False + 任一为 True 即拒绝构造、未知模式拒绝；static 基线 0 次 LLM/计划恒定/仅窗口 0 探针；normal 15 次调用、revision_rate=0.8333、supported_retention=1.0、refuted_retirement=1.0、引用覆盖>0.5、账本被绑定反馈驱动、所有引用均存在于 store、envelope 哈希绑定、模拟成本 368640；shuffled 绑定标记、计划与决策分布偏离 normal、feedback_binding_matters=True；两次运行逐字节确定性 |
+| `test_feedback_llm_ued_controller.py` | 57 | 授权姿态（全部 REAL_* 旗标 False、C16 工程旗标 True、任一 never-true 旗标为 True 即拒绝构造）；双窗口状态机：同窗 apply verdict/改计划→SAME_WINDOW_REVISION_FORBIDDEN、FUTURE/UNKNOWN/DUPLICATE_FEEDBACK_ID、P0-6 绑定守卫、phase 迁移；三模式端到端（7 调用/窗、61440 transitions/探针窗、revision 滞后反馈一窗）；C10 cooldown/重开；C11 REQUEST_CONTROL 停环 + artifact + final_batch final=False；确定性逐字节 |
+| `test_feedback_llm_ued_review_board.py` | 31 | 六角色固定顺序与每窗完整 6 次调用；verdict 显式引用 feedback_id/hypothesis_id/prediction_signature；新假设 PENDING+预测签名；AxisDirective 合法性；Critic 升级规则（HIGH_SEVERITY_FLOOR/OPPOSITE_MATCH_FLOOR/WIDE_CI）与 endorsed；REQUEST_CONTROL 两触发路径 |
+| `test_feedback_llm_ued_persistence.py` | 31 | C15：冻结点快照→恢复→续跑与不间断运行 summary 逐字节一致（normal+shuffled）；fresh subprocess 恢复哈希一致；篡改矩阵（顶层字段+重签名深篡改）→HASH_CHAIN_BROKEN；逐假设 revision 链校验单元负测；原子写无 .tmp 残留；停环恢复保持停止且零新增调用 |
+| `test_feedback_llm_ued_selection_anchors.py` | 26 | C12+C13：八准则 clamp 与 schema 合法性；共享 soft_copeland_rank 等价（ranking_hash 逐字节一致，不分叉）；constant 维度 provenance；族多样性贪心（penalty 0 vs 0.5 对照）；AnchorManifestSource（缺失/未冻结/哈希不一致 fail-closed）；controller 锚位绑定（占位标签、冻结 manifest 绑定、三模式预算相等） |
+| `test_feedback_llm_ued_compare_gate_reconcile.py` | 28 | 比较器阈值与 MAJORITY；reconciler 预算/探索预留/悬空引用/伪装禁止/RETIRE_REQUIRES_FEEDBACK/REQUEST_CONTROL 零预算 |
+| `test_feedback_llm_ued_probe.py` | 21 | 漏斗形状 64→64→24→12+4=16；61440 transitions 精确核算；stage-2 Copeland 审计字段（score/copeland_rank/criteria/selected）；锚位重复/数量非法 fail-closed |
+| `test_feedback_llm_ued_hash_recompute.py` | 20 | C14：七类对象空哈希计算、携带哈希逐字比较（mismatch→CONTENT_HASH_MISMATCH）、自 dump 往返、构造后 tamper→rehash 暴露、Envelope 三哈希与 replay key 一致 |
+| `test_feedback_llm_ued_axis_directive.py` | 19 | 轴/层级/方向/角色合法性、control 必须 hold、treatment 方向-层级一致、held axes 约束、批次唯一性与每窗每轴至多一个 treatment |
+| `test_feedback_llm_ued_backends.py` | 19 | Mock/Replay/Real 后端：usage 计数、未授权构造 Blocked、录制-回放等价、assert_no_real_llm_usage |
+| `test_feedback_llm_ued_view_isolation.py` | 18 | C9：static board 上下文零反馈载荷（结构级）；shuffled 冻结置换可复算、匿名化 id、身份侧信道不可还原；三模式角色/EnvCoder/seed/预算一致 |
+| `test_feedback_llm_ued_evidence.py` | 17 | 行为失败证据提取（return shortfall/早停/行为激活缺口/reference gap）+ 确定性 CI 半宽 |
+| `test_feedback_llm_ued_ledger_store.py` | 18 | 账本生命周期与哈希链衔接；store 白名单/formal 源拒绝/bind_match 重哈希 |
+| `test_feedback_llm_ued_real_probe.py` | 16 | ExecutableCandidate 哈希重算、RealTaskParamsAdapter、FakeStepEnv fake-real、未授权 Blocked |
+| `test_feedback_llm_ued_contracts.py` | 16 | 候选哈希稳定性、计划签名顺序无关、诚实性错误码、上下文块往返 |
+| `test_feedback_llm_ued_student_binding.py` | 15 | 固定身份 PERSISTENT_RMT16_ORIGINAL_VTRACE_98304、CC4 缺失 fail-closed、训练接缝 no-op 记账、诚实姿态 |
+| `test_feedback_llm_ued_env_coder.py` | 14 | SpecEnvCoder 确定性、compile/reset/step 三级门禁 fail-closed、LLM 接缝 Blocked |
 
-## 3. d052 全量套件：663 passed / 6 failed（均为既有环境性失败）
+## 3. d052 全量套件：920 passed / 6 failed（均为既有环境性失败）
 
 ```
-6 failed, 663 passed, 2 warnings in 5.45s
+6 failed, 920 passed, 2 warnings in 10.41s
 
 FAILED d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13
 FAILED d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors
@@ -52,33 +57,52 @@ FAILED d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unc
 
 对照说明（诚实性）：
 
-- 本方向改动前的基线为 **554 passed + 同样 6 个环境性失败**（任务 #86 记录）。
-- 现在 663 = 554 + 109（本方向新增），**6 个失败与本方向无关**：全部位于
-  `test_real_bundle_reconciliation.py`，依赖本 worktree 不具备的历史 real-bundle
-  数据，在改动前即失败，失败名单完全一致。
-- 无任何新增失败、无跳过掩盖。
+- 本方向开工前基线为 554 passed + 同样 6 个环境性失败；C1–C16 过程中基线
+  演进 554→749→889→920，**6 个失败名单全程未变**。
+- 6 个失败全部位于 `test_real_bundle_reconciliation.py`，依赖本 worktree
+  不具备的历史 real-bundle 数据，与本方向无关。
+- 无新增失败、无跳过掩盖；C16 旗标翻转（E2_FORMAL_PLAN_ALIGNED /
+  FEEDBACK_REVISION_BOUND → True）后全量复跑确认无回归。
 
-## 4. Smoke（三模式闭环 6 窗）
+## 4. Smoke（三模式闭环 6 窗，新架构真实输出）
 
-命令（真实执行，输出见 `final_implementation_report.md` §5）：
+命令（真实执行）：
 
 ```bash
-/d/Anaconda/python -c "
+PYTHONPATH=. /d/Anaconda/python -c "
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.controller import FeedbackUEDController
 sums = {}
 for mode in (C.MODE_STATIC_LLM, C.MODE_NORMAL_FEEDBACK, C.MODE_SHUFFLED_FEEDBACK):
     sums[mode] = FeedbackUEDController(mode).run(max_windows=6)
-cmp_ = FeedbackUEDController.compare_summaries(sums[C.MODE_NORMAL_FEEDBACK], sums[C.MODE_SHUFFLED_FEEDBACK], sums[C.MODE_STATIC_LLM])
 print('SMOKE OK: modes=3 windows=6')
 for m, s in sums.items():
-    print(f'  {m}: llm_calls={s.n_llm_calls} revision_rate={s.revision_rate} supp_retain={s.supported_retention_rate} ref_retire={s.refuted_retirement_rate} transitions={s.total_simulator_transitions}')
-print('  comparison: plan_difference_windows=%s feedback_binding_matters=%s static_llm_calls=%s' % (cmp_['plan_difference_windows'], cmp_['feedback_binding_matters'], cmp_['static_llm_calls']))
+    print(f'  {m}: n_windows={s.n_windows} llm_calls={s.n_llm_calls} revision_rate={s.revision_rate} decisions={s.decision_distribution} citation_cov={round(s.feedback_citation_coverage,4)} supp_retain={s.supported_retention_rate} ref_retire={s.refuted_retirement_rate} transitions={s.total_simulator_transitions}')
+print('  comparison:', FeedbackUEDController.compare_summaries(
+    sums[C.MODE_NORMAL_FEEDBACK], sums[C.MODE_SHUFFLED_FEEDBACK], sums[C.MODE_STATIC_LLM]))
 "
 ```
 
+真实输出：
+
+```
+SMOKE OK: modes=3 windows=6
+  static_llm: n_windows=6 llm_calls=42 revision_rate=1.0 decisions={'MUTATE': 6} citation_cov=0.0 supp_retain=0.0 ref_retire=0.0 transitions=368640
+  normal_feedback: n_windows=6 llm_calls=42 revision_rate=1.0 decisions={'MUTATE': 7, 'RETIRE': 2, 'RETAIN': 6} citation_cov=0.8047 supp_retain=1.0 ref_retire=0.2857 transitions=368640
+  shuffled_feedback: n_windows=6 llm_calls=42 revision_rate=1.0 decisions={'MUTATE': 7, 'RETIRE': 2, 'RETAIN': 4} citation_cov=0.8047 supp_retain=1.0 ref_retire=0.2222 transitions=368640
+  comparison: plan_difference_windows=4 plan_identical_windows=2
+    feedback_binding_matters=True static_plan_difference_vs_normal=5
+```
+
+口径说明：新架构下 static 基线也执行完整六角色+EnvCoder（compute-matched，
+每窗 7 次 LLM 族调用、6 窗共 42 次），与旧版 0 调用基线不同；其反馈视图是
+结构性空的 NullFeedbackView，故 citation_cov=0、无 verdict 驱动的
+retain/retire，计划修订全部为 EXPLORATION。
+
 ## 5. 结论
 
-- 109 个新测试全绿；全量套件无回归（基线失败名单不变）。
-- 闭环数值（revision_rate、retain/retire 分布、引用覆盖、normal≠shuffled）
-  由端到端测试与 smoke 双重锁定，且两次独立运行逐字节一致。
+- 366 个方向二测试全绿；全量套件 920 通过、基线失败名单不变。
+- 双窗口时序、对照隔离、哈希重算、持久化/跨窗恢复等价（含 fresh-process）
+  均有专门正负测试锁定；两次独立运行 summary 逐字节一致（确定性）。
+- 闭环数值（引用覆盖 0.8047、normal≠shuffled、feedback_binding_matters=True）
+  由端到端测试与 smoke 双重锁定。

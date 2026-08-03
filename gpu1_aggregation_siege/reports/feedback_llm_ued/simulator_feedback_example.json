@@ -1,78 +1,111 @@
 {
-  "description": "One complete real SimulatorFeedbackRecord from window 1 of a normal_feedback run. stage1/stage2 metrics come from the deterministic symbolic probe runner (BLOCKED_NO_LOCAL_CRAFTAX); expected_observed_match was graded by the ExpectedObservedComparator. The record carries only episode-level aggregates — no Reference action guidance.",
+  "description": "One complete real SimulatorFeedbackRecord (window 1) of a normal_feedback run. stage1/stage2 metrics come from the deterministic symbolic probe runner (BLOCKED_NO_LOCAL_CRAFTAX); expected_observed_match was graded by the ExpectedObservedComparator. The record is hash-bound (C14 recomputation) and carries Student identity fields (fixed PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 binding; CC4 shared StudentAdapter absent -> REAL_CHECKPOINT_LOADED=false). Only episode-level aggregates — no Reference action guidance.",
   "mode": "normal_feedback",
   "record": {
     "axis_values": {
-      "long_term_memory_requirement": "low"
+      "resource_pressure": "medium"
     },
-    "candidate_hash": "6aba448165ad628fa9217eadee4d1a5ff6f113cb5b3bf3bac8750fe71f36ff77",
-    "candidate_id": "cand-w01-long_term_memory_family-00",
-    "distinguishes_hypothesis_ids": [],
-    "environment_family": "long_term_memory_family",
-    "expected_observed_match": "neutral",
-    "expected_signature": {},
-    "feedback_id": "fb-w01-cand-w01-long_term_memory_family-00",
+    "candidate_hash": "22af7ab19dc29dade17cce49dfb33e64adc53b482b4e3895545733873240fd87",
+    "candidate_id": "cand-w01-resource_pressure_family-00",
+    "distinguishes_hypothesis_ids": [
+      "hyp-01"
+    ],
+    "environment_family": "resource_pressure_family",
+    "expected_observed_match": "opposite",
+    "expected_signature": {
+      "student_behavior_activation": 0.55,
+      "student_front_progress": 0.48,
+      "student_success_rate": 0.47
+    },
+    "feedback_id": "fb-w01-cand-w01-resource_pressure_family-00",
     "held_constant_axes": {},
     "match_detail": {
       "n_agree": 0,
-      "n_compared": 0,
-      "n_neutral": 0,
-      "n_opposite": 0,
-      "no_overlap": true,
-      "overall": "neutral",
-      "per_metric": {},
+      "n_compared": 3,
+      "n_neutral": 1,
+      "n_opposite": 2,
+      "no_overlap": false,
+      "overall": "opposite",
+      "per_metric": {
+        "student_behavior_activation": {
+          "counter": null,
+          "direction": "neutral",
+          "expected": 0.55,
+          "observed": 0.816567
+        },
+        "student_front_progress": {
+          "counter": null,
+          "direction": "opposite",
+          "expected": 0.48,
+          "observed": 0.845213
+        },
+        "student_success_rate": {
+          "counter": null,
+          "direction": "opposite",
+          "expected": 0.47,
+          "observed": 0.826135
+        }
+      },
       "skipped_expected_metrics": [],
       "tolerance": 0.25
     },
+    "memory_compatibility_status": "NOT_APPLICABLE_LOCAL",
     "mutation_axes": [
-      "long_term_memory_requirement"
+      "resource_pressure"
     ],
     "protocol_version": "canonical_v2",
     "provenance": {
       "binding": "normal",
-      "plan_id": "plan-0001-a9931391ebaa1ba2",
+      "plan_id": "plan-0001-efd6ab52bbb35dfa",
       "real_adapter_status": "BLOCKED_NO_LOCAL_CRAFTAX",
       "runner_id": "mock.feedback_llm_ued.symbolic_probe.v1",
       "source": "CANDIDATE_PROBE",
       "window": 1
     },
-    "record_hash": "cf79d26073576dbd1ec7e7803fc289382f455183b3b1d7e3b46c490849107cd1",
+    "record_hash": "2c532d222b7bad691c03bc2cbd810c06ce3080c8f00e8c47fd1cfa40b8948ff9",
+    "reference_identity_hash": "",
     "reference_stats": {},
-    "source_plan_id": "plan-0001-a9931391ebaa1ba2",
+    "source_plan_id": "plan-0001-efd6ab52bbb35dfa",
     "stage1_metrics": {
-      "global_retention": 0.91925,
-      "learnability": 0.616,
+      "global_retention": 0.792248,
+      "learnability": 0.053,
       "probe_source": "CANDIDATE_PROBE",
       "protocol_version": "canonical_v2",
-      "reference_behavior_activation": 0.815925,
-      "reference_mean_progress": 0.781692,
-      "reference_success_rate": 0.963967,
-      "regret": 0.391154,
+      "reference_behavior_activation": 0.941942,
+      "reference_mean_progress": 0.750749,
+      "reference_success_rate": 1.0,
+      "regret": 0.173865,
       "simulator_transitions": 384,
       "stage": "fast",
-      "student_behavior_activation": 0.662467,
-      "student_front_progress": 0.716033,
-      "student_success_rate": 0.572813,
+      "student_behavior_activation": 0.816567,
+      "student_front_progress": 0.845213,
+      "student_success_rate": 0.826135,
       "too_easy": false,
       "too_hard": false
     },
     "stage2_metrics": {
-      "global_retention": 0.91925,
-      "learnability": 0.616,
+      "global_retention": 0.792248,
+      "learnability": 0.053,
       "probe_source": "CANDIDATE_PROBE",
       "protocol_version": "canonical_v2",
-      "reference_behavior_activation": 0.815925,
-      "reference_mean_progress": 0.781692,
-      "reference_success_rate": 0.963967,
-      "regret": 0.391154,
+      "reference_behavior_activation": 0.941942,
+      "reference_mean_progress": 0.750749,
+      "reference_success_rate": 1.0,
+      "regret": 0.173865,
       "simulator_transitions": 1536,
       "stage": "full",
-      "student_behavior_activation": 0.662467,
-      "student_front_progress": 0.716033,
-      "student_success_rate": 0.572813,
+      "student_behavior_activation": 0.816567,
+      "student_front_progress": 0.845213,
+      "student_success_rate": 0.826135,
       "too_easy": false,
       "too_hard": false
     },
+    "student_checkpoint_step": 0,
+    "student_identity_hash": "86090f23be8fd9e9015f37adc5ec8e8ed61d31fdcbe7ca95eb8fd817313fac5b",
+    "student_parameter_tree_hash": "9c64b96cf0c4f653a81c520447714ac3d69a7a93dff0323b09c755da78cbd0aa",
+    "student_roles": [
+      "search"
+    ],
     "window": 1
   },
   "store_size_after_run": 384

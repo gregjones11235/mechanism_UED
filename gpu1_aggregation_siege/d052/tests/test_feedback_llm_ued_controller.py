@@ -154,6 +154,12 @@ class TestAuthorizationPosture:
         assert len(C.SEED_SCHEDULE_HASH) == 64
         # C10 RETIRE lifecycle constant
         assert C.RETIRE_COOLDOWN_WINDOWS == 3
+        # C16: the plan-alignment and feedback-binding engineering flags are
+        # ON (ENGINEERING_SCAFFOLD evidence level; every REAL_* flag above
+        # remains False)
+        assert C.SIX_ROLE_BOARD_IMPLEMENTED is True
+        assert C.E2_FORMAL_PLAN_ALIGNED is True
+        assert C.FEEDBACK_REVISION_BOUND is True
 
     def test_controller_refuses_any_true_flag(self, monkeypatch):
         monkeypatch.setattr(C, "TRAINING_AUTHORIZED", True)

@@ -78,11 +78,21 @@ SHARED_ANCHOR_MANIFEST_BOUND = False
 BLOCKED_SHARED_ANCHOR_MANIFEST = "BLOCKED_SHARED_ANCHOR_MANIFEST"
 
 #: engineering-progress flags (may flip True as scaffold pieces land):
-E2_FORMAL_PLAN_ALIGNED = False
+#: C16 earned: the direction-two formal plan (six-role Review Board +
+#: independent EnvCoder + double-window state machine + three-mode
+#: structural isolation + shared Soft Copeland + anchor-manifest seam +
+#: hash recomputation + persistence/restore equivalence) is fully
+#: implemented and tested — at ENGINEERING_SCAFFOLD evidence level (mock
+#: backend + symbolic probe; every REAL_* flag below remains False).
+E2_FORMAL_PLAN_ALIGNED = True
 #: C6 earned: six-role Review Board implemented (mock rules,
 #: ENGINEERING_SCAFFOLD evidence — no real LLM calls).
 SIX_ROLE_BOARD_IMPLEMENTED = True
-FEEDBACK_REVISION_BOUND = False
+#: C16 earned: plan revisions are bound to Simulator feedback — window k+1's
+#: six roles cite window-k feedback ids/hypothesis ids/prediction signatures
+#: explicitly, the revision record's label is forced by its citation union,
+#: and uncited modifications can only be EXPLORATION (hard validators).
+FEEDBACK_REVISION_BOUND = True
 #: C8 earned: the double-window state machine guarantees a plan revision at
 #: window k may cite ONLY feedback from windows <= k-1 (the window-k board's
 #: six roles are the sole producers of window-k revisions).
