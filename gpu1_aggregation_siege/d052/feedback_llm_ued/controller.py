@@ -58,6 +58,21 @@ explicit ``human_reopen_families`` constructor authorization or because ALL
 distinguishing probe evidence postdates the retirement window. A STALE
 verdict can therefore never resurrect a retired family.
 
+C11 REQUEST_CONTROL blocking: when a window's board requests human control
+(critic escalation and/or tutor REQUEST_CONTROL proposals), the loop HALTS
+immediately after phase B: no verdicts are applied, no plan is produced, no
+probe runs, nothing is frozen — the stopped window produced NO execution
+batch. The halt is recorded as a deterministic HumanDecisionArtifact (bound
+to the escalated window's ``board_hash``, tutor citations resolved to real
+store ids through the window's view), the WindowRecord documents the stop
+(phase stays BOARD, revision_label = REQUEST_CONTROL_STOPPED, training
+NOT_EXECUTED_REQUEST_CONTROL), and the RunSummary carries the artifact plus
+the LaunchGate ``final_batch`` verdict, whose ``final`` is ALWAYS False for
+a stopped loop (and for this whole round, since training is unauthorized).
+The stopped window is closed to revision exactly like a frozen one: its
+phase is not REVISION, so apply_board_verdicts / revise_plan raise
+SAME_WINDOW_REVISION_FORBIDDEN.
+
 Honesty posture re-asserted at construction: every real-world authorization
 flag must be False this round; the loop runs on the deterministic mock LLM
 backend + the deterministic symbolic probe runner and says so in every
@@ -96,6 +111,7 @@ from d052.feedback_llm_ued.feedback_view import (
 )
 from d052.feedback_llm_ued.intervention_tutor import FamilyProposal
 from d052.feedback_llm_ued.formal_isolation import FormalSourceIsolationGuard
+from d052.feedback_llm_ued.human_decision import HumanDecisionArtifact
 from d052.feedback_llm_ued.hypothesis_ledger import (
     HypothesisLedger,
     HypothesisRecord,
@@ -195,6 +211,13 @@ class RunSummary:
     transitions_per_useful_environment: float
     plan_signature_hashes: List[str]
     windows: List[dict]
+    # -- C11 REQUEST_CONTROL blocking audit trail --------------------------
+    request_control_stopped: bool = False
+    stopped_window: Optional[int] = None
+    human_decision_artifact: Optional[dict] = None
+    #: FeedbackLaunchGate.evaluate_final_batch verdict (FinalBatchDecision
+    #: as a dict); ``final`` is always False for a stopped loop
+    final_batch: Dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -258,6 +281,10 @@ class FeedbackUEDController:
         #: Sole keeper is this controller; the board reads blocked lists via
         #: the board context, the Reconciler re-checks fail closed.
         self._retired_at: Dict[str, int] = {}
+        #: C11: one artifact per REQUEST_CONTROL stop (the loop halts at the
+        #: first one, so at most one entry in practice — the list keeps the
+        #: type honest for future resume-after-human-decision work)
+        self.human_decision_artifacts: List[HumanDecisionArtifact] = []
 
     # ------------------------------------------------------------------ seeds
     def _seed(self) -> None:
@@ -280,9 +307,18 @@ class FeedbackUEDController:
     def run(self, max_windows: int = C.MAX_WINDOWS) -> RunSummary:
         self._seed()
         records: List[WindowRecord] = []
+        stopped_window: Optional[int] = None
         for window in range(max_windows):
-            records.append(self._run_window(window))
-        self._summary = self._build_summary(records)
+            record = self._run_window(window)
+            records.append(record)
+            if record.request_control:
+                # C11: the board requested human control — the loop HALTS
+                # right after the escalated board. No execution batch, no
+                # probe, nothing else is applied autonomously.
+                stopped_window = window
+                break
+        self._summary = self._build_summary(records,
+                                            stopped_window=stopped_window)
         assert_no_real_llm_usage(self.backend.usage)
         return self._summary
 
@@ -310,6 +346,36 @@ class FeedbackUEDController:
         self._sequence += C.BOARD_CALLS_PER_WINDOW
         self.envelopes.extend(board.envelopes)
         self.boards[window] = board
+
+        # -- C11 REQUEST_CONTROL blocking: the board asked a human to take
+        #    over. Halt IMMEDIATELY after phase B: no verdict application,
+        #    no plan, no probe, no freeze — this window produced NO
+        #    execution batch. The stopped WindowRecord keeps phase BOARD,
+        #    which also closes it to revision (SAME_WINDOW_REVISION_-
+        #    FORBIDDEN on any later apply_board_verdicts / revise_plan).
+        if board.request_control:
+            artifact = self._escalation_artifact(window, board, view)
+            self.human_decision_artifacts.append(artifact)
+            return WindowRecord(
+                window=window, mode=self.mode, phase=self._phases[window],
+                evidence_window=evidence_window,
+                feedback_view_label=view.label,
+                board_call_count=C.BOARD_CALLS_PER_WINDOW,
+                env_coder_call_count=0,
+                n_llm_calls=self.backend.usage.total_calls - n_calls_before,
+                request_control=True,
+                global_risk=board.critic.global_risk,
+                plan_id="",
+                plan_signature_hash="",
+                revision_label=C.REVISION_LABEL_REQUEST_CONTROL_STOPPED,
+                n_directives=len(board.directives),
+                n_coded=0,
+                gate_passed=False,
+                n_candidates=0,
+                n_feedback_records=0,
+                funnel_stats={},
+                window_aggregates={},
+                training_step_status="NOT_EXECUTED_REQUEST_CONTROL")
 
         # -- C. REVISION phase: verdicts -> ledger; proposals -> plan_k -----
         self._set_phase(window, PHASE_REVISION)
@@ -453,6 +519,45 @@ class FeedbackUEDController:
             if window - w > C.RETIRE_COOLDOWN_WINDOWS
             and fam not in reopened)
         return in_cooldown, blocked_retired, reopened
+
+    # --------------------------------------- C11 REQUEST_CONTROL blocking
+    def _escalation_artifact(self, window: int, board: BoardOutput, view
+                             ) -> HumanDecisionArtifact:
+        """Build the audit-grade HumanDecisionArtifact for a REQUEST_CONTROL
+        stop.
+
+        Tutor-proposal citations are resolved through the window's view
+        FIRST (de-anonymization under the shuffled mode), so the artifact
+        only ever carries REAL store ids — a human reviewer reads the same
+        ids the SimulatorFeedbackStore holds. The ``board_hash`` binds the
+        complete BoardOutput of the escalated window (all six role outputs,
+        verdicts, directives, proposals), so every detail of the stop is
+        recomputable from the frozen record.
+        """
+        sources: set = set()
+        if board.critic.request_control:
+            sources.add(C.ROLE_CRITIC_SKEPTIC)
+        rc_proposals = [p for p in board.family_proposals
+                        if p.decision == C.DECISION_REQUEST_CONTROL]
+        if rc_proposals:
+            sources.add(C.ROLE_INTERVENTION_TUTOR)
+        cited = sorted({view.resolve_citation(fid)
+                        for p in rc_proposals
+                        for fid in p.based_on_feedback_ids})
+        return HumanDecisionArtifact(
+            artifact_id=f"hda-w{window:02d}-{board.board_hash[:16]}",
+            window=window, mode=self.mode,
+            trigger_sources=sorted(sources),
+            global_risk=board.critic.global_risk,
+            critic_objections=list(board.critic.objections),
+            request_control_families=sorted(
+                {p.environment_family for p in rc_proposals}),
+            cited_feedback_ids=cited,
+            board_hash=board.board_hash,
+            reason=(f"window {window}: the six-role board requested human "
+                    f"control (sources: {sorted(sources)}); the loop stops, "
+                    f"no execution batch is produced, and nothing else is "
+                    f"applied autonomously"))
 
     # ------------------------------------------------- revision (phase C)
     def validate_verdict_citations(self, window: int, verdicts) -> None:
@@ -763,7 +868,8 @@ class FeedbackUEDController:
             behavior_activation=round(sum(acts) / len(acts), 6),
             learnability=round(sum(learns) / len(learns), 6))
 
-    def _build_summary(self, records: List[WindowRecord]) -> RunSummary:
+    def _build_summary(self, records: List[WindowRecord],
+                       stopped_window: Optional[int] = None) -> RunSummary:
         n_windows = len(records)
         n_revisions = len(self.revisions)
         decision_dist: Dict[str, int] = {}
@@ -802,6 +908,11 @@ class FeedbackUEDController:
         transitions = self.runner.total_transitions
         useful = sum(int(rec.funnel_stats.get("dynamic_selected", 0))
                      for rec in records)
+        # C11: the final-batch verdict — a REQUEST_CONTROL-stopped loop can
+        # NEVER ship a final batch (and this round never trains anyway).
+        final_batch = self.launch_gate.evaluate_final_batch(
+            loop_completed=(stopped_window is None),
+            request_control_stopped=(stopped_window is not None))
         return RunSummary(
             mode=self.mode,
             n_windows=n_windows,
@@ -817,7 +928,13 @@ class FeedbackUEDController:
             transitions_per_useful_environment=(
                 round(transitions / useful, 2) if useful else 0.0),
             plan_signature_hashes=[r.plan_signature_hash for r in records],
-            windows=[r.to_dict() for r in records])
+            windows=[r.to_dict() for r in records],
+            request_control_stopped=stopped_window is not None,
+            stopped_window=stopped_window,
+            human_decision_artifact=(
+                self.human_decision_artifacts[-1].model_dump()
+                if self.human_decision_artifacts else None),
+            final_batch=asdict(final_batch))
 
     def _verdicts_by_window(self) -> Dict[int, List[Tuple[str, str]]]:
         out: Dict[int, List[Tuple[str, str]]] = {}

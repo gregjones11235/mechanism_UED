@@ -46,6 +46,23 @@ class LaunchDecision:
     reason: str
 
 
+@dataclass(frozen=True)
+class FinalBatchDecision:
+    """C11: the final-batch verdict for a finished (or stopped) loop.
+
+    An execution batch may ship as FINAL only if the loop ran to completion
+    (no REQUEST_CONTROL stop) AND training is authorized this round. A
+    REQUEST_CONTROL stop can never produce a final batch — the artifact
+    awaits human review.
+    """
+
+    final: bool
+    loop_completed: bool
+    request_control_stopped: bool
+    training_allowed: bool
+    reason: str
+
+
 class FeedbackLaunchGate:
     """Strongly-typed gate over the round's authorization constants.
 
@@ -81,6 +98,40 @@ class FeedbackLaunchGate:
                 and C.FORMAL_EVALUATION_AUTHORIZED),
             reason=("fail-closed evaluation of "
                     "d052.feedback_llm_ued.constants authorization flags"))
+
+    # ------------------------------------------------------- C11 final batch
+    def evaluate_final_batch(self, *, loop_completed: bool,
+                             request_control_stopped: bool
+                             ) -> FinalBatchDecision:
+        """Fail-closed verdict on whether the loop's last batch is FINAL.
+
+        ``final`` requires ALL of: the loop ran to completion, no
+        REQUEST_CONTROL stop, and training authorized this round. The reason
+        string names every failed condition (REQUEST_CONTROL first — a human
+        stop outranks every other consideration).
+        """
+        decision = self.evaluate()
+        reasons = []
+        if request_control_stopped:
+            reasons.append("REQUEST_CONTROL_STOPPED: the board requested "
+                           "human control; the stopped window produced a "
+                           "HumanDecisionArtifact and NO execution batch "
+                           "awaiting autonomous continuation")
+        if not loop_completed:
+            reasons.append("LOOP_NOT_COMPLETED")
+        if not decision.training_allowed:
+            reasons.append(f"TRAINING_NOT_ALLOWED: TRAINING_AUTHORIZED="
+                           f"{C.TRAINING_AUTHORIZED} this round")
+        final = (loop_completed and not request_control_stopped
+                 and decision.training_allowed)
+        return FinalBatchDecision(
+            final=final,
+            loop_completed=loop_completed,
+            request_control_stopped=request_control_stopped,
+            training_allowed=decision.training_allowed,
+            reason=("; ".join(reasons) if reasons
+                    else "loop completed, no REQUEST_CONTROL stop, training "
+                         "authorized"))
 
     # -------------------------------------------------------------- asserts
     def assert_backend_allowed(self, backend_kind: str) -> LaunchDecision:

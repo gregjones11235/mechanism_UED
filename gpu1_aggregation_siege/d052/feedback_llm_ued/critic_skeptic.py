@@ -7,6 +7,18 @@ expected-vs-observed contradictions, ungraded feedback (comparator skipped —
 a honesty objection), and wide confidence intervals; it escalates global risk
 and may raise request_control.
 
+C11: ``request_control`` now HALTS the whole loop (HumanDecisionArtifact, no
+execution batch, loop stops). The mock therefore escalates only where
+autonomous continuation is indefensible:
+
+* honesty violation — feedback the comparator never graded; or
+* HIGH risk computed from THIN evidence (pooled CI half-width >= WIDE_CI):
+  severe AND uncertain at the same time.
+
+Severe-but-PRECISE evidence stays HIGH risk WITHOUT halting the loop — that
+is exactly what the RETIRE / MUTATE curriculum actions are for. Risk grading
+itself is unchanged.
+
 ENGINEERING_SCAFFOLD: deterministic mock rule; no real LLM call this round.
 """
 from __future__ import annotations
@@ -121,10 +133,16 @@ def mock_rule(context: dict) -> dict:
     else:
         risk = "LOW"
 
+    # C11: escalation halts the loop, so it is decoupled from risk grading.
+    # Escalate only on an honesty violation (ungraded feedback) or on HIGH
+    # risk built from THIN evidence (wide CI). Severe-but-precise evidence
+    # stays HIGH risk without stopping the autonomous loop.
+    escalate = bool(ungraded) or (risk == "HIGH" and ci >= WIDE_CI)
+
     return dict(window=window,
                 objections=objections,
                 global_risk=risk,
-                request_control=(risk == "HIGH"),
+                request_control=escalate,
                 endorsed=(risk != "HIGH"),
                 honesty_check_passed=(not ungraded),
                 critique_summary=(

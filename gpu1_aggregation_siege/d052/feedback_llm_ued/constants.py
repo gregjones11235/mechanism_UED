@@ -198,6 +198,12 @@ DESIGNER_DECISIONS = frozenset({
 EXPLORATION_DECISIONS = frozenset({DECISION_MUTATE, DECISION_EXPAND_BUDGET})
 EXPLORATION_LABEL = "EXPLORATION"
 
+#: C11: window-level revision label for a window STOPPED by REQUEST_CONTROL.
+#: No PlanRevisionRecord exists for such a window (no verdicts are applied,
+#: no plan is produced) — the label only documents the halt in the
+#: WindowRecord / RunSummary audit trail.
+REVISION_LABEL_REQUEST_CONTROL_STOPPED = "REQUEST_CONTROL_STOPPED"
+
 #: C10 RETIRE lifecycle: a family retired at window w is in COOLDOWN for the
 #: next RETIRE_COOLDOWN_WINDOWS windows (w+1 .. w+RETIRE_COOLDOWN_WINDOWS);
 #: any proposal of any decision targeting it during cooldown fails closed

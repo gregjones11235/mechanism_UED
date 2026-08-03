@@ -38,6 +38,17 @@ window 4, never re-retired; shuffled coverage 0.8047 with
 threat_distance@1, resource_pressure@2 — a DIFFERENT family set than
 normal) and anon-citation resolution into honest ledger/revision ids;
 static keeps a single plan signature and 0.0 coverage.
+
+C11 REQUEST_CONTROL blocking: a board that requests human control (critic
+escalation and/or a tutor REQUEST_CONTROL proposal) halts the loop right
+after phase B — no verdicts, no plan, no probe, no freeze, NO execution
+batch. The halt is recorded as a hash-bound HumanDecisionArtifact in the
+RunSummary (tutor citations resolved to real store ids), the stopped window
+stays closed to revision (phase BOARD), and the LaunchGate final_batch
+verdict is final=False. The mock critic escalates only on honesty
+violations or severe-but-THIN evidence, so the deterministic baselines
+(severe but PRECISE from window 1 on) never halt; scripted backends prove
+both trigger paths and the halt semantics.
 """
 import json
 
@@ -54,6 +65,10 @@ from d052.feedback_llm_ued.controller import (
     SameWindowRevisionForbidden,
     StateMachineViolation,
 )
+from d052.feedback_llm_ued.execution_mode import FeedbackLaunchGate
+from d052.feedback_llm_ued.feedback_contracts import extract_context
+from d052.feedback_llm_ued.human_decision import HumanDecisionArtifact
+from d052.feedback_llm_ued.llm_backend import DeterministicMockFeedbackBackend
 from d052.feedback_llm_ued.plan_revision import FEEDBACK_DRIVEN_LABEL
 from d052.feedback_llm_ued.review_board import (
     build_board_prompt_context,
@@ -483,8 +498,19 @@ class TestNormalFeedbackLoop:
         assert len(set(s.plan_signature_hashes)) == 6
         assert [w["global_risk"] for w in s.windows] == \
             ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
+        # C11: the loop never escalates — the baseline evidence is severe
+        # but PRECISE (pooled CI is tiny from window 1 on), and C11 halts
+        # only on honesty violations or severe-but-THIN evidence
         assert [w["request_control"] for w in s.windows] == \
-            [False] + [True] * (WINDOWS - 1)
+            [False] * WINDOWS
+        assert s.request_control_stopped is False
+        assert s.stopped_window is None
+        assert s.human_decision_artifact is None
+        # …but even a completed loop ships no FINAL batch this round:
+        # training is unauthorized (MOCK_DRY_RUN)
+        assert s.final_batch["final"] is False
+        assert "TRAINING_NOT_ALLOWED" in s.final_batch["reason"]
+        assert s.final_batch["loop_completed"] is True
 
     def test_ledger_moved_by_bound_feedback(self, runs):
         ctls, _sums = runs
@@ -587,8 +613,13 @@ class TestShuffledFeedback:
         assert len(set(s.plan_signature_hashes)) == 6
         assert [w["global_risk"] for w in s.windows] == \
             ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
+        # C11: same as normal — severe but precise evidence never halts
         assert [w["request_control"] for w in s.windows] == \
-            [False] + [True] * (WINDOWS - 1)
+            [False] * WINDOWS
+        assert s.request_control_stopped is False
+        assert s.stopped_window is None
+        assert s.human_decision_artifact is None
+        assert s.final_batch["final"] is False
 
     def test_shuffling_changes_plans(self, runs):
         _ctls, sums = runs
@@ -804,3 +835,227 @@ class TestDeterminism:
         ctl = ctls[C.MODE_NORMAL_FEEDBACK]
         assert ctl.runner.total_transitions == \
             sums[C.MODE_NORMAL_FEEDBACK].total_simulator_transitions
+
+
+# ---------------------------------------- C11 scripted REQUEST_CONTROL backends
+class _EscalatingCriticBackend(DeterministicMockFeedbackBackend):
+    """Mock backend whose Nth Critic/Skeptic call demands human control.
+    Deterministic: identical runs produce identical escalations."""
+
+    def __init__(self, escalate_on_critic_call: int):
+        super().__init__()
+        self._target = escalate_on_critic_call
+        self._critic_calls = 0
+
+    def complete(self, role, prompt):
+        raw = super().complete(role, prompt)
+        if role != C.ROLE_CRITIC_SKEPTIC:
+            return raw
+        self._critic_calls += 1
+        if self._critic_calls != self._target:
+            return raw
+        dump = json.loads(raw)
+        dump["request_control"] = True
+        dump["endorsed"] = False
+        dump["critique_summary"] += " | C11 test: human control requested"
+        return json.dumps(dump, sort_keys=True, ensure_ascii=False)
+
+
+class _RequestControlTutorBackend(DeterministicMockFeedbackBackend):
+    """Mock backend whose Nth InterventionTutor call injects a legal,
+    feedback-cited REQUEST_CONTROL proposal for the first visible family
+    (citation taken from the prompt context between the CONTRACT markers)."""
+
+    def __init__(self, escalate_on_tutor_call: int):
+        super().__init__()
+        self._target = escalate_on_tutor_call
+        self._tutor_calls = 0
+
+    def complete(self, role, prompt):
+        raw = super().complete(role, prompt)
+        if role != C.ROLE_INTERVENTION_TUTOR:
+            return raw
+        self._tutor_calls += 1
+        if self._tutor_calls != self._target:
+            return raw
+        visible = sorted(extract_context(prompt)["feedback"],
+                         key=lambda p: p["feedback_id"])
+        assert visible, "the escalation window must have visible feedback"
+        first = visible[0]
+        dump = json.loads(raw)
+        dump["family_proposals"].append(dict(
+            environment_family=first["environment_family"],
+            decision=C.DECISION_REQUEST_CONTROL,
+            based_on_feedback_ids=[first["feedback_id"]],
+            based_on_hypothesis_ids=[],
+            reason="C11 test: human control requested on cited evidence",
+            is_exploration=False))
+        return json.dumps(dump, sort_keys=True, ensure_ascii=False)
+
+
+# --------------------------------------------------- C11 REQUEST_CONTROL block
+class TestRequestControlBlocking:
+    """C11: a REQUEST_CONTROL board HALTS the loop right after phase B. The
+    stopped window produces NO execution batch (no verdict application, no
+    plan, no probe, no freeze), a HumanDecisionArtifact lands in the
+    RunSummary, the stopped window is closed to revision exactly like a
+    frozen one, and the LaunchGate's final_batch verdict is final=False."""
+
+    def test_critic_escalation_stops_the_loop(self):
+        ctl = FeedbackUEDController(
+            C.MODE_NORMAL_FEEDBACK,
+            backend=_EscalatingCriticBackend(escalate_on_critic_call=3))
+        s = ctl.run(max_windows=WINDOWS)
+        stop = 2                     # the 3rd critic call belongs to window 2
+        assert s.n_windows == stop + 1
+        assert s.request_control_stopped is True
+        assert s.stopped_window == stop
+        # budget: windows 0..1 ran fully (7 calls each) + only the six
+        # board calls of the stopped window; only two windows ever probed
+        assert s.n_llm_calls == 7 * stop + C.BOARD_CALLS_PER_WINDOW
+        assert s.total_simulator_transitions == \
+            TRANSITIONS_PER_PROBED_WINDOW * stop
+        assert len(list(ctl.store.ids())) == 64 * stop
+
+        rec = s.windows[stop]
+        assert rec["request_control"] is True
+        assert rec["phase"] == PHASE_BOARD          # halted right after B
+        assert rec["board_call_count"] == C.BOARD_CALLS_PER_WINDOW
+        assert rec["env_coder_call_count"] == 0
+        assert rec["n_llm_calls"] == C.BOARD_CALLS_PER_WINDOW
+        assert rec["plan_id"] == ""                 # NO execution batch
+        assert rec["plan_signature_hash"] == ""
+        assert rec["revision_label"] == \
+            C.REVISION_LABEL_REQUEST_CONTROL_STOPPED
+        assert rec["gate_passed"] is False
+        assert rec["n_candidates"] == 0
+        assert rec["n_feedback_records"] == 0
+        assert rec["funnel_stats"] == {}
+        assert rec["window_aggregates"] == {}
+        assert rec["training_step_status"] == "NOT_EXECUTED_REQUEST_CONTROL"
+
+        # the artifact: critic-triggered, hash-bound to the escalated board
+        board = ctl.boards[stop]
+        art = s.human_decision_artifact
+        assert art is not None
+        assert art["window"] == stop
+        assert art["mode"] == C.MODE_NORMAL_FEEDBACK
+        assert art["trigger_sources"] == [C.ROLE_CRITIC_SKEPTIC]
+        assert art["global_risk"] == board.critic.global_risk
+        assert art["critic_objections"] == list(board.critic.objections)
+        assert art["board_hash"] == board.board_hash
+        assert art["artifact_id"] == \
+            f"hda-w{stop:02d}-{board.board_hash[:16]}"
+        assert art["request_control_families"] == []   # critic-only stop
+        assert art["cited_feedback_ids"] == []
+        assert len(art["artifact_hash"]) == 64
+
+        # LaunchGate: a stopped loop never ships a final batch
+        assert s.final_batch["final"] is False
+        assert s.final_batch["request_control_stopped"] is True
+        assert s.final_batch["loop_completed"] is False
+        assert "REQUEST_CONTROL_STOPPED" in s.final_batch["reason"]
+
+        # the stopped window is closed to revision exactly like a frozen one
+        with pytest.raises(SameWindowRevisionForbidden):
+            ctl.apply_board_verdicts(stop, [])
+        with pytest.raises(SameWindowRevisionForbidden):
+            ctl.revise_plan(stop, board)
+
+        # deterministic: an identically scripted run reproduces everything
+        again = FeedbackUEDController(
+            C.MODE_NORMAL_FEEDBACK,
+            backend=_EscalatingCriticBackend(escalate_on_critic_call=3))
+        assert json.dumps(s.to_dict(), sort_keys=True) == \
+            json.dumps(again.run(max_windows=WINDOWS).to_dict(),
+                       sort_keys=True)
+
+    def test_tutor_request_control_proposal_stops_the_loop(self):
+        ctl = FeedbackUEDController(
+            C.MODE_NORMAL_FEEDBACK,
+            backend=_RequestControlTutorBackend(escalate_on_tutor_call=2))
+        s = ctl.run(max_windows=WINDOWS)
+        stop = 1                     # the 2nd tutor call belongs to window 1
+        assert s.n_windows == stop + 1
+        assert s.request_control_stopped is True
+        assert s.stopped_window == stop
+        assert s.n_llm_calls == 7 * stop + C.BOARD_CALLS_PER_WINDOW
+        assert s.total_simulator_transitions == \
+            TRANSITIONS_PER_PROBED_WINDOW * stop
+
+        art = s.human_decision_artifact
+        assert art is not None
+        # the critic did NOT escalate (severe-but-precise evidence from
+        # window 1 on) — the tutor's cited REQUEST_CONTROL proposal alone
+        # halts the loop
+        assert art["trigger_sources"] == [C.ROLE_INTERVENTION_TUTOR]
+        assert art["request_control_families"]
+        for fam in art["request_control_families"]:
+            assert fam in C.ENVIRONMENT_FAMILIES
+        # citations resolved to REAL store ids (window-0 records)
+        all_ids = set(ctl.store.ids())
+        assert art["cited_feedback_ids"]
+        for fid in art["cited_feedback_ids"]:
+            assert fid in all_ids
+            assert not fid.startswith("anon-")
+            assert ctl.store.get(fid).window == 0
+        assert s.final_batch["final"] is False
+        assert s.final_batch["request_control_stopped"] is True
+
+    def test_critic_escalation_stops_static_mode_at_window_zero(self):
+        # even the structurally feedback-blind mode honors the halt
+        ctl = FeedbackUEDController(
+            C.MODE_STATIC_LLM,
+            backend=_EscalatingCriticBackend(escalate_on_critic_call=1))
+        s = ctl.run(max_windows=WINDOWS)
+        assert s.n_windows == 1
+        assert s.stopped_window == 0
+        assert s.n_llm_calls == C.BOARD_CALLS_PER_WINDOW
+        assert s.total_simulator_transitions == 0
+        assert s.human_decision_artifact["trigger_sources"] == \
+            [C.ROLE_CRITIC_SKEPTIC]
+        assert s.final_batch["final"] is False
+
+    def test_final_batch_gate_units(self):
+        gate = FeedbackLaunchGate()
+        done = gate.evaluate_final_batch(loop_completed=True,
+                                         request_control_stopped=False)
+        assert done.final is False          # training unauthorized this round
+        assert done.loop_completed is True
+        assert "TRAINING_NOT_ALLOWED" in done.reason
+        stopped = gate.evaluate_final_batch(loop_completed=False,
+                                            request_control_stopped=True)
+        assert stopped.final is False
+        assert stopped.request_control_stopped is True
+        assert "REQUEST_CONTROL_STOPPED" in stopped.reason
+        assert "LOOP_NOT_COMPLETED" in stopped.reason
+        assert "TRAINING_NOT_ALLOWED" in stopped.reason
+
+    def test_artifact_validation_is_fail_closed(self):
+        board_hash = "ab" * 32
+        base = dict(artifact_id=f"hda-w01-{board_hash[:16]}", window=1,
+                    mode=C.MODE_NORMAL_FEEDBACK,
+                    trigger_sources=[C.ROLE_CRITIC_SKEPTIC],
+                    global_risk="HIGH", board_hash=board_hash)
+        art = HumanDecisionArtifact(**base)
+        assert len(art.artifact_hash) == 64
+        assert art.rehash() == art.artifact_hash
+        with pytest.raises(ValueError, match="UNKNOWN_MODE"):
+            HumanDecisionArtifact(**{**base, "mode": "bogus"})
+        with pytest.raises(ValueError, match="EMPTY_TRIGGER_SOURCES"):
+            HumanDecisionArtifact(**{**base, "trigger_sources": []})
+        with pytest.raises(ValueError, match="ILLEGAL_TRIGGER_SOURCE"):
+            HumanDecisionArtifact(**{**base, "trigger_sources": ["explorer"]})
+        with pytest.raises(ValueError, match="ILLEGAL_BOARD_HASH"):
+            HumanDecisionArtifact(**{**base, "board_hash": "short"})
+        with pytest.raises(ValueError,
+                           match="TUTOR_TRIGGER_WITHOUT_PROPOSALS"):
+            HumanDecisionArtifact(**{
+                **base, "trigger_sources": [C.ROLE_INTERVENTION_TUTOR]})
+        with pytest.raises(ValueError, match="ARTIFACT_ID_MISMATCH"):
+            HumanDecisionArtifact(**{**base, "artifact_id": "hda-w99-xxxx"})
+        # tamper: content changed but the old hash kept -> rehash diverges
+        dump = art.model_dump()
+        dump["global_risk"] = "LOW"
+        tampered = HumanDecisionArtifact(**dump)
+        assert tampered.rehash() != tampered.artifact_hash

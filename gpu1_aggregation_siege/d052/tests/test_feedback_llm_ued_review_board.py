@@ -9,13 +9,18 @@ import pytest
 from pydantic import ValidationError
 
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued import critic_skeptic
 from d052.feedback_llm_ued.axis_directive import (
     ROLE_CONTROL,
     ROLE_TREATMENT,
     assert_directive_batch_legal,
 )
-from d052.feedback_llm_ued.behavior_failure import assemble_board_context
+from d052.feedback_llm_ued.behavior_failure import (
+    SEVERITY_HIGH,
+    assemble_board_context,
+)
 from d052.feedback_llm_ued.causal_failure_analyst import BoardHypothesisVerdict
+from d052.feedback_llm_ued.critic_skeptic import WIDE_CI
 from d052.feedback_llm_ued.feedback_contracts import extract_context
 from d052.feedback_llm_ued.feedback_view import (
     FeedbackView,
@@ -30,6 +35,7 @@ from d052.feedback_llm_ued.review_board import (
     validate_citations,
 )
 from d052.feedback_llm_ued.simulator_feedback_store import (
+    MATCH_UNGRADED,
     SimulatorFeedbackStore,
 )
 from d052.feedback_llm_ued.synthetic_feedback import (
@@ -332,12 +338,17 @@ class TestDeliverables:
         assert retire and retire[0].environment_family == FAM_A
         assert retire[0].based_on_feedback_ids == ["fb-rb-w0-0"]
 
-    def test_request_control_escalates_on_severe_evidence(self):
+    def test_severe_but_precise_evidence_is_high_risk_without_stop(self):
+        # C11: 3 records -> pooled 18 episodes -> CI half-width ~0.226
+        # (< WIDE_CI), so the evidence is severe but PRECISE: HIGH risk and
+        # not endorsed, but the loop does NOT halt — severe-and-certain is
+        # exactly what the RETIRE / MUTATE curriculum actions are for.
         store = SimulatorFeedbackStore()
         for i in range(3):
             store.add(make_record(i, student_sr=0.4))
         store.bind_match("fb-rb-w0-0", direction="opposite")
         store.bind_match("fb-rb-w0-1", direction="opposite")
+        store.bind_match("fb-rb-w0-2", direction="opposite")
         ctx = assemble_board_context(store, window=0,
                                      mode=C.MODE_NORMAL_FEEDBACK)
         view = NormalFeedbackView.from_store(store, max_window=0)
@@ -347,9 +358,9 @@ class TestDeliverables:
                                hypotheses=[], backend=backend,
                                sequence_start=0)
         assert out.critic.global_risk == "HIGH"
-        assert out.critic.request_control is True
         assert out.critic.endorsed is False
-        assert out.request_control is True
+        assert out.critic.request_control is False
+        assert out.request_control is False
 
     def test_ungraded_feedback_is_an_honesty_objection(self):
         store = SimulatorFeedbackStore()
@@ -365,6 +376,65 @@ class TestDeliverables:
         assert out.critic.honesty_check_passed is False
         assert out.critic.global_risk in ("MEDIUM", "HIGH")
         assert any("never graded" in o for o in out.critic.objections)
+        # C11: an honesty violation ALWAYS escalates — the loop must stop
+        # for human review when feedback was never graded
+        assert out.critic.request_control is True
+        assert out.request_control is True
+
+
+class TestCriticEscalationRule:
+    """C11: ``request_control`` HALTS the whole loop (HumanDecisionArtifact,
+    no execution batch), so the mock critic escalates only where autonomous
+    continuation is indefensible: an honesty violation (ungraded feedback)
+    or HIGH risk built from THIN evidence (CI half-width >= WIDE_CI).
+    Severe-but-precise evidence stays HIGH risk without halting — the risk
+    grading itself is unchanged."""
+
+    @staticmethod
+    def _ctx(*, high_sev=0, opposite=0, ungraded=0, ci=0.0):
+        evidence = [{"severity": SEVERITY_HIGH} for _ in range(high_sev)]
+        feedback = (
+            [dict(feedback_id=f"fb-opp-{i}",
+                  expected_observed_match=C.MATCH_DIRECTION_OPPOSITE)
+             for i in range(opposite)] +
+            [dict(feedback_id=f"fb-ungraded-{i}",
+                  expected_observed_match=MATCH_UNGRADED)
+             for i in range(ungraded)])
+        return dict(window=1,
+                    board_context=dict(behavior_evidence=evidence,
+                                       student_success_rate_ci=ci),
+                    feedback=feedback)
+
+    def test_high_risk_with_precise_evidence_does_not_halt(self):
+        out = critic_skeptic.mock_rule(self._ctx(high_sev=3, ci=0.1))
+        assert out["global_risk"] == "HIGH"
+        assert out["endorsed"] is False
+        assert out["request_control"] is False
+
+    def test_high_risk_with_thin_evidence_halts(self):
+        out = critic_skeptic.mock_rule(self._ctx(high_sev=3, ci=0.6))
+        assert out["global_risk"] == "HIGH"
+        assert out["request_control"] is True
+
+    def test_ungraded_feedback_halts_even_without_high_risk(self):
+        out = critic_skeptic.mock_rule(self._ctx(ungraded=1, ci=0.1))
+        assert out["global_risk"] == "MEDIUM"
+        assert out["honesty_check_passed"] is False
+        assert out["request_control"] is True
+
+    def test_clean_evidence_does_not_halt(self):
+        out = critic_skeptic.mock_rule(self._ctx(ci=0.1))
+        assert out["global_risk"] == "LOW"
+        assert out["request_control"] is False
+
+    def test_wide_ci_boundary_is_inclusive(self):
+        wide = critic_skeptic.mock_rule(self._ctx(opposite=2, ci=WIDE_CI))
+        assert wide["global_risk"] == "HIGH"
+        assert wide["request_control"] is True
+        tight = critic_skeptic.mock_rule(
+            self._ctx(opposite=2, ci=WIDE_CI - 0.01))
+        assert tight["global_risk"] == "HIGH"
+        assert tight["request_control"] is False
 
 
 class TestFeedbackView:
