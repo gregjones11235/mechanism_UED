@@ -219,7 +219,10 @@ class TestTeacherFromCommittedFiles:
             anchor_manifest_mapping=_draft_manifest(),
         )
         batch = manager.build_training_batch()
-        assert batch["task_ids"] == list(layout.ANCHOR_TASK_IDS)
+        # C13: blocked => ZERO trainable tasks (no anchors-only sneak)
+        assert batch["task_ids"] == []
+        assert batch["training_permitted"] is False
+        assert batch["provenance"] == "BLOCKED"
         assert batch["reuse_only"] is True
         workers = manager.evolve_tasks()
         assert len(workers) == 12

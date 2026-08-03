@@ -36,7 +36,8 @@
   （grep 审计 + `test_learnability.py` 断言 0.25 不在 metrics.py）。
 - 本轮无 probe ⇒ `LEARNABILITY_UNAVAILABLE` ⇒
   `SELECTION_BLOCKED_NO_REAL_EVIDENCE`：动态候选不晋升，
-  batch 退化为 4 anchors + REUSE（集成 smoke 断言阻断码出现、
+  batch `training_permitted=False`、`task_ids=[]` —— **零训练更新**
+  （C13：不再有 anchors-only 偷跑；集成 smoke 断言阻断码出现、
   notes 无伪造数值）。
 - 证据：`tests/e1_formal/test_learnability.py`（labeled FIXTURE
   数据明示为 fixture，绝不称真实）。
@@ -108,11 +109,53 @@ G1 REFERENCE_CONTRACT_UNFROZEN
   => EVAL_SEAM_SKIPPED_NO_STUDENT_ADAPTER
   => G2 LEARNABILITY_UNAVAILABLE
   => SELECTION_BLOCKED_NO_REAL_EVIDENCE
-  => batch = 4 anchors + REUSE only（G3 retention 亦 BLOCKED_SHARED_ANCHOR_MANIFEST）
+  => batch 零可训练任务（training_permitted=False）
+  => enforce_training_gate 拒绝 => 零 PPO 更新、零 global/env step 前进
+     （G3 retention 亦 BLOCKED_SHARED_ANCHOR_MANIFEST）
 ```
 
 集成 smoke 断言链上每个码如实出现；任何一级都不以 archive/
 启发式数值伪造真实证据。
+
+## C13 训练门禁（总控 REQUEST_CHANGES 修复）——关闭
+
+**缺陷（已修）**：C11/C12 版本中 `build_training_batch()` 阻断时返回
+4 个硬编码 anchors 且 `reuse_only=True`，而 `run_dicode.py` 忽略
+`blocked_codes`/`reuse_only` 仍调用 `run_session_training()`——
+硬门禁阻塞下仍产生训练更新；且"REUSE"未携带上一窗口已验证的
+12 dynamic IDs。
+
+**修复（双层 fail-closed）**：
+
+1. 教师侧（`gen_manager.build_training_batch`）：任何适用硬门禁阻塞
+   ⇒ `task_ids=[]`、`training_permitted=False`、携带全部阻断码；
+   绝不产出 anchors-only 可训练批次。
+2. 门禁侧（新 `training_gate.enforce_training_gate`，纯 stdlib）：
+   `training_permitted` 必须严格为字面 `True`；许可批次独立复核为
+   恰 12 dynamic + 4 frozen shared anchors（canonical 顺序）且 pinned
+   layout 覆盖全部 16 任务——anchors-only/乱序/重复/legacy 分布
+   均拒绝。`run_dicode.py` 的 E1 钩子分支先过门禁，未许可即抛
+   `RuntimeError`（零更新、零 step、不回退 legacy 采样）。
+3. 合法 REUSE = 上一窗口**完整已验证**的 12 dynamic + 4 frozen
+   shared anchors，经 `record_verified_batch` 认证并携带
+   来源/窗口/hash 证据：`window_id`、provenance 必须恰为
+   `CANDIDATE_EVALUATION`（真实双 probe 路径）、12 个动态任务逐条
+   绑定本教师 registry 的 `spec_hash`/`code_sha256`、anchor manifest
+   sha256 与当前冻结 manifest 相等、Reference candidate_id 与冻结
+   契约相等。认证前置：G1 冻结 + G3 冻结 + 阈值冻结；任一不满足 ⇒
+   `GEN_MANAGER_SNAPSHOT_BLOCKED`。无合法快照 ⇒
+   `TRAINING_BLOCKED_NO_VERIFIED_BATCH`（或相应阻断码）⇒ 跳过训练。
+- fail-closed 码：`TRAINING_GATE_BLOCKED`、`TRAINING_GATE_BAD_BATCH`、
+  `TRAINING_BLOCKED_NO_VERIFIED_BATCH`、`GEN_MANAGER_PROMOTION_BLOCKED`、
+  `GEN_MANAGER_SNAPSHOT_{BAD_TYPE,MISSING_FIELD,MISMATCH,BLOCKED}`。
+- 证据：`tests/e1_formal/test_training_gate.py`（正负矩阵：DRAFT
+  manifest / 缺 dual-probe / 空快照 / 伪快照（篡改 sha、幽灵任务、
+  错 provenance、错窗、错锚点）⇒ 全部零训练；FIXTURE 合法 12+4 ⇒
+  恰训练一次）；`test_wiring_sources.py` AST 断言 run_dicode 中
+  门禁先于 `run_session_training`、无模块级 E1 导入、legacy 采样不变。
+- 诚实声明：本轮正例测试使用明示 FIXTURE 的冻结契约/manifest/快照，
+  仅证明机制；真实 Reference/anchor 冻结件与真实 probe 到位前，
+  生产路径永远落在阻断侧（零训练）。
 
 ## 待总控冻结项清单
 

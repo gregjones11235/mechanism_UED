@@ -161,16 +161,41 @@ def main(config: DictConfig):
         # --- Step 3: Sample tasks for training ---
         print("Sampling tasks for training...")
         # C11 teacher duck hook: an E1 teacher builds its own batch
-        # (12 dynamic + 4 anchors, or anchors + REUSE while G2/G3
-        # blocked); legacy archive sampling is bypassed entirely.
-        # Teachers without the hook — the legacy GenManager — take the
-        # original sampling path verbatim.
+        # (12 dynamic + 4 anchors when a real selection is verified,
+        # or a legitimately REUSEd verified window); legacy archive
+        # sampling is bypassed entirely. Teachers without the hook —
+        # the legacy GenManager — take the original sampling path
+        # verbatim.
+        #
+        # C13 fail-closed training gate: while ANY applicable hard gate
+        # blocks (DRAFT anchor manifest, missing real dual probes, no
+        # verified previous-window batch), the teacher batch is NOT
+        # training_permitted and run_session_training must NEVER run —
+        # zero PPO updates, zero global/env-step progress. Refuse
+        # loudly; never fall back to legacy sampling, never train an
+        # anchors-only batch.
         batch_hook = getattr(gen_manager, "build_training_batch", None)
         if batch_hook is not None:
             e1_batch = batch_hook()
-            print(f"  Teacher-built batch: {len(e1_batch['task_ids'])} tasks "
-                  f"(reuse_only={e1_batch['reuse_only']}).")
-            sampled_task_ids = list(e1_batch["task_ids"])
+            from dicode.teachers.e1_formal.training_gate import (
+                TrainingGateError,
+                enforce_training_gate,
+            )
+            try:
+                gated_task_ids = enforce_training_gate(e1_batch)
+            except TrainingGateError as gate_error:
+                raise RuntimeError(
+                    "E1 training gate BLOCKED ("
+                    + ", ".join(gate_error.codes or (gate_error.code,))
+                    + "): zero training updates this session; "
+                    "run_session_training refused (fix: freeze the "
+                    "Reference identity + shared anchor manifest and "
+                    "provide real dual probes, or do not enable the "
+                    "e1_formal teacher)."
+                ) from gate_error
+            print(f"  Teacher-built batch: {len(gated_task_ids)} tasks "
+                  f"(provenance={e1_batch.get('provenance')}).")
+            sampled_task_ids = list(gated_task_ids)
         else:
             target_batch_size = config.dicode_manager.training_sample_size_n
             num_new_to_use = len(new_task_ids)

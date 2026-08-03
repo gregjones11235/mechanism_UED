@@ -249,6 +249,58 @@ class TestRunDicodeSeams:
         ]
         assert len(legacy_calls) == 1
 
+    # ---------------- C13 fail-closed training gate -------------------
+    def test_training_gate_imported_inside_the_hook_branch_only(self):
+        main_fn = _function(self.tree, "main")
+        imports = [
+            n
+            for n in ast.walk(main_fn)
+            if isinstance(n, ast.ImportFrom)
+            and n.module == "dicode.teachers.e1_formal.training_gate"
+        ]
+        assert len(imports) == 1  # lazy import, E1 branch only
+        names = {alias.name for alias in imports[0].names}
+        assert "enforce_training_gate" in names
+        assert "TrainingGateError" in names
+        # NO module-level E1 import was added to the legacy file
+        assert (
+            "dicode.teachers.e1_formal.training_gate"
+            not in _module_level_imports(self.tree)
+        )
+
+    def test_gate_enforced_before_run_session_training(self):
+        main_fn = _function(self.tree, "main")
+        gate_calls = [
+            n
+            for n in ast.walk(main_fn)
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "enforce_training_gate"
+        ]
+        assert len(gate_calls) == 1
+        train_calls = [
+            n
+            for n in ast.walk(main_fn)
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "run_session_training"
+        ]
+        assert len(train_calls) == 1
+        # source order: the gate decides BEFORE training can run
+        assert gate_calls[0].lineno < train_calls[0].lineno
+
+    def test_gate_failure_raises_not_falls_back(self):
+        main_fn = _function(self.tree, "main")
+        # the gate exception is re-raised as a RuntimeError — never
+        # swallowed into legacy sampling or anchors-only training
+        raises = [n for n in ast.walk(main_fn) if isinstance(n, ast.Raise)]
+        messages = _string_constants_in(main_fn)
+        assert any("E1 training gate BLOCKED" in m for m in messages)
+        assert any(
+            "run_session_training refused" in m for m in messages
+        )
+        assert len(raises) >= 1
+
 
 class TestEvaluationSeamExport:
     def test_init_exports_the_seam(self):

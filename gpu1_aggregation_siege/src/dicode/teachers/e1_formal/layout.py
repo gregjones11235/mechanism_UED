@@ -89,9 +89,9 @@ def build_training_layout(
     """Deterministic 12 dynamic + 4 anchor weight layout.
 
     Requires EXACTLY ``NUM_DYNAMIC_SLOTS`` unique non-empty dynamic ids
-    (a blocked/promotion-failed batch is assembled elsewhere as
-    anchors + REUSE, never through this function) and the PINNED layout
-    constants. Returns an ordered mapping dynamic... -> task_1 ->
+    (a blocked batch trains nothing and never reaches this function —
+    C13; there is no anchors-only trainable batch) and the PINNED
+    layout constants. Returns an ordered mapping dynamic... -> task_1 ->
     task_2 -> task_3 -> original_craftax whose weights are strictly
     positive and sum to exactly 1.
     """

@@ -53,7 +53,9 @@ class TestStatusReportHonesty:
         assert "engineering alignment only" in joined
         assert "E1S_STATIC_ABLATION_PRESERVED" in joined
         assert "REAL_*" in joined
-        assert "anchors + REUSE" in joined
+        # C13: blocked => trains NOTHING; REUSE = verified 12+4 only
+        assert "trains NOTHING" in joined
+        assert "verified 12+4" in joined
 
     def test_all_real_flags_false(self):
         report = _manager().status_report()
@@ -79,15 +81,19 @@ class TestGateBlockCodesAppearNotValues:
         assert G2_SELECTION_BLOCKED in codes           # G2 selection
         assert AM.BLOCKED_SHARED_ANCHOR_MANIFEST in codes  # G3
 
-    def test_blocked_batch_is_anchors_only_with_codes(self):
+    def test_blocked_batch_permits_zero_training(self):
+        # C13: blocked => ZERO trainable tasks — no anchors-only sneak,
+        # no fabricated dynamic id; the training gate refuses the batch
+        # before run_session_training can ever run.
         manager = _manager()
         batch = manager.build_training_batch()
-        # NO fabricated dynamic task id anywhere in the batch
-        assert batch["task_ids"] == list(layout.ANCHOR_TASK_IDS)
-        assert batch["task_ids"][-1] == "original_craftax"
+        assert batch["task_ids"] == []
+        assert batch["training_permitted"] is False
+        assert batch["provenance"] == "BLOCKED"
         assert batch["reuse_only"] is True
         assert batch["layout"] is None
         assert batch["dynamic_promoted"] == 0
+        assert batch["reuse_evidence"] is None
         for code in (
             G1_UNFROZEN,
             LEARNABILITY_THRESHOLD_MISSING,

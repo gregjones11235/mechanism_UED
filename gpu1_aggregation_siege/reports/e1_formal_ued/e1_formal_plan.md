@@ -13,7 +13,8 @@
   `248285e` C3 核心+G1 → `3e18aa9` C4 evidence → `4ae56fa` C5 replay/manifest/accounting →
   `7f56341` C6 board → `f254a61` C7 TaskSpec → `0578559` C8 EnvCoder →
   `4f3e333` C9 metrics/anchors/selector/parity → `8e65663` C10 GenManager+配置 →
-  `1fa41ab` C11 集成布线+评价 seam → （本提交）C12 报告。
+  `1fa41ab` C11 集成布线+评价 seam → `0c8f2af` C12 报告 →
+  （本提交）C13 fail-closed 训练门禁修复（总控 REQUEST_CHANGES）。
 
 ## 一、九阶段管线 → 代码位置
 
@@ -36,11 +37,31 @@ REFERENCE_CONTRACT_UNFROZEN
   => EVAL_SEAM_SKIPPED_NO_STUDENT_ADAPTER
   => LEARNABILITY_UNAVAILABLE
   => SELECTION_BLOCKED_NO_REAL_EVIDENCE
-  => batch = 4 anchors + REUSE only
+  => batch 零可训练任务（training_permitted=False，task_ids=[]）
+  => 训练门禁拒绝 run_session_training：零 PPO 更新、零 step 前进
 ```
 
+**C13 修正（总控 REQUEST_CHANGES）**：C11/C12 版本在阻断时返回
+"4 anchors + reuse_only" 且 run_dicode 仍会调 run_session_training——
+那是 anchors-only 偷跑路径，已删除。现在：
+
+1. 阻断 batch 的 `task_ids` 为空、`training_permitted=False`；
+2. `run_dicode.py` 的 E1 钩子分支先过
+   `training_gate.enforce_training_gate`（严格 `is True`），未许可即
+   抛 `RuntimeError` 显式中止——零更新、零 step、绝不回退 legacy 采样；
+3. 门禁模块独立复核：许可 batch 必须恰为 12 dynamic + 4 frozen
+   anchors（canonical 顺序）+ 覆盖 16 任务的 pinned layout；anchors-only、
+   乱序、重复、legacy 分布一律拒绝；
+4. REUSE 仅当存在上一窗口**完整已验证**快照
+   （`record_verified_batch`：G1 冻结+G3 冻结+阈值冻结+
+   provenance=CANDIDATE_EVALUATION+12 个动态任务逐条绑定本教师
+   registry 的 spec_hash/code_sha256+manifest sha 相等），否则
+   `TRAINING_BLOCKED_NO_VERIFIED_BATCH`/相应阻断码。
+
 集成 smoke（`tests/e1_formal/test_integration_smoke.py`）断言链上每个码
-**如实出现**，且 batch 中没有任何伪造动态任务或伪造数值。
+**如实出现**，且 batch 中没有任何伪造动态任务或伪造数值；
+`tests/e1_formal/test_training_gate.py` 提供完整正负矩阵
+（DRAFT manifest/缺 dual-probe/空/伪快照 ⇒ 零训练；合法 12+4 ⇒ 训练一次）。
 
 ## 三、集成布线（C11；默认路径字节不变义务）
 
@@ -49,7 +70,7 @@ REFERENCE_CONTRACT_UNFROZEN
 | `setup.py::_resolve_teacher` | 教师注入 | 无 teacher 组 ⇒ 原 `GenManager(config)` 逐字；e1_formal 惰性导入；static_llm/未知 ⇒ NotImplementedError |
 | `training.py::_resolve_session_task_distribution` | 12+4 pinned 布局 | `build_training_layout` getattr 鸭钩；仅在覆盖会话且和恰为 1 时采用，绝不重归一化；legacy 函数一字未动 |
 | `evolution_efficient.py::dispatch_evolution_worker` | `select_context_tasks` | getattr 鸭钩；E1 本轮答 [] ⇒ 不派发（诚实：无可采纳上下文任务） |
-| `run_dicode.py` | `consume_worker_results` / `build_training_batch` / `observe_session_feedback` | getattr 鸭钩；legacy 键与采样逐字保留；feedback 仅在真实训练指标非空时回喂 |
+| `run_dicode.py` | `consume_worker_results` / `build_training_batch` / `observe_session_feedback` | getattr 鸭钩；legacy 键与采样逐字保留；feedback 仅在真实训练指标非空时回喂；**C13：batch 钩子分支先过 `enforce_training_gate`，未许可⇒ RuntimeError，run_session_training 绝不执行** |
 | `evaluation/__init__.py` | +1 行导出 seam | 原导出行不动 |
 
 字节不变证据：AST 守护断言（`test_wiring_sources.py`）+ 纯 python mirror

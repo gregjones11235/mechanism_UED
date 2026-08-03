@@ -425,9 +425,10 @@ def select_dynamic_batch(
     Any missing real evidence (no signals at all, or any signal lacking
     ``has_real_probe``) fails closed with
     ``SELECTION_BLOCKED_NO_REAL_EVIDENCE`` — dynamic candidates are not
-    promoted and the batch degrades upstream to anchors + REUSE. There
-    is NO retention substitute and NO archive-priority substitute on
-    this path.
+    promoted and the upstream batch trains NOTHING while blocked (C13:
+    zero updates, no anchors-only sneak; REUSE requires a fully
+    verified previous window). There is NO retention substitute and NO
+    archive-priority substitute on this path.
     """
     if len(signals) == 0:
         raise SelectorError(

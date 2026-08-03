@@ -51,7 +51,9 @@ def _resolve_teacher(config: DictConfig):
       formal teacher and constructs it from the committed frozen
       manifest (configs/e1_formal_ued.yaml) and the committed DRAFT
       anchor manifest. Until the supervisor freeze artifacts arrive
-      the teacher constructs fully degraded (anchors + REUSE only).
+      the teacher constructs fully degraded: its blocked batch trains
+      NOTHING (zero updates), and REUSE is legitimate only as a fully
+      verified previous window (C13).
     * ``teacher.teacher_type == "static_llm"``: E1-S is demoted to
       PRESERVED ARTIFACTS only this round; it is not runnable and
       must never be silently substituted — fail closed with the

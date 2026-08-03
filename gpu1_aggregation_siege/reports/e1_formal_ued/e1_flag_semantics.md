@@ -13,7 +13,7 @@
 | 3 | SIX_ROLE_BOARD_IMPLEMENTED | 每执行窗恰 6 命名角色（固定顺序）、fail-closed、无 2 角色/条件路径、测试绿 | **true** | `teachers/e1_formal/board.py`；`INCOMPLETE_REVIEW_WINDOW`→REUSE；`test_board.py` |
 | 4 | REAL_ENVCODER_USED | EnvCoder 由真实 LLM provider 应答 | **false** | replay-only（`llm_client.py`：miss⇒HARD FAIL，record 本轮禁用）；`status_report` 断言 `test_integration_smoke.py::test_all_real_flags_false` |
 | 5 | REAL_STUDENT_REFERENCE_EVAL | 经 CC4 adapter 的真实 Student+Reference rollout | **false** | G1 契约身份值未冻结 + 无 adapter；seam 阻断码测试 `test_candidate_evaluation_seam.py` |
-| 6 | REAL_TRAINING_UPDATE_EXECUTED | 真实 PPO update 跑在 12+4 batch | **false** | 本轮离线，未训练；replay store 为空⇒开窗 HARD FAIL by design |
+| 6 | REAL_TRAINING_UPDATE_EXECUTED | 真实 PPO update 跑在 12+4 batch | **false** | 本轮离线，未训练；replay store 为空⇒开窗 HARD FAIL by design；且 C13 后硬门禁阻塞时**结构性地不可能训练**（batch 零可训练任务 + enforce_training_gate 拒绝，见 gate_closure_v2.md「C13 训练门禁」） |
 | 7 | REFERENCE_CONTRACT_READY | G1 契约 schema+fail-closed+配置 seam 实现且测试绿，无任何猜测/默认路径（机制级；身份值冻结另计） | **true（机制级）** | `teachers/e1_formal/reference_contract.py`（8 类字段无默认；TODO/latest/auto/空⇒拒）；`test_reference_contract.py`；身份值待总控冻结 |
 | 8 | CANDIDATE_LEARNABILITY_REAL | 本候选真实双 probe+Wilson CI 产生三态分类（无 0.25 替代） | **false** | 本轮无 probe⇒`LEARNABILITY_UNAVAILABLE`⇒`SELECTION_BLOCKED_NO_REAL_EVIDENCE`；分类器+fixture 绿（`test_learnability.py`）；0.25 已删（grep 审计） |
 | 9 | ANCHOR_RETENTION_REAL | 同一 Student 在冻结 manifest 绑定的 4 anchor 上更新前/后真实评价 | **false** | manifest=DRAFT_UNFROZEN⇒`BLOCKED_SHARED_ANCHOR_MANIFEST`（`test_anchor_manifest.py`）；成就数替代已删 |

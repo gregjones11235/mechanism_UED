@@ -264,7 +264,7 @@ class TestParityGate:
 
     def test_e1_promotion_gate_requires_real_probes(self):
         # parity replica core is pure; the E1 gate layers real-evidence
-        # enforcement on top (blocked path feeds anchors + REUSE batch)
+        # enforcement on top (blocked path trains nothing upstream, C13)
         signals = S.consume_candidate_signals(
             [
                 {

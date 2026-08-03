@@ -32,7 +32,13 @@ Degradation chain (plan D5 — every step honest, nothing fabricated)::
       => EVAL_SEAM_SKIPPED_NO_STUDENT_ADAPTER
       => LEARNABILITY_UNAVAILABLE
       => SELECTION_BLOCKED_NO_REAL_EVIDENCE
-      => batch = 4 anchors + REUSE only
+      => batch trains NOTHING (zero PPO updates, zero env-step
+         progress). An anchors-only batch is a sneak path and is never
+         emitted as trainable (C13). REUSE is legitimate ONLY as the
+         FULL 12 dynamic + 4 frozen shared anchors of the last fully
+         verified window, bound to source/window/hash evidence
+         (``record_verified_batch``); without such a snapshot the batch
+         is BLOCKED and the training gate refuses run_session_training.
 
 This module imports NO jax/craftax, performs NO network I/O and NO
 file I/O (the anchor manifest and frozen manifest are injected as
@@ -43,6 +49,7 @@ validated; ``status_report`` says so explicitly.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -69,6 +76,7 @@ from .reference_contract import (
 from .schemas import E1Code, E1SchemaError, assert_llm_role_admissible
 from .student_contract import PINNED_STUDENT_CANDIDATE_ID
 from .task_specs import compile_task_specs
+from .training_gate import TRAINING_BLOCKED_NO_VERIFIED_BATCH
 
 #: replay provider identity pinned by the frozen manifest (plan D11)
 REPLAY_MODEL_ID = "e1-replay-mock-v1"
@@ -87,6 +95,27 @@ GEN_MANAGER_MANIFEST_MISMATCH = "GEN_MANAGER_MANIFEST_MISMATCH"
 GEN_MANAGER_BAD_DYNAMIC_SET = "GEN_MANAGER_BAD_DYNAMIC_SET"
 GEN_MANAGER_FEEDBACK_BAD_FACTS = "GEN_MANAGER_FEEDBACK_BAD_FACTS"
 GEN_MANAGER_NO_ADMISSIBLE_EVIDENCE = "GEN_MANAGER_NO_ADMISSIBLE_EVIDENCE"
+#: C13: promotion attempted while hard gates still block (contract
+#: violation — real selection is impossible while blocked)
+GEN_MANAGER_PROMOTION_BLOCKED = "GEN_MANAGER_PROMOTION_BLOCKED"
+#: C13: verified-batch snapshot validation failures (REUSE evidence)
+GEN_MANAGER_SNAPSHOT_BAD_TYPE = "GEN_MANAGER_SNAPSHOT_BAD_TYPE"
+GEN_MANAGER_SNAPSHOT_MISSING_FIELD = "GEN_MANAGER_SNAPSHOT_MISSING_FIELD"
+GEN_MANAGER_SNAPSHOT_MISMATCH = "GEN_MANAGER_SNAPSHOT_MISMATCH"
+GEN_MANAGER_SNAPSHOT_BLOCKED = "GEN_MANAGER_SNAPSHOT_BLOCKED"
+
+#: provenance a verified REUSE snapshot must carry: only the candidate
+#: evaluation path (real Student/Reference dual probes) may certify a
+#: window as REUSE-admissible
+_VERIFIED_SNAPSHOT_PROVENANCE = "CANDIDATE_EVALUATION"
+_VERIFIED_SNAPSHOT_FIELDS = (
+    "window_id",
+    "provenance",
+    "reference_candidate_id",
+    "anchor_task_ids",
+    "anchor_manifest_sha256",
+    "dynamic_tasks",
+)
 
 #: honest environment-compilation note for this round
 ENVCODER_CHECK_NOTE = (
@@ -311,6 +340,12 @@ class E1FormalGenManager:
         # compiled E1 artifacts recorded by consume_worker_results (C11);
         # promotion happens ONLY via E1 selection, never legacy activation
         self._artifact_registry: Dict[str, Dict[str, Any]] = {}
+        # C13: the last FULLY VERIFIED window batch (12 dynamic + 4
+        # frozen shared anchors with source/window/hash evidence) — the
+        # ONLY legitimate REUSE source. None until real dual-probe
+        # selection is certified via record_verified_batch; while None,
+        # every batch trains nothing.
+        self._verified_batch_snapshot: Optional[Dict[str, Any]] = None
 
     # ------------------------------------------------------------------
     # init-time manifest verification (fail-closed, greppable)
@@ -423,7 +458,8 @@ class E1FormalGenManager:
         )
         if len(raw_items) == 0:
             # NO admissible evidence => the gate must not open a window;
-            # zero ledger calls; anchors + REUSE only.
+            # zero ledger calls. The session batch trains nothing while
+            # blocked (C13): zero updates, no anchors-only sneak.
             return self._reuse_batch(
                 [GEN_MANAGER_NO_ADMISSIBLE_EVIDENCE]
                 + self.current_blocked_codes(),
@@ -655,43 +691,410 @@ class E1FormalGenManager:
         )
 
     # ------------------------------------------------------------------
-    # batch + layout (G2/G3 degradation lands here)
+    # batch + layout (G2/G3 degradation lands here; C13 fail-closed:
+    # blocked => ZERO trainable tasks, never an anchors-only sneak)
     # ------------------------------------------------------------------
     def build_training_batch(
         self, promoted_dynamic_ids: Optional[Sequence[str]] = None
     ) -> Dict[str, Any]:
-        """Blocked => 4 anchors + REUSE only; 12 promoted ids => 16."""
+        """Build the session batch; ``training_permitted`` gates training.
+
+        C13 contract (supervisor REQUEST_CHANGES fix):
+
+        * ANY applicable hard gate blocked => ``training_permitted`` is
+          False and ``task_ids`` is EMPTY — zero PPO updates, zero
+          global/env-step progress. An anchors-only batch is a sneak
+          path and is never emitted as trainable.
+        * no promoted ids and gates clear => REUSE is legitimate ONLY
+          as the FULL 12 dynamic + 4 frozen shared anchors of the last
+          fully verified window (``record_verified_batch`` evidence);
+          without such a snapshot the batch is BLOCKED
+          (``TRAINING_BLOCKED_NO_VERIFIED_BATCH``).
+        * 12 promoted ids are accepted ONLY while every gate is clear
+          (real selection is impossible otherwise) and every id carries
+          compiled-artifact evidence in the registry.
+        """
         ids = list(promoted_dynamic_ids or ())
         blocked = self.current_blocked_codes()
+
         if len(ids) == 0:
+            snapshot = self._verified_batch_snapshot
+            if not blocked and snapshot is not None and (
+                self._snapshot_still_valid(snapshot)
+            ):
+                dynamic_ids = [
+                    entry["task_id"] for entry in snapshot["dynamic_tasks"]
+                ]
+                layout_map = layout.build_training_layout(dynamic_ids)
+                return {
+                    "task_ids": dynamic_ids + list(layout.ANCHOR_TASK_IDS),
+                    "training_permitted": True,
+                    "provenance": "REUSE_VERIFIED_WINDOW",
+                    "layout": layout_map,
+                    "dynamic_promoted": 0,
+                    "reuse_only": True,
+                    "reuse_evidence": dict(snapshot),
+                    "blocked_codes": [],
+                    "notes": [
+                        "REUSE: the previous window's fully verified "
+                        "12 dynamic + 4 frozen shared anchors, bound to "
+                        f"window {snapshot['window_id']} and anchor "
+                        f"manifest sha {snapshot['anchor_manifest_sha256']}",
+                    ],
+                }
+            codes = list(blocked)
+            if not codes:
+                # gates clear but NO legitimate previous-window batch
+                codes = [TRAINING_BLOCKED_NO_VERIFIED_BATCH]
             return {
-                "task_ids": list(layout.ANCHOR_TASK_IDS),
+                "task_ids": [],
+                "training_permitted": False,
+                "provenance": "BLOCKED",
                 "layout": None,
                 "dynamic_promoted": 0,
                 "reuse_only": True,
-                "blocked_codes": blocked,
+                "reuse_evidence": None,
+                "blocked_codes": codes,
                 "notes": [
-                    "no dynamically promoted tasks: selection requires "
-                    "real dual probes (G2); anchors + REUSE only (D5)",
-                    "anchor retention evaluation stays blocked until the "
-                    "shared manifest is frozen (G3)",
+                    "hard gate(s) blocked: ZERO training updates this "
+                    "session — selection requires real dual probes (G2) "
+                    "and a frozen shared anchor manifest (G3)",
+                    "an anchors-only batch is a sneak path and is never "
+                    "emitted as trainable; REUSE requires the previous "
+                    "window's verified 12+4 with source/window/hash "
+                    "evidence, which does not exist yet",
                 ],
             }
+
+        # --- 12 promoted dynamic ids -----------------------------------
         if len(ids) != layout.NUM_DYNAMIC_SLOTS:
             raise GenManagerError(
                 GEN_MANAGER_BAD_DYNAMIC_SET,
                 f"e1_formal.batch: promoted dynamic set must have exactly "
                 f"{layout.NUM_DYNAMIC_SLOTS} ids, got {len(ids)}",
             )
+        if blocked:
+            raise GenManagerError(
+                GEN_MANAGER_PROMOTION_BLOCKED,
+                "e1_formal.batch: promotion is impossible while hard "
+                f"gates block ({blocked}); real selection requires real "
+                "dual probes (G2) and a frozen anchor manifest (G3). "
+                "Refusing to build a trainable batch from unverified ids.",
+            )
+        missing = [t for t in ids if t not in self._artifact_registry]
+        if missing:
+            raise GenManagerError(
+                GEN_MANAGER_MISSING_FIELD,
+                "e1_formal.batch: promoted ids without compiled-artifact "
+                f"evidence in the registry: {missing}",
+            )
+        window_ids = {
+            self._artifact_registry[t]["window_id"] for t in ids
+        }
+        if len(window_ids) != 1:
+            raise GenManagerError(
+                GEN_MANAGER_BAD_DYNAMIC_SET,
+                "e1_formal.batch: a promoted batch must come from ONE "
+                f"window, got ids from {sorted(window_ids)}",
+            )
+        # certified: this window becomes the REUSE source for the next
+        self._certify_dynamic_window(
+            window_ids.pop(), ids, _VERIFIED_SNAPSHOT_PROVENANCE,
+            "e1_formal.batch.promotion",
+        )
         layout_map = layout.build_training_layout(ids)
         return {
             "task_ids": list(ids) + list(layout.ANCHOR_TASK_IDS),
+            "training_permitted": True,
+            "provenance": "PROMOTED_SELECTION",
             "layout": layout_map,
             "dynamic_promoted": len(ids),
             "reuse_only": False,
-            "blocked_codes": blocked,
+            "reuse_evidence": dict(self._verified_batch_snapshot),
+            "blocked_codes": [],
             "notes": [],
         }
+
+    # ------------------------------------------------------------------
+    # C13 verified REUSE snapshot (source/window/hash evidence)
+    # ------------------------------------------------------------------
+    @property
+    def verified_batch_snapshot(self) -> Optional[Dict[str, Any]]:
+        """Read-only copy of the last verified window batch (audit)."""
+        snapshot = self._verified_batch_snapshot
+        if snapshot is None:
+            return None
+        copy = dict(snapshot)
+        copy["dynamic_tasks"] = [dict(e) for e in snapshot["dynamic_tasks"]]
+        copy["anchor_task_ids"] = list(snapshot["anchor_task_ids"])
+        return copy
+
+    def record_verified_batch(self, snapshot: Any) -> Dict[str, Any]:
+        """Certify the previous window's FULLY VERIFIED 12+4 batch (C13).
+
+        The ONLY legitimate REUSE source. Fail-closed requirements:
+
+        * the Reference contract is frozen (G1) and the shared anchor
+          manifest is FROZEN (G3) RIGHT NOW, with the snapshot bound to
+          the current manifest sha and Reference candidate id;
+        * learnability thresholds are frozen (a real dual-probe verdict
+          is impossible without them);
+        * ``provenance`` is exactly CANDIDATE_EVALUATION — only the
+          real Student/Reference dual-probe path may certify a window;
+        * EXACTLY 12 unique dynamic entries, each bound to a
+          compiled artifact in this teacher's own registry with
+          matching spec_hash and code sha256 (no entry may be
+          certified the teacher never compiled);
+        * the four anchors are exactly the canonical shared anchors.
+
+        Returns the stored (cleaned) snapshot. Raises GenManagerError
+        with a greppable code on ANY violation — a fake/empty/stale
+        snapshot never becomes a REUSE source.
+        """
+        ctx = "e1_formal.record_verified_batch"
+        blocked = self.current_gate_blockers_for_certification(ctx)
+        if blocked:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BLOCKED,
+                f"{ctx}: cannot certify a REUSE batch while hard gates "
+                f"block: {blocked}",
+            )
+        if not isinstance(snapshot, Mapping):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: snapshot must be a mapping, got "
+                f"{type(snapshot).__name__}",
+            )
+        unknown = sorted(k for k in snapshot if k not in _VERIFIED_SNAPSHOT_FIELDS)
+        if unknown:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: unknown snapshot field(s) {unknown}",
+            )
+        for name in _VERIFIED_SNAPSHOT_FIELDS:
+            if name not in snapshot:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                    f"{ctx}: missing field {name!r}",
+                )
+        window_id = snapshot["window_id"]
+        if not isinstance(window_id, str) or not window_id.strip():
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                f"{ctx}: window_id must be a non-empty str",
+            )
+        provenance = snapshot["provenance"]
+        if provenance != _VERIFIED_SNAPSHOT_PROVENANCE:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: provenance must be exactly "
+                f"{_VERIFIED_SNAPSHOT_PROVENANCE!r} (real dual probes), "
+                f"got {provenance!r}",
+            )
+        candidate_id = snapshot["reference_candidate_id"]
+        if candidate_id != self._reference_contract.candidate_id:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: reference_candidate_id {candidate_id!r} != "
+                f"frozen contract {self._reference_contract.candidate_id!r}",
+            )
+        manifest_sha = snapshot["anchor_manifest_sha256"]
+        if manifest_sha != self._anchor_manifest.manifest_sha256:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: anchor_manifest_sha256 {manifest_sha!r} != "
+                f"current frozen manifest "
+                f"{self._anchor_manifest.manifest_sha256!r}",
+            )
+        anchor_ids = snapshot["anchor_task_ids"]
+        if not isinstance(anchor_ids, (list, tuple)) or tuple(
+            anchor_ids
+        ) != layout.ANCHOR_TASK_IDS:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: anchor_task_ids must equal "
+                f"{list(layout.ANCHOR_TASK_IDS)}, got {anchor_ids!r}",
+            )
+        raw_tasks = snapshot["dynamic_tasks"]
+        if not isinstance(raw_tasks, (list, tuple)):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: dynamic_tasks must be a sequence",
+            )
+        if len(raw_tasks) != layout.NUM_DYNAMIC_SLOTS:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: dynamic_tasks must have exactly "
+                f"{layout.NUM_DYNAMIC_SLOTS} entries, got {len(raw_tasks)}",
+            )
+        entries: List[Dict[str, str]] = []
+        seen = set()
+        for i, raw in enumerate(raw_tasks):
+            entry_ctx = f"{ctx}.dynamic_tasks[{i}]"
+            if not isinstance(raw, Mapping):
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                    f"{entry_ctx}: must be a mapping",
+                )
+            unknown = sorted(
+                k
+                for k in raw
+                if k not in ("task_id", "artifact_id", "spec_hash",
+                             "code_sha256")
+            )
+            if unknown:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                    f"{entry_ctx}: unknown field(s) {unknown}",
+                )
+            task_id = raw.get("task_id")
+            if not isinstance(task_id, str) or not task_id.strip():
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                    f"{entry_ctx}: needs non-empty task_id",
+                )
+            if task_id in seen:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: duplicate task_id {task_id!r}",
+                )
+            if task_id in layout.ANCHOR_TASK_IDS:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: dynamic id {task_id!r} collides with "
+                    "a shared anchor",
+                )
+            seen.add(task_id)
+            record = self._artifact_registry.get(task_id)
+            if record is None:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: task {task_id!r} was never compiled "
+                    "and recorded by this teacher — it cannot be part "
+                    "of a verified window",
+                )
+            for field in ("artifact_id", "spec_hash", "code_sha256"):
+                value = raw.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise GenManagerError(
+                        GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                        f"{entry_ctx}: needs non-empty {field!r}",
+                    )
+            if raw["spec_hash"] != record["spec_hash"]:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: spec_hash does not match the "
+                    f"registry record for {task_id!r}",
+                )
+            code_sha = hashlib.sha256(
+                record["code"].encode("utf-8")
+            ).hexdigest()
+            if raw["code_sha256"] != code_sha:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: code_sha256 does not match the "
+                    "registry code for {task_id!r}".format(
+                        task_id=task_id
+                    ),
+                )
+            entries.append(
+                {
+                    "task_id": task_id,
+                    "artifact_id": raw["artifact_id"],
+                    "spec_hash": raw["spec_hash"],
+                    "code_sha256": raw["code_sha256"],
+                }
+            )
+        window_ids = {
+            self._artifact_registry[entry["task_id"]]["window_id"]
+            for entry in entries
+        }
+        if len(window_ids) != 1:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: a verified batch must come from ONE window, "
+                f"got ids from {sorted(window_ids)}",
+            )
+        if window_ids.pop() != window_id.strip():
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: window_id {window_id!r} does not match the "
+                "registry-recorded window of the dynamic tasks",
+            )
+        stored = {
+            "window_id": window_id.strip(),
+            "provenance": provenance,
+            "reference_candidate_id": candidate_id,
+            "anchor_task_ids": list(layout.ANCHOR_TASK_IDS),
+            "anchor_manifest_sha256": manifest_sha,
+            "dynamic_tasks": entries,
+        }
+        self._verified_batch_snapshot = stored
+        self._real_selection_completed = True
+        return dict(stored)
+
+    def current_gate_blockers_for_certification(self, ctx: str) -> List[str]:
+        """Hard gates that block REUSE certification (G1/G2-config/G3)."""
+        blocked: List[str] = []
+        if self._reference_contract is None:
+            blocked.append("REFERENCE_CONTRACT_UNFROZEN")
+        if not self._anchor_manifest.is_frozen:
+            blocked.append(AM.BLOCKED_SHARED_ANCHOR_MANIFEST)
+        if self._thresholds is None:
+            blocked.append(MT.LEARNABILITY_THRESHOLD_MISSING)
+        return blocked
+
+    def _snapshot_still_valid(self, snapshot: Mapping[str, Any]) -> bool:
+        """Re-check a stored snapshot against the CURRENT gate state."""
+        if self.current_gate_blockers_for_certification("e1_formal.reuse"):
+            return False
+        if (
+            snapshot["anchor_manifest_sha256"]
+            != self._anchor_manifest.manifest_sha256
+        ):
+            return False
+        if (
+            snapshot["reference_candidate_id"]
+            != self._reference_contract.candidate_id
+        ):
+            return False
+        return True
+
+    def _certify_dynamic_window(
+        self,
+        window_id: str,
+        dynamic_ids: Sequence[str],
+        provenance: str,
+        ctx: str,
+    ) -> None:
+        """Store registry-bound evidence as the verified snapshot."""
+        entries = []
+        for task_id in dynamic_ids:
+            record = self._artifact_registry[task_id]
+            entries.append(
+                {
+                    "task_id": task_id,
+                    "artifact_id": record["artifact_id"],
+                    "spec_hash": record["spec_hash"],
+                    "code_sha256": hashlib.sha256(
+                        record["code"].encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
+        self._verified_batch_snapshot = {
+            "window_id": window_id,
+            "provenance": provenance,
+            "reference_candidate_id": (
+                self._reference_contract.candidate_id
+            ),
+            "anchor_task_ids": list(layout.ANCHOR_TASK_IDS),
+            "anchor_manifest_sha256": (
+                self._anchor_manifest.manifest_sha256
+            ),
+            "dynamic_tasks": entries,
+        }
+        self._real_selection_completed = True
+        del ctx  # accepted for symmetric error context by callers
 
     def build_training_layout(
         self, dynamic_task_ids: Optional[Sequence[str]] = None
@@ -753,7 +1156,10 @@ class E1FormalGenManager:
                 "no real Student/Reference evaluation, no real training "
                 "update",
                 "no dynamic task is ever promoted without real probes; "
-                "selection degrades to anchors + REUSE",
+                "while hard gates block, the batch trains NOTHING (zero "
+                "updates, no anchors-only sneak); REUSE is only the "
+                "previous window's verified 12+4 with source/window/"
+                "hash evidence",
             ],
         }
 

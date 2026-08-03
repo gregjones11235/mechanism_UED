@@ -592,24 +592,28 @@ class TestObserveSessionFeedback:
 
 
 class TestBatchAndLayout:
-    def test_blocked_batch_is_anchors_plus_reuse_only(self):
+    def test_blocked_batch_permits_zero_training_not_anchors_only(self):
+        # C13: while hard gates block, the batch trains NOTHING — the
+        # old anchors-only batch was a sneak path and is gone. Full
+        # gate matrix in test_training_gate.py.
         batch = _manager().build_training_batch()
-        assert batch["task_ids"] == list(L.ANCHOR_TASK_IDS)
-        assert batch["task_ids"][-1] == "original_craftax"
+        assert batch["task_ids"] == []
+        assert batch["training_permitted"] is False
+        assert batch["provenance"] == "BLOCKED"
         assert batch["layout"] is None
         assert batch["reuse_only"] is True
         assert batch["dynamic_promoted"] == 0
+        assert batch["reuse_evidence"] is None
         assert "SELECTION_BLOCKED_NO_REAL_EVIDENCE" in batch["blocked_codes"]
         assert AM.BLOCKED_SHARED_ANCHOR_MANIFEST in batch["blocked_codes"]
 
-    def test_promoted_batch_is_16_tasks_with_layout(self):
+    def test_promotion_while_blocked_fails_closed(self):
+        # C13: real selection is impossible while gates block; a
+        # "promoted" batch must never become trainable here.
         dynamic = [f"dyn_{i:02d}" for i in range(12)]
-        batch = _manager().build_training_batch(dynamic)
-        assert len(batch["task_ids"]) == 16
-        assert batch["task_ids"][:12] == dynamic
-        assert batch["task_ids"][12:] == list(L.ANCHOR_TASK_IDS)
-        assert len(batch["layout"]) == 16
-        assert batch["reuse_only"] is False
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            _manager().build_training_batch(dynamic)
+        assert excinfo.value.code == GM.GEN_MANAGER_PROMOTION_BLOCKED
 
     @pytest.mark.parametrize("count", [1, 11, 13])
     def test_wrong_promoted_count_fails_closed(self, count):
@@ -678,7 +682,7 @@ class TestNoHeavyImports:
     """The edge stays importable without jax/craftax (pure stdlib +
     teacher modules)."""
 
-    MODULES = ("gen_manager.py", "archive_view.py")
+    MODULES = ("gen_manager.py", "archive_view.py", "training_gate.py")
 
     def test_no_jax_or_craftax_imports(self):
         for relpath in self.MODULES:
