@@ -1,0 +1,188 @@
+{
+  "schema": "simulator_frontier.student_mount_smoke/v1",
+  "r4_scope": "R4b checkpoint-side proof only; R4a env-side PASS + R4b PASS != R4c joint fresh-process proof",
+  "COMBINED_FRESH_PROCESS_RESTORE": false,
+  "disclaimers": [
+    "forward smoke != performance evaluation",
+    "contract/fake tests != real closed loop",
+    "zero parameter updates; zero training this round",
+    "optimizer/train-rng/policy-memory are ABSENT in the CC2 pkl; the R4c joint proof is unavailable for those components this round"
+  ],
+  "profile_name": "rmt16_persistent_98304",
+  "checkpoint_path": "D:/cc4tmp/.tier3_ft_scratch/real_98304/RMT16-LONG98304-PERSISTENT_step98304_full_state.pkl",
+  "driver_source_path": "D:/Projects/dicode-codex-director/orchestration/control/_cc2_stage/train_rmt16_p2replay.py",
+  "driver_source_sha256_expected": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "identity": {
+    "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "architecture_family": "RMT16",
+    "checkpoint_format": "CC2_PKL",
+    "global_step": 98304,
+    "total_env_steps": 98304,
+    "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "source_commit": "src-sha256:453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "observation_shape": [
+      8335
+    ],
+    "action_count": 43,
+    "memory_spec_hash": "ab03915d783d3a47cdf40335938054e00691f29a1e9ea1c5551de52d4668f69c"
+  },
+  "REAL_CHECKPOINT_LOADED": true,
+  "gates": {
+    "G0_identity": {
+      "identity_hash": "822f5789619bf9a16b2eea20fefe3c95cd701906399c49d88c20467c67cb14bc",
+      "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+    },
+    "G1_driver_cfg": {
+      "driver_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+      "cfg_fields": {
+        "activation": "relu",
+        "embed_size": 256,
+        "hidden_layers": 256,
+        "num_heads": 8,
+        "qkv_features": 256,
+        "num_layers": 2,
+        "gating": true,
+        "gating_bias": 2.0,
+        "rmt_num_tokens": 16,
+        "window_mem": 128,
+        "num_steps": 128
+      }
+    },
+    "G2_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+    "G3_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "G4_manifest": {
+      "carry_mode": "persistent",
+      "step": 98304,
+      "arm": "RMT16-Persistent-OrigVtrace"
+    },
+    "G5_structure": {
+      "encoder_kernel_shape": [
+        8335,
+        256
+      ],
+      "actor_out_kernel_shape": [
+        256,
+        43
+      ],
+      "observation_dim": 8335,
+      "action_count": 43,
+      "craftax_len_action": 43,
+      "num_params_leaves": 101
+    },
+    "G6_absent_components": {
+      "optimizer": "ABSENT_IN_CHECKPOINT",
+      "train_rng": "ABSENT_IN_CHECKPOINT",
+      "policy_memory": "ABSENT_IN_CHECKPOINT (memory re-derives from the CC2 reset convention via initial_memory)"
+    }
+  },
+  "contains_optimizer": false,
+  "contains_rng": false,
+  "contains_policy_memory": false,
+  "r4c_joint_proof_status": {
+    "params": "restored+hash-bound (R4b)",
+    "optimizer": "ABSENT_IN_CHECKPOINT -> joint proof unavailable this round",
+    "train_rng": "ABSENT_IN_CHECKPOINT -> joint proof unavailable this round",
+    "global_step": "restored from manifest['step'] (no optimizer state to pair)",
+    "policy_memory": "ABSENT_IN_CHECKPOINT -> re-derived from reset convention",
+    "env_state": "R4a-side proof (separate); R4c combined run NOT executed"
+  },
+  "file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+  "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+  "driver_source_sha256_actual": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+  "manifest": {
+    "step": 98304,
+    "arm": "RMT16-Persistent-OrigVtrace",
+    "carry_mode": "persistent",
+    "replay_mode": "original_vtrace",
+    "seed": 42
+  },
+  "observation_source": {
+    "label": "STRUCTURED_SYNTHETIC_SEEDED_NORMAL",
+    "obs_dim": 8335,
+    "real_craftax_reset_obs_size": 8268,
+    "note": "structured synthetic (seeded normal, non-zero, deterministic); the trained obs is 8268 MiniCraftaxTrain + 67 multitask embedding assembled by the training wrapper, which a bare env reset cannot reproduce — labeled, never disguised as real"
+  },
+  "REAL_FORWARD_SMOKE_PASS": true,
+  "smoke": {
+    "obs_source": "STRUCTURED_SYNTHETIC_SEEDED_NORMAL",
+    "obs_dim": 8335,
+    "action_count": 43,
+    "batches": {
+      "batch_1": {
+        "deterministic_reproducible": true,
+        "action_shape": [
+          1
+        ],
+        "logits_shape": [
+          1,
+          43
+        ],
+        "actions_in_range": true,
+        "logits_finite": true,
+        "value_finite": true,
+        "stochastic_seeded_reproducible": true,
+        "stochastic_actions_in_range": true,
+        "memory_progression": {
+          "steps": 8,
+          "seg_count_after": 8,
+          "seg_count_increments_correct": true,
+          "mem_tokens_untouched_before_boundary": true
+        }
+      },
+      "batch_4": {
+        "deterministic_reproducible": true,
+        "action_shape": [
+          4
+        ],
+        "logits_shape": [
+          4,
+          43
+        ],
+        "actions_in_range": true,
+        "logits_finite": true,
+        "value_finite": true,
+        "stochastic_seeded_reproducible": true,
+        "stochastic_actions_in_range": true,
+        "memory_progression": {
+          "steps": 8,
+          "seg_count_after": 8,
+          "seg_count_increments_correct": true,
+          "mem_tokens_untouched_before_boundary": true
+        }
+      }
+    },
+    "segment_boundary_probe": {
+      "ran": true,
+      "seg_count_after_128_steps": 0,
+      "segment_boundary_crossed": true,
+      "mem_tokens_nonzero_after_boundary": true,
+      "carry_mode": "persistent",
+      "persistent_carry_verified": true
+    },
+    "zero_update_params_bit_identical": true,
+    "params_sha256_before": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "params_sha256_after": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d"
+  },
+  "fresh_process_recheck": {
+    "returncode": 0,
+    "elapsed_s": 0.731,
+    "executable": "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\sim_frontier_venv\\Scripts\\python.exe",
+    "in_process_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "fresh_process_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "match": true
+  },
+  "verdict": "PASS",
+  "elapsed_s": 36.13,
+  "environment": {
+    "python": "3.12.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "jax": "0.4.35",
+    "numpy": "2.2.6",
+    "jax_devices": [
+      "TFRT_CPU_0"
+    ],
+    "flax": "0.10.7",
+    "craftax": "installed"
+  }
+}
