@@ -253,24 +253,20 @@ class RealBackendAdapter:
 # Protocol without a cycle)
 # ---------------------------------------------------------------------------
 from d052.feedback_llm_ued import (  # noqa: E402
-    adaptive_designer,
-    adversarial_reviewer,
     behavior_auditor,
     causal_failure_analyst,
     critic_skeptic,
     env_coder,
     explorer,
-    feedback_diagnostician,
     intervention_tutor,
     student_modeler,
 )
 
 _DEFAULT_RULES: Dict[str, Callable[[dict], dict]] = {
-    C.ROLE_FEEDBACK_DIAGNOSTICIAN: feedback_diagnostician.mock_rule,
-    C.ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER: adaptive_designer.mock_rule,
-    C.ROLE_ADVERSARIAL_REVIEWER: adversarial_reviewer.mock_rule,
     # six-role Review Board (C6) — every role always registered; the board
-    # runs all six every window, in every comparison mode
+    # runs all six every window, in every comparison mode. The legacy
+    # Diagnostician/Designer/Reviewer roles were abolished with C8 and are
+    # NOT registered (complete() raises UNKNOWN_ROLE_FOR_MOCK_BACKEND).
     C.ROLE_STUDENT_MODELER: student_modeler.mock_rule,
     C.ROLE_BEHAVIOR_AUDITOR: behavior_auditor.mock_rule,
     C.ROLE_CAUSAL_FAILURE_ANALYST: causal_failure_analyst.mock_rule,

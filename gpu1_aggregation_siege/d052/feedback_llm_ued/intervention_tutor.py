@@ -131,6 +131,17 @@ def mock_rule(context: dict) -> dict:
     The tutor re-derives verdicts from the SAME visible feedback the analyst
     sees (roles share one context; no role reads another role's output), so
     the two stay consistent by construction.
+
+    Proposal sources, in deterministic order:
+
+    1. one proposal per hypothesis-bearing family (first hypothesis by id):
+       SUPPORTED -> RETAIN, REFUTED -> RETIRE, INCONCLUSIVE -> MUTATE (all
+       cited), STALE -> uncited exploration MUTATE;
+    2. one uncited exploration MUTATE per family that carries NO ledger
+       hypothesis at all — the loop must never die of an empty budget just
+       because every seeded line of inquiry was retired (the Reconciler
+       still applies the exploration cap; these are proposals, rules
+       dispose).
     """
     window = int(context.get("window", 0))
     hypotheses = context.get("hypotheses", [])
@@ -179,6 +190,19 @@ def mock_rule(context: dict) -> dict:
                 reason=f"{verdict} by visible probe feedback for "
                        f"hypothesis {hid}",
                 is_exploration=False))
+        seen_families.add(fam)
+
+    # families with no hypothesis at all: bounded exploration so the dynamic
+    # budget is never empty when all seeded lines of inquiry were retired
+    for fam in C.ENVIRONMENT_FAMILIES:
+        if fam in seen_families:
+            continue
+        proposals.append(dict(
+            environment_family=fam, decision=C.DECISION_MUTATE,
+            based_on_feedback_ids=[], based_on_hypothesis_ids=[],
+            reason=f"no hypothesis yet for {fam}: first controlled "
+                   f"measurement as exploration",
+            is_exploration=True))
         seen_families.add(fam)
 
     rationale = (f"window {window}: {len(proposals)} family proposal(s) "

@@ -1,29 +1,49 @@
-"""FeedbackUEDController — closes the scientific loop (task §1/§5).
+"""FeedbackUEDController — double-window state machine (C8 rewrite).
 
-Per window k:
+Per window k (all k >= 0; window 0's k-1 feedback view is empty, the board
+still runs its complete six roles):
 
-    plan_k -> candidate generation -> simulator probe -> expected-vs-observed
-    comparison -> (gate) LLM feedback diagnosis -> RETAIN/MUTATE/RETIRE/
-    REQUEST_CONTROL -> plan_{k+1}
+    A. EVIDENCE  — behavior-failure evidence of window k-1 probes +
+                   FeedbackView over ONLY frozen feedback from windows
+                   <= k-1 (static mode gets the structurally empty
+                   NullFeedbackView);
+    B. BOARD     — six-role Review Board, always all six calls: verdicts on
+                   <= k-1 feedback (explicit feedback_id / hypothesis_id /
+                   prediction-signature citations) + new PENDING hypotheses
+                   + AxisDirectives + per-family proposals;
+    C. REVISION  — verdict application to the ledger (P0-6 binding guard) +
+                   Reconciler -> plan_k + training-seam no-op bookkeeping;
+    D. PROBING   — EnvCoder (7th call) -> compile/reset/step gates ->
+                   directive-driven candidate expansion -> staged funnel
+                   probe -> expected-vs-observed grading -> STAGED
+                   feedback_k (not yet visible to anything);
+    E. FREEZE    — feedback_k records are written atomically to the store
+                   and graded, the board's new hypotheses are registered,
+                   and the window is marked FROZEN.
 
-Three comparison modes (§5):
+After phase E, ANY verdict application or plan change for window k raises
+``SAME_WINDOW_REVISION_FORBIDDEN`` (fail closed). Revision driven by
+feedback_k is only possible at window k+1, through the complete six-role
+board citing feedback_k's feedback ids — revisions always lag feedback by
+exactly one window (``NEXT_WINDOW_REVISION_ONLY`` /
+``SAME_WINDOW_REVISION_REJECTED``).
 
-* ``static_llm``       — the bootstrap initial plan is kept forever; feedback
-                         is never read (the generate-then-accept baseline);
-* ``normal_feedback``  — the full loop with CORRECT candidate<->feedback
-                         binding;
-* ``shuffled_feedback``— identical, except the candidate<->feedback binding is
-                         deterministically rotated (candidate identities and
-                         hypothesis bindings stay; observed metric payloads
-                         rotate), proving the plan really is a function of the
-                         feedback and not of window order.
+Three comparison modes (§5) share the SAME six roles / EnvCoder / probe /
+training seam / seeds / budget:
 
-All three modes share the SAME deterministic bootstrap plan and hypothesis
-seeds, so any plan divergence is attributable solely to feedback use.
+* ``static_llm``        — the board reads the structurally empty
+                          NullFeedbackView; every revision is EXPLORATION;
+* ``normal_feedback``   — honest candidate<->feedback binding;
+* ``shuffled_feedback`` — identical, except the candidate<->feedback metric
+                          binding is deterministically rotated at freeze
+                          time (C9 moves this into the frozen permuted view),
+                          proving the plan really is a function of the
+                          feedback and not of window order.
 
 Honesty posture re-asserted at construction: every real-world authorization
 flag must be False this round; the loop runs on the deterministic mock LLM
-backend + the deterministic symbolic probe runner and says so in every record.
+backend + the deterministic symbolic probe runner and says so in every
+record (ENGINEERING_SCAFFOLD).
 """
 from __future__ import annotations
 
@@ -31,15 +51,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from d052.feedback_llm_ued import constants as C
-from d052.feedback_llm_ued import (
-    adaptive_designer,
-    adversarial_reviewer,
-    feedback_diagnostician,
-)
+from d052.feedback_llm_ued.behavior_failure import assemble_board_context
 from d052.feedback_llm_ued.deterministic_reconciler import (
     DeterministicReconciler,
 )
-from d052.feedback_llm_ued.environment_generator import generate_candidates
+from d052.feedback_llm_ued.env_coder import run_env_coder
+from d052.feedback_llm_ued.env_coder_gate import EnvCoderGate
+from d052.feedback_llm_ued.environment_generator import (
+    generate_candidates_from_directives,
+)
 from d052.feedback_llm_ued.execution_mode import (
     EXECUTION_MODE_MOCK_DRY_RUN,
     FeedbackLaunchGate,
@@ -47,13 +67,12 @@ from d052.feedback_llm_ued.execution_mode import (
 from d052.feedback_llm_ued.expected_observed import ExpectedObservedComparator
 from d052.feedback_llm_ued.feedback_contracts import (
     CurriculumPlan,
-    FamilyAllocation,
     ProbeMetrics,
     plan_signature_hash,
 )
-from d052.feedback_llm_ued.feedback_invocation_gate import (
-    GateInput,
-    evaluate_gate,
+from d052.feedback_llm_ued.feedback_view import (
+    NormalFeedbackView,
+    NullFeedbackView,
 )
 from d052.feedback_llm_ued.formal_isolation import FormalSourceIsolationGuard
 from d052.feedback_llm_ued.hypothesis_ledger import (
@@ -70,6 +89,7 @@ from d052.feedback_llm_ued.plan_revision import (
     PlanRevisionRecord,
     assert_feedback_ids_known,
 )
+from d052.feedback_llm_ued.review_board import BoardOutput, run_review_board
 from d052.feedback_llm_ued.simulator_feedback_store import (
     SimulatorFeedbackRecord,
     SimulatorFeedbackStore,
@@ -83,28 +103,58 @@ from d052.feedback_llm_ued.student_binding import (
     local_symbolic_binding,
 )
 
-#: deterministic bootstrap: first four families, seeded hypotheses + plan
+#: deterministic bootstrap: first four families carry the seeded hypotheses
 _BOOTSTRAP_FAMILIES = C.ENVIRONMENT_FAMILIES[:4]
-BOOTSTRAP_PLAN_ID = "plan-0000-bootstrap-v1"
+
+#: slots requested per funded board proposal (the Reconciler caps/tops up;
+#: RETIRE and REQUEST_CONTROL proposals always request zero budget)
+PROPOSAL_DEFAULT_SLOTS = 4
+
+# ---------------------------------------------------------------------------
+# double-window phase machine (fixed order, monotone per window)
+# ---------------------------------------------------------------------------
+PHASE_EVIDENCE = "EVIDENCE"
+PHASE_BOARD = "BOARD"
+PHASE_REVISION = "REVISION"
+PHASE_PROBING = "PROBING"
+PHASE_FROZEN = "FROZEN"
+_PHASE_ORDER = (PHASE_EVIDENCE, PHASE_BOARD, PHASE_REVISION, PHASE_PROBING,
+                PHASE_FROZEN)
+
+
+class SameWindowRevisionForbidden(RuntimeError):
+    """A verdict / plan change was attempted outside the window's REVISION
+    phase (i.e. after feedback_k was staged or frozen) — the double-window
+    state machine refuses it, fail closed."""
+
+
+class StateMachineViolation(RuntimeError):
+    """The phase machine was asked to move backwards — an internal bug."""
 
 
 @dataclass
 class WindowRecord:
     window: int
     mode: str
-    gate_conditions: List[str]
-    invoked_llm: bool
+    phase: str
+    evidence_window: int
+    feedback_view_label: str
+    board_call_count: int
+    env_coder_call_count: int
     n_llm_calls: int
-    reviewer_invoked: bool
-    risk_triggers: List[str]
-    reused_previous_plan: bool
+    request_control: bool
+    global_risk: str
     plan_id: str
     plan_signature_hash: str
     revision_label: str
+    n_directives: int = 0
+    n_coded: int = 0
+    gate_passed: bool = False
     n_candidates: int = 0
     n_feedback_records: int = 0
     funnel_stats: Dict[str, int] = field(default_factory=dict)
     window_aggregates: Dict[str, float] = field(default_factory=dict)
+    training_step_status: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -139,7 +189,7 @@ def _assert_authorization_posture() -> None:
 
 
 class FeedbackUEDController:
-    """Deterministic, replayable driver of the feedback-adaptive loop."""
+    """Deterministic, replayable driver of the double-window loop."""
 
     def __init__(self, mode: str, *, backend=None, probe_runner=None) -> None:
         if mode not in C.FEEDBACK_MODES:
@@ -155,6 +205,7 @@ class FeedbackUEDController:
         self.store = SimulatorFeedbackStore()
         self.comparator = ExpectedObservedComparator()
         self.reconciler = DeterministicReconciler()
+        self.env_coder_gate = EnvCoderGate()
         self.isolation = FormalSourceIsolationGuard()
         # CC4 Student binding seam: the CC4 shared StudentAdapter is absent
         # from this worktree (verified), so the loop carries the honest local
@@ -166,13 +217,19 @@ class FeedbackUEDController:
         self.revisions: List[PlanRevisionRecord] = []
         self.envelopes: List[object] = []
         self.plans: Dict[str, CurriculumPlan] = {}
+        self.boards: Dict[int, BoardOutput] = {}
+        self.training_log: List[object] = []
+        self._plans_by_window: Dict[int, CurriculumPlan] = {}
         self._window_feedback: Dict[int, List[str]] = {}
+        self._phases: Dict[int, str] = {}
         self._sequence = 0
         self._summary: Optional[RunSummary] = None
 
     # ------------------------------------------------------------------ seeds
     def _seed(self) -> None:
-        """Deterministic hypothesis seeds + the shared bootstrap plan."""
+        """Deterministic hypothesis seeds. There is NO bootstrap plan: plan_0
+        is produced by window 0's board + Reconciler exactly like every
+        other window's plan (all-exploration, since no feedback exists)."""
         for i, family in enumerate(_BOOTSTRAP_FAMILIES):
             self.ledger.register(HypothesisRecord(
                 hypothesis_id=f"hyp-{i:02d}", source_window=0,
@@ -184,275 +241,230 @@ class FeedbackUEDController:
                                      "student_behavior_activation": 0.55,
                                      "student_front_progress": 0.48},
                 environment_family=family, confidence=0.5))
-        allocations = [FamilyAllocation(
-            environment_family=family, slots=3, decision=C.DECISION_MUTATE,
-            reason="bootstrap exploration (no feedback exists yet)",
-            is_exploration=True) for family in _BOOTSTRAP_FAMILIES]
-        plan = CurriculumPlan(
-            plan_id=BOOTSTRAP_PLAN_ID, window=0, mode=self.mode,
-            allocations=allocations, explored_families=list(_BOOTSTRAP_FAMILIES))
-        self.plans[plan.plan_id] = plan
-        self.revisions.append(PlanRevisionRecord(
-            revision_id="rev-w00-bootstrap", window=0, mode=self.mode,
-            new_plan_id=plan.plan_id, modifications=[],
-            label=C.EXPLORATION_LABEL))
 
     # ------------------------------------------------------------------ loop
     def run(self, max_windows: int = C.MAX_WINDOWS) -> RunSummary:
         self._seed()
         records: List[WindowRecord] = []
-        prev_plan = self.plans[BOOTSTRAP_PLAN_ID]
-        state = dict(front_stalled=0, windows_without_improvement=0,
-                     prev_front=None, prev_retention=None, prev_activation=None,
-                     prev_learnability=None, plan_age=0,
-                     prev_dynamic_selected=C.DYNAMIC_UED_SLOTS)
         for window in range(max_windows):
-            if window == 0:
-                wrec = self._window_bootstrap(window, prev_plan, state)
-            else:
-                wrec, prev_plan = self._window_adaptive(window, prev_plan, state)
-            records.append(wrec)
+            records.append(self._run_window(window))
         self._summary = self._build_summary(records)
         assert_no_real_llm_usage(self.backend.usage)
         return self._summary
 
-    # ------------------------------------------------------------- window 0
-    def _window_bootstrap(self, window: int, plan: CurriculumPlan,
-                          state: dict) -> WindowRecord:
-        n_fb = self._generate_probe_bind(window, plan)
-        agg = self._window_aggregates(window)
-        state.update(prev_front=agg.get("front_progress"),
-                     prev_retention=agg.get("global_retention"),
-                     prev_activation=agg.get("behavior_activation"),
-                     prev_learnability=agg.get("learnability"),
-                     plan_age=0)
-        return WindowRecord(
-            window=window, mode=self.mode, gate_conditions=[],
-            invoked_llm=False, n_llm_calls=0, reviewer_invoked=False,
-            risk_triggers=[], reused_previous_plan=False, plan_id=plan.plan_id,
-            plan_signature_hash=plan_signature_hash(plan),
-            revision_label=C.EXPLORATION_LABEL,
-            n_candidates=C.RAW_CANDIDATES, n_feedback_records=n_fb,
-            funnel_stats=dict(self._last_funnel_stats),
-            window_aggregates=agg)
-
-    # ----------------------------------------------------------- window >=1
-    def _window_adaptive(self, window: int, prev_plan: CurriculumPlan,
-                         state: dict) -> Tuple[WindowRecord, CurriculumPlan]:
-        agg_prev = self._window_aggregates(window - 1)
-        front = agg_prev.get("front_progress")
-        if state["prev_front"] is not None and front is not None:
-            if abs(front - state["prev_front"]) < 0.02:
-                state["front_stalled"] += 1
-            else:
-                state["front_stalled"] = 0
-        retention_delta = 0.0
-        if state["prev_retention"] is not None and \
-                agg_prev.get("global_retention") is not None:
-            retention_delta = (agg_prev["global_retention"]
-                               - state["prev_retention"])
-        activation_change = 0.0
-        if state["prev_activation"] is not None and \
-                agg_prev.get("behavior_activation") is not None:
-            activation_change = abs(agg_prev["behavior_activation"]
-                                    - state["prev_activation"])
-        learn = agg_prev.get("learnability")
-        if state["prev_learnability"] is not None and learn is not None:
-            if learn <= state["prev_learnability"] + 0.01:
-                state["windows_without_improvement"] += 1
-            else:
-                state["windows_without_improvement"] = 0
-
-        has_prior_diagnosis = any(
-            e.role == feedback_diagnostician.ROLE for e in self.envelopes)
-        gate_input = GateInput(
-            window=window,
-            has_prior_diagnosis=has_prior_diagnosis,
-            core_behavior_rate_change=activation_change,
-            front_stalled_windows=state["front_stalled"],
-            global_retention_delta=retention_delta,
-            previous_plan_exhausted=(
-                state["prev_dynamic_selected"] < C.STAGE2_KEEP),
-            valid_candidate_count=self._last_stage1_survivors,
-            required_candidate_count=C.STAGE1_KEEP,
-            cached_plan_age_windows=state["plan_age"])
-        gate = evaluate_gate(gate_input)
-
-        invoke = bool(gate["invoke_llm"])
-        if self.mode == C.MODE_STATIC_LLM:
-            invoke = False                     # baseline never reads feedback
-
+    def _run_window(self, window: int) -> WindowRecord:
         n_calls_before = self.backend.usage.total_calls
-        if not invoke:
-            state["plan_age"] += 1
-            agg = self._window_aggregates(window - 1)
-            wrec = WindowRecord(
-                window=window, mode=self.mode,
-                gate_conditions=list(gate["conditions"]), invoked_llm=False,
-                n_llm_calls=0, reviewer_invoked=False, risk_triggers=[],
-                reused_previous_plan=True, plan_id=prev_plan.plan_id,
-                plan_signature_hash=plan_signature_hash(prev_plan),
-                revision_label="REUSED",
-                window_aggregates=agg)
-            return wrec, prev_plan
 
-        # ---- LLM path: diagnose -> design -> (review) -> reconcile --------
-        diagnosis = self._diagnose(window)
-        self._apply_verdicts(window, diagnosis)
-        allocations, designer_out = self._design(window, diagnosis)
-        risk_ctx = self._risk_context(window, diagnosis, allocations, state)
-        triggers = adversarial_reviewer.evaluate_risk_triggers(risk_ctx)
-        reviewer_invoked = bool(triggers)
-        if reviewer_invoked:
-            allocations = self._review(window, allocations, risk_ctx, triggers)
-        plan, revision = self._reconcile(window, prev_plan, allocations)
-        state["plan_age"] = 0
+        # -- A. evidence assembly: ONLY frozen windows <= k-1 are visible ---
+        self._set_phase(window, PHASE_EVIDENCE)
+        evidence_window = max(0, window - 1)
+        view = self._feedback_view(window)
+        board_context = assemble_board_context(
+            self.store, window=evidence_window, mode=self.mode,
+            feedback_view_label=view.label)
 
-        n_fb = self._generate_probe_bind(window, plan)
+        # -- B. six-role Review Board (always all six calls) ----------------
+        self._set_phase(window, PHASE_BOARD)
+        board = run_review_board(
+            window=window, mode=self.mode, board_context=board_context,
+            view=view, hypotheses=self.ledger.all(), backend=self.backend,
+            sequence_start=self._sequence)
+        self._sequence += C.BOARD_CALLS_PER_WINDOW
+        self.envelopes.extend(board.envelopes)
+        self.boards[window] = board
+
+        # -- C. REVISION phase: verdicts -> ledger; proposals -> plan_k -----
+        self._set_phase(window, PHASE_REVISION)
+        self.apply_board_verdicts(window, board.verdicts)
+        plan, revision = self.revise_plan(window, board)
+        training = self.training_seam.execute_training_step(window)
+        self.training_log.append(training)
+
+        # -- D. PROBING phase: EnvCoder -> gates -> probe -> staged fb_k ----
+        self._set_phase(window, PHASE_PROBING)
+        env_out, env_envelope = run_env_coder(
+            window=window, directives=list(board.directives),
+            backend=self.backend, sequence=self._sequence)
+        self._sequence += 1
+        self.envelopes.append(env_envelope)
+        gate_report = self.env_coder_gate.evaluate(
+            window=window, directives=list(board.directives), output=env_out)
+        self.env_coder_gate.assert_passed(gate_report)
+        staged, batch = self._probe_and_stage(window, plan, board.directives)
+
+        # -- E. ATOMIC FREEZE: feedback_k + new hypotheses + FROZEN ---------
+        self._freeze_window(window, staged, board.new_hypotheses)
+
         agg = self._window_aggregates(window)
-        state.update(prev_front=agg.get("front_progress"),
-                     prev_retention=agg.get("global_retention"),
-                     prev_activation=agg.get("behavior_activation"),
-                     prev_learnability=agg.get("learnability"),
-                     prev_dynamic_selected=self._last_dynamic_selected)
-        wrec = WindowRecord(
-            window=window, mode=self.mode,
-            gate_conditions=list(gate["conditions"]), invoked_llm=True,
+        return WindowRecord(
+            window=window, mode=self.mode, phase=self._phases[window],
+            evidence_window=evidence_window,
+            feedback_view_label=view.label,
+            board_call_count=C.BOARD_CALLS_PER_WINDOW,
+            env_coder_call_count=1,
             n_llm_calls=self.backend.usage.total_calls - n_calls_before,
-            reviewer_invoked=reviewer_invoked, risk_triggers=triggers,
-            reused_previous_plan=False, plan_id=plan.plan_id,
+            request_control=board.request_control,
+            global_risk=board.critic.global_risk,
+            plan_id=plan.plan_id,
             plan_signature_hash=plan_signature_hash(plan),
             revision_label=revision.label,
-            n_candidates=C.RAW_CANDIDATES, n_feedback_records=n_fb,
-            funnel_stats=dict(self._last_funnel_stats),
-            window_aggregates=agg)
-        return wrec, plan
+            n_directives=len(board.directives),
+            n_coded=len(env_out.coded),
+            gate_passed=gate_report.passed,
+            n_candidates=C.RAW_CANDIDATES,
+            n_feedback_records=len(staged),
+            funnel_stats=dict(batch.funnel_stats),
+            window_aggregates=agg,
+            training_step_status=training.status)
 
-    # ------------------------------------------------------------ LLM steps
-    def _diagnose(self, window: int):
-        fb_ids = self._window_feedback.get(window - 1, [])
-        feedback_ctx = []
-        for fid in fb_ids:
-            rec = self.store.get(fid)
-            feedback_ctx.append(dict(
-                feedback_id=rec.feedback_id,
-                candidate_id=rec.candidate_id,
-                distinguishes_hypothesis_ids=rec.distinguishes_hypothesis_ids,
-                expected_observed_match=rec.expected_observed_match))
-        context = dict(
-            window=window,
-            hypotheses=[dict(hypothesis_id=h.hypothesis_id,
-                             target_behavior=h.target_behavior,
-                             environment_family=h.environment_family,
-                             confidence=h.confidence, status=h.status)
-                        for h in self.ledger.all()],
-            feedback=feedback_ctx)
-        env = feedback_diagnostician.run(context, self.backend, window=window,
-                                         sequence=self._sequence)
-        self._sequence += 1
-        self.envelopes.append(env)
-        return feedback_diagnostician.DiagnosisOutput(**env.parsed_json)
+    # ------------------------------------------------------- phase machine
+    def phase_of(self, window: int) -> Optional[str]:
+        return self._phases.get(window)
 
-    def _apply_verdicts(self, window: int, diagnosis) -> None:
-        for v in diagnosis.hypothesis_verdicts:
+    def _set_phase(self, window: int, phase: str) -> None:
+        if phase not in _PHASE_ORDER:
+            raise StateMachineViolation(
+                f"UNKNOWN_PHASE: {phase!r}")
+        current = self._phases.get(window)
+        if current is not None and \
+                _PHASE_ORDER.index(current) >= _PHASE_ORDER.index(phase):
+            raise StateMachineViolation(
+                f"STATE_MACHINE_PHASE_REGRESSION: window {window} phase "
+                f"{current!r} -> {phase!r} (phases are monotone)")
+        self._phases[window] = phase
+
+    def _assert_revision_allowed(self, window: int) -> None:
+        """Revision is ONLY legal during window k's REVISION phase — before
+        feedback_k is staged. After staging/freezing, the window is closed
+        and only window k+1's six-role board may act on feedback_k."""
+        phase = self._phases.get(window)
+        if phase != PHASE_REVISION:
+            raise SameWindowRevisionForbidden(
+                f"SAME_WINDOW_REVISION_FORBIDDEN: window {window} is in "
+                f"phase {phase!r}; verdict application / plan revision is "
+                f"only legal during the {PHASE_REVISION!r} phase, before "
+                f"feedback_{window} is staged. Revisions based on "
+                f"feedback_{window} may only happen at window {window + 1} "
+                f"through the complete six-role board explicitly citing its "
+                f"feedback ids (NEXT_WINDOW_REVISION_ONLY)")
+
+    # ------------------------------------------------------- feedback view
+    def _feedback_view(self, window: int):
+        """The ONLY surface through which the board touches feedback.
+
+        static: NullFeedbackView (structural — holds no store reference).
+        normal/shuffled (C8): read-only snapshot of frozen windows <= k-1.
+        C9 replaces the shuffled path with the frozen PermutedFeedbackView.
+        """
+        if self.mode == C.MODE_STATIC_LLM:
+            return NullFeedbackView()
+        records = [r for r in self.store.all() if r.window <= window - 1]
+        return NormalFeedbackView(records, window_scope=max(0, window - 1))
+
+    # ------------------------------------------------- revision (phase C)
+    def validate_verdict_citations(self, window: int, verdicts) -> None:
+        """P0-6 binding guard (defense-in-depth over the board's own
+        citation validation). Pure validator — phase-independent, so the
+        negative tests can exercise it directly. Fail closed on:
+
+        * more than one verdict per hypothesis per window;
+        * unknown hypothesis / unknown feedback id;
+        * feedback from THIS or a LATER window (FUTURE_FEEDBACK_ID);
+        * duplicate citation inside one verdict;
+        * record not distinguishing the verdicted hypothesis;
+        * record family != hypothesis family;
+        * record produced by a plan this run never generated.
+        """
+        if window < 0:
+            raise ValueError(f"ILLEGAL_REVISION_WINDOW: {window}")
+        seen_hypotheses: set = set()
+        for v in verdicts:
+            if v.hypothesis_id in seen_hypotheses:
+                raise ValueError(
+                    f"DUPLICATE_HYPOTHESIS_VERDICT: {v.hypothesis_id!r} is "
+                    f"verdicted more than once in window {window}")
+            seen_hypotheses.add(v.hypothesis_id)
             try:
-                self.ledger.get(v.hypothesis_id)
+                hyp = self.ledger.get(v.hypothesis_id)
             except KeyError:
-                continue                       # unknown hypothesis: fail-safe
-            for fid in v.feedback_ids:
+                raise ValueError(
+                    f"UNKNOWN_HYPOTHESIS_ID: verdict targets "
+                    f"{v.hypothesis_id!r} which the ledger does not hold"
+                ) from None
+            seen_fids: set = set()
+            for fid in v.cited_feedback_ids:
+                if fid in seen_fids:
+                    raise ValueError(
+                        f"DUPLICATE_FEEDBACK_CITATION: {fid!r} cited twice "
+                        f"by verdict for {v.hypothesis_id!r}")
+                seen_fids.add(fid)
+                try:
+                    rec = self.store.get(fid)
+                except KeyError:
+                    raise ValueError(
+                        f"UNKNOWN_FEEDBACK_ID: {fid!r} cited by verdict for "
+                        f"{v.hypothesis_id!r} does not exist in the "
+                        f"SimulatorFeedbackStore") from None
+                if rec.window >= window:
+                    raise ValueError(
+                        f"FUTURE_FEEDBACK_ID: {fid!r} comes from window "
+                        f"{rec.window}; a window-{window} revision may only "
+                        f"cite feedback from windows <= {window - 1}")
+                if v.hypothesis_id not in rec.distinguishes_hypothesis_ids:
+                    raise ValueError(
+                        f"FEEDBACK_BINDING_MISMATCH: {fid!r} does not "
+                        f"distinguish hypothesis {v.hypothesis_id!r}")
+                if rec.environment_family != hyp.environment_family:
+                    raise ValueError(
+                        f"FEEDBACK_BINDING_MISMATCH: {fid!r} family "
+                        f"{rec.environment_family!r} != hypothesis family "
+                        f"{hyp.environment_family!r}")
+                if rec.source_plan_id not in self.plans:
+                    raise ValueError(
+                        f"UNKNOWN_SOURCE_PLAN: {fid!r} was produced by plan "
+                        f"{rec.source_plan_id!r} which this run never "
+                        f"generated")
+
+    def apply_board_verdicts(self, window: int, verdicts) -> None:
+        """Apply the board's verdicts to the ledger — ONLY in the REVISION
+        phase (double-window state machine)."""
+        self._assert_revision_allowed(window)
+        self.validate_verdict_citations(window, verdicts)
+        for v in verdicts:
+            for fid in v.cited_feedback_ids:
                 rec = self.store.get(fid)
-                agrees = rec.expected_observed_match == C.MATCH_DIRECTION_AGREE
+                agrees = rec.expected_observed_match == \
+                    C.MATCH_DIRECTION_AGREE
                 self.ledger.bind_feedback(v.hypothesis_id, fid, agrees=agrees)
             self.ledger.apply_verdict(
                 v.hypothesis_id, status=v.verdict, window=window,
-                reason=v.reason, feedback_ids=list(v.feedback_ids),
+                reason=v.reason, feedback_ids=list(v.cited_feedback_ids),
                 confidence=v.new_confidence)
 
-    def _design(self, window: int, diagnosis):
-        context = dict(
-            window=window,
-            verdicts=[v.model_dump() for v in diagnosis.hypothesis_verdicts],
-            hypotheses=[dict(hypothesis_id=h.hypothesis_id,
-                             environment_family=h.environment_family)
-                        for h in self.ledger.all()],
-            budget=C.DYNAMIC_UED_SLOTS,
-            global_risk=diagnosis.global_risk)
-        env = adaptive_designer.run(context, self.backend, window=window,
-                                    sequence=self._sequence)
-        self._sequence += 1
-        self.envelopes.append(env)
-        out = adaptive_designer.DesignerOutput(**env.parsed_json)
-        allocations = [a.model_dump() for a in out.allocations]
-        if out.request_control:
-            cited = [fid for v in diagnosis.hypothesis_verdicts
-                     for fid in v.feedback_ids]
-            if cited:
-                allocations.append(dict(
-                    environment_family=C.ENVIRONMENT_FAMILIES[0],
-                    decision=C.DECISION_REQUEST_CONTROL, slots=0,
-                    based_on_feedback_ids=sorted(set(cited))[:1],
-                    reason="escalation: global risk HIGH",
-                    is_exploration=False))
-        return allocations, out
-
-    def _risk_context(self, window: int, diagnosis, allocations,
-                      state: dict) -> dict:
-        prev_ids = self._window_feedback.get(window - 1, [])
-        opposite = sum(1 for fid in prev_ids
-                       if self.store.get(fid).expected_observed_match
-                       == C.MATCH_DIRECTION_OPPOSITE)
-        return dict(
-            window=window,
-            overall_confidence=diagnosis.overall_confidence,
-            global_risk=diagnosis.global_risk,
-            allocations=allocations,
-            windows_without_improvement=state["windows_without_improvement"],
-            opposite_probe_count=opposite,
-            reject_rate=self._last_reject_rate,
-            preparing_formal_run=False)
-
-    def _review(self, window: int, allocations: List[dict], risk_ctx: dict,
-                triggers: List[str]) -> List[dict]:
-        context = dict(risk_ctx, triggered_by=triggers,
-                       verdicts=[], hypotheses=[])
-        env = adversarial_reviewer.run(context, self.backend, window=window,
-                                       sequence=self._sequence)
-        self._sequence += 1
-        self.envelopes.append(env)
-        out = adversarial_reviewer.ReviewerOutput(**env.parsed_json)
-        if not out.forced_retire_families:
-            return allocations
-        forced = set(out.forced_retire_families)
-        fixed: List[dict] = []
-        for a in allocations:
-            if a["environment_family"] in forced and \
-                    a["decision"] != C.DECISION_RETIRE:
-                if a["based_on_feedback_ids"]:
-                    fixed.append(dict(
-                        a, decision=C.DECISION_RETIRE, slots=0,
-                        reason="forced retirement by adversarial reviewer: "
-                               + a["reason"]))
-                # uncited (exploration) allocations are simply dropped
-                continue
-            fixed.append(a)
-        return fixed
-
-    def _reconcile(self, window: int, prev_plan: CurriculumPlan,
-                   allocations: List[dict]):
-        previous_slots = {a.environment_family: a.slots
-                          for a in prev_plan.allocations}
+    def revise_plan(self, window: int, board: BoardOutput
+                    ) -> Tuple[CurriculumPlan, PlanRevisionRecord]:
+        """Close the board's family proposals into plan_k — ONLY in the
+        REVISION phase (double-window state machine)."""
+        self._assert_revision_allowed(window)
+        allocations = [self._proposal_to_allocation(p)
+                       for p in board.family_proposals]
+        previous = self._plans_by_window.get(window - 1)
+        previous_plan_id = previous.plan_id if previous else ""
+        previous_slots = ({a.environment_family: a.slots
+                           for a in previous.allocations} if previous else {})
         rc = self.reconciler.reconcile(
             window=window, mode=self.mode, proposals=allocations,
             known_feedback_ids=set(self.store.ids()),
-            previous_plan_id=prev_plan.plan_id,
+            previous_plan_id=previous_plan_id,
             previous_slots=previous_slots)
         plan = rc.plan
         self.plans[plan.plan_id] = plan
+        self._plans_by_window[window] = plan
         cited = sorted({fid for m in rc.modifications
                         for fid in m["based_on_feedback_ids"]})
         revision = PlanRevisionRecord(
             revision_id=f"rev-w{window:02d}", window=window, mode=self.mode,
-            previous_plan_id=prev_plan.plan_id, new_plan_id=plan.plan_id,
+            previous_plan_id=previous_plan_id, new_plan_id=plan.plan_id,
             based_on_feedback_ids=cited,
             modifications=[PlanModification(**m) for m in rc.modifications],
             label=(FEEDBACK_DRIVEN_LABEL if cited else C.EXPLORATION_LABEL))
@@ -460,26 +472,43 @@ class FeedbackUEDController:
         self.revisions.append(revision)
         return plan, revision
 
-    # ------------------------------------------------- generation + probing
-    def _generate_probe_bind(self, window: int,
-                             plan: CurriculumPlan) -> int:
+    @staticmethod
+    def _proposal_to_allocation(proposal) -> dict:
+        """FamilyProposal -> Reconciler allocation dict.
+
+        The board proposes actions, the Reconciler disposes budget: core
+        proposals request PROPOSAL_DEFAULT_SLOTS (the Reconciler caps and
+        tops up); RETIRE / REQUEST_CONTROL request zero budget.
+        """
+        slots = 0 if proposal.decision in (C.DECISION_RETIRE,
+                                           C.DECISION_REQUEST_CONTROL) \
+            else PROPOSAL_DEFAULT_SLOTS
+        reason = proposal.reason or (
+            f"{proposal.decision} proposal for "
+            f"{proposal.environment_family}")
+        return dict(environment_family=proposal.environment_family,
+                    decision=proposal.decision, slots=slots,
+                    based_on_feedback_ids=list(proposal.based_on_feedback_ids),
+                    reason=reason,
+                    is_exploration=proposal.is_exploration)
+
+    # -------------------------------------------- probing + staging (D)
+    def _probe_and_stage(self, window: int, plan: CurriculumPlan, directives
+                         ) -> Tuple[List[SimulatorFeedbackRecord], object]:
+        """Probe the directive-driven candidates and STAGE feedback_k.
+
+        Staged records are NOT visible to anything yet: they enter the store
+        only in the atomic freeze (phase E). This is what makes window k's
+        feedback unreadable to window k's own revision path.
+        """
         hyp_by_family: Dict[str, List[str]] = {}
         for h in self.ledger.all():
             hyp_by_family.setdefault(h.environment_family, []).append(
                 h.hypothesis_id)
-        for fam in hyp_by_family:
-            hyp_by_family[fam].sort()
-        candidates = generate_candidates(plan, hypothesis_families=hyp_by_family)
+        candidates = generate_candidates_from_directives(
+            plan, directives=list(directives),
+            hypothesis_families=hyp_by_family)
         batch = run_staged_funnel(candidates, self.runner, window=window)
-        self._last_funnel_stats = batch.funnel_stats
-        self._last_stage1_survivors = len(batch.stage1_survivors)
-        self._last_dynamic_selected = len(batch.dynamic_selected)
-        n_probed = len(batch.stage1_results)
-        n_rejected_static = len(batch.static_rejects)
-        self._last_reject_rate = (
-            (n_probed - sum(1 for r in batch.stage1_results
-                            if r["action"] == "accept")
-             + n_rejected_static) / max(1, n_probed + n_rejected_static))
 
         cand_by_id = {c.candidate_id: c for c in candidates}
         fast_obs = {r["candidate_id"]: r["metrics"]
@@ -487,10 +516,12 @@ class FeedbackUEDController:
         full_obs = {r["candidate_id"]: r["metrics"]
                     for r in batch.stage2_results}
         if self.mode == C.MODE_SHUFFLED_FEEDBACK:
+            # C8 keeps the probe-time rotation; C9 moves the permutation
+            # into the frozen PermutedFeedbackView (view-time, recomputable)
             fast_obs = self._rotate_binding(fast_obs)
             full_obs = self._rotate_binding(full_obs)
 
-        created = 0
+        staged: List[SimulatorFeedbackRecord] = []
         for cid in sorted(fast_obs):
             cand = cand_by_id[cid]
             fid = f"fb-w{window:02d}-{cid}"
@@ -523,16 +554,12 @@ class FeedbackUEDController:
                 student_roles=(C.STUDENT_ROLE_SEARCH,))
             self.isolation.assert_record_clean(
                 record.model_dump(), label=f"feedback:{fid}")
-            self.store.add(record)
-            self.comparator.grade_record(self.store, fid)
-            created += 1
-        self._window_feedback[window] = [f"fb-w{window:02d}-{cid}"
-                                         for cid in sorted(fast_obs)]
-        return created
+            staged.append(record)
+        return staged, batch
 
     @staticmethod
     def _rotate_binding(obs: Dict[str, dict]) -> Dict[str, dict]:
-        """Deterministic candidate<->feedback rotation for shuffled mode."""
+        """Deterministic candidate<->feedback metric rotation (shuffled)."""
         ids = sorted(obs)
         n = len(ids)
         if n <= 1:
@@ -552,6 +579,39 @@ class FeedbackUEDController:
             for k, v in hyp.predicted_signature.items():
                 merged.setdefault(k, float(v))
         return merged
+
+    # -------------------------------------------------- atomic freeze (E)
+    def _freeze_window(self, window: int,
+                       staged: List[SimulatorFeedbackRecord],
+                       new_hypotheses) -> None:
+        """Atomic write + FREEZE of feedback_k.
+
+        Order inside the freeze: (1) every staged record enters the store,
+        (2) every record is graded by the comparator (bind_match re-stamps
+        the record hash), (3) the board's new PENDING hypotheses are
+        registered in the ledger, (4) the window is marked FROZEN. New
+        hypotheses are registered AFTER the feedback write because
+        feedback_k cannot distinguish them (the candidates were generated
+        before they existed). After this call the window is closed: any
+        verdict application or plan change raises
+        SAME_WINDOW_REVISION_FORBIDDEN.
+        """
+        for record in staged:
+            self.store.add(record)
+        for record in staged:
+            self.comparator.grade_record(self.store, record.feedback_id)
+        for proposal in new_hypotheses:
+            self.ledger.register(HypothesisRecord(
+                hypothesis_id=proposal.hypothesis_id,
+                source_window=window,
+                target_behavior=proposal.target_behavior,
+                evidence_ids=[],
+                predicted_signature=dict(proposal.predicted_signature),
+                environment_family=proposal.environment_family,
+                confidence=proposal.initial_confidence,
+                status=C.HYPOTHESIS_PENDING))
+        self._window_feedback[window] = [r.feedback_id for r in staged]
+        self._set_phase(window, PHASE_FROZEN)
 
     # ------------------------------------------------------------- metrics
     def _window_aggregates(self, window: int) -> Dict[str, float]:
@@ -578,8 +638,7 @@ class FeedbackUEDController:
 
     def _build_summary(self, records: List[WindowRecord]) -> RunSummary:
         n_windows = len(records)
-        n_revisions = sum(1 for r in self.revisions
-                          if r.revision_id != "rev-w00-bootstrap")
+        n_revisions = len(self.revisions)
         decision_dist: Dict[str, int] = {}
         cited_records: set = set()
         for rev in self.revisions:
@@ -593,8 +652,6 @@ class FeedbackUEDController:
         # supported retention / refuted retirement rates
         supported = refuted = supported_retained = refuted_retired = 0
         for rev in self.revisions:
-            if rev.revision_id == "rev-w00-bootstrap":
-                continue
             keep = {m.environment_family: m.decision
                     for m in rev.modifications}
             window_verdicts = [v for v in

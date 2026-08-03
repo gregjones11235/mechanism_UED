@@ -102,14 +102,26 @@ class TestMockBackendUsage:
 
     def test_mock_usage_accounting(self):
         backend = DeterministicMockFeedbackBackend()
-        ctx = dict(window=1, hypotheses=[], feedback=[])
-        from d052.feedback_llm_ued import feedback_diagnostician
-        prompt = feedback_diagnostician.build_prompt(ctx)
-        backend.complete(C.ROLE_FEEDBACK_DIAGNOSTICIAN, prompt)
+        ctx = dict(window=1, mode=C.MODE_NORMAL_FEEDBACK,
+                   board_context=dict(behavior_evidence=[]),
+                   feedback=[], feedback_view_label="null", hypotheses=[])
+        from d052.feedback_llm_ued import student_modeler
+        prompt = student_modeler.build_prompt(ctx)
+        backend.complete(C.ROLE_STUDENT_MODELER, prompt)
         assert backend.usage.mock_calls == 1
         assert backend.usage.real_calls == 0
         assert backend.usage.total_calls == 1
         assert_no_real_llm_usage(backend.usage)
+
+    def test_legacy_roles_are_not_registered(self):
+        """C8 abolished the Diagnostician/Designer/Reviewer pattern: the mock
+        backend refuses to serve them (fail closed, no silent legacy path)."""
+        backend = DeterministicMockFeedbackBackend()
+        for role in ("feedback_diagnostician", "adaptive_environment_designer",
+                     "adversarial_reviewer"):
+            with pytest.raises(KeyError,
+                               match="UNKNOWN_ROLE_FOR_MOCK_BACKEND"):
+                backend.complete(role, "any prompt")
 
 
 class TestReplayBackend:
@@ -130,14 +142,16 @@ class TestReplayBackend:
 
     def test_record_then_replay_equivalence_same_test(self):
         """Record a mock run in-test, replay it, get byte-identical prompts."""
-        from d052.feedback_llm_ued import feedback_diagnostician
+        from d052.feedback_llm_ued import student_modeler
         mock = DeterministicMockFeedbackBackend()
         recorder = RecordingBackend(mock)
-        ctx = dict(window=2, hypotheses=[], feedback=[])
-        prompt = feedback_diagnostician.build_prompt(ctx)
-        raw1 = recorder.complete(C.ROLE_FEEDBACK_DIAGNOSTICIAN, prompt)
+        ctx = dict(window=2, mode=C.MODE_NORMAL_FEEDBACK,
+                   board_context=dict(behavior_evidence=[]),
+                   feedback=[], feedback_view_label="null", hypotheses=[])
+        prompt = student_modeler.build_prompt(ctx)
+        raw1 = recorder.complete(C.ROLE_STUDENT_MODELER, prompt)
         replay = ReplayBackend(recorder.to_replay_corpus())
-        raw2 = replay.complete(C.ROLE_FEEDBACK_DIAGNOSTICIAN, prompt)
+        raw2 = replay.complete(C.ROLE_STUDENT_MODELER, prompt)
         assert raw1 == raw2
         assert replay.usage.replay_calls == 1
         assert isinstance(recorder, LLMBackend)

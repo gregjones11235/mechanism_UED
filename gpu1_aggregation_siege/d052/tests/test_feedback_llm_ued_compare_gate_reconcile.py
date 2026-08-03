@@ -1,4 +1,9 @@
-"""ExpectedObservedComparator + FeedbackInvocationGate + DeterministicReconciler."""
+"""ExpectedObservedComparator + DeterministicReconciler.
+
+(The FeedbackInvocationGate and its tests were abolished with C8: the
+double-window state machine runs the complete six-role board every window,
+unconditionally — there is no conditional invocation left to gate.)
+"""
 import pytest
 
 from d052.feedback_llm_ued import constants as C
@@ -11,10 +16,6 @@ from d052.feedback_llm_ued.expected_observed import (
     relative_gap,
 )
 from d052.feedback_llm_ued.feedback_contracts import FamilyAllocation
-from d052.feedback_llm_ued.feedback_invocation_gate import (
-    GateInput,
-    evaluate_gate,
-)
 from d052.feedback_llm_ued.simulator_feedback_store import (
     SimulatorFeedbackRecord,
     SimulatorFeedbackStore,
@@ -112,71 +113,6 @@ class TestComparator:
         detail = ExpectedObservedComparator().grade_record(store, "fb-nm")
         assert detail["overall"] == C.MATCH_DIRECTION_NEUTRAL
         assert detail["reason"] == "NO_PROBE_METRICS"
-
-
-# --------------------------------------------------------------------- gate
-def _gate(**over):
-    base = dict(window=1, has_prior_diagnosis=True)
-    base.update(over)
-    return evaluate_gate(GateInput(**base))
-
-
-class TestGate:
-    def test_no_condition_no_invoke(self):
-        out = _gate(valid_candidate_count=C.STAGE1_KEEP)
-        assert out["invoke_llm"] is False
-        assert out["conditions"] == ()
-        assert "reuse previous diagnosis" in out["reason"]
-
-    def test_each_condition_individually(self):
-        cases = [
-            (dict(has_prior_diagnosis=False), C.GATE_FIRST_WINDOW),
-            (dict(window=0), C.GATE_FIRST_WINDOW),
-            (dict(new_detector_types=["det_x"]), C.GATE_NEW_DETECTOR_TYPE),
-            (dict(core_behavior_rate_change=0.25),
-             C.GATE_CORE_BEHAVIOR_RATE_SHIFT),
-            (dict(front_stalled_windows=2),
-             C.GATE_FRONT_STALLED_TWO_WINDOWS),
-            (dict(global_retention_delta=-0.05),
-             C.GATE_GLOBAL_RETENTION_REGRESSION),
-            (dict(previous_plan_exhausted=True),
-             C.GATE_PREVIOUS_PLAN_EXHAUSTED),
-            (dict(valid_candidate_count=10, required_candidate_count=24),
-             C.GATE_INSUFFICIENT_VALID_CANDIDATES),
-            (dict(cached_plan_age_windows=4), C.GATE_CACHED_PLAN_AGE),
-        ]
-        for kwargs, expected in cases:
-            kwargs.setdefault("valid_candidate_count", C.STAGE1_KEEP)
-            out = _gate(**kwargs)
-            assert out["invoke_llm"] is True, kwargs
-            assert expected in out["conditions"], kwargs
-
-    def test_thresholds_are_strict(self):
-        out = _gate(core_behavior_rate_change=0.24,
-                    front_stalled_windows=1,
-                    global_retention_delta=-0.04,
-                    cached_plan_age_windows=3,
-                    valid_candidate_count=C.STAGE1_KEEP)
-        assert out["invoke_llm"] is False
-
-    def test_all_non_first_conditions_fire_together(self):
-        out = _gate(new_detector_types=["d"], core_behavior_rate_change=0.3,
-                    front_stalled_windows=3, global_retention_delta=-0.1,
-                    previous_plan_exhausted=True, valid_candidate_count=1,
-                    required_candidate_count=24, cached_plan_age_windows=5)
-        assert len(out["conditions"]) == 7          # first_window excluded
-        # deterministic order == GATE_MUST_INVOKE_CONDITIONS order
-        order = [c for c in C.GATE_MUST_INVOKE_CONDITIONS
-                 if c != C.GATE_FIRST_WINDOW]
-        assert list(out["conditions"]) == order
-
-    def test_window_zero_can_fire_all_eight(self):
-        out = _gate(window=0, new_detector_types=["d"],
-                    core_behavior_rate_change=0.3, front_stalled_windows=3,
-                    global_retention_delta=-0.1, previous_plan_exhausted=True,
-                    valid_candidate_count=1, required_candidate_count=24,
-                    cached_plan_age_windows=5)
-        assert len(out["conditions"]) == 8
 
 
 # --------------------------------------------------------------- reconciler

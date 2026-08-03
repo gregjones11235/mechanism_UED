@@ -69,8 +69,14 @@ E2_FORMAL_PLAN_ALIGNED = False
 #: ENGINEERING_SCAFFOLD evidence — no real LLM calls).
 SIX_ROLE_BOARD_IMPLEMENTED = True
 FEEDBACK_REVISION_BOUND = False
-NEXT_WINDOW_REVISION_ONLY = False
-SAME_WINDOW_REVISION_REJECTED = False
+#: C8 earned: the double-window state machine guarantees a plan revision at
+#: window k may cite ONLY feedback from windows <= k-1 (the window-k board's
+#: six roles are the sole producers of window-k revisions).
+NEXT_WINDOW_REVISION_ONLY = True
+#: C8 earned: any attempt to apply a verdict or modify window k's plan after
+#: feedback_k is staged raises SAME_WINDOW_REVISION_FORBIDDEN (fail closed);
+#: negative tests prove the refusal.
+SAME_WINDOW_REVISION_REJECTED = True
 STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
 SHUFFLE_PERMUTATION_FROZEN = False
 
@@ -105,20 +111,11 @@ BACKEND_KINDS = frozenset({BACKEND_KIND_MOCK, BACKEND_KIND_REPLAY,
 ROLE_PROMPT_VERSION = "feedback_llm_ued.roles.v1"
 RECONCILE_RULE_VERSION = "feedback_llm_ued.reconcile.v1"
 
-ROLE_FEEDBACK_DIAGNOSTICIAN = "feedback_diagnostician"
-ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER = "adaptive_environment_designer"
-ROLE_ADVERSARIAL_REVIEWER = "adversarial_reviewer"      # conditional third role
-
-FEEDBACK_ROLES_DEFAULT = (
-    ROLE_FEEDBACK_DIAGNOSTICIAN,
-    ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER,
-)
-
 # ---------------------------------------------------------------------------
 # Six-role Review Board (director-approved formal architecture). Every review
 # window runs ALL SIX roles unconditionally — the legacy
-# Diagnostician+Designer+conditional-Reviewer 2/3-call pattern is abolished
-# as a formal path (C8 removes it).
+# Diagnostician+Designer+conditional-Reviewer 2/3-call pattern was abolished
+# and its modules removed in C8.
 # ---------------------------------------------------------------------------
 ROLE_STUDENT_MODELER = "student_modeler"
 ROLE_BEHAVIOR_AUDITOR = "behavior_auditor"
@@ -160,8 +157,9 @@ HYPOTHESIS_TERMINAL_VERDICTS = frozenset({HYPOTHESIS_SUPPORTED,
                                           HYPOTHESIS_REFUTED})
 
 # ---------------------------------------------------------------------------
-# Designer decision vocabulary (task §3). Environment-level actions ONLY —
-# never an action/reward/policy knob.
+# Curriculum decision vocabulary (task §3). Environment-level actions ONLY —
+# never an action/reward/policy knob. The board's InterventionTutor proposes
+# them; the DeterministicReconciler disposes.
 # ---------------------------------------------------------------------------
 DECISION_RETAIN = "RETAIN"
 DECISION_MUTATE = "MUTATE"
@@ -209,52 +207,6 @@ ROLLOUT_LENGTH = 128                   # transitions per episode (symbolic)
 #: preflight routing thresholds (selectively reused from skill_preflight.route)
 PREFLIGHT_LEARNABLE_LOW = 0.05
 PREFLIGHT_TOO_EASY = 0.85
-
-# ---------------------------------------------------------------------------
-# FeedbackInvocationGate — the eight MUST-invoke conditions (task §5 / prior
-# 精简版 spec). If NONE fire, the previous diagnosis + plan are reused and the
-# generator continues in the neighborhood of existing interventions.
-# ---------------------------------------------------------------------------
-GATE_FIRST_WINDOW = "first_window"
-GATE_NEW_DETECTOR_TYPE = "new_detector_type"
-GATE_CORE_BEHAVIOR_RATE_SHIFT = "core_behavior_rate_change_ge_25pct"
-GATE_FRONT_STALLED_TWO_WINDOWS = "front_stalled_two_windows"
-GATE_GLOBAL_RETENTION_REGRESSION = "global_retention_crossed_regression"
-GATE_PREVIOUS_PLAN_EXHAUSTED = "previous_plan_exhausted"
-GATE_INSUFFICIENT_VALID_CANDIDATES = "insufficient_valid_candidates"
-GATE_CACHED_PLAN_AGE = "cached_plan_age_reached_4_windows"
-GATE_MUST_INVOKE_CONDITIONS = (
-    GATE_FIRST_WINDOW,
-    GATE_NEW_DETECTOR_TYPE,
-    GATE_CORE_BEHAVIOR_RATE_SHIFT,
-    GATE_FRONT_STALLED_TWO_WINDOWS,
-    GATE_GLOBAL_RETENTION_REGRESSION,
-    GATE_PREVIOUS_PLAN_EXHAUSTED,
-    GATE_INSUFFICIENT_VALID_CANDIDATES,
-    GATE_CACHED_PLAN_AGE,
-)
-
-# ---------------------------------------------------------------------------
-# Conditional third reviewer (AdversarialReviewer) risk triggers (task §3).
-# ---------------------------------------------------------------------------
-RISK_LOW_CONFIDENCE = "overall_confidence_below_0p55"
-RISK_CONFLICTING_INTERVENTIONS = "two_hypotheses_opposite_interventions"
-RISK_GLOBAL_RISK_HIGH = "global_risk_high"
-RISK_NO_IMPROVEMENT_TWO_WINDOWS = "no_improvement_two_windows"
-RISK_PROBE_OPPOSITE_DIRECTION = "probe_opposite_to_prediction"
-RISK_HIGH_REJECT_RATE = "reject_rate_above_30pct"
-RISK_BEFORE_FORMAL_CANDIDATE_RUN = "preparing_formal_candidate_run"
-REVIEWER_RISK_TRIGGERS = (
-    RISK_LOW_CONFIDENCE,
-    RISK_CONFLICTING_INTERVENTIONS,
-    RISK_GLOBAL_RISK_HIGH,
-    RISK_NO_IMPROVEMENT_TWO_WINDOWS,
-    RISK_PROBE_OPPOSITE_DIRECTION,
-    RISK_HIGH_REJECT_RATE,
-    RISK_BEFORE_FORMAL_CANDIDATE_RUN,
-)
-REVIEWER_CONFIDENCE_FLOOR = 0.55
-REVIEWER_REJECT_RATE_FLOOR = 0.30
 
 # ---------------------------------------------------------------------------
 # Expected-vs-observed comparison
@@ -384,6 +336,4 @@ MAX_INTERVENTIONS = 8
 MAX_EXPLORATION_PROPOSALS = 2
 MAX_AXES_PER_INTERVENTION = 3
 
-#: default LLM calls per TRIGGERED window (1 diagnostician + 1 designer)
-DEFAULT_LLM_CALLS_PER_TRIGGERED_WINDOW = 2
 MAX_WINDOWS = 8                        # bounded loop horizon for dry runs

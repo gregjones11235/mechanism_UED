@@ -2,7 +2,18 @@
 import pytest
 
 from d052.feedback_llm_ued import constants as C
-from d052.feedback_llm_ued.environment_generator import generate_candidates
+from d052.feedback_llm_ued.axis_directive import (
+    DIRECTION_HOLD,
+    DIRECTION_INCREASE,
+    LEVEL_NONE,
+    ROLE_CONTROL,
+    ROLE_TREATMENT,
+    AxisDirective,
+)
+from d052.feedback_llm_ued.environment_generator import (
+    FAMILY_AXES,
+    generate_candidates_from_directives,
+)
 from d052.feedback_llm_ued.feedback_contracts import (
     CurriculumPlan,
     FamilyAllocation,
@@ -34,11 +45,41 @@ def _bootstrap_plan():
             for f in C.ENVIRONMENT_FAMILIES[:4]])
 
 
+def _directive(family, *, window=0, role=ROLE_TREATMENT, old_level=LEVEL_NONE,
+               new_level="medium"):
+    """One legal AxisDirective for ``family`` (board -> generator contract)."""
+    axis = FAMILY_AXES[family][0]
+    held = {a: "medium" for a in FAMILY_AXES[family] if a != axis}
+    if role == ROLE_CONTROL:
+        direction = DIRECTION_HOLD
+        if old_level == LEVEL_NONE:
+            old_level = "medium"     # a control re-measures an existing level
+        new_level = old_level        # CONTROL_DIRECTIVE_MUST_HOLD
+    else:
+        direction = DIRECTION_INCREASE
+    return AxisDirective(
+        directive_id=f"dir-w{window:02d}-{family}-{axis}-"
+                     f"{'treatment' if role == ROLE_TREATMENT else 'control'}",
+        source_window=window,
+        environment_family=family,
+        axis=axis,
+        old_level=old_level,
+        new_level=new_level,
+        direction=direction,
+        experiment_control_role=role,
+        held_constant_axes=held,
+        expected_next_signature={"student_success_rate": 0.5},
+        rationale="test directive")
+
+
 def _candidates():
+    """64 directive-driven candidates: 4 funded families, one directive each."""
     plan = _bootstrap_plan()
+    directives = [_directive(f) for f in C.ENVIRONMENT_FAMILIES[:4]]
     hyp_fam = {f: [f"hyp-{i:02d}"]
                for i, f in enumerate(C.ENVIRONMENT_FAMILIES[:4])}
-    return generate_candidates(plan, hypothesis_families=hyp_fam)
+    return generate_candidates_from_directives(
+        plan, directives=directives, hypothesis_families=hyp_fam)
 
 
 class TestStaticLegality:
@@ -188,25 +229,133 @@ class TestStagedFunnel:
         assert batch.funnel_stats["stage1_probed"] == 1
 
 
+def _single_family_plan(family, slots=12):
+    return CurriculumPlan(
+        plan_id="plan-test-single", window=0, mode=C.MODE_NORMAL_FEEDBACK,
+        allocations=[FamilyAllocation(
+            environment_family=family, slots=slots, decision=C.DECISION_MUTATE,
+            reason="single-family", is_exploration=True)])
+
+
 class TestGenerator:
-    def test_candidates_are_legal_and_bound(self):
+    def test_candidates_are_legal_and_bound_to_directives(self):
         cands = _candidates()
         assert len(cands) == 64
         hashes = {c.candidate_hash for c in cands}
         assert len(hashes) == 64                     # no hash collisions
+        directives = {_directive(f).directive_id
+                      for f in C.ENVIRONMENT_FAMILIES[:4]}
         for c in cands:
             assert c.real_adapter_status == C.REAL_SIMULATOR_PROBE_STATUS
             assert c.legality_hint.startswith("MOCK_ONLY")
+            assert c.variant_kind == "directive"
             assert c.provenance["source"] == C.SOURCE_CANDIDATE_PROBE
+            assert c.provenance["directive_id"] in directives
+            assert c.provenance["directive_hash"]          # bound, non-empty
             assert len(c.distinguishes_hypothesis_ids) == 1
+            assert len(c.mutation_axes) == 1
         families = {c.environment_family for c in cands}
         assert families == set(C.ENVIRONMENT_FAMILIES[:4])
+        # slot-proportional split: 4 families x 3 slots each -> 16 each
+        for f in C.ENVIRONMENT_FAMILIES[:4]:
+            assert sum(1 for c in cands
+                       if c.environment_family == f) == 16
 
-    def test_no_allocations_falls_back_to_uniform(self):
+    def test_generation_is_deterministic(self):
+        c1 = _candidates()
+        c2 = _candidates()
+        assert [c.candidate_hash for c in c1] == [c.candidate_hash for c in c2]
+
+    def test_single_directive_axis_config_is_not_rotated(self):
+        """Abolished-index-rotation check: every candidate of one directive
+        carries the IDENTICAL axis configuration (no i%len / i%3 cycling)."""
+        fam = C.ENVIRONMENT_FAMILIES[0]
+        axis = FAMILY_AXES[fam][0]
+        d = _directive(fam, new_level="high")
+        cands = generate_candidates_from_directives(
+            _single_family_plan(fam), directives=[d],
+            hypothesis_families={fam: ["hyp-00"]})
+        assert len(cands) == 64
+        for c in cands:
+            assert c.axis_values == {axis: "high"}
+            assert c.held_constant_axes == d.held_constant_axes
+            assert c.provenance["directive_id"] == d.directive_id
+            assert c.provenance["directive_hash"] == d.directive_hash
+
+    def test_control_directive_remeasures_old_level(self):
+        fam = C.ENVIRONMENT_FAMILIES[0]
+        axis = FAMILY_AXES[fam][0]
+        d = _directive(fam, role=ROLE_CONTROL, old_level="low")
+        cands = generate_candidates_from_directives(
+            _single_family_plan(fam), directives=[d],
+            hypothesis_families={fam: ["hyp-00"]})
+        assert len(cands) == 64
+        assert all(c.axis_values == {axis: "low"} for c in cands)
+
+    def test_two_directives_split_within_family(self):
+        fam = C.ENVIRONMENT_FAMILIES[0]
+        axis = FAMILY_AXES[fam][0]
+        treat = _directive(fam, new_level="high")
+        ctrl = _directive(fam, role=ROLE_CONTROL, old_level="medium")
+        cands = generate_candidates_from_directives(
+            _single_family_plan(fam), directives=[ctrl, treat],
+            hypothesis_families={fam: ["hyp-00"]})
+        assert len(cands) == 64
+        by_dir = {}
+        for c in cands:
+            by_dir.setdefault(c.provenance["directive_id"], []).append(c)
+        assert set(by_dir) == {treat.directive_id, ctrl.directive_id}
+        assert len(by_dir[treat.directive_id]) == 32
+        assert len(by_dir[ctrl.directive_id]) == 32
+        assert all(c.axis_values == {axis: "high"}
+                   for c in by_dir[treat.directive_id])
+        assert all(c.axis_values == {axis: "medium"}
+                   for c in by_dir[ctrl.directive_id])
+        # variant ids bind candidate -> directive -> within-directive replica
+        for c in by_dir[treat.directive_id]:
+            assert c.variant_id.startswith(f"var-{fam}-{treat.directive_id}-")
+
+    def test_directives_sorted_by_id_within_family(self):
+        """Directive order in the input list must not change the batch."""
+        fam = C.ENVIRONMENT_FAMILIES[0]
+        treat = _directive(fam, new_level="high")
+        ctrl = _directive(fam, role=ROLE_CONTROL, old_level="medium")
+        hyp = {fam: ["hyp-00"]}
+        c_ab = generate_candidates_from_directives(
+            _single_family_plan(fam), directives=[ctrl, treat],
+            hypothesis_families=hyp)
+        c_ba = generate_candidates_from_directives(
+            _single_family_plan(fam), directives=[treat, ctrl],
+            hypothesis_families=hyp)
+        assert [c.candidate_hash for c in c_ab] == \
+            [c.candidate_hash for c in c_ba]
+
+    def test_funded_family_without_directive_fails_closed(self):
+        """Probing a funded family without a board specification is an
+        uncontrolled mutation and must be refused (no silent fallback)."""
+        directives = [_directive(f) for f in C.ENVIRONMENT_FAMILIES[:3]]
+        hyp_fam = {f: [f"hyp-{i:02d}"]
+                   for i, f in enumerate(C.ENVIRONMENT_FAMILIES[:4])}
+        with pytest.raises(ValueError,
+                           match="FUNDED_FAMILY_WITHOUT_DIRECTIVE"):
+            generate_candidates_from_directives(
+                _bootstrap_plan(), directives=directives,
+                hypothesis_families=hyp_fam)
+
+    def test_unfunded_plan_fails_closed(self):
         plan = CurriculumPlan(plan_id="p", window=0,
                               mode=C.MODE_NORMAL_FEEDBACK, allocations=[])
-        # no allocations -> uniform fallback over all families
-        cands = generate_candidates(plan, hypothesis_families={})
-        assert len(cands) == 64
-        assert {c.environment_family for c in cands} == \
-            set(C.ENVIRONMENT_FAMILIES)
+        with pytest.raises(ValueError, match="EMPTY_PLAN_BUDGET"):
+            generate_candidates_from_directives(
+                plan, directives=[], hypothesis_families={})
+        # all-zero slots is equally unfunded
+        plan = CurriculumPlan(
+            plan_id="p", window=0, mode=C.MODE_NORMAL_FEEDBACK,
+            allocations=[FamilyAllocation(
+                environment_family=C.ENVIRONMENT_FAMILIES[0], slots=0,
+                decision=C.DECISION_RETIRE, reason="retired",
+                is_exploration=False)])
+        with pytest.raises(ValueError, match="EMPTY_PLAN_BUDGET"):
+            generate_candidates_from_directives(
+                plan, directives=[_directive(C.ENVIRONMENT_FAMILIES[0])],
+                hypothesis_families={})

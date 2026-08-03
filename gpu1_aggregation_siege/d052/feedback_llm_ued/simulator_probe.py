@@ -300,6 +300,9 @@ def run_staged_funnel(candidates: List[CandidateEnvironment],
     the final greedy pick.
     """
     batch = ProbeBatch(window=window)
+    # probe cost is accounted PER BATCH (the runner's counter is cumulative
+    # across windows; a window record must show its own window's cost)
+    transitions_before = runner.total_transitions
     if len(candidates) > raw_cap:
         raise ValueError(
             f"RAW_CANDIDATE_CAP_EXCEEDED: {len(candidates)} > {raw_cap}")
@@ -339,7 +342,8 @@ def run_staged_funnel(candidates: List[CandidateEnvironment],
 
     # -- L3: full probe + composite score -------------------------------------
     if not survivors:
-        batch.total_simulator_transitions = runner.total_transitions
+        batch.total_simulator_transitions = (runner.total_transitions
+                                             - transitions_before)
         return batch
     student_ep = C.STAGE2_STUDENT_EPISODES_MAX
     reference_ep = C.STAGE2_REFERENCE_EPISODES_MAX
@@ -382,5 +386,6 @@ def run_staged_funnel(candidates: List[CandidateEnvironment],
             selected=cand_id in selected_ids, metrics=m.model_dump()))
     # preserve deterministic selection order (score-desc greedy) in the output
     batch.dynamic_selected = [cand.candidate_id for _s, cand, _m in picked]
-    batch.total_simulator_transitions = runner.total_transitions
+    batch.total_simulator_transitions = (runner.total_transitions
+                                         - transitions_before)
     return batch
