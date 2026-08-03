@@ -65,7 +65,9 @@ BLOCKED_SHARED_ANCHOR_MANIFEST = "BLOCKED_SHARED_ANCHOR_MANIFEST"
 
 #: engineering-progress flags (may flip True as scaffold pieces land):
 E2_FORMAL_PLAN_ALIGNED = False
-SIX_ROLE_BOARD_IMPLEMENTED = False
+#: C6 earned: six-role Review Board implemented (mock rules,
+#: ENGINEERING_SCAFFOLD evidence — no real LLM calls).
+SIX_ROLE_BOARD_IMPLEMENTED = True
 FEEDBACK_REVISION_BOUND = False
 NEXT_WINDOW_REVISION_ONLY = False
 SAME_WINDOW_REVISION_REJECTED = False
@@ -111,6 +113,28 @@ FEEDBACK_ROLES_DEFAULT = (
     ROLE_FEEDBACK_DIAGNOSTICIAN,
     ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER,
 )
+
+# ---------------------------------------------------------------------------
+# Six-role Review Board (director-approved formal architecture). Every review
+# window runs ALL SIX roles unconditionally — the legacy
+# Diagnostician+Designer+conditional-Reviewer 2/3-call pattern is abolished
+# as a formal path (C8 removes it).
+# ---------------------------------------------------------------------------
+ROLE_STUDENT_MODELER = "student_modeler"
+ROLE_BEHAVIOR_AUDITOR = "behavior_auditor"
+ROLE_CAUSAL_FAILURE_ANALYST = "causal_failure_analyst"
+ROLE_INTERVENTION_TUTOR = "intervention_tutor"
+ROLE_EXPLORER = "explorer"
+ROLE_CRITIC_SKEPTIC = "critic_skeptic"
+BOARD_ROLES = (
+    ROLE_STUDENT_MODELER,
+    ROLE_BEHAVIOR_AUDITOR,
+    ROLE_CAUSAL_FAILURE_ANALYST,
+    ROLE_INTERVENTION_TUTOR,
+    ROLE_EXPLORER,
+    ROLE_CRITIC_SKEPTIC,
+)
+BOARD_CALLS_PER_WINDOW = len(BOARD_ROLES)   # 6 LLM-family calls, every window
 
 # ---------------------------------------------------------------------------
 # Hypothesis lifecycle (task: ledger statuses). A hypothesis is a claim about

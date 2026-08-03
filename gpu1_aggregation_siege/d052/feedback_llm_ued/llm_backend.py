@@ -255,11 +255,25 @@ class RealBackendAdapter:
 from d052.feedback_llm_ued import (  # noqa: E402
     adaptive_designer,
     adversarial_reviewer,
+    behavior_auditor,
+    causal_failure_analyst,
+    critic_skeptic,
+    explorer,
     feedback_diagnostician,
+    intervention_tutor,
+    student_modeler,
 )
 
 _DEFAULT_RULES: Dict[str, Callable[[dict], dict]] = {
     C.ROLE_FEEDBACK_DIAGNOSTICIAN: feedback_diagnostician.mock_rule,
     C.ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER: adaptive_designer.mock_rule,
     C.ROLE_ADVERSARIAL_REVIEWER: adversarial_reviewer.mock_rule,
+    # six-role Review Board (C6) — every role always registered; the board
+    # runs all six every window, in every comparison mode
+    C.ROLE_STUDENT_MODELER: student_modeler.mock_rule,
+    C.ROLE_BEHAVIOR_AUDITOR: behavior_auditor.mock_rule,
+    C.ROLE_CAUSAL_FAILURE_ANALYST: causal_failure_analyst.mock_rule,
+    C.ROLE_INTERVENTION_TUTOR: intervention_tutor.mock_rule,
+    C.ROLE_EXPLORER: explorer.mock_rule,
+    C.ROLE_CRITIC_SKEPTIC: critic_skeptic.mock_rule,
 }
