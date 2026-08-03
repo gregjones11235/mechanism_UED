@@ -1,0 +1,115 @@
+{
+  "schema": "simulator_frontier.student_compatibility_probe/v1",
+  "disclaimers": [
+    "zero parameter updates; read-only probe",
+    "forward checks are smoke only, never a performance evaluation",
+    "missing artifact or adapter is never disguised as PASS"
+  ],
+  "profile_name": "baseline_teacher_17500_smoke",
+  "candidate_id": "BASELINE_TEACHER_CKPT17500",
+  "architecture_family": "GTRXL128",
+  "checks": {
+    "profile_loads": {
+      "check": "profile_loads",
+      "status": "PASS",
+      "detail": "candidate_id=BASELINE_TEACHER_CKPT17500"
+    },
+    "identity_hash_stable": {
+      "check": "identity_hash_stable",
+      "status": "PASS",
+      "detail": "57de0021995fe2aa6888bc3e8335e21e495a21041016540b660bd241c153b3b4"
+    },
+    "override_agreement": {
+      "check": "override_agreement",
+      "status": "PASS",
+      "detail": ""
+    },
+    "checkpoint_artifact_present": {
+      "check": "checkpoint_artifact_present",
+      "status": "PASS",
+      "detail": "C:/Users/Lenovo/Desktop/dicode-codex-director/.tmp_simulator_team_audit/Henry_work2/ckpt/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500 (dir)"
+    },
+    "driver_source_present_and_sha_gated": {
+      "check": "driver_source_present_and_sha_gated",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "frozen_cfg_recovered_from_driver_source": {
+      "check": "frozen_cfg_recovered_from_driver_source",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "file_sha256_gate": {
+      "check": "file_sha256_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "params_sha256_recomputed_gate": {
+      "check": "params_sha256_recomputed_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "manifest_gate": {
+      "check": "manifest_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "tree_structure_gate": {
+      "check": "tree_structure_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "observation_dim_gate": {
+      "check": "observation_dim_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "action_count_gate": {
+      "check": "action_count_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "memory_spec_gate": {
+      "check": "memory_spec_gate",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "initial_memory_contract": {
+      "check": "initial_memory_contract",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "validate_memory_rejects_bad_memory": {
+      "check": "validate_memory_rejects_bad_memory",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "deterministic_forward_reproducible": {
+      "check": "deterministic_forward_reproducible",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "stochastic_forward_seeded_reproducible": {
+      "check": "stochastic_forward_seeded_reproducible",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "zero_update_params_bit_identical": {
+      "check": "zero_update_params_bit_identical",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "memory_progression_contract": {
+      "check": "memory_progression_contract",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    },
+    "fresh_process_params_recheck": {
+      "check": "fresh_process_params_recheck",
+      "status": "NOT_APPLICABLE",
+      "detail": "family GTRXL128 has no Stage-4 adapter yet (read-only probe refuses to fake a PASS)"
+    }
+  },
+  "status": "ADAPTER_PENDING",
+  "elapsed_s": 0.0
+}

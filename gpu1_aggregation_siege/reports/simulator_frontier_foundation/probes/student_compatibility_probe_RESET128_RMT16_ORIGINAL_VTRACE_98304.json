@@ -1,0 +1,115 @@
+{
+  "schema": "simulator_frontier.student_compatibility_probe/v1",
+  "disclaimers": [
+    "zero parameter updates; read-only probe",
+    "forward checks are smoke only, never a performance evaluation",
+    "missing artifact or adapter is never disguised as PASS"
+  ],
+  "profile_name": "rmt16_reset128_98304",
+  "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+  "architecture_family": "RMT16",
+  "checks": {
+    "profile_loads": {
+      "check": "profile_loads",
+      "status": "PASS",
+      "detail": "candidate_id=RESET128_RMT16_ORIGINAL_VTRACE_98304"
+    },
+    "identity_hash_stable": {
+      "check": "identity_hash_stable",
+      "status": "PASS",
+      "detail": "f29e718fb0ff2bb8434896a55fcac3f07555929e41281dd9d99d4e0a48072c2f"
+    },
+    "override_agreement": {
+      "check": "override_agreement",
+      "status": "PASS",
+      "detail": "overrides agree with the profile"
+    },
+    "checkpoint_artifact_present": {
+      "check": "checkpoint_artifact_present",
+      "status": "PASS",
+      "detail": "D:/cc4tmp/.tier3_ft_scratch/real_98304/RMT16-LONG98304-RESET128_step98304_full_state.pkl (21741720 B)"
+    },
+    "driver_source_present_and_sha_gated": {
+      "check": "driver_source_present_and_sha_gated",
+      "status": "PASS",
+      "detail": "LF-SHA 453bd1ecc8d9671c… expected 453bd1ecc8d9671c…"
+    },
+    "frozen_cfg_recovered_from_driver_source": {
+      "check": "frozen_cfg_recovered_from_driver_source",
+      "status": "PASS",
+      "detail": "26 Cfg fields recovered"
+    },
+    "file_sha256_gate": {
+      "check": "file_sha256_gate",
+      "status": "PASS",
+      "detail": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638"
+    },
+    "params_sha256_recomputed_gate": {
+      "check": "params_sha256_recomputed_gate",
+      "status": "PASS",
+      "detail": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2"
+    },
+    "manifest_gate": {
+      "check": "manifest_gate",
+      "status": "PASS",
+      "detail": "{\"carry_mode\": \"reset128\", \"step\": 98304, \"arm\": \"RMT16-Reset128-OrigVtrace\"}"
+    },
+    "tree_structure_gate": {
+      "check": "tree_structure_gate",
+      "status": "PASS",
+      "detail": "{\"encoder_kernel_shape\": [8335, 256], \"actor_out_kernel_shape\": [256, 43], \"observation_dim\": 8335, \"action_count\": 43, \"craftax_len_action\": 43, \"num_params_leaves\": 101}"
+    },
+    "observation_dim_gate": {
+      "check": "observation_dim_gate",
+      "status": "PASS",
+      "detail": "encoder kernel in-dim 8335 vs profile 8335"
+    },
+    "action_count_gate": {
+      "check": "action_count_gate",
+      "status": "PASS",
+      "detail": "head 43 / env enum 43 vs profile 43"
+    },
+    "memory_spec_gate": {
+      "check": "memory_spec_gate",
+      "status": "PASS",
+      "detail": "808f74a15267ee4d67870f8b8445aab003313ef78e43337761e1cd81322d2340"
+    },
+    "initial_memory_contract": {
+      "check": "initial_memory_contract",
+      "status": "PASS",
+      "detail": "shapes/dtypes/mem_idx=window_mem per the CC2 reset convention"
+    },
+    "validate_memory_rejects_bad_memory": {
+      "check": "validate_memory_rejects_bad_memory",
+      "status": "PASS",
+      "detail": "out-of-range seg_count and missing field both rejected"
+    },
+    "deterministic_forward_reproducible": {
+      "check": "deterministic_forward_reproducible",
+      "status": "PASS",
+      "detail": ""
+    },
+    "stochastic_forward_seeded_reproducible": {
+      "check": "stochastic_forward_seeded_reproducible",
+      "status": "PASS",
+      "detail": ""
+    },
+    "zero_update_params_bit_identical": {
+      "check": "zero_update_params_bit_identical",
+      "status": "PASS",
+      "detail": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2"
+    },
+    "memory_progression_contract": {
+      "check": "memory_progression_contract",
+      "status": "PASS",
+      "detail": "seg_count after 8 steps = 8"
+    },
+    "fresh_process_params_recheck": {
+      "check": "fresh_process_params_recheck",
+      "status": "PASS",
+      "detail": "fresh-process sha 78a14cc6e9ccdeb2… rc=0"
+    }
+  },
+  "status": "PASS",
+  "elapsed_s": 7.93
+}
