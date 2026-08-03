@@ -22,6 +22,13 @@ class BranchOutcome:
     memory_mode: str
     outcome_hash: str
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    # Additive R9 same-Student tracking / cross-policy declaration fields.
+    # "NONE" means unbound; binding is enforced by student_binding.
+    capture_student_id: str = "NONE"
+    search_student_id: str = "NONE"
+    train_student_id: str = "NONE"
+    cross_policy_search: bool = False
+    memory_compatibility_status: str = "UNSPECIFIED"
 
     def __post_init__(self) -> None:
         if not self.branch_id or not self.state_id or self.horizon < 0 or self.transitions_used < 0:

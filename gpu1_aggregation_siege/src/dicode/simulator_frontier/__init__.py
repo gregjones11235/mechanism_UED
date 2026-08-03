@@ -35,6 +35,22 @@ from .provenance import (
     FormalDataLeakageGuard,
     SearchActionLeakageGuard,
 )
+from .discovery_provenance import (
+    CaptureProvenance,
+    DiscoveryProvenance,
+    assert_not_formal,
+    discovery_source_for,
+    validate_capture_provenance,
+)
+from .student_binding import (
+    REQUIRED_ENTRY_BINDING_FIELDS,
+    UNBOUND_STUDENT,
+    assert_entry_bound,
+    assert_outcome_bound,
+    bind_branch_outcome,
+    bind_capture_entry,
+    check_bound_entry_memory_request,
+)
 
 __all__ = [
     "AchievementGoal", "CompositeGoal", "GateProgressGoal", "GoalEvaluation",
@@ -45,4 +61,9 @@ __all__ = [
     "FeasibilityEstimate", "estimate_feasibility", "MemoryCompatibilityReport",
     "MemoryRestoreMode", "MemoryRestoreRequest", "MemoryRestoreResult", "validate_memory_request", "DataSource",
     "FormalDataLeakageGuard", "SearchActionLeakageGuard",
+    "CaptureProvenance", "DiscoveryProvenance", "assert_not_formal",
+    "discovery_source_for", "validate_capture_provenance",
+    "REQUIRED_ENTRY_BINDING_FIELDS", "UNBOUND_STUDENT", "assert_entry_bound",
+    "assert_outcome_bound", "bind_branch_outcome", "bind_capture_entry",
+    "check_bound_entry_memory_request",
 ]

@@ -25,6 +25,14 @@ class FrontierArchiveEntry:
     state_hash: str
     provenance_hash: str
     created_at: str
+    # Additive R3/R9 binding fields (condition 2 + review condition 5 era).
+    # Empty defaults mean "unbound": bound-ness is enforced by
+    # student_binding.assert_entry_bound, never implied here.
+    source_student_identity_hash: str = ""
+    source_parameter_hash: str = ""
+    source_memory_spec_hash: str = ""
+    capture_student_id: str = ""
+    discovery_provenance: str = ""
 
     def bucket(self) -> tuple[Any, ...]:
         return (self.floor, self.health_band, self.threat_band, self.resource_band,
