@@ -1,0 +1,643 @@
+{
+  "CHECKPOINTS_MODIFIED": false,
+  "ENVIRONMENT_RERUNS": 0,
+  "STUDENTS_RETRAINED": 0,
+  "candidates": {
+    "BASELINE_TEACHER_CKPT17500": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.5805684102905279,
+        "front_l2 transition_count": 2,
+        "full success_count": 19
+      },
+      "old_v3_student_rank": null,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 7,
+          "front_l2": 0,
+          "full": 19
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 7,
+            "BACK_NO_DEFEAT": 1
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 6,
+            "FRONT_TRANSITION_SUCCESS": 2
+          },
+          "full": {
+            "FULL_DEFEAT_KOBOLD_SUCCESS": 19,
+            "FULL_NO_DEFEAT": 45
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 7,
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 2,
+            "PLAYER_DIED": 5,
+            "TIMED_OUT": 1
+          },
+          "full": {
+            "DEFEAT_KOBOLD": 19,
+            "PLAYER_DIED": 45
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 2,
+            "PLAYER_DIED": 5,
+            "TIMED_OUT": 1
+          },
+          "full": {
+            "PLAYER_DIED": 45
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "0164e45475fd8ced33337a024adb4eace242f6059acd7d1caab22c0165c0098d",
+        "evaluation_certificate_v3.json": "4d80bc83998b5cb5f9cb75b231e7c867f945031d8aa6b5615d388d21ab0d2d91",
+        "evaluation_result_v3.back_l2.json": "42b66b38976dc5e0191a44c7ba923f5c82149f54460a92a0e72fffaedd7ebb0a",
+        "evaluation_result_v3.front_l2.json": "28b06563f46628f9b77619b5c4bd8e5989517e527dc7d87e155f11f90feaa34f",
+        "evaluation_result_v3.full.json": "027879b8e5da265b8262b5909a527ef3fa4822c3e44452a02c8b4cc585afc5ca",
+        "provenance_v3.json": "e4bed2ae1dbe2babfd11b55ca463ed488940d664802fdaa4a373dfb08cbb20c4"
+      },
+      "source_files": {
+        "back_l2": "cc4/BASELINE_TEACHER_CKPT17500/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/BASELINE_TEACHER_CKPT17500/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/BASELINE_TEACHER_CKPT17500/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        2,
+        0.5805684102905279,
+        19,
+        7
+      ]
+    },
+    "BASE_GTRXL_ORIGINAL_VTRACE_98304": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 8,
+        "front_l2 mean graph_distance_progress": 0.5650157181747473,
+        "front_l2 transition_count": 2,
+        "full success_count": 14
+      },
+      "old_v3_student_rank": null,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 8,
+          "front_l2": 0,
+          "full": 14
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 8
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 6,
+            "FRONT_TRANSITION_SUCCESS": 2
+          },
+          "full": {
+            "FULL_DEFEAT_KOBOLD_SUCCESS": 14,
+            "FULL_NO_DEFEAT": 50
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 8,
+            "KOBOLD_ENGAGED": 8
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 2,
+            "PLAYER_DIED": 6
+          },
+          "full": {
+            "DEFEAT_KOBOLD": 14,
+            "PLAYER_DIED": 49,
+            "TIMED_OUT": 1
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 2,
+            "PLAYER_DIED": 6
+          },
+          "full": {
+            "PLAYER_DIED": 49,
+            "TIMED_OUT": 1
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "4ebaba7348cdda69c7d9f99f4ef24be31e272d66430c0f667c85218c94a664fd",
+        "evaluation_certificate_v3.json": "6a14a3b3b6f2630714feebb9b1b8e25c3f6723d6fee94c66a7c0190128b805f9",
+        "evaluation_result_v3.back_l2.json": "2ec652e897315478273221608398dd2658d530925d1c960d5416f13216716c28",
+        "evaluation_result_v3.front_l2.json": "c0096b8874e4f3f7dd6acb79276eba444b87a3554388d9a24f602e7c6ac517e9",
+        "evaluation_result_v3.full.json": "7d29c0eaecf5a7afd5c550f8c57290ed3e99e714a3a404c0d3dd381f11f8a6de",
+        "provenance_v3.json": "5a9d81a036ebccca9bda45ec9aee76ab5989babc786a2bff25d788c8182d7659"
+      },
+      "source_files": {
+        "back_l2": "cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/BASE_GTRXL_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        2,
+        0.5650157181747473,
+        14,
+        8
+      ]
+    },
+    "CONTROL_CONTINUOUS_98304": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.4196479859579006,
+        "front_l2 transition_count": 0,
+        "full success_count": 0
+      },
+      "old_v3_student_rank": 6,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 7,
+          "front_l2": 0,
+          "full": 0
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 7,
+            "BACK_NO_DEFEAT": 1
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 8
+          },
+          "full": {
+            "FULL_NO_DEFEAT": 64
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 7,
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "PLAYER_DIED": 8
+          },
+          "full": {
+            "PLAYER_DIED": 64
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "PLAYER_DIED": 8
+          },
+          "full": {
+            "PLAYER_DIED": 64
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "41dee49768271b063b22c2293464fc33bb8e3b596f115e0af6b90df30ae68f1a",
+        "evaluation_certificate_v3.json": "9bcf386fd013a787aa95c666b66f7aeac569b4ed1da197d1d0c2b63e4357881f",
+        "evaluation_result_v3.back_l2.json": "87c858ba185167d97a47aa726ccbbd0807ade327ba50105eb73a2ddffc2f1370",
+        "evaluation_result_v3.front_l2.json": "35ce8f73c1ba313b6272d57a0413aec4fe3835ffdc98093a70738c9af4ba31bf",
+        "evaluation_result_v3.full.json": "b2cb419badbe4096ce841872cc94d2e4a53d6ec8915f85f19dbeb11e4ce567d8",
+        "provenance_v3.json": "9929d492593b4f99ffcb8c894b224e726fe177c7c7d46520f71f1835f0d4513f"
+      },
+      "source_files": {
+        "back_l2": "cc4/CONTROL_CONTINUOUS_98304/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/CONTROL_CONTINUOUS_98304/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/CONTROL_CONTINUOUS_98304/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        0,
+        0.4196479859579006,
+        0,
+        7
+      ]
+    },
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.5905970705064548,
+        "front_l2 transition_count": 3,
+        "full success_count": 9
+      },
+      "old_v3_student_rank": 5,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 7,
+          "front_l2": 0,
+          "full": 9
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 7,
+            "BACK_NO_DEFEAT": 1
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 5,
+            "FRONT_TRANSITION_SUCCESS": 3
+          },
+          "full": {
+            "FULL_DEFEAT_KOBOLD_SUCCESS": 9,
+            "FULL_NO_DEFEAT": 55
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 7,
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 3,
+            "DEFEAT_KOBOLD": 1,
+            "PLAYER_DIED": 7
+          },
+          "full": {
+            "DEFEAT_KOBOLD": 9,
+            "PLAYER_DIED": 53,
+            "TIMED_OUT": 2
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 3,
+            "DEFEAT_KOBOLD": 1,
+            "PLAYER_DIED": 7
+          },
+          "full": {
+            "PLAYER_DIED": 53,
+            "TIMED_OUT": 2
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "af6e5e6ce8fd9b53a19c0a47dbee5bf0f9cc8d3d59f0f32b5d3b6d0eeeb44238",
+        "evaluation_certificate_v3.json": "7fd1a51acc7436bc077cbaade818d197e6dd4224c3e256fbc01358e0b0fd8ecc",
+        "evaluation_result_v3.back_l2.json": "778e7962166b129083b5b949ae4d2e088c7787b4240ed134abaf9e5df1ce1c6a",
+        "evaluation_result_v3.front_l2.json": "7dab5e29e93fe93a5febb41364729858552220d792d6a4cc07bda78edb36126d",
+        "evaluation_result_v3.full.json": "047e13cbd0ea7d9f745e7f0088924b53f6443f8a968b52be95a318f1a8356e3e",
+        "provenance_v3.json": "38245ac55ff47df77ed0f2256950082bedd8ff3ffb750df39fcf89f8dcd3f490"
+      },
+      "source_files": {
+        "back_l2": "cc4/PERSISTENT_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/PERSISTENT_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/PERSISTENT_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        3,
+        0.5905970705064548,
+        9,
+        7
+      ]
+    },
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 8,
+        "front_l2 mean graph_distance_progress": 0.5650157181747473,
+        "front_l2 transition_count": 2,
+        "full success_count": 14
+      },
+      "old_v3_student_rank": null,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 8,
+          "front_l2": 0,
+          "full": 14
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 8
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 6,
+            "FRONT_TRANSITION_SUCCESS": 2
+          },
+          "full": {
+            "FULL_DEFEAT_KOBOLD_SUCCESS": 14,
+            "FULL_NO_DEFEAT": 50
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 8,
+            "KOBOLD_ENGAGED": 8
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 2,
+            "PLAYER_DIED": 6
+          },
+          "full": {
+            "DEFEAT_KOBOLD": 14,
+            "PLAYER_DIED": 49,
+            "TIMED_OUT": 1
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 2,
+            "PLAYER_DIED": 6
+          },
+          "full": {
+            "PLAYER_DIED": 49,
+            "TIMED_OUT": 1
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "4ebaba7348cdda69c7d9f99f4ef24be31e272d66430c0f667c85218c94a664fd",
+        "evaluation_certificate_v3.json": "5394b8260e9a57f58197bb92e3c2b0cf2dd4316db60aaf3ee5caebd9e234c4d2",
+        "evaluation_result_v3.back_l2.json": "3e2ce2e7349601b901e6a7e61b13a6c4bd5f563389c4c92ca903a18a72af4f32",
+        "evaluation_result_v3.front_l2.json": "e5c6bbe675efaf917735a71909635645d825577c8fd1b708588709fb88d58409",
+        "evaluation_result_v3.full.json": "dc33cc4959b5cb51abbba45762ce9617f6710c9930e1e61c537c3a885623aeb8",
+        "provenance_v3.json": "f15e43d4da271c06e67219f141c4f14fc827c86124cc3f684529635fd36045e5"
+      },
+      "source_files": {
+        "back_l2": "cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/RESET128_RMT16_ORIGINAL_VTRACE_98304/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        2,
+        0.5650157181747473,
+        14,
+        8
+      ]
+    },
+    "SLOWGRU_PERSISTENT_CANONICAL_98304": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 6,
+        "front_l2 mean graph_distance_progress": 0.575285501489573,
+        "front_l2 transition_count": 2,
+        "full success_count": 17
+      },
+      "old_v3_student_rank": 1,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 6,
+          "front_l2": 0,
+          "full": 17
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 6,
+            "BACK_NO_DEFEAT": 2
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 6,
+            "FRONT_TRANSITION_SUCCESS": 2
+          },
+          "full": {
+            "FULL_DEFEAT_KOBOLD_SUCCESS": 17,
+            "FULL_NO_DEFEAT": 47
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 6,
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 2
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 1,
+            "PLAYER_DIED": 7
+          },
+          "full": {
+            "DEFEAT_KOBOLD": 17,
+            "PLAYER_DIED": 44,
+            "TIMED_OUT": 3
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 2
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 1,
+            "PLAYER_DIED": 7
+          },
+          "full": {
+            "PLAYER_DIED": 44,
+            "TIMED_OUT": 3
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "b86902c73c555b4c19ec106f0195b604631660c6983920dce02472e87d20f105",
+        "evaluation_certificate_v3.json": "9a748bbcba11b2889531f1a23f0b17cbc81a5b2f9381a1612931605a935268ba",
+        "evaluation_result_v3.back_l2.json": "c6bae9e1b84338d5baa247ab2e8ff450bb2853be2d307fdbd15c9ef26f45e0d1",
+        "evaluation_result_v3.front_l2.json": "e118829167396a127164ef4a6e2e0c066586f4a64edc8d0937a62b684264cc04",
+        "evaluation_result_v3.full.json": "d34659f17712b8b28463088c5c8bfe05c798cdccc7596f82ea5ff3d063239cc4",
+        "provenance_v3.json": "aa1204e0d4b85bd5b4c4577ceb423e51af511f0c66bad99caa779635a02c1bd1"
+      },
+      "source_files": {
+        "back_l2": "cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/SLOWGRU_PERSISTENT_CANONICAL_98304/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        2,
+        0.575285501489573,
+        17,
+        6
+      ]
+    },
+    "SLOWGRU_RESET128_CANONICAL_98304": {
+      "old_v3_rule_tuple_full_first": {
+        "back_l2 defeat_count": 7,
+        "front_l2 mean graph_distance_progress": 0.5236034412438056,
+        "front_l2 transition_count": 2,
+        "full success_count": 17
+      },
+      "old_v3_student_rank": 2,
+      "primary_metric_parity": "EXACT",
+      "reclassification": {
+        "dedup_applied_episodes_by_scenario": {
+          "back_l2": 7,
+          "front_l2": 0,
+          "full": 17
+        },
+        "primary_outcome_counts": {
+          "back_l2": {
+            "BACK_DEFEAT_KOBOLD_SUCCESS": 7,
+            "BACK_NO_DEFEAT": 1
+          },
+          "front_l2": {
+            "FRONT_NO_TRANSITION": 6,
+            "FRONT_TRANSITION_SUCCESS": 2
+          },
+          "full": {
+            "FULL_DEFEAT_KOBOLD_SUCCESS": 17,
+            "FULL_NO_DEFEAT": 47
+          }
+        },
+        "records_reclassified": {
+          "back_l2": 8,
+          "front_l2": 8,
+          "full": 64
+        },
+        "v3_secondary_event_counts": {
+          "back_l2": {
+            "DEFEAT_KOBOLD": 7,
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 1,
+            "PLAYER_DIED": 7
+          },
+          "full": {
+            "DEFEAT_KOBOLD": 17,
+            "PLAYER_DIED": 47
+          }
+        },
+        "v3r1_secondary_event_counts": {
+          "back_l2": {
+            "KOBOLD_ENGAGED": 8,
+            "PLAYER_DIED": 1
+          },
+          "front_l2": {
+            "CORRIDOR_EXIT_REACHED": 2,
+            "DEFEAT_KOBOLD": 1,
+            "PLAYER_DIED": 7
+          },
+          "full": {
+            "PLAYER_DIED": 47
+          }
+        }
+      },
+      "source_file_sha256": {
+        "episode_records.jsonl": "54f5dd67402d817c8e58ef794caf239b07d4e9688bcff5d3ea1f4eb2ac00485b",
+        "evaluation_certificate_v3.json": "4d2662535bf3c4754e9aa8942fca2d799bad581e09c871e1f28900766e800f64",
+        "evaluation_result_v3.back_l2.json": "48d64ed4395dbc0ead0ae5a314e07d31df229224aeea7c6b44260f21a78058e3",
+        "evaluation_result_v3.front_l2.json": "4914a2dabcaafe50d6aeea60d1734e392f5c3c4190317ce047e29ca93a0dfc3e",
+        "evaluation_result_v3.full.json": "47f74a9bfb6d86c427aa74ba659babffb3968378a40ec399731110df6faae941",
+        "provenance_v3.json": "f4f4a4856a157e6e9548c4e4fd35431a2a183ccf2992ca147983313a2d2ef7eb"
+      },
+      "source_files": {
+        "back_l2": "cc4/SLOWGRU_RESET128_CANONICAL_98304/formal_evaluation_v3/evaluation_result_v3.back_l2.json",
+        "front_l2": "cc4/SLOWGRU_RESET128_CANONICAL_98304/formal_evaluation_v3/evaluation_result_v3.front_l2.json",
+        "full": "cc4/SLOWGRU_RESET128_CANONICAL_98304/formal_evaluation_v3/evaluation_result_v3.full.json"
+      },
+      "v3r1_front_first_rule_tuple": [
+        2,
+        0.5236034412438056,
+        17,
+        7
+      ]
+    }
+  },
+  "generated_at_utc": "2026-08-03T04:10:35.866203+00:00",
+  "recomputation_kind": "offline recompute from immutable V3 records; no environment reruns",
+  "rule_order_change": {
+    "NEW_RULE_ORDER": [
+      "front_l2 transition_count",
+      "front_l2 mean graph_distance_progress",
+      "full success_count",
+      "back_l2 defeat_count"
+    ],
+    "OLD_RULE_ORDER": [
+      "full success_count",
+      "front_l2 transition_count",
+      "front_l2 mean graph_distance_progress",
+      "back_l2 defeat_count"
+    ],
+    "changed_field_positions": {
+      "back_l2 defeat_count": {
+        "new_position": 4,
+        "old_position": 4
+      },
+      "front_l2 mean graph_distance_progress": {
+        "new_position": 2,
+        "old_position": 3
+      },
+      "front_l2 transition_count": {
+        "new_position": 1,
+        "old_position": 2
+      },
+      "full success_count": {
+        "new_position": 3,
+        "old_position": 1
+      }
+    }
+  },
+  "ruling_task": "CC4_RECLOSE_FORMAL_GLOBAL_RANKING_WITH_FRONT_FIRST_AND_TOP_TIE_ONLY",
+  "schema": "mechanism_UED.tier3_ranking_recomputation_audit/v3r1",
+  "source_evidence_dir": "D:/cc4tmp/reports/tier3_scaffolded_evaluation/formal_evaluation_evidence_v3_20260801",
+  "source_v3_gate_sha256": "c529ebf3ddbf37085b85b0a79018d9cc06ce5a096dc744d18a97a3e0c8b72528",
+  "source_v3_summary_sha256": "dab522cf7bcc43ed74f0bc1e9cab20c01c98d972d7edceb2717f9dc18445b659",
+  "tie_policy_change": {
+    "ONLY_TOP_TIE_BLOCKS_WINNER": true,
+    "new": "ONLY a tie inside the TOP equivalence group blocks the winner; lower ties are disclosed and non-blocking",
+    "old": "ANY >=2 full-tuple tie group voided the entire ranking (INCONCLUSIVE_FULL_TIE, winner null)"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "FORMAL_RANKING_AUTHORIZED_V3R1": true,
+  "FORMAL_RANKING_PROTOCOL": "V3R1_FRONT_FIRST_TOP_TIE_ONLY",
+  "RANKING_PROTOCOL": "TIER3_FRONT_FIRST_LEXICOGRAPHIC_V1",
+  "formal_ranking_summary_sha256": "4bdba0da2379a5da546718863c73aba859a3046c3c044725ae21648ac5cf9238",
+  "formal_winner": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "gate_failures": [],
+  "gates": {
+    "R10_NO_CHECKPOINT_MOD_NO_RETRAINING_NO_EXEMPTION": true,
+    "R11_NO_FULL_FIRST_ORDERING": true,
+    "R12_NO_CANDIDATE_ID_SCIENTIFIC_TIEBREAK": true,
+    "R1_ALL_6_STUDENTS_V3_EVIDENCE_COMPLETE": true,
+    "R2_TEACHER_REFERENCE_COMPLETE": true,
+    "R3_ALL_V3_CERTIFICATE_SHAS_VERIFY": true,
+    "R4_OLD_V3_V2_FILES_UNMODIFIED": true,
+    "R5_PRIMARY_METRIC_PARITY": true,
+    "R6_FRONT_FIRST_RULE_CODE_PROTOCOL_CONSISTENT": true,
+    "R7_TOP_TIE_ONLY_TESTS_ALL_PASS": true,
+    "R8_TEACHER_EXCLUDED_FROM_STUDENT_RANKING": true,
+    "R9_NO_REROLLOUT": true
+  },
+  "generated_at_utc": "2026-08-03T04:10:35.866203+00:00",
+  "immutability": {
+    "OLD_V3_FILES_MODIFIED": 0,
+    "OLD_V3_HASH_DRIFT": 0,
+    "V2_FILES_MODIFIED": 0
+  },
+  "independent_verification": {
+    "note": "the gate is not final until the independent verifier re-derives every claim from the immutable V3 evidence; see COMMON_EVALUATOR_V3R1_RANKING_READY.json",
+    "required": true,
+    "verifier_script": "verify_formal_ranking_v3r1.py"
+  },
+  "prohibitions_honored": {
+    "candidate_exemptions": [],
+    "candidate_id_scientific_tiebreak_used": false,
+    "candidates_deleted": [],
+    "checkpoints_modified": false,
+    "episode_counts_changed": false,
+    "full_first_ordering_used": false,
+    "greedy_argmax_changed": false,
+    "horizon_changed": false,
+    "old_v3_summary_rewritten": false,
+    "original_v3_certificates_modified": false,
+    "retraining_performed": false,
+    "rollouts_rerun": false,
+    "seeds_changed": false,
+    "state_banks_modified": false,
+    "v2_v3_evidence_overwritten": false
+  },
+  "ranking_status": "ORDERED_WITH_LOWER_TIES",
+  "retained_constraints": {
+    "multi_seed_confirmation_skipped_by_director": true,
+    "scaffolded_results_can_replace_full_task": false,
+    "scientific_claim_authorized": false,
+    "single_training_seed": true,
+    "usage_scope": "工程阶段 strongest Student selection ONLY"
+  },
+  "ruling_task": "CC4_RECLOSE_FORMAL_GLOBAL_RANKING_WITH_FRONT_FIRST_AND_TOP_TIE_ONLY",
+  "schema": "mechanism_UED.tier3_formal_evaluation_gate/v3r1",
+  "self_tests": {
+    "ranking_machine_self_test_ABCDEFGHIJK": "PASS",
+    "taxonomy_v3r1_self_test": "PASS"
+  }
+}

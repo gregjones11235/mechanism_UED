@@ -1,0 +1,40 @@
+{
+  "IMMUTABLE": true,
+  "OLD_V3_EXTRA_FILES": 0,
+  "OLD_V3_FILES_MODIFIED": 0,
+  "OLD_V3_HASH_DRIFT": 0,
+  "OLD_V3_MISSING_FILES": 0,
+  "V2_EXTRA_FILES": 0,
+  "V2_FILES_MODIFIED": 0,
+  "V2_MISSING_FILES": 0,
+  "baseline_snapshot_dir": "D:\\cc4tmp\\tmp_v3r1_baseline",
+  "generated_at_utc": "2026-08-03T04:10:35.494634+00:00",
+  "old_v2": {
+    "evidence_dir": "D:\\cc4tmp\\reports\\tier3_scaffolded_evaluation\\formal_evaluation_evidence_20260801",
+    "extra_files": [],
+    "files_modified_count": 0,
+    "hash_drift_count": 0,
+    "hash_drift_files": [],
+    "live_file_count": 87,
+    "missing_files": [],
+    "modified_files": [],
+    "snapshot_file": "D:\\cc4tmp\\tmp_v3r1_baseline\\old_v2.sha",
+    "snapshot_file_count": 87,
+    "snapshot_file_sha256": "6cbc54be3f921ff7ec8570f10db0e815f5275d3ce74501f7f8e2bc7b3401e6d1"
+  },
+  "old_v3": {
+    "evidence_dir": "D:\\cc4tmp\\reports\\tier3_scaffolded_evaluation\\formal_evaluation_evidence_v3_20260801",
+    "extra_files": [],
+    "files_modified_count": 0,
+    "hash_drift_count": 0,
+    "hash_drift_files": [],
+    "live_file_count": 79,
+    "missing_files": [],
+    "modified_files": [],
+    "snapshot_file": "D:\\cc4tmp\\tmp_v3r1_baseline\\old_v3.sha",
+    "snapshot_file_count": 79,
+    "snapshot_file_sha256": "792dd3e9b1cca337615dfd68b373acea9e130f924f1c32ce098aaed0e397583d"
+  },
+  "ruling_task": "CC4_RECLOSE_FORMAL_GLOBAL_RANKING_WITH_FRONT_FIRST_AND_TOP_TIE_ONLY",
+  "schema": "mechanism_UED.tier3_old_v3_immutability_report/v3r1"
+}

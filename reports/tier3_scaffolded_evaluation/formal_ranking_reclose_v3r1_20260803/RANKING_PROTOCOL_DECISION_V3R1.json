@@ -1,0 +1,38 @@
+{
+  "decided_by": "总控 (director ruling)",
+  "decision": {
+    "FORMAL_RANKING_PROTOCOL": "V3R1_FRONT_FIRST_TOP_TIE_ONLY",
+    "NEW_RULE_ORDER": [
+      "front_l2 transition_count",
+      "front_l2 mean graph_distance_progress",
+      "full success_count",
+      "back_l2 defeat_count"
+    ],
+    "OLD_RULE_ORDER": [
+      "full success_count",
+      "front_l2 transition_count",
+      "front_l2 mean graph_distance_progress",
+      "back_l2 defeat_count"
+    ],
+    "ONLY_TOP_TIE_BLOCKS_WINNER": true,
+    "RANKING_PRIMARY_ORDER": "FRONT_TRANSITION_FIRST",
+    "RANKING_PROTOCOL": "TIER3_FRONT_FIRST_LEXICOGRAPHIC_V1",
+    "candidate_id_is_scientific_tiebreak": false,
+    "tie_tolerance": 1e-12
+  },
+  "generated_at_utc": "2026-08-03T04:10:35.866203+00:00",
+  "rationale": [
+    "FULL success_count must not be the first ranking field; the FRONT transition capability is the director-specified primary ordering criterion.",
+    "A full-tuple tie BELOW the top position must not cancel a unique top winner; only a tie within the top equivalence group blocks the winner.",
+    "Tied candidates keep student_rank=null but disclose tie_group_rank; no order is ever invented via candidate_id."
+  ],
+  "recorded_by": "CC4",
+  "ruling_task": "CC4_RECLOSE_FORMAL_GLOBAL_RANKING_WITH_FRONT_FIRST_AND_TOP_TIE_ONLY",
+  "schema": "mechanism_UED.tier3_ranking_protocol_decision/v3r1",
+  "scope_and_limits": {
+    "applies_to": "Tier3 scaffolded-evaluation formal global ranking",
+    "old_v3_status": "kept immutable and cited; the old V3 close was correct under its own protocol",
+    "retroactive_effect": "recomputed from existing immutable V3 records; no reruns, no retraining",
+    "scientific_claim_authorized": false
+  }
+}
