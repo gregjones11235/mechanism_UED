@@ -136,6 +136,12 @@ BOARD_ROLES = (
 )
 BOARD_CALLS_PER_WINDOW = len(BOARD_ROLES)   # 6 LLM-family calls, every window
 
+#: the independent EnvCoder is the 7th LLM-family call of every window: it
+#: consumes the board's AxisDirectives and emits candidate environment code
+#: (symbolic this round) which the compile/reset/step gates then check.
+ROLE_ENV_CODER = "env_coder"
+LLM_CALLS_PER_WINDOW = BOARD_CALLS_PER_WINDOW + 1     # 6 board + 1 EnvCoder
+
 # ---------------------------------------------------------------------------
 # Hypothesis lifecycle (task: ledger statuses). A hypothesis is a claim about
 # the Student's behavior that an environment family is meant to test.

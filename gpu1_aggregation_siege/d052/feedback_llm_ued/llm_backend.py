@@ -258,6 +258,7 @@ from d052.feedback_llm_ued import (  # noqa: E402
     behavior_auditor,
     causal_failure_analyst,
     critic_skeptic,
+    env_coder,
     explorer,
     feedback_diagnostician,
     intervention_tutor,
@@ -276,4 +277,6 @@ _DEFAULT_RULES: Dict[str, Callable[[dict], dict]] = {
     C.ROLE_INTERVENTION_TUTOR: intervention_tutor.mock_rule,
     C.ROLE_EXPLORER: explorer.mock_rule,
     C.ROLE_CRITIC_SKEPTIC: critic_skeptic.mock_rule,
+    # independent EnvCoder — the 7th LLM-family call of every window (C7)
+    C.ROLE_ENV_CODER: env_coder.mock_rule,
 }
