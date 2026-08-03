@@ -8,3 +8,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+# repo root: required ONLY for the sanctioned d052.achievements REGISTRY
+# import in task_specs (pure stdlib); E1 runtime imports nothing else
+# from d052.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
