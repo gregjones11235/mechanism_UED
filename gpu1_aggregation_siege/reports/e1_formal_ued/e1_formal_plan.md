@@ -14,7 +14,9 @@
   `7f56341` C6 board → `f254a61` C7 TaskSpec → `0578559` C8 EnvCoder →
   `4f3e333` C9 metrics/anchors/selector/parity → `8e65663` C10 GenManager+配置 →
   `1fa41ab` C11 集成布线+评价 seam → `0c8f2af` C12 报告 →
-  （本提交）C13 fail-closed 训练门禁修复（总控 REQUEST_CHANGES）。
+  `b5536d3` C13 fail-closed 训练门禁修复（总控 REQUEST_CHANGES）→
+  （本提交）C14 REUSE 证据收紧（record_verified_batch 结构化 dual-probe
+  绑定；总控 CC2/E1）。
 
 ## 一、九阶段管线 → 代码位置
 
@@ -57,6 +59,12 @@ REFERENCE_CONTRACT_UNFROZEN
    provenance=CANDIDATE_EVALUATION+12 个动态任务逐条绑定本教师
    registry 的 spec_hash/code_sha256+manifest sha 相等），否则
    `TRAINING_BLOCKED_NO_VERIFIED_BATCH`/相应阻断码。
+   **C14 收紧**：provenance 串单独永不认证 REUSE——另需
+   artifact_id 与内部 registry 对账、结构化 dual-probe 块（pinned
+   强 Student + Student/Reference probe id/sha256）、Reference 身份
+   哈希、窗口哈希（与 registry 逐条相等）、候选集哈希；晋升路径
+   （`build_training_batch` 携带 `dual_probe`）同构收紧。详见
+   gate_closure_v2.md「C14 REUSE 证据收紧」。
 
 集成 smoke（`tests/e1_formal/test_integration_smoke.py`）断言链上每个码
 **如实出现**，且 batch 中没有任何伪造动态任务或伪造数值；

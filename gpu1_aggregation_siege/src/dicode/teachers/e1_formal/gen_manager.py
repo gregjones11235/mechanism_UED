@@ -40,6 +40,13 @@ Degradation chain (plan D5 — every step honest, nothing fabricated)::
          (``record_verified_batch``); without such a snapshot the batch
          is BLOCKED and the training gate refuses run_session_training.
 
+C14 evidence binding: a verified snapshot carries STRUCTURED dual-probe
+evidence — Student/Reference probe ids and sha256 hashes, the pinned
+strong-Student candidate id, the Reference identity hash, the window
+hash and the candidate-set hash — and every entry's artifact_id must
+equal the teacher's internal registry. A provenance string alone (even
+the exact CANDIDATE_EVALUATION value) NEVER certifies REUSE.
+
 This module imports NO jax/craftax, performs NO network I/O and NO
 file I/O (the anchor manifest and frozen manifest are injected as
 mappings by the caller). ``check_compilation`` is a stdlib syntax-only
@@ -72,6 +79,7 @@ from .reference_contract import (
     ReferenceContractError,
     ReferenceIdentityContract,
     consume_reference_identity_contract,
+    reference_identity_sha256,
 )
 from .schemas import E1Code, E1SchemaError, assert_llm_role_admissible
 from .student_contract import PINNED_STUDENT_CANDIDATE_ID
@@ -106,16 +114,104 @@ GEN_MANAGER_SNAPSHOT_BLOCKED = "GEN_MANAGER_SNAPSHOT_BLOCKED"
 
 #: provenance a verified REUSE snapshot must carry: only the candidate
 #: evaluation path (real Student/Reference dual probes) may certify a
-#: window as REUSE-admissible
+#: window as REUSE-admissible. Necessary but NEVER sufficient (C14):
+#: certification additionally requires every structured evidence field
+#: below, so a provenance string alone can never certify REUSE.
 _VERIFIED_SNAPSHOT_PROVENANCE = "CANDIDATE_EVALUATION"
 _VERIFIED_SNAPSHOT_FIELDS = (
     "window_id",
+    # C14: canonical hash of the review window; must equal the
+    # window_hash recorded in the artifact registry for every one of
+    # the 12 dynamic tasks
+    "window_hash",
     "provenance",
     "reference_candidate_id",
+    # C14: canonical sha256 over the frozen Reference identity (all
+    # contracted fields), computed from the CURRENT frozen contract
+    "reference_identity_hash",
     "anchor_task_ids",
     "anchor_manifest_sha256",
+    # C14: canonical sha256 over the ordered candidate set (the 12
+    # dynamic task ids exactly as certified)
+    "candidate_set_hash",
+    # C14: structured Student/Reference dual-probe evidence block
+    "dual_probe",
     "dynamic_tasks",
 )
+
+#: C14: structured dual-probe evidence fields (all required; a
+#: provenance string alone never certifies REUSE). The probes must
+#: have run on the pinned strong Student and the frozen Reference.
+_DUAL_PROBE_FIELDS = (
+    "student_candidate_id",
+    "student_probe_id",
+    "student_probe_hash",
+    "reference_probe_id",
+    "reference_probe_hash",
+)
+
+_HEX_DIGITS = frozenset("0123456789abcdef")
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    """True iff ``value`` is a 64-char lowercase sha256 hex string."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(c in _HEX_DIGITS for c in value)
+    )
+
+
+def _validate_dual_probe(raw: Any, ctx: str) -> Dict[str, str]:
+    """Fail-closed validation of the structured dual-probe block (C14).
+
+    Required evidence: the pinned strong-Student candidate id, a
+    Student probe id + sha256 hash and a Reference probe id + sha256
+    hash. Raises GenManagerError with a greppable code on ANY
+    violation; returns the cleaned block.
+    """
+    if not isinstance(raw, Mapping):
+        raise GenManagerError(
+            GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+            f"{ctx}: dual_probe must be a mapping, got "
+            f"{type(raw).__name__}",
+        )
+    unknown = sorted(k for k in raw if k not in _DUAL_PROBE_FIELDS)
+    if unknown:
+        raise GenManagerError(
+            GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+            f"{ctx}: unknown dual_probe field(s) {unknown}",
+        )
+    for name in _DUAL_PROBE_FIELDS:
+        if name not in raw:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                f"{ctx}: dual_probe missing field {name!r}",
+            )
+    student_candidate_id = raw["student_candidate_id"]
+    if student_candidate_id != PINNED_STUDENT_CANDIDATE_ID:
+        raise GenManagerError(
+            GEN_MANAGER_SNAPSHOT_MISMATCH,
+            f"{ctx}: dual probes must run on the pinned strong Student "
+            f"{PINNED_STUDENT_CANDIDATE_ID!r}, got "
+            f"{student_candidate_id!r}",
+        )
+    for name in ("student_probe_id", "reference_probe_id"):
+        value = raw[name]
+        if not isinstance(value, str) or not value.strip():
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                f"{ctx}: dual_probe needs non-empty {name!r}",
+            )
+    for name in ("student_probe_hash", "reference_probe_hash"):
+        value = raw[name]
+        if not _is_sha256_hex(value):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: dual_probe field {name!r} must be lowercase "
+                f"sha256 hex (64 chars), got {value!r}",
+            )
+    return {name: raw[name] for name in _DUAL_PROBE_FIELDS}
 
 #: honest environment-compilation note for this round
 ENVCODER_CHECK_NOTE = (
@@ -634,6 +730,10 @@ class E1FormalGenManager:
             self._artifact_registry[task_id] = {
                 "code": code,
                 "window_id": status.get("window_id", ""),
+                # C14: REUSE certification binds every dynamic task to
+                # the window hash recorded here (empty => the task can
+                # never be part of a verified window; fail-closed)
+                "window_hash": status.get("window_hash", ""),
                 "artifact_id": status.get("artifact_id", ""),
                 "spec_hash": status.get("spec_hash", ""),
                 "envcoder_check": status.get(
@@ -695,7 +795,9 @@ class E1FormalGenManager:
     # blocked => ZERO trainable tasks, never an anchors-only sneak)
     # ------------------------------------------------------------------
     def build_training_batch(
-        self, promoted_dynamic_ids: Optional[Sequence[str]] = None
+        self,
+        promoted_dynamic_ids: Optional[Sequence[str]] = None,
+        dual_probe: Any = None,
     ) -> Dict[str, Any]:
         """Build the session batch; ``training_permitted`` gates training.
 
@@ -713,6 +815,11 @@ class E1FormalGenManager:
         * 12 promoted ids are accepted ONLY while every gate is clear
           (real selection is impossible otherwise) and every id carries
           compiled-artifact evidence in the registry.
+
+        C14: promotion additionally requires ``dual_probe`` — the
+        structured Student/Reference dual-probe evidence block (probe
+        ids + sha256 hashes on the pinned strong Student). Ids plus a
+        provenance string alone NEVER certify a trainable batch.
         """
         ids = list(promoted_dynamic_ids or ())
         blocked = self.current_blocked_codes()
@@ -740,6 +847,15 @@ class E1FormalGenManager:
                         "12 dynamic + 4 frozen shared anchors, bound to "
                         f"window {snapshot['window_id']} and anchor "
                         f"manifest sha {snapshot['anchor_manifest_sha256']}",
+                        "C14 structured evidence: dual probes "
+                        "student="
+                        f"{snapshot['dual_probe']['student_probe_id']}"
+                        " / reference="
+                        f"{snapshot['dual_probe']['reference_probe_id']}"
+                        "; reference identity hash "
+                        f"{snapshot['reference_identity_hash']}; "
+                        f"candidate-set hash "
+                        f"{snapshot['candidate_set_hash']}",
                     ],
                 }
             codes = list(blocked)
@@ -797,10 +913,23 @@ class E1FormalGenManager:
                 "e1_formal.batch: a promoted batch must come from ONE "
                 f"window, got ids from {sorted(window_ids)}",
             )
+        # C14: promotion without structured dual-probe evidence is a
+        # provenance-only certification attempt — refused fail-closed
+        if dual_probe is None:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                "e1_formal.batch.promotion: promoting 12 ids requires "
+                "the structured Student/Reference dual-probe evidence "
+                "(probe ids + sha256 hashes); ids and a provenance "
+                "string alone never certify a trainable batch",
+            )
+        probe = _validate_dual_probe(
+            dual_probe, "e1_formal.batch.promotion.dual_probe"
+        )
         # certified: this window becomes the REUSE source for the next
         self._certify_dynamic_window(
             window_ids.pop(), ids, _VERIFIED_SNAPSHOT_PROVENANCE,
-            "e1_formal.batch.promotion",
+            "e1_formal.batch.promotion", dual_probe=probe,
         )
         layout_map = layout.build_training_layout(ids)
         return {
@@ -827,6 +956,7 @@ class E1FormalGenManager:
         copy = dict(snapshot)
         copy["dynamic_tasks"] = [dict(e) for e in snapshot["dynamic_tasks"]]
         copy["anchor_task_ids"] = list(snapshot["anchor_task_ids"])
+        copy["dual_probe"] = dict(snapshot["dual_probe"])
         return copy
 
     def record_verified_batch(self, snapshot: Any) -> Dict[str, Any]:
@@ -839,12 +969,21 @@ class E1FormalGenManager:
           the current manifest sha and Reference candidate id;
         * learnability thresholds are frozen (a real dual-probe verdict
           is impossible without them);
-        * ``provenance`` is exactly CANDIDATE_EVALUATION — only the
-          real Student/Reference dual-probe path may certify a window;
+        * ``provenance`` is exactly CANDIDATE_EVALUATION — necessary
+          but NEVER sufficient (C14): certification additionally
+          requires every structured evidence field below, so a
+          provenance string alone can never certify REUSE;
+        * C14 structured dual-probe evidence: a ``dual_probe`` block
+          whose probes ran on the pinned strong Student (probe ids +
+          sha256 hashes for both Student and Reference), the
+          ``reference_identity_hash`` of the CURRENT frozen Reference
+          identity, the ``window_hash`` recorded in the registry for
+          every one of the 12 tasks, and the ``candidate_set_hash``
+          over the ordered certified candidate set;
         * EXACTLY 12 unique dynamic entries, each bound to a
           compiled artifact in this teacher's own registry with
-          matching spec_hash and code sha256 (no entry may be
-          certified the teacher never compiled);
+          matching artifact_id, spec_hash and code sha256 (no entry
+          may be certified the teacher never compiled);
         * the four anchors are exactly the canonical shared anchors.
 
         Returns the stored (cleaned) snapshot. Raises GenManagerError
@@ -883,6 +1022,16 @@ class E1FormalGenManager:
                 GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
                 f"{ctx}: window_id must be a non-empty str",
             )
+        # C14: window hash — format first, registry binding below
+        window_hash = snapshot["window_hash"]
+        if not _is_sha256_hex(window_hash):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: window_hash must be lowercase sha256 hex "
+                f"(64 chars), got {window_hash!r}",
+            )
+        # provenance: necessary but NEVER sufficient (C14) — the
+        # structured evidence fields around it are what certify REUSE
         provenance = snapshot["provenance"]
         if provenance != _VERIFIED_SNAPSHOT_PROVENANCE:
             raise GenManagerError(
@@ -898,6 +1047,25 @@ class E1FormalGenManager:
                 f"{ctx}: reference_candidate_id {candidate_id!r} != "
                 f"frozen contract {self._reference_contract.candidate_id!r}",
             )
+        # C14: bind the snapshot to the CURRENT frozen Reference
+        # identity as a whole, not just the candidate-id string
+        identity_hash = snapshot["reference_identity_hash"]
+        if not _is_sha256_hex(identity_hash):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: reference_identity_hash must be lowercase "
+                f"sha256 hex (64 chars), got {identity_hash!r}",
+            )
+        contracted_identity = reference_identity_sha256(
+            self._reference_contract
+        )
+        if identity_hash != contracted_identity:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: reference_identity_hash {identity_hash!r} != "
+                f"the CURRENT frozen Reference identity "
+                f"{contracted_identity!r}",
+            )
         manifest_sha = snapshot["anchor_manifest_sha256"]
         if manifest_sha != self._anchor_manifest.manifest_sha256:
             raise GenManagerError(
@@ -906,6 +1074,10 @@ class E1FormalGenManager:
                 f"current frozen manifest "
                 f"{self._anchor_manifest.manifest_sha256!r}",
             )
+        # C14: structured Student/Reference dual-probe evidence
+        probe = _validate_dual_probe(
+            snapshot["dual_probe"], f"{ctx}.dual_probe"
+        )
         anchor_ids = snapshot["anchor_task_ids"]
         if not isinstance(anchor_ids, (list, tuple)) or tuple(
             anchor_ids
@@ -980,6 +1152,15 @@ class E1FormalGenManager:
                         GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
                         f"{entry_ctx}: needs non-empty {field!r}",
                     )
+            # C14: artifact_id must equal the INTERNAL registry record
+            # — a snapshot quoting any other artifact id is a forgery
+            if raw["artifact_id"] != record["artifact_id"]:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: artifact_id {raw['artifact_id']!r} "
+                    f"!= the internal registry artifact id "
+                    f"{record['artifact_id']!r} for {task_id!r}",
+                )
             if raw["spec_hash"] != record["spec_hash"]:
                 raise GenManagerError(
                     GEN_MANAGER_SNAPSHOT_MISMATCH,
@@ -993,9 +1174,23 @@ class E1FormalGenManager:
                 raise GenManagerError(
                     GEN_MANAGER_SNAPSHOT_MISMATCH,
                     f"{entry_ctx}: code_sha256 does not match the "
-                    "registry code for {task_id!r}".format(
-                        task_id=task_id
-                    ),
+                    f"registry code for {task_id!r}",
+                )
+            # C14: every certified task is bound to the window hash
+            # recorded in the registry (empty => never certifiable)
+            record_window_hash = record.get("window_hash", "")
+            if not record_window_hash:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: the registry record for {task_id!r} "
+                    "carries no window_hash — the task can never be "
+                    "part of a verified window",
+                )
+            if record_window_hash != window_hash:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISMATCH,
+                    f"{entry_ctx}: window_hash does not match the "
+                    f"registry-recorded window hash for {task_id!r}",
                 )
             entries.append(
                 {
@@ -1021,12 +1216,36 @@ class E1FormalGenManager:
                 f"{ctx}: window_id {window_id!r} does not match the "
                 "registry-recorded window of the dynamic tasks",
             )
+        # C14: candidate-set hash — canonical sha256 over the ordered
+        # certified candidate set (any swapped/added/omitted id or a
+        # reordered set fails closed)
+        candidate_set_hash = snapshot["candidate_set_hash"]
+        if not _is_sha256_hex(candidate_set_hash):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: candidate_set_hash must be lowercase sha256 "
+                f"hex (64 chars), got {candidate_set_hash!r}",
+            )
+        contracted_set_hash = canonical_sha256(
+            [entry["task_id"] for entry in entries]
+        )
+        if candidate_set_hash != contracted_set_hash:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: candidate_set_hash {candidate_set_hash!r} != "
+                f"canonical hash over the certified candidate set "
+                f"{contracted_set_hash!r}",
+            )
         stored = {
             "window_id": window_id.strip(),
+            "window_hash": window_hash,
             "provenance": provenance,
             "reference_candidate_id": candidate_id,
+            "reference_identity_hash": identity_hash,
             "anchor_task_ids": list(layout.ANCHOR_TASK_IDS),
             "anchor_manifest_sha256": manifest_sha,
+            "candidate_set_hash": candidate_set_hash,
+            "dual_probe": dict(probe),
             "dynamic_tasks": entries,
         }
         self._verified_batch_snapshot = stored
@@ -1058,6 +1277,13 @@ class E1FormalGenManager:
             != self._reference_contract.candidate_id
         ):
             return False
+        # C14: the snapshot stays bound to the CURRENT frozen Reference
+        # identity as a whole — a re-frozen identity invalidates REUSE
+        if (
+            snapshot.get("reference_identity_hash")
+            != reference_identity_sha256(self._reference_contract)
+        ):
+            return False
         return True
 
     def _certify_dynamic_window(
@@ -1066,11 +1292,24 @@ class E1FormalGenManager:
         dynamic_ids: Sequence[str],
         provenance: str,
         ctx: str,
+        *,
+        dual_probe: Mapping[str, str],
     ) -> None:
-        """Store registry-bound evidence as the verified snapshot."""
+        """Store registry-bound evidence as the verified snapshot.
+
+        C14: the stored snapshot carries the SAME structured evidence
+        as ``record_verified_batch`` — window hash (from the registry
+        records), Reference identity hash (from the CURRENT frozen
+        contract), candidate-set hash (canonical sha256 over the
+        ordered certified ids) and the validated dual-probe block. A
+        window whose registry records carry no window hash can never
+        be certified (fail-closed).
+        """
         entries = []
+        window_hashes = set()
         for task_id in dynamic_ids:
             record = self._artifact_registry[task_id]
+            window_hashes.add(record.get("window_hash", ""))
             entries.append(
                 {
                     "task_id": task_id,
@@ -1081,16 +1320,29 @@ class E1FormalGenManager:
                     ).hexdigest(),
                 }
             )
+        if len(window_hashes) != 1 or not next(iter(window_hashes)):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: cannot certify a window whose registry records "
+                f"carry no single non-empty window_hash "
+                f"(got {sorted(window_hashes)})",
+            )
         self._verified_batch_snapshot = {
             "window_id": window_id,
+            "window_hash": next(iter(window_hashes)),
             "provenance": provenance,
             "reference_candidate_id": (
                 self._reference_contract.candidate_id
+            ),
+            "reference_identity_hash": reference_identity_sha256(
+                self._reference_contract
             ),
             "anchor_task_ids": list(layout.ANCHOR_TASK_IDS),
             "anchor_manifest_sha256": (
                 self._anchor_manifest.manifest_sha256
             ),
+            "candidate_set_hash": canonical_sha256(list(dynamic_ids)),
+            "dual_probe": dict(dual_probe),
             "dynamic_tasks": entries,
         }
         self._real_selection_completed = True
@@ -1158,8 +1410,10 @@ class E1FormalGenManager:
                 "no dynamic task is ever promoted without real probes; "
                 "while hard gates block, the batch trains NOTHING (zero "
                 "updates, no anchors-only sneak); REUSE is only the "
-                "previous window's verified 12+4 with source/window/"
-                "hash evidence",
+                "previous window's verified 12+4 with structured "
+                "dual-probe IDs/hashes, Reference identity, window and "
+                "candidate-set hash evidence — a provenance string "
+                "alone never certifies it",
             ],
         }
 

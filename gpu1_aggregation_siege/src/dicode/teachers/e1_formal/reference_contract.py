@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 from ..static_llm.schemas import SchemaError, assert_admissible_provenance
-from .canonical import sha256_hex
+from .canonical import canonical_sha256, sha256_hex
 
 REFERENCE_CONTRACT_SCHEMA_VERSION = "e1_formal.reference_identity_contract.v1"
 
@@ -257,6 +257,19 @@ def consume_reference_identity_contract(
     return ReferenceIdentityContract(
         total_env_steps=total_env_steps, provenance=provenance, **values
     )
+
+
+def reference_identity_sha256(contract: ReferenceIdentityContract) -> str:
+    """Canonical sha256 over the frozen Reference identity (C14).
+
+    Binds REUSE certification to the CURRENT frozen Reference
+    identity as a whole — not just the candidate-id string. Computed
+    over every required identity field plus the schema version, so any
+    changed field changes the hash. Pure function; no I/O.
+    """
+    payload = {name: getattr(contract, name) for name in _REQUIRED_FIELDS}
+    payload["schema_version"] = contract.schema_version
+    return canonical_sha256(payload)
 
 
 def verify_reference_manifest_bytes(

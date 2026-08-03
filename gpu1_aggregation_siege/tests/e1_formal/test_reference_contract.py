@@ -168,6 +168,41 @@ class TestManifestBinding:
         assert excinfo.value.code == "REFERENCE_CONTRACT_MANIFEST_HASH_MISMATCH"
 
 
+class TestIdentityHash:
+    """C14: canonical sha256 over the frozen Reference identity."""
+
+    def test_identity_hash_is_deterministic(self):
+        c1 = R.consume_reference_identity_contract(_block(), "t")
+        c2 = R.consume_reference_identity_contract(_block(), "t")
+        assert R.reference_identity_sha256(
+            c1
+        ) == R.reference_identity_sha256(c2)
+
+    def test_identity_hash_is_sha256_hex(self):
+        contract = R.consume_reference_identity_contract(_block(), "t")
+        digest = R.reference_identity_sha256(contract)
+        assert len(digest) == 64
+        assert all(ch in "0123456789abcdef" for ch in digest)
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            {"candidate_id": "SOME_OTHER_CANDIDATE"},
+            {"global_step": 131073},
+            {"seed": 43},
+            {"params_sha256": "b" * 63 + "c"},
+        ],
+    )
+    def test_any_changed_identity_field_changes_the_hash(self, override):
+        base = R.consume_reference_identity_contract(_block(), "t")
+        changed = R.consume_reference_identity_contract(
+            _block(**override), "t"
+        )
+        assert R.reference_identity_sha256(
+            base
+        ) != R.reference_identity_sha256(changed)
+
+
 class TestNoIOSurface:
     def test_module_does_not_import_io_modules(self):
         import ast

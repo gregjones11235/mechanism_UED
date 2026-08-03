@@ -25,11 +25,20 @@ from dicode.teachers.e1_formal import gen_manager as GM
 from dicode.teachers.e1_formal import layout as L
 from dicode.teachers.e1_formal import training_gate as TG
 from dicode.teachers.e1_formal.canonical import canonical_sha256
+from dicode.teachers.e1_formal.reference_contract import (
+    reference_identity_sha256,
+)
+from dicode.teachers.e1_formal.student_contract import (
+    PINNED_STUDENT_CANDIDATE_ID,
+)
 
 from test_gen_manager_duck import _frozen_manifest, _manager, _teacher_config
 from test_reference_contract import _block
 
 WINDOW = "e1-w000007"
+#: FIXTURE window hash (test-only; stands in for the canonical hash of
+#: a real review window, which does not exist this round)
+WINDOW_HASH = "c1" * 32
 DYNAMIC_IDS = [f"{WINDOW}::fam_a::v{i:02d}" for i in range(1, 13)]
 CODE_TEMPLATE = "class Env{i}:\n    pass\n"
 
@@ -91,7 +100,9 @@ def _unblocked_manager(**kwargs):
     )
 
 
-def _consume_window_artifacts(manager, task_ids=None, window_id=WINDOW):
+def _consume_window_artifacts(
+    manager, task_ids=None, window_id=WINDOW, window_hash=WINDOW_HASH
+):
     ids = list(task_ids or DYNAMIC_IDS)
     workers = []
     for i, task_id in enumerate(ids):
@@ -109,6 +120,7 @@ def _consume_window_artifacts(manager, task_ids=None, window_id=WINDOW):
                     "artifact_id": f"{task_id}::a1",
                     "spec_hash": f"{i:02d}" + "ab" * 31,
                     "window_id": window_id,
+                    "window_hash": window_hash,
                     "compiled": True,
                     "compile_note": "",
                 },
@@ -118,11 +130,32 @@ def _consume_window_artifacts(manager, task_ids=None, window_id=WINDOW):
     return ids
 
 
+def _dual_probe(**overrides):
+    """FIXTURE structured Student/Reference dual-probe evidence block.
+
+    Explicitly a fixture: no real probe rollout happened this round.
+    The student candidate id is the genuinely pinned strong Student;
+    the probe ids/hashes are test placeholders that stand in for the
+    real probe records a CC4 evaluation seam would produce.
+    """
+    probe = {
+        "student_candidate_id": PINNED_STUDENT_CANDIDATE_ID,
+        "student_probe_id": "fixture-student-probe-0001",
+        "student_probe_hash": "d1" * 32,
+        "reference_probe_id": "fixture-reference-probe-0001",
+        "reference_probe_hash": "d2" * 32,
+    }
+    probe.update(overrides)
+    return probe
+
+
 def _valid_snapshot(manager, window_id=WINDOW):
     """Build a structurally honest snapshot from the teacher's OWN
     registry evidence (never from thin air)."""
     dynamic = []
+    window_hashes = set()
     for task_id, record in manager.artifact_registry.items():
+        window_hashes.add(record["window_hash"])
         dynamic.append(
             {
                 "task_id": task_id,
@@ -136,17 +169,31 @@ def _valid_snapshot(manager, window_id=WINDOW):
     contract = manager.reference_contract
     return {
         "window_id": window_id,
+        # the window hash is taken from the registry evidence itself —
+        # every recorded artifact of the window carries the same value
+        "window_hash": (
+            window_hashes.pop() if len(window_hashes) == 1 else "0" * 64
+        ),
         "provenance": "CANDIDATE_EVALUATION",
         # for blocked-certification tests the contract is None; the
         # gate rejects on the frozen-state check before it ever trusts
-        # this field
+        # these fields
         "reference_candidate_id": (
             contract.candidate_id
             if contract is not None
             else "REFERENCE_CANDIDATE_FROZEN_BY_SUPERVISOR"
         ),
+        "reference_identity_hash": (
+            reference_identity_sha256(contract)
+            if contract is not None
+            else "b0" * 32
+        ),
         "anchor_task_ids": list(L.ANCHOR_TASK_IDS),
         "anchor_manifest_sha256": manager.anchor_manifest.manifest_sha256,
+        "candidate_set_hash": canonical_sha256(
+            [entry["task_id"] for entry in dynamic]
+        ),
+        "dual_probe": _dual_probe(),
         "dynamic_tasks": dynamic,
     }
 
@@ -398,6 +445,303 @@ class TestForgedSnapshotsNeverCertify:
 
 
 # ----------------------------------------------------------------------
+# C14: structured dual-probe evidence binding — bypass attempts
+# ----------------------------------------------------------------------
+class TestC14EvidenceBindingBypassAttempts:
+    """Every C14 structured-evidence bypass attempt fails closed:
+    artifact_id must equal the internal registry; dual-probe ids and
+    hashes, Reference identity hash, window hash and candidate-set
+    hash are all mandatory; a provenance string alone NEVER certifies.
+    """
+
+    def _manager_with_window(self):
+        manager = _unblocked_manager()
+        _consume_window_artifacts(manager)
+        return manager
+
+    # --- artifact_id must equal the internal registry ------------------
+    def test_forged_artifact_id_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dynamic_tasks"][0]["artifact_id"] = "forged::a9"
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert manager.verified_batch_snapshot is None
+
+    def test_swapped_artifact_ids_rejected(self):
+        # quoting a REAL registry artifact id of ANOTHER task is still
+        # a forgery (artifact_id must equal THIS task's registry record)
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dynamic_tasks"][0]["artifact_id"] = (
+            snapshot["dynamic_tasks"][1]["artifact_id"]
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    # --- structured dual-probe block ------------------------------------
+    def test_missing_dual_probe_block_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        del snapshot["dual_probe"]
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    @pytest.mark.parametrize("bad", [None, [], "probe", 7])
+    def test_dual_probe_must_be_a_mapping(self, bad):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dual_probe"] = bad
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    def test_dual_probe_unknown_field_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dual_probe"]["notes"] = "trust me"
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    @pytest.mark.parametrize("field", GM._DUAL_PROBE_FIELDS)
+    def test_every_dual_probe_field_is_mandatory(self, field):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        del snapshot["dual_probe"][field]
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    def test_dual_probes_must_run_on_the_pinned_strong_student(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dual_probe"]["student_candidate_id"] = "SOME_OTHER_STUDENT"
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    @pytest.mark.parametrize(
+        "field", ["student_probe_id", "reference_probe_id"]
+    )
+    @pytest.mark.parametrize("value", ["", "   ", 42, None])
+    def test_probe_ids_must_be_non_empty_strings(self, field, value):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dual_probe"][field] = value
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    @pytest.mark.parametrize(
+        "field", ["student_probe_hash", "reference_probe_hash"]
+    )
+    @pytest.mark.parametrize(
+        "value", ["not-hex", "D1" * 32, "d1" * 31, "d1" * 33, 123, None]
+    )
+    def test_probe_hashes_must_be_sha256_hex(self, field, value):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["dual_probe"][field] = value
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    # --- window hash ------------------------------------------------------
+    def test_missing_window_hash_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        del snapshot["window_hash"]
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    @pytest.mark.parametrize("bad", ["", "xyz", "C1" * 32, "c1" * 31, 42])
+    def test_window_hash_must_be_sha256_hex(self, bad):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["window_hash"] = bad
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    def test_window_hash_mismatch_vs_registry_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["window_hash"] = "aa" * 32  # well-formed, wrong window
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    def test_registry_without_window_hash_can_never_certify(self):
+        # artifacts consumed without a recorded window hash are never
+        # certifiable, no matter what the snapshot claims
+        manager = _unblocked_manager()
+        _consume_window_artifacts(manager, window_hash="")
+        snapshot = _valid_snapshot(manager)
+        snapshot["window_hash"] = "aa" * 32
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    # --- Reference identity hash ------------------------------------------
+    def test_missing_reference_identity_hash_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        del snapshot["reference_identity_hash"]
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    @pytest.mark.parametrize("bad", ["", "zz", "b0" * 31, 42])
+    def test_reference_identity_hash_must_be_sha256_hex(self, bad):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["reference_identity_hash"] = bad
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    def test_wrong_reference_identity_hash_rejected(self):
+        # well-formed hash of SOME OTHER Reference identity => forgery
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["reference_identity_hash"] = "ab" * 32
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    # --- candidate-set hash ------------------------------------------------
+    def test_missing_candidate_set_hash_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        del snapshot["candidate_set_hash"]
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    @pytest.mark.parametrize("bad", ["", "no", "e3" * 33, 42])
+    def test_candidate_set_hash_must_be_sha256_hex(self, bad):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["candidate_set_hash"] = bad
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    def test_reversed_candidate_set_hash_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["candidate_set_hash"] = canonical_sha256(
+            list(reversed(DYNAMIC_IDS))
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    def test_candidate_set_hash_of_other_ids_rejected(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        snapshot["candidate_set_hash"] = canonical_sha256(
+            [f"ghost::{i}" for i in range(12)]
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    # --- provenance alone NEVER certifies ----------------------------------
+    def test_correct_provenance_without_evidence_never_certifies(self):
+        manager = self._manager_with_window()
+        snapshot = _valid_snapshot(manager)
+        stripped = {
+            "window_id": snapshot["window_id"],
+            "provenance": "CANDIDATE_EVALUATION",
+            "reference_candidate_id": snapshot["reference_candidate_id"],
+            "anchor_task_ids": list(L.ANCHOR_TASK_IDS),
+            "anchor_manifest_sha256": snapshot["anchor_manifest_sha256"],
+            "dynamic_tasks": snapshot["dynamic_tasks"],
+        }  # window_hash / identity hash / candidate-set hash / dual_probe
+        # all absent: the exact CANDIDATE_EVALUATION string alone must
+        # never certify REUSE
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(stripped)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+        assert manager.verified_batch_snapshot is None
+        train_calls = []
+        with pytest.raises(TG.TrainingGateError):
+            _run_session_step(manager, train_calls)
+        assert train_calls == []
+
+
+# ----------------------------------------------------------------------
+# C14: promotion-path bypass attempts (ids + provenance are not enough)
+# ----------------------------------------------------------------------
+class TestC14PromotionBypassAttempts:
+    def _ready_manager(self):
+        manager = _unblocked_manager()
+        _consume_window_artifacts(manager)
+        manager.record_verified_batch(_valid_snapshot(manager))
+        return manager
+
+    def test_promotion_without_dual_probe_fails_closed(self):
+        manager = self._ready_manager()
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.build_training_batch(DYNAMIC_IDS)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+
+    @pytest.mark.parametrize("bad", [[], "probe", 7])
+    def test_promotion_dual_probe_must_be_a_mapping(self, bad):
+        manager = self._ready_manager()
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.build_training_batch(DYNAMIC_IDS, dual_probe=bad)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    def test_promotion_with_wrong_student_candidate_fails_closed(self):
+        manager = self._ready_manager()
+        probe = _dual_probe(student_candidate_id="NOT_THE_PINNED_STUDENT")
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.build_training_batch(DYNAMIC_IDS, dual_probe=probe)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    def test_promotion_with_malformed_probe_hash_fails_closed(self):
+        manager = self._ready_manager()
+        probe = _dual_probe(reference_probe_hash="nothex")
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.build_training_batch(DYNAMIC_IDS, dual_probe=probe)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+
+    def test_promotion_never_certifies_without_registry_window_hash(self):
+        manager = _unblocked_manager()
+        _consume_window_artifacts(manager)  # window A (with window hash)
+        manager.record_verified_batch(_valid_snapshot(manager))
+        # window B: artifacts consumed WITHOUT a recorded window hash
+        new_ids = [f"e1-w000008::fam_c::v{i:02d}" for i in range(1, 13)]
+        _consume_window_artifacts(manager, task_ids=new_ids,
+                                    window_id="e1-w000008", window_hash="")
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.build_training_batch(new_ids, dual_probe=_dual_probe())
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        # the REUSE source stays window A's verified snapshot
+        assert manager.verified_batch_snapshot["window_id"] == WINDOW
+
+    def test_failed_promotion_attempt_keeps_training_at_zero(self):
+        manager = self._ready_manager()
+        with pytest.raises(GM.GenManagerError):
+            manager.build_training_batch(
+                DYNAMIC_IDS, dual_probe=_dual_probe(reference_probe_id="")
+            )
+        # the REUSE source stays the honest one; zero training either way
+        train_calls = []
+        batch = _run_session_step(manager, train_calls)
+        assert batch["provenance"] == "REUSE_VERIFIED_WINDOW"
+        assert len(train_calls) == 1
+        assert train_calls[0][:12] == DYNAMIC_IDS
+
+
+# ----------------------------------------------------------------------
 # negative: forged "permitted" batches at the gate itself
 # ----------------------------------------------------------------------
 class TestGateRefusesForgedPermittedBatches:
@@ -504,6 +848,19 @@ class TestLegitimateVerifiedReuseTrains:
             evidence["anchor_manifest_sha256"]
             == manager.anchor_manifest.manifest_sha256
         )
+        # C14 structured evidence rides with the REUSE batch
+        assert evidence["window_hash"] == WINDOW_HASH
+        assert evidence["reference_identity_hash"] == (
+            reference_identity_sha256(manager.reference_contract)
+        )
+        assert evidence["candidate_set_hash"] == canonical_sha256(
+            DYNAMIC_IDS
+        )
+        assert evidence["dual_probe"] == _dual_probe()
+        assert (
+            evidence["dual_probe"]["student_candidate_id"]
+            == PINNED_STUDENT_CANDIDATE_ID
+        )
         assert len(evidence["dynamic_tasks"]) == 12
         for entry in evidence["dynamic_tasks"]:
             assert len(entry["spec_hash"]) == 64
@@ -528,24 +885,34 @@ class TestLegitimateVerifiedReuseTrains:
         new_ids = [f"e1-w000008::fam_b::v{i:02d}" for i in range(1, 13)]
         _consume_window_artifacts(manager, task_ids=new_ids,
                                     window_id="e1-w000008")
-        batch = manager.build_training_batch(new_ids)
+        # C14: promotion requires structured dual-probe evidence
+        batch = manager.build_training_batch(new_ids, dual_probe=_dual_probe())
         assert batch["training_permitted"] is True
         assert batch["provenance"] == "PROMOTED_SELECTION"
         assert batch["task_ids"][:12] == new_ids
         assert batch["task_ids"][12:] == list(L.ANCHOR_TASK_IDS)
-        # the REUSE source advanced to window B
+        # the REUSE source advanced to window B, carrying full C14
+        # structured evidence
         reuse = manager.build_training_batch()
         assert reuse["provenance"] == "REUSE_VERIFIED_WINDOW"
         assert reuse["task_ids"][:12] == new_ids
-        assert reuse["reuse_evidence"]["window_id"] == "e1-w000008"
+        evidence = reuse["reuse_evidence"]
+        assert evidence["window_id"] == "e1-w000008"
+        assert evidence["dual_probe"] == _dual_probe()
+        assert evidence["window_hash"] == WINDOW_HASH
+        assert evidence["reference_identity_hash"] == (
+            reference_identity_sha256(manager.reference_contract)
+        )
+        assert evidence["candidate_set_hash"] == canonical_sha256(new_ids)
 
     def test_promotion_with_unknown_ids_fails_closed(self):
         manager = _unblocked_manager()
         _consume_window_artifacts(manager)
         manager.record_verified_batch(_valid_snapshot(manager))
         ghost = [f"e1-w000008::ghost::v{i:02d}" for i in range(1, 13)]
+        # even WITH valid dual-probe evidence, ghost ids fail closed
         with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.build_training_batch(ghost)
+            manager.build_training_batch(ghost, dual_probe=_dual_probe())
         assert excinfo.value.code == GM.GEN_MANAGER_MISSING_FIELD
 
     def test_promotion_mixing_windows_fails_closed(self):
@@ -557,7 +924,7 @@ class TestLegitimateVerifiedReuseTrains:
                                     window_id="e1-w000008")
         mixed = DYNAMIC_IDS[:6] + new_ids[:6]
         with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.build_training_batch(mixed)
+            manager.build_training_batch(mixed, dual_probe=_dual_probe())
         assert excinfo.value.code == GM.GEN_MANAGER_BAD_DYNAMIC_SET
 
     def test_snapshot_copy_is_read_only(self):
@@ -567,9 +934,14 @@ class TestLegitimateVerifiedReuseTrains:
         copy = manager.verified_batch_snapshot
         copy["dynamic_tasks"][0]["task_id"] = "HACKED"
         copy["window_id"] = "HACKED"
+        copy["dual_probe"]["student_probe_id"] = "HACKED"
         fresh = manager.verified_batch_snapshot
         assert fresh["window_id"] == WINDOW
         assert fresh["dynamic_tasks"][0]["task_id"] == DYNAMIC_IDS[0]
+        assert (
+            fresh["dual_probe"]["student_probe_id"]
+            == "fixture-student-probe-0001"
+        )
 
 
 # ----------------------------------------------------------------------

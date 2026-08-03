@@ -142,7 +142,8 @@ G1 REFERENCE_CONTRACT_UNFROZEN
    `CANDIDATE_EVALUATION`（真实双 probe 路径）、12 个动态任务逐条
    绑定本教师 registry 的 `spec_hash`/`code_sha256`、anchor manifest
    sha256 与当前冻结 manifest 相等、Reference candidate_id 与冻结
-   契约相等。认证前置：G1 冻结 + G3 冻结 + 阈值冻结；任一不满足 ⇒
+   契约相等；**C14 起另需全部结构化证据（见下节）**。认证前置：
+   G1 冻结 + G3 冻结 + 阈值冻结；任一不满足 ⇒
    `GEN_MANAGER_SNAPSHOT_BLOCKED`。无合法快照 ⇒
    `TRAINING_BLOCKED_NO_VERIFIED_BATCH`（或相应阻断码）⇒ 跳过训练。
 - fail-closed 码：`TRAINING_GATE_BLOCKED`、`TRAINING_GATE_BAD_BATCH`、
@@ -156,6 +157,54 @@ G1 REFERENCE_CONTRACT_UNFROZEN
 - 诚实声明：本轮正例测试使用明示 FIXTURE 的冻结契约/manifest/快照，
   仅证明机制；真实 Reference/anchor 冻结件与真实 probe 到位前，
   生产路径永远落在阻断侧（零训练）。
+
+## C14 REUSE 证据收紧（record_verified_batch）——关闭
+
+**动机（总控 CC2/E1 指令）**：C13 的 `record_verified_batch` 只把
+`artifact_id` 校验为非空串（未与内部 registry 对账），且 REUSE 认证
+以 provenance 串为中心。收紧后：**provenance 串单独永远不足以认证
+REUSE**，必须携带全部结构化证据，逐字段 fail-closed。
+
+新增/收紧的认证要求（`gen_manager.record_verified_batch`，违反即抛
+`GEN_MANAGER_SNAPSHOT_{BAD_TYPE,MISSING_FIELD,MISMATCH}`）：
+
+1. **artifact_id 对账**：每个动态任务的 `artifact_id` 必须等于本教师
+   内部 registry 记录的 `artifact_id`（引用其它任务的真实 id 亦拒）。
+2. **结构化 dual-probe 块** `dual_probe`（全字段必需、未知字段拒）：
+   `student_candidate_id` 必须恰为 pinned 强 Student
+   `PERSISTENT_RMT16_ORIGINAL_VTRACE_98304`；`student_probe_id` /
+   `reference_probe_id` 非空串；`student_probe_hash` /
+   `reference_probe_hash` 必为 64 位小写 sha256 hex。
+3. **Reference 身份哈希** `reference_identity_hash`：新增
+   `reference_contract.reference_identity_sha256`（对冻结契约全部必需
+   身份字段+schema_version 的 canonical sha256），快照必须与**当前**
+   冻结契约的身份哈希相等；`_snapshot_still_valid` 亦复核此绑定
+   （重新冻结身份即使旧 REUSE 失效）。
+4. **窗口哈希** `window_hash`：64 位 sha256 hex，且必须等于 12 个动态
+   任务在 registry 中逐条记录的 `window_hash`（registry 无窗口哈希的
+   artifact 永不可认证）。`consume_worker_results` 因此新增记录
+   `window_hash`（附加字段，legacy 行为不变）。
+5. **候选集哈希** `candidate_set_hash`：对按序认证的 12 个动态任务 id
+   的 canonical sha256；换序/增删/换 id 均拒。
+6. **晋升路径同步收紧**：`build_training_batch(promoted_dynamic_ids,
+   dual_probe=…)` —— 12 个晋升 id 必须随附经同一校验的 `dual_probe`
+   块；`_certify_dynamic_window` 现存储与 `record_verified_batch`
+   同构的完整结构化证据（窗口哈希来自 registry、身份哈希来自当前
+   契约、候选集哈希按序计算）；registry 无窗口哈希的窗口永不晋升。
+
+- 证据：`tests/e1_formal/test_training_gate.py` 新增 64 条 C14 正负
+  测试（`TestC14EvidenceBindingBypassAttempts` /
+  `TestC14PromotionBypassAttempts`）：伪 artifact_id（含跨任务真实
+  id 调换）、dual_probe 缺失/非映射/未知字段/逐字段缺失/错 Student/
+  空 probe id/坏哈希、窗口哈希缺失/坏型/与 registry 不符/registry 无
+  窗口哈希、身份哈希缺失/坏型/错值、候选集哈希缺失/坏型/换序/换 id、
+  **仅持正确 provenance 而无结构化证据 ⇒ 拒且零训练**；正例：完整
+  结构化证据 ⇒ 认证 ⇒ REUSE 恰训练一次，晋升携带同构证据。
+  `test_reference_contract.py::TestIdentityHash`（确定性/格式/任一
+  身份字段变更⇒哈希变更）6 条。全套 1003 passed / 5 skipped。
+- 诚实声明：正例使用的 probe id/哈希、窗口哈希为明示 FIXTURE；真实
+  CC4 双 probe 记录到位前，生产路径永远落在阻断侧。
+  `b5536d3` 的阻断零训练行为保持不变；REAL_* 标志保持 false。
 
 ## 待总控冻结项清单
 
