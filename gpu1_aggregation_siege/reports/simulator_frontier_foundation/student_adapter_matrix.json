@@ -1,0 +1,145 @@
+{
+  "schema": "simulator_frontier.student_adapter_matrix/v1",
+  "round": "simulator-frontier-foundation stage 4",
+  "policy": [
+    "read-only this round: zero parameter updates, zero training, zero real API",
+    "forward smoke != performance evaluation",
+    "missing artifact or missing adapter is never disguised as PASS (fail closed)",
+    "all local artifact paths are runtime references only; committed profile configs contain no absolute paths"
+  ],
+  "candidates": [
+    {
+      "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+      "architecture_family": "RMT16",
+      "checkpoint_format": "CC2_PKL",
+      "priority": "P1",
+      "role": "primary high-capability Student; matched arm = persistent memory",
+      "local_artifact": "D:/cc4tmp/.tier3_ft_scratch/real_98304/RMT16-LONG98304-PERSISTENT_step98304_full_state.pkl",
+      "local_artifact_kind": "file (21741728 B)",
+      "status": "MOUNTED_READ_ONLY_PASS",
+      "gates": {
+        "REAL_CHECKPOINT_LOADED": true,
+        "REAL_FORWARD_SMOKE_PASS": true,
+        "file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+        "params_sha256_recomputed": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+        "driver_source_sha256_lf": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+        "identity_hash": "822f5789619bf9a16b2eea20fefe3c95cd701906399c49d88c20467c67cb14bc",
+        "memory_spec_hash": "ab03915d783d3a47cdf40335938054e00691f29a1e9ea1c5551de52d4668f69c",
+        "global_step": 98304,
+        "total_env_steps": 98304,
+        "observation_shape": [8335],
+        "action_count": 43,
+        "param_leaves": 101,
+        "encoder_kernel_shape": [8335, 256],
+        "actor_out_shape": [256, 43]
+      },
+      "honest_gaps": [
+        "optimizer / train RNG / policy memory are ABSENT_IN_CHECKPOINT (CC2 pkl carries params + manifest only) -> R4c combined proof is incomplete for them",
+        "forward smoke used STRUCTURED_SYNTHETIC_SEEDED_NORMAL observations (seed 20260803): real MiniCraftaxTrain reset obs is 8268-dim, the 8335 contract includes a 67-dim multitask embedding assembled by the training wrapper; the smoke never disguised this as real env obs",
+        "persistent carry verified at the 128-step segment boundary (seg_count -> 0 while mem_tokens stay nonzero), params bit-identical before/after (zero update)"
+      ],
+      "evidence": "reports/simulator_frontier_foundation/student_compatibility_PERSISTENT_RMT16_ORIGINAL_VTRACE_98304.json"
+    },
+    {
+      "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+      "architecture_family": "RMT16",
+      "checkpoint_format": "CC2_PKL",
+      "priority": "P1",
+      "role": "secondary RMT16 arm (reset-128); matched pair counterpart of PERSISTENT",
+      "local_artifact": "D:/cc4tmp/.tier3_ft_scratch/real_98304/RMT16-LONG98304-RESET128_step98304_full_state.pkl",
+      "local_artifact_kind": "file (21741720 B)",
+      "status": "PROBE_PASS_20_OF_20",
+      "gates": {
+        "probe_checks_passed": "20/20",
+        "params_sha256_prefix": "78a14cc6",
+        "identity": "bound through the same read-only RMT16 adapter chain as the primary candidate; distinct params sha (different arm)"
+      },
+      "honest_gaps": [
+        "secondary probe only this round; the primary mount report belongs to PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+      ],
+      "evidence": "reports/simulator_frontier_foundation/probes/student_compatibility_probe_RESET128_RMT16_ORIGINAL_VTRACE_98304.json"
+    },
+    {
+      "candidate_id": "CONTROL_CONTINUOUS_98304",
+      "architecture_family": "GTRXL128",
+      "checkpoint_format": "ORBAX_TRAIN_STATE",
+      "priority": "P2",
+      "role": "matched control for the 98304 pair (same step budget, GTrXL128 continuous arm)",
+      "local_artifact": "C:/Users/Lenovo/Desktop/dicode-codex-director/audit_outputs/rl_dataset_fit_20260730/raw/server/cc1_retrain_CONTROL_CONTINUOUS_CANONICAL_98304/long_98304/checkpoints/98304",
+      "local_artifact_kind": "dir (orbax TrainState)",
+      "status": "ADAPTER_PENDING",
+      "gates": {
+        "probe_checks_passed": "4/20 (identity + inventory only; remaining 16 NOT_APPLICABLE until a GTrXL128 read adapter exists)",
+        "probe_exit_code": 5
+      },
+      "honest_gaps": [
+        "no GTrXL128 adapter implemented this round (scope was the RMT16 read-only chain); the probe refuses to fake a PASS",
+        "required before mounting: orbax TrainState read adapter + identity gates (obs 8335 / action 43 cross-checks) recomputed from the real artifact"
+      ],
+      "evidence": "reports/simulator_frontier_foundation/probes/student_compatibility_probe_CONTROL_CONTINUOUS_98304.json"
+    },
+    {
+      "candidate_id": "BASE_GTRXL_ORIGINAL_VTRACE_98304",
+      "architecture_family": "GTRXL128",
+      "checkpoint_format": "ORBAX_TRAIN_STATE",
+      "priority": "P2",
+      "role": "original GTrXL128 vtrace baseline",
+      "local_artifact": null,
+      "local_artifact_kind": "server-only (local holds only the SHA contract)",
+      "status": "ARTIFACT_HANDOFF_REQUIRED",
+      "gates": {
+        "probe_run": false,
+        "reason": "no local artifact -> a local probe run would only re-record the handoff; never PASS without the artifact"
+      },
+      "honest_gaps": [
+        "server-to-local artifact handoff required before any probe/mount",
+        "needs the same GTrXL128 adapter as CONTROL_CONTINUOUS_98304"
+      ],
+      "evidence": null
+    },
+    {
+      "candidate_id": "BASELINE_TEACHER_CKPT17500",
+      "architecture_family": "TEACHER_REFERENCE",
+      "checkpoint_format": "ORBAX_TRAIN_STATE",
+      "priority": "P3",
+      "role": "teacher reference only; NEVER enters the 98304 Student ranking",
+      "local_artifact": "C:/Users/Lenovo/Desktop/dicode-codex-director/.tmp_simulator_team_audit/Henry_work2/ckpt/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+      "local_artifact_kind": "dir (orbax); canonical pkl MISSING locally",
+      "status": "ADAPTER_PENDING",
+      "gates": {
+        "probe_checks_passed": "4/20 (identity + inventory only)",
+        "probe_exit_code": 5,
+        "canonical_pkl": "MISSING (recorded honestly)"
+      },
+      "honest_gaps": [
+        "no teacher-reference adapter implemented this round; read-only smoke only when the canonical artifact and adapter are both present"
+      ],
+      "evidence": "reports/simulator_frontier_foundation/probes/student_compatibility_probe_BASELINE_TEACHER_CKPT17500.json"
+    },
+    {
+      "candidate_id": "SLOWGRU_PERSISTENT_24576",
+      "architecture_family": "SLOWGRU",
+      "checkpoint_format": "CC2_PKL",
+      "priority": "P4",
+      "role": "compatibility-only candidate (slow-GRU persistent memory)",
+      "local_artifact": null,
+      "local_artifact_kind": "server-only",
+      "status": "ARTIFACT_HANDOFF_REQUIRED",
+      "gates": {
+        "probe_exit_code": 5,
+        "probe_recorded": "ARTIFACT_HANDOFF_REQUIRED (the probe ran and recorded the handoff path honestly, never PASS)"
+      },
+      "honest_gaps": [
+        "server-only artifact; no SLOWGRU adapter this round"
+      ],
+      "evidence": "reports/simulator_frontier_foundation/probes/student_compatibility_probe_SLOWGRU_PERSISTENT_24576.json"
+    }
+  ],
+  "probe_implementation": {
+    "entry": "python -m dicode.simulator_frontier.probes.student_compatibility",
+    "checks_total": 20,
+    "exit_codes": {"0": "PASS", "4": "FAIL", "5": "BLOCKED (ADAPTER_PENDING / ARTIFACT_HANDOFF_REQUIRED / env)"},
+    "never_imported_by": "dicode.simulator_frontier.__init__",
+    "source": "gpu1_aggregation_siege/src/dicode/simulator_frontier/probes/student_compatibility.py"
+  }
+}

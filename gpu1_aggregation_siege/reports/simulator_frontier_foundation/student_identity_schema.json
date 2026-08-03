@@ -1,0 +1,47 @@
+{
+  "schema": "simulator_frontier.student_identity_schema/v1",
+  "source_module": "dicode.student_adapters.identity.StudentIdentity",
+  "description": "Minimal, hash-bound Student identity (plan §19). Every field is mandatory; nothing is inferred. Missing/placeholder fields raise instead of guessing.",
+  "fields": {
+    "candidate_id": {"type": "string", "required": true, "semantics": "unique candidate name, e.g. PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"},
+    "architecture_family": {"type": "string", "required": true, "semantics": "network family, e.g. RMT16 / GTrXL128 / SLOWGRU"},
+    "checkpoint_format": {"type": "string", "required": true, "semantics": "one of checkpoint_codec format families (CC2_PKL / ORBAX_TRAIN_STATE / ORBAX_NESTED_PARAMS / BAKEOFF_PKL / PHASE4A_PKL)"},
+    "global_step": {"type": "integer", "required": true, "semantics": "optimizer/global step recorded in the checkpoint manifest; >= 0"},
+    "total_env_steps": {"type": "integer", "required": true, "semantics": "total environment steps the candidate was trained for; >= 0"},
+    "params_sha256": {"type": "string", "required": true, "semantics": "64-hex sha256 over the params pytree leaves (CC2 algorithm: sha256 of np.ascontiguousarray(np.asarray(leaf)).tobytes() per jax.tree_util.tree_leaves, in leaf order)"},
+    "source_commit": {"type": "string", "required": true, "semantics": "training-source identity binding; for CC2 candidates the SHA-bound driver source, e.g. src-sha256:453bd1ec…"},
+    "observation_shape": {"type": "array[int]", "required": true, "semantics": "obs contract, e.g. [8335] = 8268 MiniCraftaxTrain + 67 multitask embedding"},
+    "action_count": {"type": "integer", "required": true, "semantics": "discrete action count; cross-verified against craftax len(Action)==43"},
+    "memory_spec_hash": {"type": "string", "required": false, "semantics": "MemorySpec.spec_hash(); empty string only pre-binding, otherwise 64-hex"},
+    "extras": {"type": "object", "required": false, "semantics": "non-binding metadata only; never participates in the identity hash"}
+  },
+  "validation_rules": [
+    "text fields non-empty and free of placeholders (PENDING*/UNKNOWN/TODO/NONE/N/A) -> raise",
+    "params_sha256 must match ^[0-9a-f]{64}$ -> raise",
+    "global_step/total_env_steps >= 0 -> raise",
+    "observation_shape non-empty positive tuple -> raise",
+    "action_count > 0 -> raise",
+    "memory_spec_hash empty or ^[0-9a-f]{64}$ -> raise"
+  ],
+  "identity_hash_algorithm": "sha256 over canonical JSON (sort_keys, separators ','/':', ensure_ascii=False) of all fields except extras",
+  "placeholder_policy": "NEVER guess; a gap is a hard error (fail closed)",
+  "bound_instance_primary": {
+    "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "architecture_family": "RMT16",
+    "checkpoint_format": "CC2_PKL",
+    "global_step": 98304,
+    "total_env_steps": 98304,
+    "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "source_commit": "src-sha256:453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "observation_shape": [8335],
+    "action_count": 43,
+    "memory_spec_hash": "ab03915d783d3a47cdf40335938054e00691f29a1e9ea1c5551de52d4668f69c",
+    "identity_hash": "822f5789619bf9a16b2eea20fefe3c95cd701906399c49d88c20467c67cb14bc",
+    "evidence": "reports/simulator_frontier_foundation/student_compatibility_PERSISTENT_RMT16_ORIGINAL_VTRACE_98304.json"
+  },
+  "consumers": [
+    "dicode.simulator_frontier.student_binding (entry/outcome binding, fail closed)",
+    "dicode.student_adapters.registry (profile.expected_identity)",
+    "R4b/R4c restore gates (expected_identity comparisons)"
+  ]
+}

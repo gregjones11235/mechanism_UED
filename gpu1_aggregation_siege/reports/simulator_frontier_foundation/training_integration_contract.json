@@ -1,0 +1,90 @@
+{
+  "schema": "simulator_frontier.training_integration_contract/v1",
+  "authority": "controller roadmap R1-R9 + independent review conditions 1-5 (all in force)",
+  "scope_note": "interface/contract level only this round: zero real API, zero actual-N long jobs, zero training updates; contract tests != real closed loop",
+  "sub_contracts": {
+    "SC1_student_adapter_runtime": {
+      "roadmap_ref": "R1/R5/R9 runtime mount",
+      "rules": [
+        "mount is fully specified by student.profile + student.checkpoint_path + student.expected_params_sha256 (+ optional student.expected_source_commit); nothing is defaulted or guessed",
+        "identity gates are fail-closed: observation_shape=(8335,), action_count=43 cross-verified against craftax len(Action), family-specific memory_spec_hash; any mismatch refuses the mount",
+        "profile configs carry logical identity only (no server absolute paths, no checkpoint payloads)",
+        "runtime overrides must agree with the bound profile (override_agreement), disagreement is a hard failure"
+      ],
+      "implementation": "dicode.student_adapters.{protocol,identity,registry,checkpoint_codec} + conf/student_profiles/*.yaml",
+      "round_status": "implemented and green (gate C); real training entry NOT wired this round"
+    },
+    "SC2_checkpoint_full_state_resume": {
+      "roadmap_ref": "R4b/R4c",
+      "rules": [
+        "load_full_state binds: file sha256, recomputed params-tree sha256, manifest/step, tree structure (obs/action dims from the real artifact)",
+        "components absent from the artifact are recorded ABSENT_IN_CHECKPOINT, never silently re-initialized and presented as restored",
+        "resume.mode=full_state for future real updates: optimizer / global step / train RNG must come from the checkpoint or be explicitly declared absent (R4c then marks the joint proof incomplete)",
+        "the joint proof must run in ONE fresh process per combined_restore_contract.run_combined_restore"
+      ],
+      "implementation": "dicode.student_adapters.checkpoint_codec + rmt16_adapter.load_full_state + dicode.simulator_frontier.combined_restore_contract",
+      "round_status": "R4b executed on the real PERSISTENT pkl (params + manifest present; optimizer/train_rng/policy_memory ABSENT_IN_CHECKPOINT); R4c contract only, COMBINED_FRESH_PROCESS_RESTORE=false"
+    },
+    "SC3_memory_restore_mode": {
+      "roadmap_ref": "R4c policy_memory/history components; R9 resume",
+      "rules": [
+        "exactly one of ZERO_MEMORY / SAVED_POLICY_MEMORY / HISTORY_BURN_IN per MemoryRestoreRequest",
+        "adapter.validate_memory is the gate: shape/dtype/range (e.g. RMT16 seg_count within [0,128]) and missing-field negatives both reject",
+        "memory must never be silently zeroed when the mode requires saved state; incompatible requests fail closed"
+      ],
+      "implementation": "dicode.simulator_frontier.memory_modes + RMT16StudentAdapter.initial_memory/validate_memory",
+      "round_status": "contract + real-adapter validation green; real saved-policy-memory/history restore = Phase 2"
+    },
+    "SC4_distribution_and_anchor_retention": {
+      "roadmap_ref": "R8",
+      "rules": [
+        "12 dynamic frontier distributions + 4 standard-reset anchors; anchor ratio must be > 0",
+        "anchors come ONLY from the shared controller-signed frozen manifest (3-direction shared); CC4 provides schema/binding, never self-invented science content",
+        "formal evaluation banks/worlds (FORMAL_FRONT/FORMAL_BACK/FORMAL_FULL) never enter the online curriculum",
+        "capability-regression trigger gate: anchor regression beyond threshold triggers the gate before further curriculum change"
+      ],
+      "implementation": "dicode.simulator_frontier.anchor_manifest (AnchorManifest/RetentionContract/bind/validate, fail closed)",
+      "round_status": "schema/binding ready; SHARED_ANCHOR_MANIFEST_BOUND=false, status BLOCKED_SHARED_ANCHOR_MANIFEST (awaiting controller manifest)"
+    },
+    "SC5_same_student_update": {
+      "roadmap_ref": "R9",
+      "rules": [
+        "mixed-start PPO/V-trace updates the SAME high-capability Student: same candidate_id, optimizer state continued, identity hash unchanged; no identity swap, no optimizer reset, no fresh-init disguised as resume",
+        "after the update window the frontier is re-collected (back to R1) with TRAINING_DISCOVERY provenance",
+        "REAL_TRAINING_UPDATE_EXECUTED stays false until at least one real update on the real Student has executed and been verified (params moved, optimizer step continued, checkpoint recoverable)"
+      ],
+      "implementation": "interface level: training_integration_contract SC5 + CC1_HANDOFF mount guide; hook location identified (ppo_tr.make_train/make_eval network construction) but NOT modified this round",
+      "round_status": "not executed (zero training updates this round by standing order)"
+    }
+  },
+  "prohibitions": [
+    "do NOT rewrite Archive / GoalSpec / TerminalEventAdapter / Branch Statistics / Curriculum Selector to fit a particular Student",
+    "do NOT let successful actions, routes, waypoints, logits, hidden states or expert trajectories enter the curriculum or the Student (SearchActionLeakageGuard + invocation-gate extended forbidden keys)",
+    "do NOT feed FORMAL_FRONT/FORMAL_BACK/FORMAL_FULL data into Archive/Gate/LLM/selector (FormalDataLeakageGuard)",
+    "do NOT hardcode checkpoint paths in core modules or commit server absolute paths in profiles",
+    "do NOT guess network families or load the closest-looking checkpoint",
+    "do NOT present forward smoke as performance evaluation, or contract/fake-client tests as real closed loops"
+  ],
+  "ownership": {
+    "sole_owner": "CC4 (this seat) owns the shared real StudentAdapter / loader / registry surface",
+    "shared_surface": [
+      "dicode.student_adapters.protocol (StudentAdapter protocol)",
+      "dicode.student_adapters.identity (StudentIdentity + identity_hash)",
+      "dicode.student_adapters.registry (profiles + fail-closed resolution)",
+      "dicode.student_adapters.checkpoint_codec (five format families, read-only load)",
+      "conf/student_profiles/*.yaml"
+    ],
+    "consumption_rules": [
+      "CC2/CC3 may ONLY consume these contracts; building duplicate adapter/loader/registry frameworks is forbidden",
+      "consumers pass student.profile/student.checkpoint_path/student.expected_params_sha256; they must not bypass identity gates",
+      "any needed extension must land as an additive change reviewed by the owner"
+    ]
+  },
+  "r8_r9_interface": {
+    "r8_inputs": ["FrontierArchive aggregate summaries (never per-event action content)", "Feasibility Statistics at N_actual", "bound AnchorManifest (pending)"],
+    "r8_outputs": ["12 dynamic frontier distributions + 4 standard-reset anchors for mixed-start batches"],
+    "r9_inputs": ["mixed standard-reset/frontier-start batches", "same-Student full-state resume (SC2)", "memory restore mode (SC3)"],
+    "r9_outputs": ["updated same Student (identity unchanged)", "next-window frontier re-collection (R1)"],
+    "invocation_gate": "0 or exactly 2 LLM calls (frontier_evidence_diagnostician -> curriculum_search_planner); deterministic selector holds selection authority; REAL_TWO_LLM_CALL_EXECUTED=false this round"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "simulator_frontier.sota_launch_gate/v1",
+  "gate_definitions": {
+    "A": {
+      "name": "FOUNDATION_CONTRACT_GREEN",
+      "meaning": "simulator_frontier foundation contract layer fully green: goals / terminal_events / state_codec / frontier_archive / archive_schema / search_statistics / memory_modes / provenance, plus Stage-2 additive surfaces student_binding and discovery_provenance",
+      "evidence": "gpu1_aggregation_siege/tests/simulator_frontier (full regression 200 passed, 0 skipped)"
+    },
+    "B": {
+      "name": "R4A_ENV_RESTORE_PARITY_PASS",
+      "meaning": "real Craftax EnvState restore (leaf-wise exact) + dynamics parity on real MiniCraftaxTrain, Stage-1 driver PASS (env side only)",
+      "evidence": "reports/simulator_frontier_cc1/phase1/phase1_parity_report.json + PHASE1_REPORT.md"
+    },
+    "C": {
+      "name": "STUDENT_ADAPTER_CONTRACT_GREEN",
+      "meaning": "shared student_adapters contract layer green: protocol / identity / fail-closed registry / checkpoint_codec / five profile configs / fake adapter; sole-owner surface (CC2/CC3 consume only)",
+      "evidence": "gpu1_aggregation_siege/tests/simulator_frontier/test_student_adapters.py + conf/student_profiles/*.yaml"
+    },
+    "D": {
+      "name": "R4B_REAL_MOUNT_SMOKE_PASS",
+      "meaning": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 real read-only mount: REAL_CHECKPOINT_LOADED (file sha + recomputed params sha + identity gates obs=8335/action=43/RMT16-memory) AND REAL_FORWARD_SMOKE_PASS (no-update forward smoke; smoke != performance evaluation)",
+      "evidence": "reports/simulator_frontier_foundation/student_compatibility_PERSISTENT_RMT16_ORIGINAL_VTRACE_98304.json"
+    },
+    "E": {
+      "name": "ACTUAL_N_SEARCH_AND_FEASIBILITY_EXECUTED",
+      "meaning": "R5/R6 actually executed: real actual-N multi-branch search from jointly restored states + Feasibility Statistics measured at N_actual (no best-of-N extrapolation)",
+      "evidence": null,
+      "this_round": false
+    },
+    "F": {
+      "name": "SAME_STUDENT_REAL_UPDATE_EXECUTED",
+      "meaning": "R9 actually executed: mixed-start PPO/V-trace performed at least one real training update on the SAME high-capability Student (same candidate_id, optimizer continued, identity unchanged)",
+      "evidence": null,
+      "this_round": false
+    }
+  },
+  "semantic_boundaries": [
+    "FOUNDATION_READY means A AND B AND C AND D ONLY (base gates); it must never be phrased as 'direction 3 trainable' or 'SOTA ready'",
+    "TWO_LLM_GATE_CONTRACT_ONLY means CONTRACT_AND_FAKE_CLIENT_TEST_READY and nothing more; REAL_TWO_LLM_CALL_EXECUTED stays false until a real authorized double-LLM run executes",
+    "SHARED_ANCHOR_MANIFEST_BOUND stays false with status BLOCKED_SHARED_ANCHOR_MANIFEST until the shared frozen manifest signed by the controller arrives; anchor science content is never self-invented",
+    "COMBINED_FRESH_PROCESS_RESTORE stays false until run_combined_restore executes in ONE fresh process with every required component RESTORED; env-only PASS /\\ checkpoint-only PASS is NOT a joint proof",
+    "REAL_CHECKPOINT_LOADED / REAL_FORWARD_SMOKE_PASS are read-only R4b statements; forward smoke is never a performance evaluation"
+  ],
+  "implication_rules": [
+    "FOUNDATION_READY := A && B && C && D",
+    "ACTUAL_N_READY := E",
+    "REAL_TRAINING_UPDATE_EXECUTED := F",
+    "(ACTUAL_N_READY == false) OR (REAL_TRAINING_UPDATE_EXECUTED == false) => SOTA_INTEGRATION_READY must be false",
+    "SOTA_INTEGRATION_READY additionally requires COMBINED_FRESH_PROCESS_RESTORE == true and SHARED_ANCHOR_MANIFEST_BOUND == true"
+  ],
+  "current_round_values": {
+    "A": true,
+    "B": true,
+    "C": true,
+    "D": true,
+    "E": false,
+    "F": false,
+    "FOUNDATION_READY": true,
+    "FOUNDATION_SCOPE_HONEST": true,
+    "REAL_CHECKPOINT_LOADED": true,
+    "REAL_FORWARD_SMOKE_PASS": true,
+    "COMBINED_FRESH_PROCESS_RESTORE": false,
+    "DISCOVERY_FORMAL_PROVENANCE_ISOLATED": true,
+    "ACTUAL_N_READY": false,
+    "TWO_LLM_GATE_CONTRACT_ONLY": true,
+    "REAL_TWO_LLM_CALL_EXECUTED": false,
+    "SHARED_ANCHOR_MANIFEST_BOUND": false,
+    "BLOCKED_SHARED_ANCHOR_MANIFEST": true,
+    "REAL_TRAINING_UPDATE_EXECUTED": false,
+    "SOTA_INTEGRATION_READY": false
+  },
+  "sota_launch_blockers_this_round": [
+    "E not executed: no real actual-N search (zero paid API / zero long jobs this round by standing order)",
+    "F not executed: zero training updates this round by standing order",
+    "COMBINED_FRESH_PROCESS_RESTORE false: optimizer/train-rng/policy-memory/history restore is Phase 2; the audited CC2 pkl carries params + manifest only",
+    "SHARED_ANCHOR_MANIFEST_BOUND false: awaiting the controller-signed shared manifest"
+  ]
+}
