@@ -1,8 +1,10 @@
 """End-to-end: the double-window state machine (C8).
 
 Per window k: EVIDENCE -> BOARD (always all six roles) -> REVISION (verdicts
-+ plan_k, citing ONLY feedback from windows <= k-1) -> PROBING (EnvCoder +
-gates + staged funnel probe -> staged feedback_k) -> atomic FREEZE. After the
++ plan_k, citing ONLY feedback from EXACTLY window k-1 — CC3 C9 gate;
+older/current/future records fail closed as STALE_FEEDBACK_ID) -> PROBING
+(EnvCoder + gates + staged funnel probe -> staged feedback_k) -> atomic
+FREEZE. After the
 freeze, ANY same-window verdict application or plan change raises
 SAME_WINDOW_REVISION_FORBIDDEN; feedback_k can only be acted on by window
 k+1's complete six-role board (NEXT_WINDOW_REVISION_ONLY /
@@ -29,15 +31,16 @@ evidence) — so each family retires at most ONCE per run, a STALE verdict
 can never resurrect it, and the board context carries the blocked lists so
 the six roles skip cooldown/retired families by construction.
 
-C10 re-baseline (6 windows, deterministic mock): 42 LLM-family calls and
-368640 simulator transitions per mode; normal coverage 0.8047 with
-{MUTATE: 7, RETIRE: 2, RETAIN: 6} and six unique plan signatures —
-threat_distance retired once at window 1 and day_night_rest_need once at
-window 4, never re-retired; shuffled coverage 0.8047 with
-{MUTATE: 7, RETIRE: 2, RETAIN: 4}, six unique plan signatures (retires
-threat_distance@1, resource_pressure@2 — a DIFFERENT family set than
-normal) and anon-citation resolution into honest ledger/revision ids;
-static keeps a single plan signature and 0.0 coverage.
+CC3 C9 gate re-baseline (6 windows, deterministic mock, exact k-1 lag):
+42 LLM-family calls and 368640 simulator transitions per mode; normal
+coverage 0.8047 with {MUTATE: 7, RETIRE: 4, RETAIN: 3} — threat_distance
+retired@1, day_night_rest_need@4, visibility@4, resource_pressure@5;
+shuffled coverage 0.8047 with {MUTATE: 7, RETIRE: 3, RETAIN: 3} —
+threat_distance@1, resource_pressure@2, day_night_rest_need@5 (a DIFFERENT
+retirement set than normal, so feedback_binding_matters stays True); both
+modes keep six unique plan signatures and anon-citation resolution into
+honest ledger/revision ids; static keeps {MUTATE: 6}, a single plan
+signature and 0.0 coverage.
 
 C11 REQUEST_CONTROL blocking: a board that requests human control (critic
 escalation and/or a tutor REQUEST_CONTROL proposal) halts the loop right
@@ -148,13 +151,14 @@ class TestAuthorizationPosture:
         # C8 double-window flags are ON
         assert C.NEXT_WINDOW_REVISION_ONLY is True
         assert C.SAME_WINDOW_REVISION_REJECTED is True
-        # CC3 C9 GATE (2026-08-04): the two C9 isolation flags are OFF while
-        # the board-context assembly is re-anchored on the FeedbackView alone
-        # (no raw-store read) and the window lag is tightened to EXACTLY k-1
-        # (STALE_FEEDBACK_ID fail closed). They flip back to True only after
-        # the targeted bypass and lag tests pass.
-        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is False
-        assert C.SHUFFLE_PERMUTATION_FROZEN is False
+        # CC3 C9 GATE (2026-08-04): the two C9 isolation flags were set
+        # False while the board-context assembly was re-anchored on the
+        # FeedbackView alone (no raw-store read) and the window lag was
+        # tightened to EXACTLY k-1 (STALE_FEEDBACK_ID fail closed). The
+        # targeted bypass and lag tests (test_feedback_llm_ued_c9_gate.py)
+        # passed, so both flags are earned back to True.
+        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is True
+        assert C.SHUFFLE_PERMUTATION_FROZEN is True
         assert len(C.SEED_SCHEDULE_HASH) == 64
         # C10 RETIRE lifecycle constant
         assert C.RETIRE_COOLDOWN_WINDOWS == 3
@@ -227,25 +231,28 @@ class TestDoubleWindowStateMachine:
         with pytest.raises(StateMachineViolation, match="UNKNOWN_PHASE"):
             ctl._set_phase(0, "REVIEW")
 
-    def test_double_window_lag_every_citation_lags_one_window(self, runs):
-        """The defining invariant: every feedback record a revision cites was
-        frozen in a STRICTLY EARLIER window (revision lags feedback by one
-        window); window 0 cites nothing at all."""
+    def test_double_window_lag_every_citation_lags_exactly_one_window(self,
+                                                                      runs):
+        """The defining invariant (tightened by the CC3 C9 gate): every
+        feedback record a revision cites was frozen in EXACTLY the previous
+        window — rec.window == revision window - 1. Older records are
+        stale, current/future records cannot be cited at all; window 0
+        cites nothing."""
         ctls, _sums = runs
         for mode, ctl in ctls.items():
             for rev in ctl.revisions:
                 for fid in rev.based_on_feedback_ids:
                     rec = ctl.store.get(fid)
-                    assert rec.window <= rev.window - 1, (mode, rev.window,
+                    assert rec.window == rev.window - 1, (mode, rev.window,
                                                           fid, rec.window)
             assert ctl.revisions[0].based_on_feedback_ids == []
-            # same for ledger verdicts: bound feedback is always older than
-            # the verdict window
+            # same for ledger verdicts: bound feedback lags the verdict by
+            # EXACTLY one window
             for rec in ctl.ledger.all():
                 for entry in rec.revision_history:
                     for fid in entry["feedback_ids"]:
                         fb = ctl.store.get(fid)
-                        assert fb.window <= int(entry["window"]) - 1
+                        assert fb.window == int(entry["window"]) - 1
 
     # -- citation validator (pure, phase-independent P0-6 guard) -----------
     def test_legal_next_window_citation_passes(self, runs):
@@ -256,21 +263,32 @@ class TestDoubleWindowStateMachine:
         ctl.validate_verdict_citations(
             1, [_verdict("hyp-00", [fid])])
 
-    def test_same_window_feedback_is_future(self, runs):
+    def test_same_window_feedback_is_stale(self, runs):
         """Citing feedback produced in the VERY window being revised is the
-        double-window violation the state machine exists to prevent."""
+        double-window violation the state machine exists to prevent (CC3 C9
+        gate: current-window records fail closed as STALE_FEEDBACK_ID)."""
         ctls, _sums = runs
         ctl = ctls[C.MODE_NORMAL_FEEDBACK]
         fid = _records_of(ctl, 0)[0].feedback_id
-        with pytest.raises(ValueError, match="FUTURE_FEEDBACK_ID"):
+        with pytest.raises(ValueError, match="STALE_FEEDBACK_ID"):
             ctl.validate_verdict_citations(0, [_verdict("hyp-00", [fid])])
 
-    def test_later_window_feedback_is_future(self, runs):
+    def test_later_window_feedback_is_stale(self, runs):
         ctls, _sums = runs
         ctl = ctls[C.MODE_NORMAL_FEEDBACK]
         fid = _records_of(ctl, 2)[0].feedback_id
-        with pytest.raises(ValueError, match="FUTURE_FEEDBACK_ID"):
+        with pytest.raises(ValueError, match="STALE_FEEDBACK_ID"):
             ctl.validate_verdict_citations(1, [_verdict("hyp-00", [fid])])
+
+    def test_older_window_feedback_is_stale(self, runs):
+        """CC3 C9 gate negative test: the lag is EXACTLY one window — a
+        window-3 revision citing a window-0 record (older than k-1) fails
+        closed as STALE_FEEDBACK_ID, not merely 'still legal'."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_NORMAL_FEEDBACK]
+        fid = _records_of(ctl, 0)[0].feedback_id
+        with pytest.raises(ValueError, match="STALE_FEEDBACK_ID"):
+            ctl.validate_verdict_citations(3, [_verdict("hyp-00", [fid])])
 
     def test_unknown_feedback_id_refused(self, runs):
         ctls, _sums = runs
@@ -452,20 +470,25 @@ class TestStaticBaseline:
             assert view.records() == []
             assert view.to_prompt_payload() == []
         # windows >= 1: rebuild the exact context run_review_board assembles
-        # (window 0's board ran before any record existed, so its evidence
-        # slice is not rebuildable after the fact)
+        # (CC3 C9 gate: assembly consumes the VIEW only — never the raw
+        # store, which here is provably full)
         for window in range(1, WINDOWS):
             view = ctl._feedback_view(window)
+            board_context = assemble_board_context(
+                view, window=window - 1, mode=C.MODE_STATIC_LLM)
             context = build_board_prompt_context(
                 window=window, mode=C.MODE_STATIC_LLM,
-                board_context=assemble_board_context(
-                    ctl.store, window=window - 1,
-                    mode=C.MODE_STATIC_LLM,
-                    feedback_view_label=view.label),
+                board_context=board_context,
                 view=view,
                 hypotheses=normalize_hypothesis_inputs(ctl.ledger.all()))
             assert context["feedback"] == []          # …but the board sees 0
             assert context["feedback_view_label"] == "null"
+            # the whole evidence layer is structurally empty too: no
+            # behavior evidence, no pooled SR/CI, no candidate ids
+            assert board_context.behavior_evidence == []
+            assert board_context.pooled_episodes == 0
+            assert board_context.pooled_student_success_rate == 0.0
+            assert board_context.student_success_rate_ci == 1.0
 
 
 # ------------------------------------------------------------- normal mode
@@ -498,13 +521,14 @@ class TestNormalFeedbackLoop:
         _ctls, sums = runs
         s = sums[C.MODE_NORMAL_FEEDBACK]
         assert s.feedback_citation_coverage == 0.8047
+        # CC3 C9 gate re-baseline (EXACT k-1 lag): each window's board sees
+        # ONLY the previous window's 64 records, so refutations arrive with
+        # fresh citable evidence and every refuted line retires (4 of 4)
         assert s.decision_distribution == {C.DECISION_MUTATE: 7,
-                                           C.DECISION_RETIRE: 2,
-                                           C.DECISION_RETAIN: 6}
+                                           C.DECISION_RETIRE: 4,
+                                           C.DECISION_RETAIN: 3}
         assert s.supported_retention_rate == 1.0
-        # C10 lifecycle: a family retires at most ONCE — later re-refutations
-        # of the already-retired line find it blocked (2 of 7 refutations)
-        assert s.refuted_retirement_rate == 0.2857
+        assert s.refuted_retirement_rate == 1.0
         assert len(set(s.plan_signature_hashes)) == 6
         assert [w["global_risk"] for w in s.windows] == \
             ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
@@ -608,18 +632,23 @@ class TestShuffledFeedback:
             for entry in rec.revision_history:
                 for fid in entry["feedback_ids"]:
                     assert fid in all_ids
-                    assert ctl.store.get(fid).window <= int(entry["window"]) - 1
+                    # CC3 C9 gate: the lag is EXACTLY one window
+                    assert ctl.store.get(fid).window == \
+                        int(entry["window"]) - 1
 
     def test_rebaselined_shuffled_numbers(self, runs):
         _ctls, sums = runs
         s = sums[C.MODE_SHUFFLED_FEEDBACK]
         assert s.feedback_citation_coverage == 0.8047
+        # CC3 C9 gate re-baseline (EXACT k-1 lag): the shuffled numbers
+        # shift with the normal ones, but the two modes STILL differ — the
+        # permutation changes which families retire (3 vs 4), which is the
+        # point of the comparison
         assert s.decision_distribution == {C.DECISION_MUTATE: 7,
-                                           C.DECISION_RETIRE: 2,
-                                           C.DECISION_RETAIN: 4}
+                                           C.DECISION_RETIRE: 3,
+                                           C.DECISION_RETAIN: 3}
         assert s.supported_retention_rate == 1.0
-        # C10 lifecycle: 2 of 9 refutations retire (each family at most once)
-        assert s.refuted_retirement_rate == 0.2222
+        assert s.refuted_retirement_rate == 1.0
         assert len(set(s.plan_signature_hashes)) == 6
         assert [w["global_risk"] for w in s.windows] == \
             ["MEDIUM"] + ["HIGH"] * (WINDOWS - 1)
@@ -755,25 +784,42 @@ class TestRetireLifecycle:
         ctl = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK,
                                     human_reopen_families=[FAM0])
         s = ctl.run(max_windows=WINDOWS)
-        # retired at w1, cooldown w2..w4, human-reopened at w5 — the board
-        # proposes for it again and the fresh REFUTED verdict re-retires it
-        assert ctl._retired_at[FAM0] == WINDOWS - 1
+        # CC3 C9 gate re-baseline (EXACT k-1 lag): FAM0 retires at w1
+        # (cited verdict), is blocked through w2..w4, and is human-reopened
+        # at w5. Under the strict one-window lag the w5 board sees NO FAM0
+        # feedback at all (the blocked windows produced none), so the
+        # comeback proposal is an uncited EXPLORATION MUTATE; the family is
+        # funded, the reopen is CONSUMED, and FAM0 leaves the retirement
+        # registry — a re-retirement would need fresh refuting evidence,
+        # which only a later window could bring.
+        assert FAM0 not in ctl._retired_at
         props = [p for p in ctl.boards[WINDOWS - 1].family_proposals
                  if p.environment_family == FAM0]
         assert len(props) == 1
-        assert props[0].decision == C.DECISION_RETIRE
-        assert props[0].based_on_feedback_ids           # cited, not STALE
-        assert ctl._plans_by_window[WINDOWS - 1].retired_families == [FAM0]
+        assert props[0].decision == C.DECISION_MUTATE
+        assert props[0].is_exploration
+        assert props[0].based_on_feedback_ids == []
+        funded = {a.environment_family
+                  for a in ctl._plans_by_window[WINDOWS - 1].allocations}
+        assert FAM0 in funded
+        # the retirement itself happened at w1 and WAS cited (a real
+        # verdict, not exploration)
+        retire_at_w1 = [p for p in ctl.boards[1].family_proposals
+                        if p.environment_family == FAM0]
+        assert len(retire_at_w1) == 1
+        assert retire_at_w1[0].decision == C.DECISION_RETIRE
+        assert retire_at_w1[0].based_on_feedback_ids
         # the intermediate windows kept the family fully blocked
         for window in range(2, WINDOWS - 1):
             assert all(p.environment_family != FAM0
                        for p in ctl.boards[window].family_proposals)
-        # lifecycle invariants hold under reopen: compute-matched + no
-        # double retirement before the reopen window
+        # lifecycle invariants hold under reopen: compute-matched + the
+        # run's RETIRE decisions are the w1 FAM0 retirement plus the three
+        # later families
         assert s.n_llm_calls == 7 * WINDOWS
         assert s.total_simulator_transitions == \
             WINDOWS * TRANSITIONS_PER_PROBED_WINDOW
-        assert s.decision_distribution[C.DECISION_RETIRE] == 3
+        assert s.decision_distribution[C.DECISION_RETIRE] == 4
 
     def test_illegal_human_reopen_family_refused(self):
         with pytest.raises(ValueError, match="UNKNOWN_ENVIRONMENT_FAMILY"):

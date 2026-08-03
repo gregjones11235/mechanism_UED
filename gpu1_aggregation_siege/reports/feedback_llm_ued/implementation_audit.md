@@ -3,9 +3,9 @@
 - 分支：`henry/ba-bagr-ued-review-board-v2`
 - worktree：`C:/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree`
   （只在此 worktree 施工；未切换/未覆盖 CC1、CC2 分支，未整体合并 Mason 分支）
-- 代码根：`gpu1_aggregation_siege/d052/feedback_llm_ued/`（34 个模块，7768 行）
+- 代码根：`gpu1_aggregation_siege/d052/feedback_llm_ued/`（34 个模块，7923 行）
 - 测试：`gpu1_aggregation_siege/d052/tests/test_feedback_llm_ued_*.py`
-  （16 个文件，366 用例）
+  （17 个文件，380 用例，含 CC3 C9 门禁定向测试 10 用例）
 - 本文件只陈述**已验证**的事实；未运行/未实现内容一律显式标注。
 
 ## 1. 提交序列（C1–C16，全部原子提交、显式路径 add、无 amend/force/rebase）
@@ -26,17 +26,19 @@
 | C12+C13 | 共享 Soft Copeland 选择层 + anchor manifest 接缝 | `1974119` |
 | C14 | 内容哈希重算（CONTENT_HASH_MISMATCH） | `5a7b876` |
 | C15 | 持久化 + 跨窗恢复等价 | `a5ed224` |
-| C16 | 报告收尾 + 旗标翻转（本次提交） | 见 git log |
+| C16 | 报告收尾 + 旗标翻转 | `794507a` |
+| CC3-A | C9 门禁：两个隔离旗标置 False + posture 同步（修复前姿态） | `ec4935f` |
+| CC3-B | C9 门禁修复：BoardContext 只经 FeedbackView + 恰好 k−1 滞后 + 定向旁路/滞后测试 + 旗标复 True + 报告重定基线（本次提交） | 见 git log |
 
-基线演进：554→749→889→920 passed；6 个既有环境性失败名单全程未变。
+基线演进：554→749→889→920→934 passed；6 个既有环境性失败名单全程未变。
 
 ## 2. 模块清单（全部已实现、全部有测试覆盖；行数为 wc -l 实测）
 
 ### 2.1 核心闭环
 | 模块 | 行数 | 职责 |
 |---|---|---|
-| `controller.py` | 1046 | 双窗口状态机（A–E phase 机）、三模式、verdict 应用校验、RETIRE/REQUEST_CONTROL、summary 对比、C15 续跑支持 |
-| `review_board.py` | 326 | 六角色编排（固定顺序）、BoardOutput=verdict+新假设+AxisDirective+逐族提案+global_risk |
+| `controller.py` | 1062 | 双窗口状态机（A–E phase 机）、三模式、verdict 应用校验（恰好 k−1，STALE_FEEDBACK_ID）、RETIRE/REQUEST_CONTROL、summary 对比、C15 续跑支持 |
+| `review_board.py` | 339 | 六角色编排（固定顺序）、BoardOutput=verdict+新假设+AxisDirective+逐族提案+global_risk；prompt 上下文双重窗口校验 |
 | `deterministic_reconciler.py` | 337 | 提案→FamilyAllocation 收口：诚实性重标、悬空引用、退休优先、预算上限、锚位预留 |
 | `hypothesis_ledger.py` | 142 | 假设账本：唯一状态写入者，revision_history 哈希链 |
 | `simulator_feedback_store.py` | 217 | 反馈库：reference 白名单、formal 源拒绝、bind_match 重哈希、dump |
@@ -48,7 +50,8 @@
 `student_modeler.py`(108) / `behavior_auditor.py`(116) /
 `causal_failure_analyst.py`(223) / `intervention_tutor.py`(242) /
 `explorer.py`(232) / `critic_skeptic.py`(162)；board 输入层：
-`behavior_failure.py`(215) + `uncertainty.py`(73)。
+`behavior_failure.py`(255，BoardContext 只经视图装配、原始 store 被拒绝) +
+`uncertainty.py`(73)。
 
 ### 2.3 EnvCoder 与门禁
 `env_coder.py`(172)：SpecEnvCoder 确定性符号生成 + LLM 接缝 Blocked；
@@ -67,29 +70,46 @@
 
 ### 2.5 合同、后端与隔离
 `feedback_contracts.py`(272)：Candidate/ProbeMetrics/CurriculumPlan/Envelope；
-`feedback_view.py`(250)：Normal/Null/Permuted 三视图；
+`feedback_view.py`(316)：Normal/Null/Permuted 三视图（CC3 门禁：视图构造即
+校验恰好同窗记录 + 每视图自带 behavior_evidence 层）；
 `llm_backend.py`(278)：UsageStats + Mock/Replay/Real 适配器；
 `execution_mode.py`(173)：ExecutionMode + FeedbackLaunchGate；
 `student_binding.py`(175)：固定身份 + CC4 fail-closed + 训练 no-op 记账；
 `human_decision.py`(89)；`formal_isolation.py`(99)；
-`constants.py`(384)；`synthetic_feedback.py`(75)；`__init__.py`(33)。
+`constants.py`(404)；`synthetic_feedback.py`(75)；`__init__.py`(33)。
 
 ## 3. 关键审计结论
 
-### 3.1 双窗口时序（REQUEST_CHANGES 修订核心）
-- 窗口 k 六角色只能读 ≤k−1 的冻结反馈；feedback_k 产生后本窗只能原子
-  写入并冻结；修订只能由窗口 k+1 的完整六角色显式引用 feedback_k 产生。
-  状态机 phase 标记 + 负测证明：same-window apply verdict/改计划 →
-  `SAME_WINDOW_REVISION_FORBIDDEN`；引用同窗 feedback → `FUTURE_FEEDBACK_ID`；
-  缺失 → `UNKNOWN_FEEDBACK_ID`；重复 → `DUPLICATE_FEEDBACK_CITATION`。
-- **NEXT_WINDOW_REVISION_ONLY=True、SAME_WINDOW_REVISION_REJECTED=True**（有负测）。
+### 3.1 双窗口时序（REQUEST_CHANGES 修订核心 + CC3 C9 门禁收紧）
+- 窗口 k 六角色只能读**恰好 k−1** 的冻结反馈（CC3 门禁：旧语义 ≤k−1 收紧
+  为恰好一窗，更旧/当前/未来记录一律 fail-closed）；feedback_k 产生后本窗
+  只能原子写入并冻结；修订只能由窗口 k+1 的完整六角色显式引用 feedback_k
+  产生。四层防线：视图构造（`_assert_exact_window`）、controller 视图选择
+  （只选 k−1 记录）、controller 引用校验、board 引用校验 + prompt 上下文
+  双重窗口检查。状态机 phase 标记 + 负测证明：same-window apply verdict/
+  改计划 → `SAME_WINDOW_REVISION_FORBIDDEN`；引用旧/同窗/未来 feedback →
+  `STALE_FEEDBACK_ID`；缺失 → `UNKNOWN_FEEDBACK_ID`；重复 →
+  `DUPLICATE_FEEDBACK_CITATION`。
+- **NEXT_WINDOW_REVISION_ONLY=True（CC3 收紧语义）、
+  SAME_WINDOW_REVISION_REJECTED=True**（有负测）。
 
-### 3.2 对照隔离（结构性而非提示词级）
-- static：`NullFeedbackView` 类型级不持有 store 引用；测试断言 board 上下文
-  零反馈载荷。**STATIC_FEEDBACK_STRUCTURALLY_HIDDEN=True**。
+### 3.2 对照隔离（结构性而非提示词级；CC3 C9 门禁重验）
+- **CC3 门禁历史（如实）**：总控 CC3 审核发现旧实现中 BoardContext 装配
+  直接读取原始 SimulatorFeedbackStore，向 static 上下文泄漏证据、向 shuffled
+  上下文泄漏证据层身份；两旗标先置 False（Commit A `ec4935f`），修复 +
+  定向旁路/滞后测试（`test_feedback_llm_ued_c9_gate.py`，10 用例）全绿后
+  复 True（Commit B）。
+- BoardContext 只经 FeedbackView 装配：`assemble_board_context` 对原始
+  store 直接抛 `BOARD_CONTEXT_STORE_FORBIDDEN`，视图窗口≠证据窗抛
+  `BOARD_CONTEXT_WINDOW_MISMATCH`。
+- static：`NullFeedbackView` 类型级不持有 store 引用；门禁测试断言满 store
+  下 board 上下文零载荷（证据/SR/CI/候选 id/历史全空，序列化扫描无真实 id）。
+  **STATIC_FEEDBACK_STRUCTURALLY_HIDDEN=True（门禁后重验）**。
 - shuffled：冻结可复算置换（仅由 (mode, 窗口, SEED_SCHEDULE_HASH)+记录集
-  派生），匿名化 id 屏蔽身份侧信道；负测证明上下文不可还原真实配对。
-  **SHUFFLE_PERMUTATION_FROZEN=True**。
+  派生），匿名化 id 在 prompt 层**与证据层**均屏蔽身份侧信道（证据匿名 id
+  与 payload 逐位一致、candidate_id=MASKED_IDENTITY）；负测证明上下文不可
+  还原真实配对、resolve_citation 为唯一还原路径。
+  **SHUFFLE_PERMUTATION_FROZEN=True（门禁后重验）**。
 - compute-matched：三模式每窗 7 次 LLM 族调用、61440 transitions、同 seed。
 
 ### 3.3 Soft Copeland 与 anchors（诚实性）
@@ -117,13 +137,14 @@
 
 | 主张 | 证据 |
 |---|---|
-| 366 个方向二测试全绿 | `test_report.md` §2（逐文件计数） |
-| 全量 d052 套件 920 通过 / 6 既有环境性失败 | `test_report.md` §3 |
-| 闭环数值（三模式 6 窗，新架构） | `final_implementation_report.md` §5（smoke 真实输出） |
-| 双窗口时序负测 | `test_feedback_llm_ued_controller.py`（57 用例含同窗禁止/未来/重复/缺失引用） |
-| 隔离负测 | `test_feedback_llm_ued_view_isolation.py`（18 用例） |
+| 380 个方向二测试全绿 | `test_report.md` §2（逐文件计数） |
+| 全量 d052 套件 934 通过 / 6 既有环境性失败 | `test_report.md` §3 |
+| 闭环数值（三模式 6 窗，CC3 门禁后重定基线） | `final_implementation_report.md` §4（smoke 真实输出） |
+| 双窗口时序负测（恰好 k−1） | `test_feedback_llm_ued_controller.py`（58 用例含同窗禁止/旧/未来/重复/缺失引用） |
+| CC3 C9 门禁旁路/滞后定向测试 | `test_feedback_llm_ued_c9_gate.py`（10 用例：static 满 store 零载荷、shuffled 证据层无身份、混合窗口/旧/当前/未来 fail-closed、端到端逐引用恰好滞后一窗） |
+| 隔离负测 | `test_feedback_llm_ued_view_isolation.py`（18 用例）+ `test_feedback_llm_ued_evidence.py`（19 用例含 BOARD_CONTEXT_STORE_FORBIDDEN） |
 | 跨窗恢复等价 + fresh-process + 篡改矩阵 | `test_feedback_llm_ued_persistence.py`（31 用例） |
-| 示例 JSON 非伪造 | 三个 example JSON 由真实 6 窗 normal 运行直接导出（本次重新生成） |
+| 示例 JSON 非伪造 | 三个 example JSON 由真实 6 窗 normal 运行直接导出（CC3 门禁后重新生成） |
 | 确定性 | 两次独立运行 summary 逐字节一致（controller/persistence 测试双重锁定） |
 
 ## 5. 已知限制与剩余阻塞（如实）

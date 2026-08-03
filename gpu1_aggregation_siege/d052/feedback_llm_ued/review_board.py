@@ -11,9 +11,12 @@ modes. The board reads ONLY:
 
 * the window's behavior-failure evidence (``BoardContext``), and
 * the ``FeedbackView`` — the sole surface exposing probe feedback. In the
-  double-window state machine the view holds only frozen records from windows
-  <= k-1; the static mode hands over ``NullFeedbackView`` (structurally
-  empty); the shuffled mode will hand over a permuted view (C9).
+  double-window state machine the view holds the frozen records of EXACTLY
+  window k-1 (CC3 C9 gate: the lag is exactly one window; older records are
+  stale and current/future records do not exist yet from the board's point
+  of view — all fail closed as STALE_FEEDBACK_ID); the static mode hands
+  over ``NullFeedbackView`` (structurally empty); the shuffled mode hands
+  over a frozen anonymized permuted view (C9).
 
 The assembled ``BoardOutput`` carries the four board deliverables — verdicts
 (with explicit feedback_id / prediction-signature citations), new hypotheses,
@@ -99,15 +102,22 @@ def build_board_prompt_context(*, window: int, mode: str,
     feed back into it — the critic stays independent)."""
     if mode not in C.FEEDBACK_MODES:
         raise ValueError(f"UNKNOWN_MODE: {mode!r}")
-    # double-window discipline at the evidence layer: every behavior item a
-    # window-k board reads must come from a probe STRICTLY before window k
+    # double-window discipline at the evidence layer (CC3 C9 gate): every
+    # behavior item a window-k board reads must come from EXACTLY window
+    # k-1's probes (window 0 reads no evidence at all)
     for item in board_context.behavior_evidence:
-        if item.window >= window:
+        if item.window != window - 1:
             raise ValueError(
                 f"BOARD_CONTEXT_WINDOW_MISMATCH: evidence item "
                 f"{item.feedback_id!r} is from window {item.window}; a "
                 f"window-{window} board may only read evidence from "
-                f"windows <= {window - 1}")
+                f"EXACTLY window {window - 1}")
+    if board_context.window != max(0, window - 1):
+        raise ValueError(
+            f"BOARD_CONTEXT_WINDOW_MISMATCH: board context window "
+            f"{board_context.window} != evidence window "
+            f"{max(0, window - 1)} for board window {window} (CC3 C9 "
+            f"gate: the lag is exactly one window)")
     return dict(window=window,
                 mode=mode,
                 board_context=board_context.model_dump(),
@@ -124,8 +134,9 @@ def validate_citations(verdicts: Sequence[BoardHypothesisVerdict],
 
     * every verdict must target a hypothesis the ledger actually holds;
     * every cited feedback id must be VISIBLE in the window's FeedbackView;
-    * cited feedback must come from a STRICTLY EARLIER window (<= k-1 for a
-      window-k board) — a record from this window or later is future feedback;
+    * cited feedback must come from EXACTLY window k-1 for a window-k board
+      (CC3 C9 gate: older, current and future records all fail closed as
+      STALE_FEEDBACK_ID);
     * a verdict may not cite the same feedback id twice;
     * a hypothesis may receive at most ONE verdict per board;
     * with an empty view there is nothing to cite, so no verdicts.
@@ -156,11 +167,13 @@ def validate_citations(verdicts: Sequence[BoardHypothesisVerdict],
                 raise ValueError(
                     f"UNKNOWN_FEEDBACK_ID: {fid!r} is not visible in this "
                     f"window's FeedbackView (window {window})")
-            if int(record.get("window", -1)) >= window:
+            if int(record.get("window", -1)) != window - 1:
                 raise ValueError(
-                    f"FUTURE_FEEDBACK_ID: {fid!r} comes from window "
+                    f"STALE_FEEDBACK_ID: {fid!r} comes from window "
                     f"{record.get('window')} — a window-{window} board may "
-                    f"only cite feedback from windows <= {window - 1}")
+                    f"only cite feedback from EXACTLY window {window - 1} "
+                    f"(older/current/future records fail closed; CC3 C9 "
+                    f"gate)")
     if verdicts and any(v.cited_feedback_ids for v in verdicts) and \
             not visible_by_id:
         raise ValueError(

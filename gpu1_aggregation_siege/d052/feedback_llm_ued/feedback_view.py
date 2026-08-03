@@ -4,7 +4,8 @@ probe feedback (structural basis of the comparison-mode isolation).
 The board never receives a store. It receives a view:
 
 * ``NormalFeedbackView``   — read-only frozen snapshot of explicitly injected
-                             records (the controller selects window <= k-1);
+                             records (the controller selects EXACTLY window
+                             k-1 — the CC3 C9 gate's exact lag);
 * ``NullFeedbackView``     — STRUCTURAL blocking: the type holds no store, no
                              records and no ids — feedback is unreachable by
                              construction, not by prompt omission (static
@@ -33,6 +34,7 @@ from typing import Dict, List, Protocol, Sequence, runtime_checkable
 
 from d052.bagr_ued.hashing import canonical_sha256
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.behavior_failure import BehaviorFailureEvidence
 from d052.feedback_llm_ued.simulator_feedback_store import (
     SimulatorFeedbackRecord,
 )
@@ -57,6 +59,16 @@ class FeedbackView(Protocol):
     def to_prompt_payload(self) -> List[dict]:
         ...
 
+    def behavior_evidence(self) -> List[BehaviorFailureEvidence]:
+        """The BoardContext evidence layer, derived ONLY from the records the
+        view presents (CC3 C9 gate: the board context is built from the view,
+        never from the raw store). Null view: empty. Normal view: real-id
+        evidence. Permuted view: anonymized evidence (anonymized feedback ids
+        consistent with the prompt payload, candidate id masked) — no
+        identity side channel at the evidence layer either.
+        """
+        ...
+
     def resolve_citation(self, citation: str) -> str:
         """Map a board citation back to a SimulatorFeedbackStore id.
 
@@ -64,6 +76,20 @@ class FeedbackView(Protocol):
         citation they did not present.
         """
         ...
+
+
+def _assert_exact_window(records: Sequence[SimulatorFeedbackRecord],
+                         window_scope: int) -> None:
+    """CC3 C9 gate (defense in depth): a view scoped to window w presents
+    EXACTLY window-w records. Older, current and future records all fail
+    closed as STALE_FEEDBACK_ID — the window lag is exactly one window."""
+    for record in records:
+        if record.window != window_scope:
+            raise ValueError(
+                f"STALE_FEEDBACK_ID: record {record.feedback_id!r} is from "
+                f"window {record.window}; a view scoped to window "
+                f"{window_scope} presents EXACTLY that window's frozen "
+                f"feedback (older/current/future records fail closed)")
 
 
 def record_payload(record: SimulatorFeedbackRecord) -> Dict[str, object]:
@@ -101,21 +127,30 @@ class NormalFeedbackView:
                  window_scope: int) -> None:
         if window_scope < 0:
             raise ValueError(f"ILLEGAL_VIEW_WINDOW_SCOPE: {window_scope}")
+        _assert_exact_window(records, window_scope)
         self.window_scope = window_scope
         #: sorted + tuple: immutable snapshot, deterministic order
         self._records = tuple(sorted(records, key=lambda r: r.feedback_id))
         self._ids = frozenset(r.feedback_id for r in self._records)
 
     @classmethod
-    def from_store(cls, store, *, max_window: int) -> "NormalFeedbackView":
-        records = [r for r in store.all() if r.window <= max_window]
-        return cls(records, window_scope=max_window)
+    def from_store(cls, store, *,
+                   evidence_window: int) -> "NormalFeedbackView":
+        """CC3 C9 gate: the view presents EXACTLY ``evidence_window``'s
+        frozen records (window k's board reads window k-1 and nothing else).
+        """
+        records = [r for r in store.all() if r.window == evidence_window]
+        return cls(records, window_scope=evidence_window)
 
     def records(self) -> List[SimulatorFeedbackRecord]:
         return list(self._records)
 
     def to_prompt_payload(self) -> List[dict]:
         return [record_payload(r) for r in self._records]
+
+    def behavior_evidence(self) -> List[BehaviorFailureEvidence]:
+        return [BehaviorFailureEvidence.from_record(r)
+                for r in self._records]
 
     def resolve_citation(self, citation: str) -> str:
         if citation not in self._ids:
@@ -141,6 +176,9 @@ class NullFeedbackView:
         return []
 
     def to_prompt_payload(self) -> List[dict]:
+        return []
+
+    def behavior_evidence(self) -> List[BehaviorFailureEvidence]:
         return []
 
     def resolve_citation(self, citation: str) -> str:
@@ -172,6 +210,24 @@ def _anonymized_payload(anon_id: str,
     payload["axis_values"] = {}
     payload["held_constant_axes"] = {}
     return payload
+
+
+def _anonymized_evidence(anon_id: str,
+                         record: SimulatorFeedbackRecord
+                         ) -> BehaviorFailureEvidence:
+    """BoardContext evidence for one permuted record under its anonymized id.
+
+    CC3 C9 gate: the evidence layer must carry NO identity side channel
+    either — the feedback id is the SAME anonymized id the prompt payload
+    shows (evidence<->payload consistency), and the candidate id is masked.
+    The statistical content (rates, gaps, severity, match state, window,
+    family) moves together with the record, exactly like the payload.
+    """
+    evidence = BehaviorFailureEvidence.from_record(record)
+    payload = evidence.model_dump()
+    payload["feedback_id"] = anon_id
+    payload["candidate_id"] = MASKED_IDENTITY
+    return BehaviorFailureEvidence(**payload)
 
 
 class PermutedFeedbackView:
@@ -207,6 +263,7 @@ class PermutedFeedbackView:
         if not is_sha256_hex(seed_schedule_hash):
             raise ValueError(
                 f"ILLEGAL_SEED_SCHEDULE_HASH: {seed_schedule_hash!r}")
+        _assert_exact_window(records, window_scope)
         self.window_scope = window_scope
         self.board_window = board_window
 
@@ -224,10 +281,13 @@ class PermutedFeedbackView:
 
         self._anon_to_real: Dict[str, str] = {}
         self._payloads: List[Dict[str, object]] = []
+        self._evidence: List[BehaviorFailureEvidence] = []
         for slot, record in enumerate(self._records):
             anon_id = f"anon-w{board_window:02d}-{slot:03d}"
             self._anon_to_real[anon_id] = record.feedback_id
             self._payloads.append(_anonymized_payload(anon_id, record))
+            self._evidence.append(
+                _anonymized_evidence(anon_id, record))
         self.label = f"{VIEW_LABEL_PERMUTED}:{self._permutation_seed[:16]}"
 
     @property
@@ -239,6 +299,12 @@ class PermutedFeedbackView:
 
     def to_prompt_payload(self) -> List[dict]:
         return [dict(p) for p in self._payloads]
+
+    def behavior_evidence(self) -> List[BehaviorFailureEvidence]:
+        """Anonymized evidence — the BoardContext built from this view never
+        carries a real feedback id or candidate id (no identity side
+        channel at the evidence layer)."""
+        return list(self._evidence)
 
     def resolve_citation(self, citation: str) -> str:
         try:

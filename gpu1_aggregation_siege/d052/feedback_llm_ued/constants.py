@@ -93,28 +93,34 @@ SIX_ROLE_BOARD_IMPLEMENTED = True
 #: explicitly, the revision record's label is forced by its citation union,
 #: and uncited modifications can only be EXPLORATION (hard validators).
 FEEDBACK_REVISION_BOUND = True
-#: C8 earned: the double-window state machine guarantees a plan revision at
-#: window k may cite ONLY feedback from windows <= k-1 (the window-k board's
-#: six roles are the sole producers of window-k revisions).
+#: C8 earned (tightened by the CC3 C9 gate, 2026-08-04): the double-window
+#: state machine guarantees a plan revision at window k may cite ONLY
+#: feedback from EXACTLY window k-1 — older, current and future records all
+#: fail closed as STALE_FEEDBACK_ID (the window-k board's six roles are the
+#: sole producers of window-k revisions).
 NEXT_WINDOW_REVISION_ONLY = True
 #: C8 earned: any attempt to apply a verdict or modify window k's plan after
 #: feedback_k is staged raises SAME_WINDOW_REVISION_FORBIDDEN (fail closed);
 #: negative tests prove the refusal.
 SAME_WINDOW_REVISION_REJECTED = True
-#: C9 (re-opened by CC3 gate, 2026-08-04): the static-no-feedback mode must
-#: bind the board to a view whose BoardContext is built ONLY from that view —
-#: empty behavior evidence, pooled SR, CI, candidate ids and history — never
-#: from the raw SimulatorFeedbackStore. The CC3 gate found the previous
-#: store-fed assembly path leaking evidence into the static context, so the
-#: flag is set False until the targeted bypass tests pass again.
-STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
-#: C9 (re-opened by CC3 gate, 2026-08-04): the shuffled permutation must be a
-#: frozen recomputable anonymization with NO identity side channel — including
-#: the evidence layer of the BoardContext — and the window lag must be EXACTLY
-#: one window (rec.window == window-1; older/current/future fail closed as
-#: STALE_FEEDBACK_ID). Flag is False until the targeted bypass and lag tests
-#: pass again.
-SHUFFLE_PERMUTATION_FROZEN = False
+#: C9 earned again (CC3 gate, 2026-08-04): the static-no-feedback mode binds
+#: the board to the structurally empty NullFeedbackView, and the BoardContext
+#: is built ONLY from that view — empty behavior evidence, zero pooled
+#: episodes/SR, maximal-uncertainty CI, no candidate ids, no history — never
+#: from the raw SimulatorFeedbackStore (assemble_board_context refuses a raw
+#: store with BOARD_CONTEXT_STORE_FORBIDDEN). The CC3 gate found the previous
+#: store-fed assembly path leaking evidence into the static context; the fix
+#: plus the targeted bypass tests (test_feedback_llm_ued_c9_gate.py) earn
+#: this flag back.
+STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = True
+#: C9 earned again (CC3 gate, 2026-08-04): the shuffled permutation is a
+#: frozen recomputable anonymization with NO identity side channel — at the
+#: prompt layer AND at the BoardContext evidence layer (anonymized evidence
+#: ids consistent with the payload, candidate id masked) — and the window lag
+#: is EXACTLY one window (rec.window == window-1; older/current/future fail
+#: closed as STALE_FEEDBACK_ID). Re-earned by the targeted bypass and lag
+#: tests (test_feedback_llm_ued_c9_gate.py).
+SHUFFLE_PERMUTATION_FROZEN = True
 
 #: flags that must NEVER be True this round (authorization posture re-asserts)
 NEVER_TRUE_REAL_CAPABILITY_FLAGS = (

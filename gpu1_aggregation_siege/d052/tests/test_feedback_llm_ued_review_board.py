@@ -2,8 +2,10 @@
 
 Positive tests (full board runs on the deterministic mock backend) plus the
 negative citation tests the director's REQUEST_CHANGES review mandated:
-unknown / future / duplicate feedback citations all fail closed, and the
-static-mode NullFeedbackView is structurally empty.
+unknown / stale (wrong-window) / duplicate feedback citations all fail
+closed, and the static-mode NullFeedbackView is structurally empty. CC3 C9
+gate: the BoardContext is assembled from the FeedbackView only, and the
+window lag is exactly one window (STALE_FEEDBACK_ID otherwise).
 """
 import pytest
 from pydantic import ValidationError
@@ -68,16 +70,20 @@ def make_hyp(hid, family=FAM_A, signature=None):
 
 
 def _case(*, mode=C.MODE_NORMAL_FEEDBACK, board_window=1):
-    """One graded opposite record + one agreeing record (window 0) and one
-    ledger hypothesis; the board runs at ``board_window``."""
+    """One graded opposite record + one agreeing record in the board's
+    EVIDENCE window (``board_window - 1`` — the CC3 C9 gate's exact lag)
+    and one ledger hypothesis; the board runs at ``board_window``. The
+    BoardContext is assembled from the VIEW ONLY (never the raw store)."""
+    ev_window = max(0, board_window - 1)
     store = SimulatorFeedbackStore()
-    store.add(make_record(0, distinguishes=["hyp-1"]))
-    store.add(make_record(1, family=FAM_B, student_sr=0.6))
+    store.add(make_record(0, window=ev_window, feedback_id="fb-rb-w0-0",
+                          distinguishes=["hyp-1"]))
+    store.add(make_record(1, window=ev_window, family=FAM_B, student_sr=0.6,
+                          feedback_id="fb-rb-w0-1"))
     store.bind_match("fb-rb-w0-0", direction="opposite")
     store.bind_match("fb-rb-w0-1", direction="agree")
-    ctx = assemble_board_context(store, window=board_window - 1, mode=mode)
-    view = NormalFeedbackView.from_store(store,
-                                         max_window=board_window - 1)
+    view = NormalFeedbackView.from_store(store, evidence_window=ev_window)
+    ctx = assemble_board_context(view, window=ev_window, mode=mode)
     return store, ctx, view
 
 
@@ -157,7 +163,7 @@ class TestBoardContract:
 
 class TestWindowZeroAndNullView:
     def test_window0_empty_view_still_runs_full_board(self):
-        ctx = assemble_board_context(SimulatorFeedbackStore(), window=0,
+        ctx = assemble_board_context(NullFeedbackView(), window=0,
                                      mode=C.MODE_STATIC_LLM)
         backend = DeterministicMockFeedbackBackend()
         out = run_review_board(window=0, mode=C.MODE_STATIC_LLM,
@@ -179,7 +185,7 @@ class TestWindowZeroAndNullView:
         assert vars(view) == {}
 
     def test_static_mode_prompts_carry_zero_feedback_payload(self):
-        ctx = assemble_board_context(SimulatorFeedbackStore(), window=0,
+        ctx = assemble_board_context(NullFeedbackView(), window=0,
                                      mode=C.MODE_STATIC_LLM)
 
         class PromptSpy:
@@ -244,21 +250,36 @@ class TestCitationDiscipline:
         with pytest.raises(ValueError, match="UNKNOWN_FEEDBACK_ID"):
             validate_citations([bad], visible, 1, frozenset({"hyp-1"}))
 
-    def test_future_feedback_id_rejected_end_to_end(self):
-        # a window-1 board handed a view that (wrongly) contains a window-1
-        # record must refuse to cite it — same-window feedback is future
-        store = SimulatorFeedbackStore()
-        store.add(make_record(0))                       # evidence only
-        store.add(make_record(9, window=1, distinguishes=["hyp-1"]))
-        ctx = assemble_board_context(store, window=0,
-                                     mode=C.MODE_NORMAL_FEEDBACK)
-        view = NormalFeedbackView.from_store(store, max_window=1)
-        backend = DeterministicMockFeedbackBackend()
-        with pytest.raises(ValueError, match="FUTURE_FEEDBACK_ID"):
-            run_review_board(window=1, mode=C.MODE_NORMAL_FEEDBACK,
-                             board_context=ctx, view=view,
-                             hypotheses=[make_hyp("hyp-1")],
-                             backend=backend, sequence_start=0)
+    def test_wrong_window_feedback_is_stale(self):
+        """CC3 C9 gate: a window-k board may cite feedback from EXACTLY
+        window k-1 — an older, current or future record fails closed as
+        STALE_FEEDBACK_ID. Real views can never present such a record (the
+        view constructors refuse them — tested below), so this exercises the
+        board-level validator defense in depth."""
+        _, _, view = _case(board_window=2)     # visible records: window 1
+        visible = {p["feedback_id"]: dict(p)
+                   for p in view.to_prompt_payload()}
+        fid = next(iter(visible))
+        bad = BoardHypothesisVerdict(
+            hypothesis_id="hyp-1", verdict=C.HYPOTHESIS_REFUTED,
+            new_confidence=0.3, cited_feedback_ids=[fid],
+            cited_prediction_signature={"student_success_rate": 0.5})
+        for wrong_window in (0, 2, 3):          # older / current / future
+            visible[fid]["window"] = wrong_window
+            with pytest.raises(ValueError, match="STALE_FEEDBACK_ID"):
+                validate_citations([bad], visible, 2,
+                                   frozenset({"hyp-1"}))
+        visible[fid]["window"] = 1              # exactly k-1: legal
+        validate_citations([bad], visible, 2, frozenset({"hyp-1"}))
+
+    def test_view_with_wrong_window_records_refused(self):
+        """View construction itself fails closed on records whose window is
+        not the view scope (the lag is exactly one window)."""
+        rec = make_record(9, window=1, distinguishes=["hyp-1"])
+        with pytest.raises(ValueError, match="STALE_FEEDBACK_ID"):
+            NormalFeedbackView([rec], window_scope=0)
+        with pytest.raises(ValueError, match="STALE_FEEDBACK_ID"):
+            NormalFeedbackView([rec], window_scope=2)
 
     def test_duplicate_feedback_citation_rejected(self):
         _, _, view = _case()
@@ -317,7 +338,8 @@ class TestDeliverables:
         out, _ = run_board()
         evidenced = {p["environment_family"]
                      for p in NormalFeedbackView.from_store(
-                         _case()[0], max_window=0).to_prompt_payload()}
+                         _case()[0],
+                         evidence_window=0).to_prompt_payload()}
         for d in out.directives:
             if "exploration" in d.directive_id:
                 assert d.environment_family not in evidenced
@@ -349,9 +371,9 @@ class TestDeliverables:
         store.bind_match("fb-rb-w0-0", direction="opposite")
         store.bind_match("fb-rb-w0-1", direction="opposite")
         store.bind_match("fb-rb-w0-2", direction="opposite")
-        ctx = assemble_board_context(store, window=0,
+        view = NormalFeedbackView.from_store(store, evidence_window=0)
+        ctx = assemble_board_context(view, window=0,
                                      mode=C.MODE_NORMAL_FEEDBACK)
-        view = NormalFeedbackView.from_store(store, max_window=0)
         backend = DeterministicMockFeedbackBackend()
         out = run_review_board(window=1, mode=C.MODE_NORMAL_FEEDBACK,
                                board_context=ctx, view=view,
@@ -365,9 +387,9 @@ class TestDeliverables:
     def test_ungraded_feedback_is_an_honesty_objection(self):
         store = SimulatorFeedbackStore()
         store.add(make_record(0, distinguishes=["hyp-1"]))   # never graded
-        ctx = assemble_board_context(store, window=0,
+        view = NormalFeedbackView.from_store(store, evidence_window=0)
+        ctx = assemble_board_context(view, window=0,
                                      mode=C.MODE_NORMAL_FEEDBACK)
-        view = NormalFeedbackView.from_store(store, max_window=0)
         backend = DeterministicMockFeedbackBackend()
         out = run_review_board(window=1, mode=C.MODE_NORMAL_FEEDBACK,
                                board_context=ctx, view=view,
@@ -443,10 +465,12 @@ class TestFeedbackView:
         store.add(make_record(1, window=0, feedback_id="fb-z"))
         store.add(make_record(0, window=0, feedback_id="fb-a"))
         store.add(make_record(2, window=1, feedback_id="fb-w1"))
-        view = NormalFeedbackView.from_store(store, max_window=0)
+        view = NormalFeedbackView.from_store(store, evidence_window=0)
         assert view.window_scope == 0
+        # sorted; ONLY the evidence window's records (CC3 C9 gate: the
+        # window-1 record is not visible to a window-0 scope)
         assert [p["feedback_id"] for p in view.to_prompt_payload()] == \
-            ["fb-a", "fb-z"]                      # sorted, window <= scope
+            ["fb-a", "fb-z"]
         view.records().clear()                    # copies: snapshot intact
         assert len(view.records()) == 2
 

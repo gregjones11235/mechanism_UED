@@ -4,14 +4,19 @@ Per window k (all k >= 0; window 0's k-1 feedback view is empty, the board
 still runs its complete six roles):
 
     A. EVIDENCE  — behavior-failure evidence of window k-1 probes +
-                   FeedbackView over ONLY frozen feedback from windows
-                   <= k-1 (static mode gets the structurally empty
-                   NullFeedbackView; shuffled mode the frozen permuted +
-                   anonymized PermutedFeedbackView);
+                   FeedbackView over EXACTLY the frozen feedback of window
+                   k-1 (CC3 C9 gate: the lag is exactly one window —
+                   older/current/future records fail closed as
+                   STALE_FEEDBACK_ID; the BoardContext is assembled from
+                   the view ONLY, never from the raw store). Static mode
+                   gets the structurally empty NullFeedbackView; shuffled
+                   mode the frozen permuted + anonymized
+                   PermutedFeedbackView;
     B. BOARD     — six-role Review Board, always all six calls: verdicts on
-                   <= k-1 feedback (explicit feedback_id / hypothesis_id /
-                   prediction-signature citations) + new PENDING hypotheses
-                   + AxisDirectives + per-family proposals;
+                   window k-1 feedback (explicit feedback_id /
+                   hypothesis_id / prediction-signature citations) + new
+                   PENDING hypotheses + AxisDirectives + per-family
+                   proposals;
     C. REVISION  — verdict application to the ledger (P0-6 binding guard) +
                    Reconciler -> plan_k + training-seam no-op bookkeeping;
     D. PROBING   — EnvCoder (7th call) -> compile/reset/step gates ->
@@ -390,15 +395,16 @@ class FeedbackUEDController:
     def _run_window(self, window: int) -> WindowRecord:
         n_calls_before = self.backend.usage.total_calls
 
-        # -- A. evidence assembly: ONLY frozen windows <= k-1 are visible ---
+        # -- A. evidence assembly: the board reads EXACTLY the frozen
+        #    window k-1 feedback, and the BoardContext is built ONLY from
+        #    the FeedbackView — never from the raw store (CC3 C9 gate) ----
         self._set_phase(window, PHASE_EVIDENCE)
         evidence_window = max(0, window - 1)
         view = self._feedback_view(window)
         in_cooldown, blocked_retired, _reopened = \
             self._retirement_state(window)
         board_context = assemble_board_context(
-            self.store, window=evidence_window, mode=self.mode,
-            feedback_view_label=view.label,
+            view, window=evidence_window, mode=self.mode,
             families_in_cooldown=in_cooldown,
             retired_families=blocked_retired)
 
@@ -524,8 +530,14 @@ class FeedbackUEDController:
     def _feedback_view(self, window: int):
         """The ONLY surface through which the board touches feedback.
 
+        CC3 C9 gate: the lag is EXACTLY one window — a window-k view
+        presents the frozen records of window k-1 ONLY (older records are
+        stale, current/future records do not exist yet from the board's
+        point of view; all three fail closed as STALE_FEEDBACK_ID if they
+        ever reach a view or a citation validator).
+
         static:   NullFeedbackView (structural — holds no store reference).
-        normal:   read-only snapshot of frozen windows <= k-1.
+        normal:   read-only snapshot of EXACTLY window k-1.
         shuffled: PermutedFeedbackView over the SAME honest records — a
                   frozen, recomputable permutation presented under
                   anonymized ids with the identity side channels masked
@@ -533,7 +545,7 @@ class FeedbackUEDController:
         """
         if self.mode == C.MODE_STATIC_LLM:
             return NullFeedbackView()
-        records = [r for r in self.store.all() if r.window <= window - 1]
+        records = [r for r in self.store.all() if r.window == window - 1]
         scope = max(0, window - 1)
         if self.mode == C.MODE_SHUFFLED_FEEDBACK:
             return PermutedFeedbackView(
@@ -635,7 +647,9 @@ class FeedbackUEDController:
 
         * more than one verdict per hypothesis per window;
         * unknown hypothesis / unknown feedback id;
-        * feedback from THIS or a LATER window (FUTURE_FEEDBACK_ID);
+        * feedback from ANY window other than EXACTLY window k-1
+          (STALE_FEEDBACK_ID — older, current and future records all fail
+          closed; CC3 C9 gate);
         * duplicate citation inside one verdict;
         * record not distinguishing the verdicted hypothesis;
         * record family != hypothesis family;
@@ -671,11 +685,13 @@ class FeedbackUEDController:
                         f"UNKNOWN_FEEDBACK_ID: {fid!r} cited by verdict for "
                         f"{v.hypothesis_id!r} does not exist in the "
                         f"SimulatorFeedbackStore") from None
-                if rec.window >= window:
+                if rec.window != window - 1:
                     raise ValueError(
-                        f"FUTURE_FEEDBACK_ID: {fid!r} comes from window "
+                        f"STALE_FEEDBACK_ID: {fid!r} comes from window "
                         f"{rec.window}; a window-{window} revision may only "
-                        f"cite feedback from windows <= {window - 1}")
+                        f"cite feedback from EXACTLY window {window - 1} — "
+                        f"older, current and future records all fail closed "
+                        f"(CC3 C9 gate)")
                 if v.hypothesis_id not in rec.distinguishes_hypothesis_ids:
                     raise ValueError(
                         f"FEEDBACK_BINDING_MISMATCH: {fid!r} does not "

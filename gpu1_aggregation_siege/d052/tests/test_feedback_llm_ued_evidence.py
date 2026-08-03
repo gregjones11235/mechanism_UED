@@ -4,7 +4,6 @@ from pydantic import ValidationError
 
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.behavior_failure import (
-    FEEDBACK_VIEW_UNBOUND,
     REFERENCE_GAP_HIGH,
     REFERENCE_GAP_LOW,
     REFERENCE_GAP_MEDIUM,
@@ -17,6 +16,10 @@ from d052.feedback_llm_ued.behavior_failure import (
     assemble_board_context,
     extract_window_evidence,
     severity_for,
+)
+from d052.feedback_llm_ued.feedback_view import (
+    NormalFeedbackView,
+    NullFeedbackView,
 )
 from d052.feedback_llm_ued.simulator_feedback_store import (
     MATCH_UNGRADED,
@@ -167,8 +170,11 @@ class TestWindowExtractionAndBoardContext:
             == [e.model_dump() for e in ev0]
 
     def test_assemble_board_context_pools_episodes_and_ci(self):
-        store = self._store()
-        ctx = assemble_board_context(store, window=0,
+        # CC3 C9 gate: assembly consumes the VIEW only (exactly the evidence
+        # window's records — the window-1 record below is not pooled)
+        view = NormalFeedbackView.from_store(self._store(),
+                                             evidence_window=0)
+        ctx = assemble_board_context(view, window=0,
                                      mode=C.MODE_NORMAL_FEEDBACK)
         assert ctx.window == 0
         assert len(ctx.behavior_evidence) == 3
@@ -178,22 +184,45 @@ class TestWindowExtractionAndBoardContext:
         assert ctx.pooled_student_success_rate == expected_sr
         assert ctx.student_success_rate_ci == round(
             ci_halfwidth(expected_sr, 18), 6)
-        assert ctx.feedback_view_label == FEEDBACK_VIEW_UNBOUND
+        assert ctx.feedback_view_label == "normal"
 
     def test_empty_evidence_is_maximally_uncertain(self):
-        ctx = assemble_board_context(SimulatorFeedbackStore(), window=0,
+        ctx = assemble_board_context(NullFeedbackView(), window=0,
                                      mode=C.MODE_STATIC_LLM)
         assert ctx.behavior_evidence == []
         assert ctx.pooled_episodes == 0
         assert ctx.pooled_student_success_rate == 0.0
         assert ctx.student_success_rate_ci == 1.0
+        assert ctx.feedback_view_label == "null"
 
     def test_board_context_rejects_unknown_mode(self):
         with pytest.raises(ValidationError, match="UNKNOWN_MODE"):
             BoardContext(window=0, mode="self_training")
 
     def test_assembly_is_deterministic(self):
-        store = self._store()
-        a = assemble_board_context(store, window=0, mode=C.MODE_NORMAL_FEEDBACK)
-        b = assemble_board_context(store, window=0, mode=C.MODE_NORMAL_FEEDBACK)
+        view = NormalFeedbackView.from_store(self._store(),
+                                             evidence_window=0)
+        a = assemble_board_context(view, window=0,
+                                   mode=C.MODE_NORMAL_FEEDBACK)
+        b = assemble_board_context(view, window=0,
+                                   mode=C.MODE_NORMAL_FEEDBACK)
         assert a.model_dump() == b.model_dump()
+
+    def test_raw_store_is_refused(self):
+        """CC3 C9 gate negative test: BoardContext assembly must NEVER
+        consume the raw SimulatorFeedbackStore (that path leaked evidence
+        into the static context and identity into the shuffled one)."""
+        with pytest.raises(ValueError,
+                           match="BOARD_CONTEXT_STORE_FORBIDDEN"):
+            assemble_board_context(self._store(), window=0,
+                                   mode=C.MODE_NORMAL_FEEDBACK)
+
+    def test_view_scope_must_match_the_evidence_window(self):
+        """CC3 C9 gate negative test: a view scoped to another window is
+        refused — the lag is exactly one window."""
+        view = NormalFeedbackView.from_store(self._store(),
+                                             evidence_window=0)
+        with pytest.raises(ValueError,
+                           match="BOARD_CONTEXT_WINDOW_MISMATCH"):
+            assemble_board_context(view, window=1,
+                                   mode=C.MODE_NORMAL_FEEDBACK)

@@ -84,7 +84,7 @@
       "old_slots": 12
     }
   ],
-  "description": "One complete real PlanRevisionRecord produced by window 1 of a normal_feedback run: the six-role board cited window-(k-1) feedback ids, and the record label is FORCED by its citation union (FEEDBACK_DRIVEN). budget_changes_view is the explicit per-family slot-delta projection. Mock LLM + symbolic probe — ENGINEERING_SCAFFOLD evidence.",
+  "description": "One complete real PlanRevisionRecord produced by window 1 of a normal_feedback run (regenerated after the CC3 C9 gate, 2026-08-04): the six-role board cited EXACTLY window-(k-1) feedback ids (older/current/future records fail closed as STALE_FEEDBACK_ID), and the record label is FORCED by its citation union (FEEDBACK_DRIVEN). budget_changes_view is the explicit per-family slot-delta projection. Mock LLM + symbolic probe: ENGINEERING_SCAFFOLD evidence only.",
   "mode": "normal_feedback",
   "record": {
     "based_on_feedback_ids": [

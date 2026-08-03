@@ -6,21 +6,25 @@
 
 本版对应 C1–C16 架构（六角色 Review Board + 独立 EnvCoder + 双窗口状态机 +
 三模式结构性隔离 + 共享 Soft Copeland + anchor manifest 接缝 + 哈希重算 +
-持久化/跨窗恢复）。旧两角色/条件调用门版本已随 C8 废除。
+持久化/跨窗恢复），并按 CC3 C9 门禁（2026-08-04）收紧两处：BoardContext
+只经 FeedbackView 装配（原始 store 被拒绝）；窗口滞后由 ≤k−1 收紧为
+**恰好 k−1**（旧/当前/未来记录一律 STALE_FEEDBACK_ID）。旧两角色/条件
+调用门版本已随 C8 废除。
 
 ## 1. 双窗口状态机（窗口时序规范）
 
 ```
 窗口 k（k≥0；窗 0 的 k−1 反馈视图为空，board 仍完整跑 6 次）
  ├─ A. EVIDENCE：行为失败证据（窗 k−1 probe 提取）+ FeedbackView(k−1)
- │     （仅 k−1 及更早的已冻结反馈；static=结构性 NullFeedbackView；
- │      shuffled=冻结可复算置换视图）
+ │     （**恰好** k−1 的已冻结反馈，CC3 C9 门禁；BoardContext 只经该视图
+ │      装配，原始 store 被 BOARD_CONTEXT_STORE_FORBIDDEN 拒绝；
+ │      static=结构性 NullFeedbackView；shuffled=冻结可复算置换视图）
  ├─ B. BOARD：完整六角色 Review Board（6 次 LLM 族调用，无条件）：
  │     StudentModeler→BehaviorAuditor→CausalFailureAnalyst→InterventionTutor
  │     →Explorer→Critic/Skeptic；输出：对 k−1 反馈的 verdict（显式引用
  │     feedback_id/hypothesis_id/prediction_signature）+ 新假设（PENDING+
  │     预测签名）+ 受控环境规格（AxisDirective）+ 逐族提案 + global_risk
- ├─ C. REVISION：verdict 应用（仅引用 ≤k−1 的反馈）→ Ledger（哈希链）；
+ ├─ C. REVISION：verdict 应用（仅引用**恰好 k−1** 的反馈）→ Ledger（哈希链）；
  │     Reconciler→plan_k；八准则 + 共享 Soft Copeland→12 dynamic；
  │     +4 anchors（manifest 绑定）→ 执行批（训练接缝 no-op 记账）
  ├─ D. PROBING：EnvCoder（第 7 次 LLM 族调用）→ compile/reset/step 门禁 →
@@ -37,12 +41,14 @@ phase 机常量：`PHASE_EVIDENCE / PHASE_BOARD / PHASE_REVISION / PHASE_PROBING
 
 - feedback_k 产生（phase≥PROBING）后，窗口 k 内任何 `apply_board_verdicts`
   或 `revise_plan` → `SAME_WINDOW_REVISION_FORBIDDEN`；
-- 引用同窗生成的 feedback_id → `FUTURE_FEEDBACK_ID`；
+- 引用的 feedback 窗口 ≠ 当前窗−1（**更旧、同窗、未来**三种情形，CC3 C9
+  门禁）→ `STALE_FEEDBACK_ID`（原 `FUTURE_FEEDBACK_ID` 已被其取代）；
 - 引用不存在于 store 的 feedback_id → `UNKNOWN_FEEDBACK_ID`；
 - 同一 verdict 内重复引用 → `DUPLICATE_FEEDBACK_CITATION`；
 - P0-6 绑定守卫：verdict 只能作用于其 feedback 的 `distinguishes` 假设，
   window/plan/family 必须匹配，每窗每假设至多 1 个 verdict。
-均配负测（`test_feedback_llm_ued_controller.py`）。
+均配负测（`test_feedback_llm_ued_controller.py` +
+`test_feedback_llm_ued_c9_gate.py`）。
 
 ## 2. 六角色与调用预算
 
@@ -63,12 +69,14 @@ phase 机常量：`PHASE_EVIDENCE / PHASE_BOARD / PHASE_REVISION / PHASE_PROBING
 
 | 模式 | 反馈视图 | 隔离方式 |
 |---|---|---|
-| `static_llm` | `NullFeedbackView` | **类型级**不持有 SimulatorFeedbackStore 引用，board 上下文结构性零反馈载荷（非提示词省略） |
-| `normal_feedback` | `NormalFeedbackView` | 只读冻结快照，仅 ≤k−1 |
-| `shuffled_feedback` | `PermutedFeedbackView` | **冻结可复算置换**：仅由 (mode, 窗口, SEED_SCHEDULE_HASH)+记录集派生，无运行时随机；匿名化 id 呈现，board 上下文不可还原真实 candidate↔feedback 配对 |
+| `static_llm` | `NullFeedbackView` | **类型级**不持有 SimulatorFeedbackStore 引用，board 上下文结构性零反馈载荷（证据/SR/CI/候选 id/历史全空，非提示词省略） |
+| `normal_feedback` | `NormalFeedbackView` | 只读冻结快照，**恰好 k−1**（混合窗口记录在构造时即 STALE_FEEDBACK_ID） |
+| `shuffled_feedback` | `PermutedFeedbackView` | **冻结可复算置换**：仅由 (mode, 窗口, SEED_SCHEDULE_HASH)+记录集派生，无运行时随机；匿名化 id 呈现（prompt 层与 BoardContext 证据层一致，candidate id 掩码），board 上下文不可还原真实 candidate↔feedback 配对 |
 
 三模式保持相同六角色/EnvCoder/probe/训练接缝/seed/预算（每窗 7 次调用、
-61440 transitions）；差异只能归因于反馈的使用方式。
+61440 transitions）；差异只能归因于反馈的使用方式。所有模式的 BoardContext
+一律只经 FeedbackView 装配（`assemble_board_context`；传入原始 store →
+`BOARD_CONTEXT_STORE_FORBIDDEN` fail-closed，CC3 C9 门禁）。
 
 ## 4. 探针预算与漏斗（不变量）
 

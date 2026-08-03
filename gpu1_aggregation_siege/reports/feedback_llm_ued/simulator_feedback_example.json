@@ -1,5 +1,5 @@
 {
-  "description": "One complete real SimulatorFeedbackRecord (window 1) of a normal_feedback run. stage1/stage2 metrics come from the deterministic symbolic probe runner (BLOCKED_NO_LOCAL_CRAFTAX); expected_observed_match was graded by the ExpectedObservedComparator. The record is hash-bound (C14 recomputation) and carries Student identity fields (fixed PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 binding; CC4 shared StudentAdapter absent -> REAL_CHECKPOINT_LOADED=false). Only episode-level aggregates — no Reference action guidance.",
+  "description": "One complete real SimulatorFeedbackRecord (window 1) of a normal_feedback run regenerated after the CC3 C9 gate (2026-08-04): BoardContext is built ONLY from the FeedbackView and the double-window lag is EXACTLY one window (window-2's board reads this record, window 3+ sees it as STALE_FEEDBACK_ID). stage1/stage2 metrics come from the deterministic symbolic probe runner (BLOCKED_NO_LOCAL_CRAFTAX); expected_observed_match was graded by the ExpectedObservedComparator. The record is hash-bound (C14 recomputation) and carries Student identity fields (fixed PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 binding; CC4 shared StudentAdapter absent -> REAL_CHECKPOINT_LOADED=false). Only episode-level aggregates - no Reference action guidance.",
   "mode": "normal_feedback",
   "record": {
     "axis_values": {

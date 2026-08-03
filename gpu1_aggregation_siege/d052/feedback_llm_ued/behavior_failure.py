@@ -17,14 +17,18 @@ seam (which does measure episode lengths) attaches a measured rate through
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from pydantic import Field, model_validator
+
+if TYPE_CHECKING:
+    from d052.feedback_llm_ued.feedback_view import FeedbackView
 
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.simulator_feedback_store import (
     MATCH_STATES,
     SimulatorFeedbackRecord,
+    SimulatorFeedbackStore,
 )
 from d052.feedback_llm_ued.uncertainty import (
     Z_95,
@@ -128,7 +132,14 @@ class BehaviorFailureEvidence(CanonicalModel):
 
 
 def extract_window_evidence(store, window: int) -> List[BehaviorFailureEvidence]:
-    """Deterministic evidence list for one window's graded feedback records."""
+    """Deterministic evidence list for one window's graded feedback records.
+
+    Low-level audit/extraction utility ONLY. The CC3 C9 gate forbids the
+    board-context assembly from touching a raw store — ``BoardContext`` is
+    built exclusively from a ``FeedbackView`` (see
+    ``assemble_board_context``); the views implement their own evidence
+    layer (``FeedbackView.behavior_evidence``).
+    """
     records = sorted(store.for_window(window), key=lambda r: r.feedback_id)
     return [BehaviorFailureEvidence.from_record(r) for r in records]
 
@@ -180,20 +191,49 @@ class BoardContext(CanonicalModel):
         return self
 
 
-def assemble_board_context(store, *, window: int, mode: str,
-                           feedback_view_label: str = FEEDBACK_VIEW_UNBOUND,
+def assemble_board_context(view: "FeedbackView", *, window: int, mode: str,
                            retired_families=(),
                            families_in_cooldown=(),
                            z: float = Z_95) -> BoardContext:
-    """Phase-A assembly: window-k evidence + pooled-episode uncertainty.
+    """Phase-A assembly: window-k evidence + pooled-episode uncertainty,
+    built ONLY from the window's FeedbackView (CC3 C9 gate).
+
+    The raw ``SimulatorFeedbackStore`` is explicitly refused: reading it
+    here leaked behavior evidence / success rates / candidate ids into the
+    STATIC board context and an identity side channel into the SHUFFLED
+    one. Everything below derives from what the view presents:
+
+    * evidence layer   — ``view.behavior_evidence()`` (null view: empty;
+      normal view: real ids; permuted view: anonymized ids + masked
+      candidate id, consistent with the prompt payload);
+    * pooled episodes  — stage metrics of ``view.records()`` (aggregate
+      episode counts carry no pairing information);
+    * pooled SR + CI   — over the presented evidence only.
+
+    A view scoped to a real window must be scoped to EXACTLY ``window``
+    (the evidence window); the null view (scope -1) presents nothing, so
+    the static context comes out structurally empty: no evidence, zero
+    pooled episodes/SR, maximal-uncertainty CI, no candidate ids, no
+    history.
 
     ``retired_families`` / ``families_in_cooldown`` carry the controller's
     C10 RETIRE lifecycle state into the board context so the six roles skip
     blocked families by construction (the Reconciler re-checks fail closed).
     """
-    evidence = extract_window_evidence(store, window)
+    if isinstance(view, SimulatorFeedbackStore):
+        raise ValueError(
+            "BOARD_CONTEXT_STORE_FORBIDDEN: assemble_board_context "
+            "consumes ONLY a FeedbackView (CC3 C9 gate) — raw-store "
+            "assembly leaks evidence and identity into the static/"
+            "shuffled boards")
+    if view.window_scope >= 0 and view.window_scope != window:
+        raise ValueError(
+            f"BOARD_CONTEXT_WINDOW_MISMATCH: view scope "
+            f"{view.window_scope} != evidence window {window} — the "
+            f"window-k board reads EXACTLY window k-1 (CC3 C9 gate)")
+    evidence = list(view.behavior_evidence())
     pooled = 0
-    for record in store.for_window(window):
+    for record in view.records():
         for metrics in (record.stage1_metrics, record.stage2_metrics):
             if metrics is not None:
                 pooled += episodes_from_transitions(
@@ -209,7 +249,7 @@ def assemble_board_context(store, *, window: int, mode: str,
                         pooled_episodes=pooled,
                         pooled_student_success_rate=mean_sr,
                         student_success_rate_ci=round(ci, 6),
-                        feedback_view_label=feedback_view_label,
+                        feedback_view_label=view.label,
                         retired_families=sorted(set(retired_families)),
                         families_in_cooldown=sorted(
                             set(families_in_cooldown)))
