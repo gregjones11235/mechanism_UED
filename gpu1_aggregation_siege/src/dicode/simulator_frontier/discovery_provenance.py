@@ -73,6 +73,11 @@ FROZEN_FORMAL_ASSET_REGISTRY_BOUND = False
 DISCOVERY_FORMAL_PROVENANCE_ISOLATED = False
 BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY = "BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY"
 
+# Registry usage classes (fail-closed default = TEST_ONLY).
+REGISTRY_USAGE_TEST_ONLY = "TEST_ONLY"
+REGISTRY_USAGE_PRODUCTION = "PRODUCTION"
+_REGISTRY_USAGES = (REGISTRY_USAGE_TEST_ONLY, REGISTRY_USAGE_PRODUCTION)
+
 
 def registry_status() -> dict:
     return {
@@ -80,9 +85,12 @@ def registry_status() -> dict:
         "status": BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY,
         "contract_ready": DISCOVERY_PROVENANCE_CONTRACT_READY,
         "real_isolation_proven": False,
+        "production_entrypoint_enforced": True,
+        "production_registry_bound": production_registry_bound(),
         "note": ("the frozen forbidden formal asset identity set must be injected "
-                 "by the controller; synthetic registries in tests are fixtures, "
-                 "never the real manifest"),
+                 "by the controller via inject_frozen_formal_asset_registry; "
+                 "synthetic registries are TEST_ONLY and can never enter the "
+                 "production slot"),
     }
 
 
@@ -152,6 +160,13 @@ class DiscoveryProvenanceRegistry:
 
     Must be injected by the caller (ultimately: the controller-signed frozen
     manifest).  A missing/invalid registry fails closed — never guessed.
+
+    ``usage`` is part of the binding contract and of the registry hash:
+    TEST_ONLY (fail-closed default) registries power contract tests only and
+    can never enter the production slot; PRODUCTION registries are accepted
+    ONLY through ``inject_frozen_formal_asset_registry`` and rejected
+    everywhere else (a PRODUCTION-labelled registry that bypasses the
+    injection slot is refused fail closed).
     """
 
     registry_id: str
@@ -160,17 +175,26 @@ class DiscoveryProvenanceRegistry:
     forbidden_formal_identities: tuple[FormalAssetIdentity, ...]
     allowed_discovery_assets: tuple[DiscoveryAssetRecord, ...]
     registry_hash: str
+    usage: str = REGISTRY_USAGE_TEST_ONLY
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "forbidden_formal_identities",
                            tuple(self.forbidden_formal_identities))
         object.__setattr__(self, "allowed_discovery_assets",
                            tuple(self.allowed_discovery_assets))
+        if self.usage not in _REGISTRY_USAGES:
+            raise ProvenanceViolationError(
+                f"DiscoveryProvenanceRegistry.usage must be one of {_REGISTRY_USAGES}, "
+                f"got {self.usage!r}")
 
 
 def registry_hash_of(registry_id: str, controller_signature_ref: str,
                      forbidden: tuple[FormalAssetIdentity, ...],
-                     allowed: tuple[DiscoveryAssetRecord, ...]) -> str:
+                     allowed: tuple[DiscoveryAssetRecord, ...], *,
+                     usage: str = REGISTRY_USAGE_TEST_ONLY) -> str:
+    if usage not in _REGISTRY_USAGES:
+        raise ProvenanceViolationError(
+            f"registry_hash_of usage must be one of {_REGISTRY_USAGES}, got {usage!r}")
     forbidden_rows = sorted(
         (ident.asset_kind.value, ident.canonical_id, ident.sha256) for ident in forbidden)
     allowed_rows = sorted(
@@ -181,6 +205,7 @@ def registry_hash_of(registry_id: str, controller_signature_ref: str,
         "controller_signature_ref": controller_signature_ref,
         "forbidden_formal_identities": forbidden_rows,
         "allowed_discovery_assets": allowed_rows,
+        "usage": usage,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -245,7 +270,7 @@ def validate_discovery_registry(registry: DiscoveryProvenanceRegistry) -> None:
                 f"discovery asset {rec.asset_id!r} embeds a forbidden formal identity")
 
     expected = registry_hash_of(registry.registry_id, registry.controller_signature_ref,
-                                forbidden, allowed)
+                                forbidden, allowed, usage=registry.usage)
     if registry.registry_hash != expected:
         raise ProvenanceViolationError(
             f"discovery registry hash mismatch: got {registry.registry_hash!r}, "
@@ -306,6 +331,11 @@ def validate_capture_provenance(cap: CaptureProvenance, *,
             "none provided -> fail closed, never guess "
             f"({BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY})")
     validate_discovery_registry(registry)
+    if registry.usage == REGISTRY_USAGE_PRODUCTION and registry is not _PRODUCTION_REGISTRY:
+        raise ProvenanceViolationError(
+            "PRODUCTION registries may only be used through "
+            "inject_frozen_formal_asset_registry / validate_capture_provenance_production; "
+            "direct use of an un-injected PRODUCTION registry is rejected fail closed")
     forbidden = registry.forbidden_formal_identities
 
     if cap.provenance is DiscoveryProvenance.SYNTHETIC_FIXTURE:
@@ -404,3 +434,67 @@ def discovery_source_for(provenance: DiscoveryProvenance) -> DataSource:
 def assert_not_formal(source: DataSource | str, consumer: str) -> None:
     """Convenience bridge: reuse FormalDataLeakageGuard for arbitrary consumers."""
     FormalDataLeakageGuard.assert_allowed(DataSource(source), consumer)
+
+
+# ---------------------------------------------------------------------------
+# Production injection slot (controller next-task CC4/E3, 2026-08-04).
+#
+# Production capture paths may ONLY use a registry that the controller
+# injected through ``inject_frozen_formal_asset_registry``.  TEST_ONLY
+# (synthetic) registries remain test-only forever: they cannot enter the
+# production slot, and a PRODUCTION-labelled registry that bypasses the slot
+# is rejected by ``validate_capture_provenance`` itself.  Until a real
+# controller manifest is injected, every production call fails closed with
+# BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY.
+# ---------------------------------------------------------------------------
+
+_PRODUCTION_REGISTRY: DiscoveryProvenanceRegistry | None = None
+
+
+def inject_frozen_formal_asset_registry(registry: DiscoveryProvenanceRegistry) -> None:
+    """Bind the controller-injected frozen formal asset registry (single shot).
+
+    Fail closed unless the registry is fully valid AND explicitly labelled
+    PRODUCTION.  Re-injection without an explicit clear is a violation.
+    """
+    global _PRODUCTION_REGISTRY
+    if _PRODUCTION_REGISTRY is not None:
+        raise ProvenanceViolationError(
+            "a production registry is already injected; explicit "
+            "clear_injected_production_registry required before re-injection (fail closed)")
+    validate_discovery_registry(registry)
+    if registry.usage != REGISTRY_USAGE_PRODUCTION:
+        raise ProvenanceViolationError(
+            f"only usage={REGISTRY_USAGE_PRODUCTION} registries can enter the production "
+            f"slot; synthetic/TEST_ONLY registries are test-only and stay rejected")
+    _PRODUCTION_REGISTRY = registry
+
+
+def clear_injected_production_registry() -> None:
+    """Explicitly unbind the production registry (test teardown / rotation)."""
+    global _PRODUCTION_REGISTRY
+    _PRODUCTION_REGISTRY = None
+
+
+def production_registry_bound() -> bool:
+    """True only when a controller-injected production registry is live."""
+    return _PRODUCTION_REGISTRY is not None
+
+
+def production_registry() -> DiscoveryProvenanceRegistry:
+    """Return the injected production registry or fail closed (never guess)."""
+    if _PRODUCTION_REGISTRY is None:
+        raise ProvenanceViolationError(
+            "production capture path requires the controller-injected frozen formal "
+            f"asset registry; none bound -> {BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY}")
+    return _PRODUCTION_REGISTRY
+
+
+def validate_capture_provenance_production(cap: CaptureProvenance) -> None:
+    """PRODUCTION entry point: registry comes ONLY from the injection slot.
+
+    Never accepts synthetic fixtures, never falls back to a caller-supplied
+    registry, and stays blocked until the controller manifest is injected.
+    """
+    validate_capture_provenance(cap, registry=production_registry(),
+                                allow_synthetic_fixture=False)

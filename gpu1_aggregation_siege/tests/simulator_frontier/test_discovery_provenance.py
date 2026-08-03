@@ -22,6 +22,8 @@ from dicode.simulator_frontier.discovery_provenance import (
     DISCOVERY_FORMAL_PROVENANCE_ISOLATED,
     DISCOVERY_PROVENANCE_CONTRACT_READY,
     FROZEN_FORMAL_ASSET_REGISTRY_BOUND,
+    REGISTRY_USAGE_PRODUCTION,
+    REGISTRY_USAGE_TEST_ONLY,
     AssetKind,
     CaptureProvenance,
     DiscoveryAssetRecord,
@@ -29,10 +31,14 @@ from dicode.simulator_frontier.discovery_provenance import (
     DiscoveryProvenanceRegistry,
     FormalAssetIdentity,
     assert_not_formal,
+    clear_injected_production_registry,
     discovery_source_for,
+    inject_frozen_formal_asset_registry,
+    production_registry_bound,
     registry_hash_of,
     registry_status,
     validate_capture_provenance,
+    validate_capture_provenance_production,
     validate_discovery_registry,
 )
 from dicode.simulator_frontier.errors import ProvenanceViolationError
@@ -71,13 +77,15 @@ def _registry(**overrides) -> DiscoveryProvenanceRegistry:
     registry_id = overrides.pop("registry_id", "SYNTHETIC_DISCOVERY_REGISTRY")
     signature = overrides.pop("controller_signature_ref",
                               "SYNTHETIC_CONTROLLER_SIGNATURE_REF")
+    usage = overrides.pop("usage", REGISTRY_USAGE_TEST_ONLY)
     registry_hash = overrides.pop("registry_hash", None) or registry_hash_of(
-        registry_id, signature, forbidden, allowed)
+        registry_id, signature, forbidden, allowed, usage=usage)
     return DiscoveryProvenanceRegistry(
         registry_id=registry_id, controller_signature_ref=signature,
         frozen=overrides.pop("frozen", True),
         forbidden_formal_identities=forbidden,
-        allowed_discovery_assets=allowed, registry_hash=registry_hash)
+        allowed_discovery_assets=allowed, registry_hash=registry_hash,
+        usage=usage)
 
 
 def _cap(**overrides) -> CaptureProvenance:
@@ -332,3 +340,121 @@ class TestSourceMapping:
             assert_not_formal(DataSource.FORMAL_FULL, consumer="FrontierArchive")
         with pytest.raises(ProvenanceViolationError):
             assert_not_formal("FORMAL_FRONT", consumer="curriculum")
+
+
+class TestProductionPath:
+    """CC4/E3: production capture paths require the controller-injected
+    frozen formal asset registry; synthetic registries stay test-only.
+
+    Every registry used here is still a SYNTHETIC fixture — these tests
+    prove the mechanical enforcement contract only (real isolation stays
+    BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY until the controller
+    injects the real manifest).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_production_slot(self):
+        clear_injected_production_registry()
+        yield
+        clear_injected_production_registry()
+
+    def test_production_path_without_injection_fails_closed(self):
+        assert production_registry_bound() is False
+        with pytest.raises(ProvenanceViolationError) as excinfo:
+            validate_capture_provenance_production(_cap())
+        assert BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY in str(excinfo.value)
+
+    def test_test_only_registry_cannot_enter_production_slot(self):
+        with pytest.raises(ProvenanceViolationError):
+            inject_frozen_formal_asset_registry(_registry())  # usage=TEST_ONLY
+        assert production_registry_bound() is False
+        # production entry point stays blocked after the rejected injection
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance_production(_cap())
+
+    def test_invalid_production_registry_cannot_enter_slot(self):
+        # hash computed correctly for PRODUCTION usage, but frozen=False:
+        # injection validates BEFORE binding and must fail closed
+        bad = _registry(usage=REGISTRY_USAGE_PRODUCTION, frozen=False)
+        with pytest.raises(ProvenanceViolationError):
+            inject_frozen_formal_asset_registry(bad)
+        assert production_registry_bound() is False
+
+    def test_valid_production_injection_passes_legal_capture(self):
+        inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+        assert production_registry_bound() is True
+        validate_capture_provenance_production(
+            _cap(bank_refs=("training_capture_bank",),
+                 world_set_id="discovery_worlds_v1",
+                 notes={"purpose": "frontier collection"}))  # must not raise
+
+    def test_valid_production_injection_rejects_bypass_captures(self):
+        inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+        # neutral-alias bank ref (the core PASS_WITH_BLOCKER bypass)
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance_production(
+                _cap(bank_refs=("eval_holdout_bank",)))
+        # neutral canonical id from the forbidden identity set
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance_production(
+                _cap(bank_refs=("evaluation_holdout_alpha",)))
+        # forbidden formal SHA embedded in notes
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance_production(
+                _cap(notes={"seed_source": FORMAL_WORLD_SHA}))
+        # unregistered world set hash
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance_production(_cap(world_set_hash="b" * 64))
+
+    def test_production_path_never_accepts_synthetic_fixture(self):
+        inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance_production(
+                _cap(provenance=DiscoveryProvenance.SYNTHETIC_FIXTURE))
+
+    def test_double_injection_is_rejected(self):
+        inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+        with pytest.raises(ProvenanceViolationError):
+            inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+
+    def test_uninjected_production_registry_direct_use_is_rejected(self):
+        # a PRODUCTION-labelled registry that bypasses the injection slot
+        # cannot be handed to validate_capture_provenance directly
+        rogue = _registry(usage=REGISTRY_USAGE_PRODUCTION)
+        with pytest.raises(ProvenanceViolationError):
+            validate_capture_provenance(_cap(), registry=rogue)
+        assert production_registry_bound() is False
+
+    def test_registry_hash_is_usage_sensitive(self):
+        forbidden, allowed = _forbidden(), _allowed()
+        test_hash = registry_hash_of("RID", "SIG", forbidden, allowed)
+        prod_hash = registry_hash_of("RID", "SIG", forbidden, allowed,
+                                     usage=REGISTRY_USAGE_PRODUCTION)
+        assert test_hash != prod_hash
+        # a PRODUCTION registry stamped with its TEST_ONLY hash fails closed
+        forged = DiscoveryProvenanceRegistry(
+            registry_id="RID", controller_signature_ref="SIG", frozen=True,
+            forbidden_formal_identities=forbidden,
+            allowed_discovery_assets=allowed, registry_hash=test_hash,
+            usage=REGISTRY_USAGE_PRODUCTION)
+        with pytest.raises(ProvenanceViolationError):
+            validate_discovery_registry(forged)
+        with pytest.raises(ProvenanceViolationError):
+            inject_frozen_formal_asset_registry(forged)
+        assert production_registry_bound() is False
+
+    def test_registry_status_reflects_production_slot(self):
+        status = registry_status()
+        assert status["production_entrypoint_enforced"] is True
+        assert status["production_registry_bound"] is False
+        inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+        assert registry_status()["production_registry_bound"] is True
+
+    def test_clear_restores_blocked_state(self):
+        inject_frozen_formal_asset_registry(_registry(usage=REGISTRY_USAGE_PRODUCTION))
+        assert production_registry_bound() is True
+        clear_injected_production_registry()
+        assert production_registry_bound() is False
+        with pytest.raises(ProvenanceViolationError) as excinfo:
+            validate_capture_provenance_production(_cap())
+        assert BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY in str(excinfo.value)
