@@ -86,6 +86,16 @@ unchanged (12 dynamic + 4 anchors) in all three modes, and
 anchor probes, and this round's placeholder anchors are reported as exactly
 that.
 
+C15 persistence: ``persistence.snapshot_controller`` captures the COMPLETE
+frozen state of this machine (phase map, mode, next window via the completed
+WindowRecords, ledger/store dumps, revisions, plans, retirement registry,
+human-reopen authorization, anchor binding, sequence, runner + backend usage
+counters, board/envelope metadata) under one recomputable ``snapshot_hash``;
+``restore_controller`` rebuilds a controller whose ``run()`` CONTINUES the
+same logical run — a freeze-point snapshot -> restore -> continue summary is
+byte-identical to the uninterrupted run's summary, and any tamper with the
+snapshot fails closed (HASH_CHAIN_BROKEN).
+
 Honesty posture re-asserted at construction: every real-world authorization
 flag must be False this round; the loop runs on the deterministic mock LLM
 backend + the deterministic symbolic probe runner and says so in every
@@ -301,6 +311,15 @@ class FeedbackUEDController:
         self._phases: Dict[int, str] = {}
         self._sequence = 0
         self._summary: Optional[RunSummary] = None
+        #: C15 persistence: seeding happens exactly once per logical run
+        #: (restore re-injects the seeded ledger instead of re-seeding), and
+        #: the completed WindowRecords survive across snapshot/restore so a
+        #: resumed run() continues — and summarizes — the SAME logical run.
+        self._seeded = False
+        self._completed_records: List[WindowRecord] = []
+        #: C15: board audit metadata surviving restore (window -> board_hash);
+        #: the live BoardOutput objects only exist within their own window
+        self.board_hashes: Dict[int, str] = {}
         #: C10 RETIRE lifecycle registry: family -> window it was retired at.
         #: Sole keeper is this controller; the board reads blocked lists via
         #: the board context, the Reconciler re-checks fail closed.
@@ -344,18 +363,25 @@ class FeedbackUEDController:
 
     # ------------------------------------------------------------------ loop
     def run(self, max_windows: int = C.MAX_WINDOWS) -> RunSummary:
-        self._seed()
-        records: List[WindowRecord] = []
+        if not self._seeded:
+            self._seed()
+            self._seeded = True
+        records = self._completed_records
         stopped_window: Optional[int] = None
-        for window in range(max_windows):
-            record = self._run_window(window)
-            records.append(record)
-            if record.request_control:
-                # C11: the board requested human control — the loop HALTS
-                # right after the escalated board. No execution batch, no
-                # probe, nothing else is applied autonomously.
-                stopped_window = window
-                break
+        if records and records[-1].request_control:
+            # C11+C15: a restored run whose last record already stopped the
+            # loop stays stopped — nothing else is applied autonomously.
+            stopped_window = records[-1].window
+        else:
+            for window in range(len(records), max_windows):
+                record = self._run_window(window)
+                records.append(record)
+                if record.request_control:
+                    # C11: the board requested human control — the loop HALTS
+                    # right after the escalated board. No execution batch, no
+                    # probe, nothing else is applied autonomously.
+                    stopped_window = window
+                    break
         self._summary = self._build_summary(records,
                                             stopped_window=stopped_window)
         assert_no_real_llm_usage(self.backend.usage)
@@ -385,6 +411,7 @@ class FeedbackUEDController:
         self._sequence += C.BOARD_CALLS_PER_WINDOW
         self.envelopes.extend(board.envelopes)
         self.boards[window] = board
+        self.board_hashes[window] = board.board_hash
 
         # -- C11 REQUEST_CONTROL blocking: the board asked a human to take
         #    over. Halt IMMEDIATELY after phase B: no verdict application,
