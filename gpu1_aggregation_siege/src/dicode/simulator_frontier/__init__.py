@@ -51,6 +51,43 @@ from .student_binding import (
     bind_capture_entry,
     check_bound_entry_memory_request,
 )
+from .combined_restore_contract import (
+    CROSS_CHECKS,
+    REQUIRED_COMPONENTS,
+    CombinedRestoreRequest,
+    CombinedRestoreVerdict,
+    ComponentResult,
+    ComponentStatus,
+    evaluate_verdict,
+    run_combined_restore,
+)
+from .invocation_gate import (
+    LLM_ROLE_SEQUENCE,
+    FakeLLMClient,
+    InvocationContractError,
+    InvocationDecision,
+    InvocationReason,
+    SelectionResult,
+    assert_never_exactly_one_call,
+    build_aggregate_evidence,
+    decide_invocation,
+    deterministic_select,
+    evidence_hash_of,
+    run_two_llm_gate,
+)
+from .anchor_manifest import (
+    ANCHOR_SLOT_COUNT,
+    BLOCKED_SHARED_ANCHOR_MANIFEST,
+    DYNAMIC_DISTRIBUTION_COUNT,
+    SHARED_ANCHOR_MANIFEST_BOUND,
+    AnchorDefinition,
+    AnchorManifest,
+    RetentionContract,
+    bind_anchor_manifest,
+    manifest_hash_of,
+    unbound_status,
+    validate_anchor_manifest,
+)
 
 __all__ = [
     "AchievementGoal", "CompositeGoal", "GateProgressGoal", "GoalEvaluation",
@@ -66,4 +103,17 @@ __all__ = [
     "REQUIRED_ENTRY_BINDING_FIELDS", "UNBOUND_STUDENT", "assert_entry_bound",
     "assert_outcome_bound", "bind_branch_outcome", "bind_capture_entry",
     "check_bound_entry_memory_request",
+    "CROSS_CHECKS", "REQUIRED_COMPONENTS", "CombinedRestoreRequest",
+    "CombinedRestoreVerdict", "ComponentResult", "ComponentStatus",
+    "evaluate_verdict", "run_combined_restore",
+    "LLM_ROLE_SEQUENCE", "FakeLLMClient", "InvocationContractError",
+    "InvocationDecision", "InvocationReason", "SelectionResult",
+    "assert_never_exactly_one_call", "build_aggregate_evidence",
+    "decide_invocation", "deterministic_select", "evidence_hash_of",
+    "run_two_llm_gate",
+    "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
+    "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
+    "AnchorDefinition", "AnchorManifest", "RetentionContract",
+    "bind_anchor_manifest", "manifest_hash_of", "unbound_status",
+    "validate_anchor_manifest",
 ]
