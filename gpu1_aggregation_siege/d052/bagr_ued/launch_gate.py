@@ -36,6 +36,9 @@ from d052.bagr_ued.hashing import canonical_sha256
 
 GATE_VERSION = "bagr_ued.launch_gate.v1"
 
+#: CC3 fix3 (§1): strong-typed, UNBYPASSABLE launch CONTEXT version
+CONTEXT_VERSION = "bagr_ued.launch_context.v1"
+
 
 # ---------------------------------------------------------------------------
 # current-state hash helpers — the SINGLE source of truth shared by the gate
@@ -54,9 +57,14 @@ def compute_selected_descriptor_hash(selected_descriptors) -> str:
 
 
 def compute_guard_report_hash(board_out) -> str:
+    #: CC3 fix3 (§10): the guard report hash additionally binds the SHARED
+    #: symbolic clip batch hash the board recorded ("" for boards without
+    #: one — e.g. legacy test fixtures — keeping gate/commit agreement).
     return canonical_sha256(dict(
         supervision_guard_status=board_out.supervision_guard_status,
-        leakage_guard_status=board_out.leakage_guard_status))
+        leakage_guard_status=board_out.leakage_guard_status,
+        symbolic_clip_batch_hash=getattr(board_out,
+                                         "symbolic_clip_batch_hash", "")))
 
 
 def compute_legality_report_hash(legal_ids: Sequence[str],
@@ -65,6 +73,48 @@ def compute_legality_report_hash(legal_ids: Sequence[str],
         legal_ids=sorted(legal_ids),
         rejected=sorted(rejected,
                         key=lambda r: r.get("descriptor_id", ""))))
+
+
+# CC3 fix3 (§2): the two hash bindings added to the four above, so the FULL
+# six-way binding (batch / descriptor / legality / guard / critic / director
+# authorization) is carried by the gate and the context alike.
+
+def compute_critic_report_hash(board_out) -> str:
+    """Hash over the Critic/Skeptic envelope content (hard rejections +
+    penalties + required controls). A board that ran no critic hashes the
+    explicit absence — the binding is never silently skipped."""
+    for e in board_out.envelopes:
+        if e.role == C.ROLE_CRITIC_SKEPTIC:
+            return canonical_sha256(dict(
+                role=e.role,
+                prompt_version=getattr(e, "prompt_version", ""),
+                parsed_json=e.parsed_json))
+    return canonical_sha256(dict(role=C.ROLE_CRITIC_SKEPTIC,
+                                 parsed_json={}, critic_envelope="ABSENT"))
+
+
+def compute_director_authorization_hash(
+        director_training_authorized: bool,
+        authorization_record: dict | None = None) -> str:
+    """Hash binding the director authorization DECISION itself (value +
+    declared source). The default source is the package constant — a real
+    authorization must supply an explicit record."""
+    record = dict(authorization_record) if authorization_record else dict(
+        source=C.DIRECTOR_AUTHORIZATION_SOURCE_DEFAULT)
+    record["director_training_authorized"] = bool(
+        director_training_authorized)
+    return canonical_sha256(record)
+
+
+def compute_clip_batch_hash(symbolic_payloads) -> str:
+    """Hash over the SHARED symbolic clip payload batch (their content
+    hashes, sorted). Empty batch -> hash of the explicit empty list."""
+    hashes = []
+    for p in symbolic_payloads:
+        dump = p.model_dump() if hasattr(p, "model_dump") and \
+            not isinstance(p, dict) else p
+        hashes.append(str(dump.get("clip_payload_sha256", "")))
+    return canonical_sha256(sorted(hashes))
 
 
 @dataclass(frozen=True)
@@ -84,6 +134,12 @@ class LaunchGate:
     selected_descriptor_hash: str
     guard_report_hash: str
     legality_report_hash: str
+    #: CC3 fix3 (§2): the critic envelope content hash and the director
+    #: authorization decision hash — completing the six-way binding. Defaults
+    #: keep legacy hand-construction compiling; evaluate_launch_gate ALWAYS
+    #: fills them, and archive.commit re-verifies them via the LaunchContext.
+    critic_report_hash: str = ""
+    director_authorization_hash: str = ""
     reasons: Tuple[str, ...] = field(default_factory=tuple)
     gate_version: str = GATE_VERSION
 
@@ -116,7 +172,9 @@ def evaluate_launch_gate(budget_plan, batch_plan, selected_descriptors,
                          rejected_descriptors, board_out, *,
                          director_training_authorized: bool =
                              C.TRAINING_AUTHORIZED,
-                         legal_ids=None) -> LaunchGate:
+                         legal_ids=None,
+                         director_authorization_record: dict | None = None
+                         ) -> LaunchGate:
     """Evaluate the structural batch gate + director authorization.
 
     ``selected_descriptors`` = the legal descriptors whose ids are the budget
@@ -125,6 +183,10 @@ def evaluate_launch_gate(budget_plan, batch_plan, selected_descriptors,
     DO NOT block a structurally-satisfied LEGAL batch — only selected-side
     violations block (selected descriptor illegal, selector referencing a
     rejected candidate, fewer than 12 legal candidates, ...).
+
+    CC3 fix3 (§2): the gate now carries the FULL six-way hash binding — the
+    four fix2 hashes plus the critic envelope hash and the director
+    authorization decision hash.
     """
     reasons: List[str] = []
     selected_ids = list(budget_plan.ued_slots)
@@ -201,6 +263,15 @@ def evaluate_launch_gate(budget_plan, batch_plan, selected_descriptors,
             f"{board_out.supervision_guard_status} leakage="
             f"{board_out.leakage_guard_status}")
 
+    # -- CC3 fix3 (§2): the critic envelope must EXIST to be hash-bound ------
+    critic_report_hash = compute_critic_report_hash(board_out)
+    if not any(e.role == C.ROLE_CRITIC_SKEPTIC for e in board_out.envelopes):
+        reasons.append(
+            "missing_critic_envelope: the critic_report_hash cannot bind a "
+            "board that never ran the Critic/Skeptic")
+    director_authorization_hash = compute_director_authorization_hash(
+        director_training_authorized, director_authorization_record)
+
     # -- required provenance / hashes present ---------------------------------
     batch_plan_hash = compute_batch_plan_hash(batch_plan)
     selected_descriptor_hash = compute_selected_descriptor_hash(
@@ -211,7 +282,10 @@ def evaluate_launch_gate(budget_plan, batch_plan, selected_descriptors,
     for name, h in (("batch_plan_hash", batch_plan_hash),
                     ("selected_descriptor_hash", selected_descriptor_hash),
                     ("guard_report_hash", guard_report_hash),
-                    ("legality_report_hash", legality_report_hash)):
+                    ("legality_report_hash", legality_report_hash),
+                    ("critic_report_hash", critic_report_hash),
+                    ("director_authorization_hash",
+                     director_authorization_hash)):
         if not (isinstance(h, str) and len(h) == 64):
             reasons.append(f"missing_required_provenance_hash: {name}")
 
@@ -225,5 +299,143 @@ def evaluate_launch_gate(budget_plan, batch_plan, selected_descriptors,
         selected_descriptor_hash=selected_descriptor_hash,
         guard_report_hash=guard_report_hash,
         legality_report_hash=legality_report_hash,
+        critic_report_hash=critic_report_hash,
+        director_authorization_hash=director_authorization_hash,
         reasons=tuple(reasons),
         gate_version=GATE_VERSION)
+
+
+# ---------------------------------------------------------------------------
+# CC3 fix3 (§1): the strong-typed, UNOMITTABLE LaunchContext
+# ---------------------------------------------------------------------------
+
+#: the six structural/authorization conditions the context binds. The final
+#: authorization is their conjunction — computed, never supplied.
+_CONTEXT_CONDITIONS = (
+    "structural_batch_ready",
+    "review_certificate_valid",
+    "provenance_valid",
+    "guards_passed",
+    "simulator_probe_complete",
+    "selection_complete",
+    "director_training_authorized",
+)
+
+
+@dataclass(frozen=True)
+class LaunchContext:
+    """The full-window launch decision state (CC3 fix3 §1).
+
+    Where the LaunchGate binds the BATCH structure, the LaunchContext binds
+    the whole review-window state around it: the review certificate, the
+    provenance chain, the guard verdicts, the simulator probe completion and
+    the selection completion — plus the director authorization. It is a
+    frozen dataclass with NO default construction of the final flag:
+
+        final_training_launch_authorized = AND of ALL seven conditions
+
+    is enforced in __post_init__, so no caller can ever hand out a context
+    whose final flag disagrees with its conditions. ``archive.commit`` and
+    ``archive.refresh(dry_run=False)`` REQUIRE it alongside the LaunchGate —
+    there is no gate-only commit path (CC3 fix3 §3).
+    """
+
+    structural_batch_ready: bool
+    review_certificate_valid: bool
+    provenance_valid: bool
+    guards_passed: bool
+    simulator_probe_complete: bool
+    selection_complete: bool
+    director_training_authorized: bool
+    final_training_launch_authorized: bool
+    #: the FULL six-way hash binding (identical to the gate's)
+    batch_plan_hash: str
+    selected_descriptor_hash: str
+    legality_report_hash: str
+    guard_report_hash: str
+    critic_report_hash: str
+    director_authorization_hash: str
+    #: hash of the SHARED symbolic clip payload batch the board and the
+    #: certificate both consumed (CC3 fix3 §10)
+    clip_batch_hash: str
+    reasons: Tuple[str, ...] = field(default_factory=tuple)
+    context_version: str = CONTEXT_VERSION
+
+    def __post_init__(self) -> None:
+        expected = all(getattr(self, name) for name in _CONTEXT_CONDITIONS)
+        if self.final_training_launch_authorized != expected:
+            raise ValueError(
+                "LAUNCH_CONTEXT_CONTRACT_VIOLATED: final_training_launch_"
+                "authorized must equal the conjunction of "
+                f"{list(_CONTEXT_CONDITIONS)}")
+        if self.context_version != CONTEXT_VERSION:
+            raise ValueError(
+                f"LAUNCH_CONTEXT_VERSION_MISMATCH: {self.context_version!r} "
+                f"!= {CONTEXT_VERSION!r}")
+        for name in ("batch_plan_hash", "selected_descriptor_hash",
+                     "legality_report_hash", "guard_report_hash",
+                     "critic_report_hash", "director_authorization_hash",
+                     "clip_batch_hash"):
+            value = getattr(self, name)
+            if not (isinstance(value, str) and len(value) == 64):
+                raise ValueError(
+                    f"LAUNCH_CONTEXT_HASH_INVALID: {name} must be a 64-char "
+                    f"sha256 hex digest, got {value!r}")
+
+
+def evaluate_launch_context(gate: LaunchGate, board_out, *,
+                            review_certificate_valid: bool = False,
+                            provenance_valid: bool = False,
+                            simulator_probe_complete: bool = False,
+                            selection_complete: bool = False,
+                            symbolic_payloads=(),
+                            extra_reasons: Sequence[str] = ()) -> LaunchContext:
+    """Assemble the strong-typed LaunchContext from the gate + window state.
+
+    Every extra condition DEFAULTS FALSE (fail-closed): a dry run / any path
+    that has not positively established the review certificate, provenance,
+    simulator probes and selection cannot reach final authorization. The
+    six hashes are carried over from the gate — the gate and the context are
+    ONE binding, never two divergent records.
+    """
+    if not isinstance(gate, LaunchGate):
+        raise AssertionError(
+            "LAUNCH_CONTEXT_REQUIRES_GATE: evaluate_launch_context needs a "
+            f"strong-typed LaunchGate, got {type(gate).__name__!r}")
+    guards_passed = (getattr(board_out, "supervision_guard_status", "") ==
+                     "PASS" and
+                     getattr(board_out, "leakage_guard_status", "") == "PASS")
+    reasons: List[str] = list(gate.reasons)
+    if not review_certificate_valid:
+        reasons.append("review_certificate_not_established")
+    if not provenance_valid:
+        reasons.append("provenance_chain_not_established")
+    if not guards_passed:
+        reasons.append("guards_not_passed")
+    if not simulator_probe_complete:
+        reasons.append("simulator_probe_incomplete")
+    if not selection_complete:
+        reasons.append("selection_incomplete")
+    reasons.extend(extra_reasons)
+    return LaunchContext(
+        structural_batch_ready=gate.structural_batch_ready,
+        review_certificate_valid=bool(review_certificate_valid),
+        provenance_valid=bool(provenance_valid),
+        guards_passed=bool(guards_passed),
+        simulator_probe_complete=bool(simulator_probe_complete),
+        selection_complete=bool(selection_complete),
+        director_training_authorized=gate.director_training_authorized,
+        final_training_launch_authorized=False if not (
+            gate.structural_batch_ready and review_certificate_valid and
+            provenance_valid and guards_passed and simulator_probe_complete
+            and selection_complete and gate.director_training_authorized
+        ) else True,
+        batch_plan_hash=gate.batch_plan_hash,
+        selected_descriptor_hash=gate.selected_descriptor_hash,
+        legality_report_hash=gate.legality_report_hash,
+        guard_report_hash=gate.guard_report_hash,
+        critic_report_hash=gate.critic_report_hash,
+        director_authorization_hash=gate.director_authorization_hash,
+        clip_batch_hash=compute_clip_batch_hash(symbolic_payloads),
+        reasons=tuple(reasons),
+        context_version=CONTEXT_VERSION)

@@ -35,6 +35,12 @@ REAL_TASKPARAMS_ADAPTER = "BLOCKED_EXTERNAL_DEPENDENCY"
 REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE = "PENDING"
 REAL_CANONICAL_CRITIC_SELECTION_POLICY = "PENDING"
 
+#: CC3 fix3 (§2): the DEFAULT declared source of the director authorization
+#: decision bound into the LaunchGate/LaunchContext hash. A real authorization
+#: must supply an explicit record (source + authorizer); this package-level
+#: default always carries TRAINING_AUTHORIZED=false.
+DIRECTOR_AUTHORIZATION_SOURCE_DEFAULT = "bagr_ued.package_constant.v1"
+
 # ---------------------------------------------------------------------------
 # Global-not-Tier3-only scope (task section 13).
 # ---------------------------------------------------------------------------

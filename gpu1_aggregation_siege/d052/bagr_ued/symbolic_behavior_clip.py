@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from pydantic import Field, model_validator
@@ -38,7 +39,7 @@ from d052.bagr_ued.formal_evaluation_leakage_guard import (
     FormalEvaluationLeakageGuard)
 from d052.bagr_ued.hashing import canonical_sha256
 from d052.bagr_ued.trajectory_supervision_guard import TrajectorySupervisionGuard
-from d052.schemas.common import CanonicalModel
+from d052.schemas.common import CanonicalModel, is_sha256_hex
 
 CLIP_SCHEMA_VERSION = "bagr_ued.symbolic_clip.v1"
 
@@ -53,6 +54,14 @@ _MOCK_PROVENANCE_LABELS = (
     "rollout_runner_sha256",
     "environment_lock_sha256",
 )
+
+#: the canonical provenance field set — every value MUST be a LOWER-CASE
+#: full-64 sha256 hex digest (CC3 fix3 §8; enforced at the schema layer AND
+#: re-checked over serialized dicts).
+PROVENANCE_FIELDS = tuple(_MOCK_PROVENANCE_LABELS)
+
+#: the ONLY legal safety_status vocabulary (CC3 fix3 §6)
+SAFETY_STATUS_VOCABULARY = frozenset({"safe", "unsafe", "unknown"})
 
 
 def mock_clip_provenance() -> Dict[str, str]:
@@ -74,10 +83,55 @@ class SymbolicBehaviorClipError(Exception):
     CLIP_PAYLOAD_HASH_MISMATCH = "CLIP_PAYLOAD_HASH_MISMATCH"
     CLIP_PROVENANCE_MISMATCH = "CLIP_PROVENANCE_MISMATCH"
     CLIP_GUARD_VIOLATION = "CLIP_GUARD_VIOLATION"
+    #: CC3 fix3 codes
+    CLIP_PAYLOAD_HASH_MISSING = "CLIP_PAYLOAD_HASH_MISSING"
+    CLIP_PROVENANCE_FORMAT_INVALID = "CLIP_PROVENANCE_FORMAT_INVALID"
+    CLIP_SAFETY_STATUS_INVALID = "CLIP_SAFETY_STATUS_INVALID"
+    CLIP_TERMINAL_FABRICATED = "CLIP_TERMINAL_FABRICATED"
+    CLIP_PER_EPISODE_LIMIT_EXCEEDED = "CLIP_PER_EPISODE_LIMIT_EXCEEDED"
+    CLIP_PER_WINDOW_LIMIT_EXCEEDED = "CLIP_PER_WINDOW_LIMIT_EXCEEDED"
+    CLIP_EXPECTED_PROVENANCE_NOT_BOUND = "CLIP_EXPECTED_PROVENANCE_NOT_BOUND"
 
     def __init__(self, code: str, message: str) -> None:
         self.code = code
         super().__init__(f"[{code}] {message}")
+
+
+@dataclass(frozen=True)
+class ClipProvenanceIdentity:
+    """IDENTITY_BOUND (CC3 fix3 §9): the ONLY admissible carrier of EXPECTED
+    clip provenance.
+
+    A plain dict of expected values is refused by validate_symbolic_clip_payload
+    — expected provenance must be constructed through this bound type, which
+    format-verifies EVERY value as a lower-case full-64 sha256 hex digest at
+    construction. This closes the hole where a caller could "expect" a
+    malformed / truncated / upper-case identity and silently compare strings.
+    """
+
+    student_checkpoint_sha256: str
+    environment_descriptor_hash: str
+    taskparams_hash: str
+    generator_provenance_hash: str
+    rollout_runner_sha256: str
+    environment_lock_sha256: str
+
+    def __post_init__(self) -> None:
+        for label in PROVENANCE_FIELDS:
+            value = getattr(self, label)
+            if not is_sha256_hex(value):
+                raise ValueError(
+                    f"CLIP_IDENTITY_NOT_BOUND: {label} must be a lower-case "
+                    f"full-64 sha256 hex digest, got {value!r}")
+
+    def as_dict(self) -> Dict[str, str]:
+        return {label: getattr(self, label) for label in PROVENANCE_FIELDS}
+
+
+def identity_bound(provenance: Dict[str, str]) -> ClipProvenanceIdentity:
+    """Construct the IDENTITY_BOUND expected-provenance carrier from a dict."""
+    return ClipProvenanceIdentity(**{label: provenance[label]
+                                     for label in PROVENANCE_FIELDS})
 
 
 # raw-exposure detectors run over the SERIALIZED payload (task §10/§14):
@@ -98,14 +152,25 @@ class SymbolicBehaviorStep(CanonicalModel):
     #: semantic CLASSES only — never a raw action integer
     action_semantic_classes: List[str] = Field(default_factory=list)
     hostile_distance_band: str = "unknown"
-    #: safe / unsafe / unknown (symbolic summary, not coordinates)
+    #: safe / unsafe / unknown — the ONLY legal vocabulary (CC3 fix3 §6);
+    #: a missing safety signal is "unknown", NEVER a defaulted "unsafe"
     safety_status: str = "unknown"
     health_delta_band: str = "unknown"
     resource_delta_bands: Dict[str, str] = Field(default_factory=dict)
     progress_delta_band: str = "unknown"
     event_semantics: List[str] = Field(default_factory=list)
-    #: none / death / timeout / success / abandoned — set on a terminal step
+    #: none / death / timeout / success / abandoned — set ONLY on the true
+    #: terminal step of the episode; a truncated clip never carries it
     terminal_category: str = "none"
+
+    @model_validator(mode="after")
+    def _safety_vocabulary(self) -> "SymbolicBehaviorStep":
+        if self.safety_status not in SAFETY_STATUS_VOCABULARY:
+            raise SymbolicBehaviorClipError(
+                SymbolicBehaviorClipError.CLIP_SAFETY_STATUS_INVALID,
+                f"step {self.step_offset}: safety_status {self.safety_status!r}"
+                f" not in {sorted(SAFETY_STATUS_VOCABULARY)}")
+        return self
 
 
 class SymbolicBehaviorClipPayload(CanonicalModel):
@@ -132,6 +197,17 @@ class SymbolicBehaviorClipPayload(CanonicalModel):
 
     @model_validator(mode="after")
     def _limits_and_hash(self) -> "SymbolicBehaviorClipPayload":
+        # CC3 fix3 §8: every provenance value is a LOWER-CASE full-64 sha256
+        # hex digest — upper-case / truncated / non-hex identities are refused
+        # at the schema layer (defense in depth: the validator below re-checks
+        # serialized dicts that bypass model construction).
+        for label in PROVENANCE_FIELDS:
+            value = getattr(self, label)
+            if not is_sha256_hex(value):
+                raise SymbolicBehaviorClipError(
+                    SymbolicBehaviorClipError.CLIP_PROVENANCE_FORMAT_INVALID,
+                    f"clip {self.clip_id}: provenance {label} must be a "
+                    f"lower-case full-64 sha256 hex digest, got {value!r}")
         if self.source not in C.ALLOWED_EVIDENCE_SOURCES:
             raise SymbolicBehaviorClipError(
                 SymbolicBehaviorClipError.CLIP_SOURCE_NOT_ADMISSIBLE,
@@ -233,16 +309,32 @@ def build_symbolic_clip_payload(bundle, clip, *,
         progress = summary.get("progress_ordinal")
 
         events = list(s.env_events)[:C.MAX_EVENT_SEMANTICS_PER_STEP]
-        # terminal step of the clip window carries the episode outcome
-        is_terminal_step = (s.step_index == last_episode_step) or \
-            (truncated and s is span_steps[-1])
+        # CC3 fix3 §5: the terminal category rides ONLY on the episode's TRUE
+        # last step. A truncated clip window that happens to end mid-episode
+        # must NOT fake a terminal (no fabricated death / timeout / success
+        # timing) — truncation is recorded via truncation_applied, never via
+        # a synthesized terminal step.
+        is_terminal_step = (s.step_index == last_episode_step)
+        if truncated and is_terminal_step:
+            # structurally unreachable (truncation implies the true last step
+            # is outside the window) — keep the invariant explicit
+            raise SymbolicBehaviorClipError(
+                SymbolicBehaviorClipError.CLIP_TERMINAL_FABRICATED,
+                f"clip {clip.clip_id}: truncated clip may not reach the true "
+                f"terminal step {last_episode_step}")
+        if summary.get("env_confirmed_safe") is True:
+            safety = "safe"
+        elif summary.get("env_confirmed_safe") is False or \
+                summary.get("env_confirmed_unsafe") is True:
+            safety = "unsafe"
+        else:
+            safety = "unknown"      # CC3 fix3 §6: no evidence -> unknown
         steps.append(SymbolicBehaviorStep(
             step_offset=s.step_index - clip.span.start_step,
             action_semantic_classes=list(s.action_semantic_classes),
             hostile_distance_band=str(
                 summary.get("hostile_distance_band", "unknown")),
-            safety_status=("safe" if summary.get("env_confirmed_safe")
-                           else "unsafe"),
+            safety_status=safety,
             health_delta_band=_delta_band(health, prev_health, _HEALTH_ORDER),
             resource_delta_bands={"resource": _delta_band(
                 resource, prev_resource, _HEALTH_ORDER)},
@@ -297,9 +389,17 @@ def _raw_exposure_findings(dump: dict) -> List[dict]:
     return findings
 
 
+def dict_clip_payload_hash(dump: dict) -> str:
+    """CC3 fix3 §4: content hash recomputed DIRECTLY over a serialized dict
+    payload (minus the hash field). Dicts bypass model construction — the
+    validator MUST recompute their SHA instead of trusting a carried value."""
+    body = {k: v for k, v in dump.items() if k != "clip_payload_sha256"}
+    return canonical_sha256(body)
+
+
 def validate_symbolic_clip_payload(payload, *,
-                                   expected_provenance: Dict[str, str] | None
-                                       = None,
+                                   expected_provenance:
+                                       ClipProvenanceIdentity | None = None,
                                    leakage_guard:
                                        FormalEvaluationLeakageGuard | None =
                                        None,
@@ -308,9 +408,29 @@ def validate_symbolic_clip_payload(payload, *,
                                        None) -> dict:
     """Fail-closed validation of a symbolic clip payload (builder output or
     tampered dump). Returns a report dict {passed, findings} — raises
-    SymbolicBehaviorClipError via ``assert_valid``."""
+    SymbolicBehaviorClipError via ``assert_valid``.
+
+    CC3 fix3 contracts:
+      * §4 — a DICT payload has its payload SHA RECOMPUTED from the dict
+        content (a missing/empty recorded hash fails closed);
+      * §8 — every provenance field is re-verified as a lower-case full-64
+        sha256 hex digest over the SERIALIZED payload;
+      * §9 — expected_provenance must be an IDENTITY_BOUND
+        ClipProvenanceIdentity; a plain dict fails closed.
+    """
     findings: List[dict] = []
     dump = payload.model_dump() if hasattr(payload, "model_dump") else payload
+
+    # 0. provenance FORMAT re-check over the serialized payload (catches
+    #    dicts that never passed the model validators)
+    for label in PROVENANCE_FIELDS:
+        value = dump.get(label)
+        if not is_sha256_hex(value):
+            findings.append(dict(
+                code=SymbolicBehaviorClipError.CLIP_PROVENANCE_FORMAT_INVALID,
+                path=f"$.{label}",
+                detail=f"provenance {label} must be a lower-case full-64 "
+                       f"sha256 hex digest, got {value!r}"))
 
     # 1. raw-exposure scan over the serialized payload
     findings.extend(_raw_exposure_findings(dump))
@@ -352,27 +472,63 @@ def validate_symbolic_clip_payload(payload, *,
                    f"MAX_SERIALIZED_PAYLOAD_BYTES="
                    f"{C.MAX_SERIALIZED_PAYLOAD_BYTES}"))
 
-    # 4. payload hash validation (tamper detection)
+    # 4. payload hash validation (tamper detection) — model and dict paths
+    #    BOTH get a recomputed SHA (CC3 fix3 §4: a dict never gets a free
+    #    pass on its carried hash; a missing/empty hash fails closed)
     if hasattr(payload, "clip_payload_sha256") and \
-            payload.clip_payload_sha256:
-        recomputed = clip_payload_hash(payload)
-        if recomputed != payload.clip_payload_sha256:
-            findings.append(dict(
-                code=SymbolicBehaviorClipError.CLIP_PAYLOAD_HASH_MISMATCH,
-                path="$.clip_payload_sha256",
-                detail="recorded payload hash does not match payload content "
-                       "(tampering or stale hash)"))
-
-    # 5. provenance validation (expected values, when supplied)
-    if expected_provenance is not None:
-        for key, expected in expected_provenance.items():
-            actual = dump.get(key)
-            if actual != expected:
+            not isinstance(payload, dict):
+        if payload.clip_payload_sha256:
+            recomputed = clip_payload_hash(payload)
+            if recomputed != payload.clip_payload_sha256:
                 findings.append(dict(
-                    code=SymbolicBehaviorClipError.CLIP_PROVENANCE_MISMATCH,
-                    path=f"$.{key}",
-                    detail=f"provenance {key} does not match the expected "
-                           f"recorded value"))
+                    code=SymbolicBehaviorClipError.CLIP_PAYLOAD_HASH_MISMATCH,
+                    path="$.clip_payload_sha256",
+                    detail="recorded payload hash does not match payload "
+                           "content (tampering or stale hash)"))
+        else:
+            findings.append(dict(
+                code=SymbolicBehaviorClipError.CLIP_PAYLOAD_HASH_MISSING,
+                path="$.clip_payload_sha256",
+                detail="model payload carries no payload hash"))
+    else:
+        recorded = dump.get("clip_payload_sha256")
+        if not (isinstance(recorded, str) and len(recorded) == 64):
+            findings.append(dict(
+                code=SymbolicBehaviorClipError.CLIP_PAYLOAD_HASH_MISSING,
+                path="$.clip_payload_sha256",
+                detail="dict symbolic clip carries no recorded payload hash — "
+                       "the SHA must be recomputed and bound, never omitted"))
+        else:
+            recomputed = dict_clip_payload_hash(dump)
+            if recomputed != recorded:
+                findings.append(dict(
+                    code=SymbolicBehaviorClipError.CLIP_PAYLOAD_HASH_MISMATCH,
+                    path="$.clip_payload_sha256",
+                    detail="dict clip payload hash recomputed from content "
+                           "does not match the recorded hash (tampering or "
+                           "stale hash)"))
+
+    # 5. provenance validation (expected values, when supplied) — CC3 fix3
+    #    §9: expected provenance must be IDENTITY_BOUND; a plain dict is
+    #    refused fail-closed (never silently compared as strings)
+    if expected_provenance is not None:
+        if not isinstance(expected_provenance, ClipProvenanceIdentity):
+            findings.append(dict(
+                code=SymbolicBehaviorClipError.
+                    CLIP_EXPECTED_PROVENANCE_NOT_BOUND,
+                path="$",
+                detail="expected_provenance must be an IDENTITY_BOUND "
+                       "ClipProvenanceIdentity (construct via "
+                       "identity_bound(...)); a plain dict is refused"))
+        else:
+            for key, expected in expected_provenance.as_dict().items():
+                actual = dump.get(key)
+                if actual != expected:
+                    findings.append(dict(
+                        code=SymbolicBehaviorClipError.CLIP_PROVENANCE_MISMATCH,
+                        path=f"$.{key}",
+                        detail=f"provenance {key} does not match the expected"
+                               f" IDENTITY_BOUND value"))
     return dict(guard="SymbolicBehaviorClipValidation",
                 passed=not findings,
                 findings=findings)

@@ -30,6 +30,7 @@ from d052.bagr_ued.event_extractor import AnomalyCandidate
 from d052.bagr_ued.behavior_clip_selector import BehaviorClip
 from d052.bagr_ued.formal_evaluation_leakage_guard import (
     FormalEvaluationLeakageGuard)
+from d052.bagr_ued.launch_gate import compute_clip_batch_hash
 from d052.bagr_ued.review_contracts import ReviewBoardOutput, RoleEnvelope
 from d052.bagr_ued.symbolic_behavior_clip import (
     assert_valid_symbolic_clip_payload,
@@ -61,7 +62,9 @@ _CONTEXT_KEY = {
 def build_base_context(bundle: TrajectoryEvidenceBundle,
                        anomalies: List[AnomalyCandidate],
                        clips: List[BehaviorClip],
-                       detector_manifest: List[dict]) -> dict:
+                       detector_manifest: List[dict],
+                       symbolic_payload_dumps: List[dict] | None = None
+                       ) -> dict:
     """The shared evidence context every role receives (symbolic only).
 
     CC3 fix2 (§12): the six roles receive BOUNDED, de-identified, per-step
@@ -71,16 +74,36 @@ def build_base_context(bundle: TrajectoryEvidenceBundle,
     payload hash + step/byte limits) BEFORE it enters the context. A clip
     that fails validation fails the whole board closed. Formal-evaluation
     trajectories remain forbidden at the bundle source level.
+
+    CC3 fix3 (§10): when ``symbolic_payload_dumps`` is supplied, the board
+    consumes that EXACT pre-built, pre-validated batch (the same batch the
+    controller certificate binds) — the board does NOT rebuild its own copy.
+    Only the legacy path (no batch supplied) builds and validates in place.
     """
     leakage = FormalEvaluationLeakageGuard()
     supervision = TrajectorySupervisionGuard()
-    symbolic_clips = []
-    for c in clips:
-        payload = build_symbolic_clip_payload(bundle, c)
-        # fail-closed per clip: guards + raw exposure + hash + limits
-        assert_valid_symbolic_clip_payload(
-            payload, leakage_guard=leakage, supervision_guard=supervision)
-        symbolic_clips.append(payload.model_dump())
+    if symbolic_payload_dumps is not None:
+        if len(symbolic_payload_dumps) != len(clips):
+            raise ValueError(
+                "SYMBOLIC_CLIP_BATCH_MISMATCH: the injected payload batch "
+                f"has {len(symbolic_payload_dumps)} payloads for "
+                f"{len(clips)} clips — board and controller must share ONE "
+                "identical batch (CC3 fix3 §10)")
+        symbolic_clips = list(symbolic_payload_dumps)
+        # re-validate the injected batch fail-closed — trust nothing
+        for dump in symbolic_clips:
+            assert_valid_symbolic_clip_payload(
+                dump, leakage_guard=leakage,
+                supervision_guard=supervision)
+    else:
+        symbolic_clips = []
+        for c in clips:
+            payload = build_symbolic_clip_payload(bundle, c)
+            # fail-closed per clip: guards + raw exposure + hash + limits
+            assert_valid_symbolic_clip_payload(
+                payload, leakage_guard=leakage,
+                supervision_guard=supervision)
+            symbolic_clips.append(payload.model_dump())
     return dict(
         bundle_id=bundle.bundle_id,
         source=bundle.source.value,
@@ -115,8 +138,20 @@ class ReviewBoard:
     def run(self, bundle: TrajectoryEvidenceBundle,
             anomalies: List[AnomalyCandidate],
             clips: List[BehaviorClip],
-            detector_manifest: List[dict]) -> ReviewBoardOutput:
-        context = build_base_context(bundle, anomalies, clips, detector_manifest)
+            detector_manifest: List[dict],
+            symbolic_payloads: List | None = None) -> ReviewBoardOutput:
+        """CC3 fix3 (§10): when ``symbolic_payloads`` (model dumps of the
+        controller-built clip payloads) is supplied, the board consumes that
+        SHARED batch and binds its hash into the output — the certificate and
+        the board then provably reviewed one identical batch."""
+        dumps = None
+        if symbolic_payloads is not None:
+            dumps = [p.model_dump() if hasattr(p, "model_dump")
+                     and not isinstance(p, dict) else p
+                     for p in symbolic_payloads]
+        context = build_base_context(bundle, anomalies, clips,
+                                     detector_manifest,
+                                     symbolic_payload_dumps=dumps)
 
         # gate 1: no formal-evaluation provenance reaches any role
         leak = self.leakage_guard.assert_clean(context, label="board_context")
@@ -155,6 +190,9 @@ class ReviewBoard:
             supervision_guard_status="PASS",
             leakage_guard_status="PASS" if leak["passed"] else "FAIL",
             real_llm_calls=int(self.backend.real_calls),
+            # CC3 fix3 (§10): bind the SHARED clip batch hash the roles saw
+            symbolic_clip_batch_hash=compute_clip_batch_hash(
+                context["symbolic_behavior_clips"]),
         )
 
     def parsed(self, board: ReviewBoardOutput, role: str) -> dict:

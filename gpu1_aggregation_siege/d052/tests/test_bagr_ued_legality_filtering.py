@@ -36,14 +36,36 @@ from d052.bagr_ued.archive import ProposalArchive
 from d052.bagr_ued.batch_planner import BatchPlanner
 from d052.bagr_ued.budget_allocator import BudgetAllocator, BudgetPlan
 from d052.bagr_ued.environment_proposer import TaskParamsDescriptor
+from d052.bagr_ued.hashing import canonical_sha256
 from d052.bagr_ued.launch_gate import (
+    LaunchContext,
     compute_selected_descriptor_hash,
+    evaluate_launch_context,
     evaluate_launch_gate,
 )
 from d052.bagr_ued.legality_gate import LegalityGate
 from d052.bagr_ued.soft_copeland import EnvironmentScoreBundle, soft_copeland_rank
 
 BATCH = BatchPlanner().plan(8)
+
+
+def _all_true_context(gate):
+    """SYNTHETIC fully-authorized context (CC3 fix3 §1/§3) — unit tests only;
+    the package TRAINING_AUTHORIZED backstop still refuses every commit."""
+    return LaunchContext(
+        structural_batch_ready=True, review_certificate_valid=True,
+        provenance_valid=True, guards_passed=True,
+        simulator_probe_complete=True, selection_complete=True,
+        director_training_authorized=True,
+        final_training_launch_authorized=True,
+        batch_plan_hash=gate.batch_plan_hash,
+        selected_descriptor_hash=gate.selected_descriptor_hash,
+        legality_report_hash=gate.legality_report_hash,
+        guard_report_hash=gate.guard_report_hash,
+        critic_report_hash=gate.critic_report_hash,
+        director_authorization_hash=gate.director_authorization_hash,
+        clip_batch_hash=canonical_sha256([]),
+        reasons=())
 
 
 def _board():
@@ -192,9 +214,12 @@ def test_case_d_rejected_candidate_in_commit_set_rejected_by_hash_binding():
     commit_set = legal + [illegal]
     assert compute_selected_descriptor_hash(commit_set) != \
         gate.selected_descriptor_hash
+    # CC3 fix3 (§3): the commit rides with a synthetic all-true context so
+    # the flow reaches the selected-descriptor hash binding, which rejects
     with pytest.raises(AssertionError,
                        match="ARCHIVE_COMMIT_REJECTED.*selected_descriptor"):
         ProposalArchive().commit(commit_set, {}, launch_gate=gate,
+                                 launch_context=_all_true_context(gate),
                                  batch_plan=BATCH, board_out=_board(),
                                  legal_ids=legal_ids,
                                  rejected_descriptors=rejected)
@@ -269,11 +294,16 @@ def test_case_j_critic_penalty_never_substitutes_legality_gate():
                                 legal_ids=legal_ids)
     assert gate.structural_batch_ready is False
     assert gate.final_training_launch_authorized is False
+    # CC3 fix3 (§1/§3): the context assembled from this gate inherits
+    # structural=false, so the commit fails closed at the structural check
     with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_REJECTED"):
-        ProposalArchive().commit(legal, {}, launch_gate=gate,
-                                 batch_plan=BATCH, board_out=_board(),
-                                 legal_ids=legal_ids,
-                                 rejected_descriptors=rejected)
+        ProposalArchive().commit(
+            legal, {}, launch_gate=gate,
+            launch_context=evaluate_launch_context(gate, _board(),
+                                                   symbolic_payloads=()),
+            batch_plan=BATCH, board_out=_board(),
+            legal_ids=legal_ids,
+            rejected_descriptors=rejected)
 
 
 # ---------------------------------------------------------------------------
