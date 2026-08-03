@@ -1,0 +1,276 @@
+"""Constants + hard authorization state for the feedback-adaptive LLM-UED loop.
+
+Authorization for THIS round: every real-world capability flag is a
+compile-time constant the controller re-asserts at startup; the package
+REFUSES to run as though any of them were True. The closed loop therefore
+executes against a deterministic symbolic probe runner + a deterministic mock
+LLM backend, and nothing here silently pretends otherwise.
+
+    TRAINING_AUTHORIZED        = false   (no optimizer step this round)
+    FORMAL_EVALUATION_AUTHORIZED = false (no formal FRONT/BACK/FULL run)
+    REAL_LLM_CALLS_AUTHORIZED    = false (mock backend only; real_calls == 0)
+    REAL_SIMULATOR_PROBE_AUTHORIZED = false (no real Craftax rollout locally)
+
+The last flag encodes the honest local state: there is no JAX/Craftax in this
+environment, so probes run on a DETERMINISTIC SYMBOLIC runner. A real-Craftax
+adapter seam exists (``simulator_probe.CraftaxPreflightProbeRunner``) but is
+BLOCKED until run on the training host; flipping the flag is a director
+decision outside this package and is refused here regardless.
+"""
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# Authorization state (THIS ROUND). NEVER True inside this package.
+# ---------------------------------------------------------------------------
+TRAINING_AUTHORIZED = False
+FORMAL_EVALUATION_AUTHORIZED = False
+REAL_LLM_CALLS_AUTHORIZED = False
+
+#: No real Craftax rollout is available locally (no JAX/Craftax interpreter).
+#: Probes run on the deterministic symbolic runner; the real adapter is a seam.
+REAL_SIMULATOR_PROBE_AUTHORIZED = False
+REAL_SIMULATOR_PROBE_STATUS = "BLOCKED_NO_LOCAL_CRAFTAX"
+
+# ---------------------------------------------------------------------------
+# Loop + role identity
+# ---------------------------------------------------------------------------
+FEEDBACK_LOOP_VERSION = "feedback_llm_ued.loop.v1"
+MOCK_BACKEND_ID = "mock.feedback_llm_ued.deterministic.v1"
+MOCK_MODEL_ID = "deterministic-rule-synth.v1"
+ROLE_PROMPT_VERSION = "feedback_llm_ued.roles.v1"
+RECONCILE_RULE_VERSION = "feedback_llm_ued.reconcile.v1"
+
+ROLE_FEEDBACK_DIAGNOSTICIAN = "feedback_diagnostician"
+ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER = "adaptive_environment_designer"
+ROLE_ADVERSARIAL_REVIEWER = "adversarial_reviewer"      # conditional third role
+
+FEEDBACK_ROLES_DEFAULT = (
+    ROLE_FEEDBACK_DIAGNOSTICIAN,
+    ROLE_ADAPTIVE_ENVIRONMENT_DESIGNER,
+)
+
+# ---------------------------------------------------------------------------
+# Hypothesis lifecycle (task: ledger statuses). A hypothesis is a claim about
+# the Student's behavior that an environment family is meant to test.
+# ---------------------------------------------------------------------------
+HYPOTHESIS_SUPPORTED = "SUPPORTED"
+HYPOTHESIS_REFUTED = "REFUTED"
+HYPOTHESIS_INCONCLUSIVE = "INCONCLUSIVE"
+HYPOTHESIS_STALE = "STALE"
+HYPOTHESIS_PENDING = "PENDING"              # not yet probed this line
+HYPOTHESIS_STATUSES = frozenset({
+    HYPOTHESIS_SUPPORTED, HYPOTHESIS_REFUTED, HYPOTHESIS_INCONCLUSIVE,
+    HYPOTHESIS_STALE, HYPOTHESIS_PENDING,
+})
+#: statuses that count as a terminal verdict for retention/retirement metrics
+HYPOTHESIS_TERMINAL_VERDICTS = frozenset({HYPOTHESIS_SUPPORTED,
+                                          HYPOTHESIS_REFUTED})
+
+# ---------------------------------------------------------------------------
+# Designer decision vocabulary (task §3). Environment-level actions ONLY —
+# never an action/reward/policy knob.
+# ---------------------------------------------------------------------------
+DECISION_RETAIN = "RETAIN"
+DECISION_MUTATE = "MUTATE"
+DECISION_RETIRE = "RETIRE"
+DECISION_EXPAND_BUDGET = "EXPAND_BUDGET"
+DECISION_REDUCE_BUDGET = "REDUCE_BUDGET"
+DECISION_REQUEST_CONTROL = "REQUEST_CONTROL"
+DESIGNER_DECISIONS = frozenset({
+    DECISION_RETAIN, DECISION_MUTATE, DECISION_RETIRE,
+    DECISION_EXPAND_BUDGET, DECISION_REDUCE_BUDGET, DECISION_REQUEST_CONTROL,
+})
+
+#: a plan modification with no cited feedback id may ONLY be one of these
+EXPLORATION_DECISIONS = frozenset({DECISION_MUTATE, DECISION_EXPAND_BUDGET})
+EXPLORATION_LABEL = "EXPLORATION"
+
+# ---------------------------------------------------------------------------
+# Three comparison modes (task §5)
+# ---------------------------------------------------------------------------
+MODE_STATIC_LLM = "static_llm"
+MODE_NORMAL_FEEDBACK = "normal_feedback"
+MODE_SHUFFLED_FEEDBACK = "shuffled_feedback"
+FEEDBACK_MODES = frozenset({MODE_STATIC_LLM, MODE_NORMAL_FEEDBACK,
+                            MODE_SHUFFLED_FEEDBACK})
+
+# ---------------------------------------------------------------------------
+# Staged probe funnel (task §4)
+# ---------------------------------------------------------------------------
+RAW_CANDIDATES = 64                    # Stage-0 generated candidates
+STAGE1_KEEP = 24                       # fast probe keeps ~24
+STAGE2_KEEP = 12                       # full probe keeps ~12 dynamic
+DYNAMIC_UED_SLOTS = 12
+GLOBAL_ANCHOR_SLOTS = 4
+FINAL_BATCH = DYNAMIC_UED_SLOTS + GLOBAL_ANCHOR_SLOTS      # 12 + 4 = 16
+
+STAGE1_STUDENT_EPISODES = 2
+STAGE1_REFERENCE_EPISODES = 1
+STAGE2_STUDENT_EPISODES_MIN = 4
+STAGE2_STUDENT_EPISODES_MAX = 8
+STAGE2_REFERENCE_EPISODES_MIN = 2
+STAGE2_REFERENCE_EPISODES_MAX = 4
+
+ROLLOUT_LENGTH = 128                   # transitions per episode (symbolic)
+
+#: preflight routing thresholds (selectively reused from skill_preflight.route)
+PREFLIGHT_LEARNABLE_LOW = 0.05
+PREFLIGHT_TOO_EASY = 0.85
+
+# ---------------------------------------------------------------------------
+# FeedbackInvocationGate — the eight MUST-invoke conditions (task §5 / prior
+# 精简版 spec). If NONE fire, the previous diagnosis + plan are reused and the
+# generator continues in the neighborhood of existing interventions.
+# ---------------------------------------------------------------------------
+GATE_FIRST_WINDOW = "first_window"
+GATE_NEW_DETECTOR_TYPE = "new_detector_type"
+GATE_CORE_BEHAVIOR_RATE_SHIFT = "core_behavior_rate_change_ge_25pct"
+GATE_FRONT_STALLED_TWO_WINDOWS = "front_stalled_two_windows"
+GATE_GLOBAL_RETENTION_REGRESSION = "global_retention_crossed_regression"
+GATE_PREVIOUS_PLAN_EXHAUSTED = "previous_plan_exhausted"
+GATE_INSUFFICIENT_VALID_CANDIDATES = "insufficient_valid_candidates"
+GATE_CACHED_PLAN_AGE = "cached_plan_age_reached_4_windows"
+GATE_MUST_INVOKE_CONDITIONS = (
+    GATE_FIRST_WINDOW,
+    GATE_NEW_DETECTOR_TYPE,
+    GATE_CORE_BEHAVIOR_RATE_SHIFT,
+    GATE_FRONT_STALLED_TWO_WINDOWS,
+    GATE_GLOBAL_RETENTION_REGRESSION,
+    GATE_PREVIOUS_PLAN_EXHAUSTED,
+    GATE_INSUFFICIENT_VALID_CANDIDATES,
+    GATE_CACHED_PLAN_AGE,
+)
+
+# ---------------------------------------------------------------------------
+# Conditional third reviewer (AdversarialReviewer) risk triggers (task §3).
+# ---------------------------------------------------------------------------
+RISK_LOW_CONFIDENCE = "overall_confidence_below_0p55"
+RISK_CONFLICTING_INTERVENTIONS = "two_hypotheses_opposite_interventions"
+RISK_GLOBAL_RISK_HIGH = "global_risk_high"
+RISK_NO_IMPROVEMENT_TWO_WINDOWS = "no_improvement_two_windows"
+RISK_PROBE_OPPOSITE_DIRECTION = "probe_opposite_to_prediction"
+RISK_HIGH_REJECT_RATE = "reject_rate_above_30pct"
+RISK_BEFORE_FORMAL_CANDIDATE_RUN = "preparing_formal_candidate_run"
+REVIEWER_RISK_TRIGGERS = (
+    RISK_LOW_CONFIDENCE,
+    RISK_CONFLICTING_INTERVENTIONS,
+    RISK_GLOBAL_RISK_HIGH,
+    RISK_NO_IMPROVEMENT_TWO_WINDOWS,
+    RISK_PROBE_OPPOSITE_DIRECTION,
+    RISK_HIGH_REJECT_RATE,
+    RISK_BEFORE_FORMAL_CANDIDATE_RUN,
+)
+REVIEWER_CONFIDENCE_FLOOR = 0.55
+REVIEWER_REJECT_RATE_FLOOR = 0.30
+
+# ---------------------------------------------------------------------------
+# Expected-vs-observed comparison
+# ---------------------------------------------------------------------------
+MATCH_DIRECTION_AGREE = "agree"
+MATCH_DIRECTION_OPPOSITE = "opposite"
+MATCH_DIRECTION_NEUTRAL = "neutral"
+#: relative gap above which a predicted-vs-observed metric counts as a mismatch
+COMPARATOR_RELATIVE_TOLERANCE = 0.25
+
+# ---------------------------------------------------------------------------
+# Formal evaluation isolation (task §6). The formal data domains may NEVER
+# enter the ledger, the LLM roles, the generator, the selector, or the
+# optimizer. Training + candidate probes use a SEPARATE source enum.
+# ---------------------------------------------------------------------------
+SOURCE_GENERATIVE_TRAINING_ENV = "GENERATIVE_TRAINING_ENV"
+SOURCE_CANDIDATE_PROBE = "CANDIDATE_PROBE"          # independent probe source
+SOURCE_SYNTHETIC_TEST_TRACE = "SYNTHETIC_TEST_TRACE"
+SOURCE_FORMAL_FRONT = "FORMAL_FRONT"
+SOURCE_FORMAL_BACK = "FORMAL_BACK"
+SOURCE_FORMAL_FULL = "FORMAL_FULL"
+
+ALLOWED_LOOP_SOURCES = frozenset({
+    SOURCE_GENERATIVE_TRAINING_ENV,
+    SOURCE_CANDIDATE_PROBE,
+    SOURCE_SYNTHETIC_TEST_TRACE,
+})
+FORMAL_FORBIDDEN_SOURCES = frozenset({
+    SOURCE_FORMAL_FRONT, SOURCE_FORMAL_BACK, SOURCE_FORMAL_FULL,
+})
+
+# ---------------------------------------------------------------------------
+# Reference-output restriction (task §4). Reference probe results may expose
+# ONLY coarse episode-level statistics to the Student / LLM. These forbidden
+# carriers must never cross into Student supervision or an LLM prompt.
+# ---------------------------------------------------------------------------
+REFERENCE_ALLOWED_FIELDS = frozenset({
+    "episode_success_rate", "mean_progress", "achievement_count",
+    "behavior_activation_rate", "mean_episode_length",
+})
+REFERENCE_FORBIDDEN_CARRIERS = frozenset({
+    "action_sequence", "trajectory", "waypoints", "hidden_state", "logits",
+    "expert_action_sequence", "policy_logits", "state_trajectory",
+})
+
+# ---------------------------------------------------------------------------
+# Environment-level TaskParams vocabulary (method-specific; deliberately
+# environment-induction knobs ONLY — no action/reward/policy knob).
+# ---------------------------------------------------------------------------
+MUTATION_AXES = (
+    "threat_distance_grading",
+    "safe_rest_area_availability",
+    "rest_need_pressure",
+    "threat_count",
+    "view_occlusion",
+    "resource_pressure",
+    "day_night_rest_need",
+    "visibility",
+    "multi_threat_interference",
+    "long_term_memory_requirement",
+    "global_task_conflict",
+)
+
+ENVIRONMENT_FAMILIES = (
+    "threat_distance_family",
+    "resource_pressure_family",
+    "day_night_rest_need_family",
+    "visibility_family",
+    "multi_threat_interference_family",
+    "long_term_memory_family",
+    "global_task_conflict_family",
+)
+
+GLOBAL_CANONICAL_ANCHOR_IDS = (
+    "GLOBAL_ANCHOR_EARLY_SURVIVAL",
+    "GLOBAL_ANCHOR_RESOURCE_CHAIN",
+    "GLOBAL_ANCHOR_THREAT_ENGAGEMENT",
+    "GLOBAL_ANCHOR_LONG_HORIZON_PLANNING",
+)
+
+#: candidate descriptor field whitelist (legality gate; mock-namespaced —
+#: the real TaskParams adapter is BLOCKED_EXTERNAL_DEPENDENCY and its real
+#: field names MUST NOT be guessed).
+MOCK_TASKPARAMS_FIELD_WHITELIST = frozenset({
+    "protocol_version",
+    "candidate_id",
+    "candidate_hash",
+    "environment_family",
+    "axis_values",
+    "held_constant_axes",
+    "variant_id",
+    "variant_kind",
+    "mutation_axes",
+    "distinguishes_hypothesis_ids",
+    "provenance",
+    "real_adapter_status",
+    "legality_hint",
+})
+
+# ---------------------------------------------------------------------------
+# Output caps (精简版 spec, carried forward): keep LLM outputs bounded.
+# ---------------------------------------------------------------------------
+MAX_DIAGNOSED_HYPOTHESES_PER_WINDOW = 8
+MAX_WEAKNESSES = 3
+MAX_HYPOTHESES = 6
+MAX_INTERVENTIONS = 8
+MAX_EXPLORATION_PROPOSALS = 2
+MAX_AXES_PER_INTERVENTION = 3
+
+#: default LLM calls per TRIGGERED window (1 diagnostician + 1 designer)
+DEFAULT_LLM_CALLS_PER_TRIGGERED_WINDOW = 2
+MAX_WINDOWS = 8                        # bounded loop horizon for dry runs
