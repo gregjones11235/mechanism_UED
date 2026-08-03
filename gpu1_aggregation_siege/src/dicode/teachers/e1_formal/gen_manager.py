@@ -17,7 +17,14 @@ GenManager`` surface consumed by ``setup.py`` / ``run_dicode.py`` /
 * ``.observe_session_feedback(session_idx, metrics)`` re-verifies
   provenance BEFORE storing anything;
 * ``.build_training_batch(...)`` / ``.build_training_layout(...)``;
+* ``.consume_worker_results(worker_results) -> ([], compiled_count)``
+  (C11: E1 consumes its own worker dicts itself; promotion happens
+  only through E1 selection, never the legacy compare-and-swap);
 * ``.anchor_task_ids``.
+
+Worker dicts carry the E1 keys (``task_id`` / ``code``) AND the legacy
+aliases (``generated_task_id`` / ``code_string``) spelling the same
+values, so every legacy consumer reads consistent data (C11).
 
 Degradation chain (plan D5 — every step honest, nothing fabricated)::
 
@@ -301,6 +308,9 @@ class E1FormalGenManager:
         self._cycles_run = 0
         self._pending_feedback: List[Dict[str, Any]] = []
         self._real_selection_completed = False
+        # compiled E1 artifacts recorded by consume_worker_results (C11);
+        # promotion happens ONLY via E1 selection, never legacy activation
+        self._artifact_registry: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # init-time manifest verification (fail-closed, greppable)
@@ -484,8 +494,13 @@ class E1FormalGenManager:
             workers.append(
                 {
                     "task_id": spec.spec_id,
+                    # legacy key aliases (C11): every legacy consumer
+                    # reads generated_task_id / code_string; both spell
+                    # the SAME values as task_id / code
+                    "generated_task_id": spec.spec_id,
                     "compiled": ok,
                     "code": artifact.env_code,
+                    "code_string": artifact.env_code,
                     "reasoning": "",
                     "e1_status": {
                         "reuse": False,
@@ -522,6 +537,75 @@ class E1FormalGenManager:
         """
         del config, num_tasks
         return []
+
+    # ------------------------------------------------------------------
+    # worker-dict consumption (C11 duck hook for run_dicode)
+    # ------------------------------------------------------------------
+    @property
+    def artifact_registry(self) -> Dict[str, Dict[str, Any]]:
+        """Read-only copy of the compiled-artifact registry (audit)."""
+        return {
+            task_id: dict(record)
+            for task_id, record in self._artifact_registry.items()
+        }
+
+    def consume_worker_results(
+        self, worker_results: Any
+    ) -> Tuple[List[str], int]:
+        """Duck hook replacing ``run_dicode._process_worker_results``.
+
+        E1 worker dicts are consumed by the teacher itself: every
+        compiled artifact is recorded in the E1 artifact registry and
+        is NEVER promoted through the legacy compare-and-swap
+        activation path — promotion happens ONLY through E1 selection
+        (``build_training_batch`` with selector-promoted ids). The
+        returned ``new_task_ids`` is therefore ALWAYS empty (legacy
+        activation bypassed), and the second element is the honest
+        compiled count. Fail-closed on any malformed dict.
+        """
+        ctx = f"e1_formal.consume_worker_results.s{self.session_idx}"
+        if not isinstance(worker_results, (list, tuple)):
+            raise GenManagerError(
+                GEN_MANAGER_BAD_TYPE,
+                f"{ctx}: worker_results must be a list, got "
+                f"{type(worker_results).__name__}",
+            )
+        compiled_count = 0
+        for i, res in enumerate(worker_results):
+            res_ctx = f"{ctx}[{i}]"
+            res = _require_mapping(res, res_ctx)
+            task_id = res.get("task_id")
+            if not isinstance(task_id, str) or not task_id.strip():
+                raise GenManagerError(
+                    GEN_MANAGER_MISSING_FIELD,
+                    f"{res_ctx}: worker dict needs a non-empty task_id",
+                )
+            compiled = res.get("compiled")
+            if not isinstance(compiled, bool):
+                raise GenManagerError(
+                    GEN_MANAGER_BAD_TYPE,
+                    f"{res_ctx}: compiled must be bool, got {compiled!r}",
+                )
+            if not compiled:
+                continue
+            code = res.get("code")
+            if not isinstance(code, str) or not code.strip():
+                raise GenManagerError(
+                    GEN_MANAGER_MISSING_FIELD,
+                    f"{res_ctx}: compiled worker dict needs non-empty code",
+                )
+            status = res.get("e1_status") or {}
+            self._artifact_registry[task_id] = {
+                "code": code,
+                "window_id": status.get("window_id", ""),
+                "artifact_id": status.get("artifact_id", ""),
+                "spec_hash": status.get("spec_hash", ""),
+                "envcoder_check": status.get(
+                    "envcoder_check", ENVCODER_CHECK_NOTE
+                ),
+            }
+            compiled_count += 1
+        return ([], compiled_count)
 
     # ------------------------------------------------------------------
     # session feedback (D12: provenance re-verified INSIDE the teacher)
@@ -675,13 +759,16 @@ class E1FormalGenManager:
 
     # ------------------------------------------------------------------
     # worker-dict helpers (compatible with run_dicode's
-    # _process_worker_results: task_id / compiled / code / reasoning)
+    # _process_worker_results: task_id / compiled / code / reasoning,
+    # plus the legacy aliases generated_task_id / code_string since C11)
     # ------------------------------------------------------------------
     def _failed_worker(self, window_id: str, spec: Any, code: str) -> Dict[str, Any]:
         return {
             "task_id": spec.spec_id,
+            "generated_task_id": spec.spec_id,
             "compiled": False,
             "code": None,
+            "code_string": None,
             "reasoning": "",
             "e1_status": {
                 "reuse": False,
@@ -697,10 +784,13 @@ class E1FormalGenManager:
     def _reuse_stub(
         self, tag: str, index: int, blocked_codes: Sequence[str], note: str
     ) -> Dict[str, Any]:
+        stub_id = f"e1-reuse::{tag}::{index:02d}"
         return {
-            "task_id": f"e1-reuse::{tag}::{index:02d}",
+            "task_id": stub_id,
+            "generated_task_id": stub_id,
             "compiled": False,
             "code": None,
+            "code_string": None,
             "reasoning": "",
             "e1_status": {
                 "reuse": True,

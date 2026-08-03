@@ -18,9 +18,10 @@ caller) and validates fail-closed:
 second time — never trusted from here. Pure standard library.
 
 The view also exposes the minimal duck surface the training loop reads
-on ``gen_manager.archive`` (``graph`` / ``save_graph`` / ``_lock``);
-this round there is no persistent teacher-owned archive, which the
-docstrings state honestly instead of pretending otherwise.
+on ``gen_manager.archive`` (``graph`` / ``save_graph`` / ``_lock`` /
+``get_task_codes``); this round there is no persistent teacher-owned
+archive, which the docstrings state honestly instead of pretending
+otherwise.
 """
 from __future__ import annotations
 
@@ -106,6 +107,31 @@ class ArchiveView:
             }
             for task in self.tasks
         }
+
+    def get_task_codes(self, tasks: Any) -> Dict[str, str]:
+        """Duck surface for ``task_utils.load_tasks_from_env_codes``
+        (C11). The snapshot view holds provenance-admissible
+        performance history ONLY — it never holds env code, so the
+        honest answer is always the empty mapping: run_session_training
+        then degrades to its documented "Could not load any task
+        classes" skip instead of guessing. Compiled E1 artifact code
+        lives in the teacher's artifact registry (see
+        ``E1FormalGenManager.consume_worker_results``); wiring it to
+        task loading is a future-round seam."""
+        if not isinstance(tasks, (list, tuple)):
+            raise ArchiveViewError(
+                ARCHIVE_VIEW_BAD_TYPE,
+                "archive.get_task_codes: tasks must be a sequence, got "
+                f"{type(tasks).__name__}",
+            )
+        for i, task_id in enumerate(tasks):
+            if not isinstance(task_id, str) or not task_id.strip():
+                raise ArchiveViewError(
+                    ARCHIVE_VIEW_BAD_TYPE,
+                    f"archive.get_task_codes[{i}]: task id must be a "
+                    f"non-empty str, got {task_id!r}",
+                )
+        return {}
 
     def save_graph(self) -> None:
         """Honest no-op: this round the teacher owns no persistent

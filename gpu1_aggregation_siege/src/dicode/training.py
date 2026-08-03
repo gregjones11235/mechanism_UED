@@ -98,9 +98,10 @@ def run_session_training(
         config, all_task_classes, gen_manager
     )
 
-    # Calculate task distribution
-    task_distribution_proportions = _calculate_task_distribution(
-        config, len(sampled_task_classes)
+    # Calculate task distribution (C11: E1 layout duck hook; legacy
+    # teachers keep _calculate_task_distribution verbatim)
+    task_distribution_proportions = _resolve_session_task_distribution(
+        config, gen_manager, len(sampled_task_classes), all_task_ids
     )
 
     # Run training
@@ -341,6 +342,56 @@ def _calculate_task_distribution(
         proportions = jnp.array([1.0])
 
     return proportions / jnp.sum(proportions)
+
+
+def _resolve_session_task_distribution(
+    config: DictConfig,
+    gen_manager: GenManager,
+    num_curriculum_tasks: int,
+    all_task_ids: list[str],
+) -> jnp.ndarray:
+    """Task distribution with the E1 teacher layout duck hook (C11).
+
+    Teachers WITHOUT ``build_training_layout`` (the legacy GenManager)
+    take the legacy ``_calculate_task_distribution`` path VERBATIM —
+    byte-identical default behavior. With an E1 teacher the hook
+    receives the session's non-anchor task ids; its pinned 12+4 weight
+    layout is applied ONLY when it covers the session ids exactly and
+    sums to exactly 1 over them (never renormalized or distorted);
+    otherwise the legacy distribution applies unchanged. In
+    particular, while ``run_session_training`` unconditionally appends
+    ``original_craftax`` for evaluation, an E1 batch that already
+    carries the original anchor is NOT overridden — the pinned weights
+    are never silently diluted. A fail-closed layout refusal degrades
+    to the legacy distribution with a visible note (never a crash,
+    never a fabricated weight).
+    """
+    layout_hook = getattr(gen_manager, "build_training_layout", None)
+    if layout_hook is not None:
+        from dicode.teachers.e1_formal.schemas import E1SchemaError
+
+        anchor_ids = set(getattr(gen_manager, "anchor_task_ids", ()))
+        dynamic_candidates = [
+            t for t in all_task_ids if t not in anchor_ids
+        ]
+        try:
+            override = layout_hook(dynamic_candidates)
+        except E1SchemaError as e:
+            print(
+                f"  [E1 layout hook] fail-closed ({e.code}); legacy "
+                "distribution applies unchanged."
+            )
+            override = None
+        if override is not None:
+            weights = []
+            for task_id in all_task_ids:
+                if task_id not in override:
+                    weights = None
+                    break
+                weights.append(override[task_id])
+            if weights is not None and abs(sum(weights) - 1.0) <= 1e-12:
+                return jnp.array(weights)
+    return _calculate_task_distribution(config, num_curriculum_tasks)
 
 
 def _reset_optimizer_state(
