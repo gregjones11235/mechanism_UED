@@ -148,9 +148,13 @@ class TestAuthorizationPosture:
         # C8 double-window flags are ON
         assert C.NEXT_WINDOW_REVISION_ONLY is True
         assert C.SAME_WINDOW_REVISION_REJECTED is True
-        # C9 isolation flags are ON
-        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is True
-        assert C.SHUFFLE_PERMUTATION_FROZEN is True
+        # CC3 C9 GATE (2026-08-04): the two C9 isolation flags are OFF while
+        # the board-context assembly is re-anchored on the FeedbackView alone
+        # (no raw-store read) and the window lag is tightened to EXACTLY k-1
+        # (STALE_FEEDBACK_ID fail closed). They flip back to True only after
+        # the targeted bypass and lag tests pass.
+        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is False
+        assert C.SHUFFLE_PERMUTATION_FROZEN is False
         assert len(C.SEED_SCHEDULE_HASH) == 64
         # C10 RETIRE lifecycle constant
         assert C.RETIRE_COOLDOWN_WINDOWS == 3

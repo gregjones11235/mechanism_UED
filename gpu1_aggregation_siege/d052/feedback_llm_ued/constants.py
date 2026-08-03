@@ -101,16 +101,20 @@ NEXT_WINDOW_REVISION_ONLY = True
 #: feedback_k is staged raises SAME_WINDOW_REVISION_FORBIDDEN (fail closed);
 #: negative tests prove the refusal.
 SAME_WINDOW_REVISION_REJECTED = True
-#: C9 earned: the static-no-feedback mode binds the board to a
-#: NullFeedbackView that holds NO reference to the SimulatorFeedbackStore at
-#: the type level — the board context is structurally empty, not merely
-#: prompt-omitted; negative tests assert a zero feedback payload.
-STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = True
-#: C9 earned: the shuffled-feedback permutation is frozen and recomputable
-#: (derived only from (mode, board window, SEED_SCHEDULE_HASH) + record set,
-#: never runtime randomness) and presents anonymized ids so the real
-#: candidate<->feedback pairing is unrecoverable from the board context.
-SHUFFLE_PERMUTATION_FROZEN = True
+#: C9 (re-opened by CC3 gate, 2026-08-04): the static-no-feedback mode must
+#: bind the board to a view whose BoardContext is built ONLY from that view —
+#: empty behavior evidence, pooled SR, CI, candidate ids and history — never
+#: from the raw SimulatorFeedbackStore. The CC3 gate found the previous
+#: store-fed assembly path leaking evidence into the static context, so the
+#: flag is set False until the targeted bypass tests pass again.
+STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
+#: C9 (re-opened by CC3 gate, 2026-08-04): the shuffled permutation must be a
+#: frozen recomputable anonymization with NO identity side channel — including
+#: the evidence layer of the BoardContext — and the window lag must be EXACTLY
+#: one window (rec.window == window-1; older/current/future fail closed as
+#: STALE_FEEDBACK_ID). Flag is False until the targeted bypass and lag tests
+#: pass again.
+SHUFFLE_PERMUTATION_FROZEN = False
 
 #: flags that must NEVER be True this round (authorization posture re-asserts)
 NEVER_TRUE_REAL_CAPABILITY_FLAGS = (
