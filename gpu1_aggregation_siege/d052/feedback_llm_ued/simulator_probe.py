@@ -71,6 +71,30 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
+def assert_episode_budget(stage: str, student_episodes: int,
+                          reference_episodes: int) -> None:
+    """Shared per-stage episode-budget gate (symbolic + real probe seams)."""
+    if stage == "fast":
+        if student_episodes > C.STAGE1_STUDENT_EPISODES or \
+                reference_episodes > C.STAGE1_REFERENCE_EPISODES:
+            raise ValueError(
+                "FAST_PROBE_EPISODE_BUDGET_EXCEEDED: "
+                f"student={student_episodes} reference={reference_episodes}")
+    elif stage == "full":
+        if not (C.STAGE2_STUDENT_EPISODES_MIN <= student_episodes
+                <= C.STAGE2_STUDENT_EPISODES_MAX):
+            raise ValueError(
+                f"FULL_PROBE_STUDENT_EPISODES_OUT_OF_RANGE: "
+                f"{student_episodes}")
+        if not (C.STAGE2_REFERENCE_EPISODES_MIN <= reference_episodes
+                <= C.STAGE2_REFERENCE_EPISODES_MAX):
+            raise ValueError(
+                f"FULL_PROBE_REFERENCE_EPISODES_OUT_OF_RANGE: "
+                f"{reference_episodes}")
+    else:
+        raise ValueError(f"ILLEGAL_PROBE_STAGE: {stage!r}")
+
+
 def static_legality_check(candidate: CandidateEnvironment) -> Tuple[bool, str]:
     """L1 static gate: mock-namespaced legality + adapter honesty."""
     if not candidate.legality_hint.startswith("MOCK_ONLY"):
@@ -160,23 +184,7 @@ class DeterministicSymbolicProbeRunner:
     @staticmethod
     def _check_episode_budget(stage: str, student_episodes: int,
                               reference_episodes: int) -> None:
-        if stage == "fast":
-            if student_episodes > C.STAGE1_STUDENT_EPISODES or \
-                    reference_episodes > C.STAGE1_REFERENCE_EPISODES:
-                raise ValueError(
-                    "FAST_PROBE_EPISODE_BUDGET_EXCEEDED: "
-                    f"student={student_episodes} reference={reference_episodes}")
-        else:
-            if not (C.STAGE2_STUDENT_EPISODES_MIN <= student_episodes
-                    <= C.STAGE2_STUDENT_EPISODES_MAX):
-                raise ValueError(
-                    f"FULL_PROBE_STUDENT_EPISODES_OUT_OF_RANGE: "
-                    f"{student_episodes}")
-            if not (C.STAGE2_REFERENCE_EPISODES_MIN <= reference_episodes
-                    <= C.STAGE2_REFERENCE_EPISODES_MAX):
-                raise ValueError(
-                    f"FULL_PROBE_REFERENCE_EPISODES_OUT_OF_RANGE: "
-                    f"{reference_episodes}")
+        assert_episode_budget(stage, student_episodes, reference_episodes)
 
 
 class CraftaxPreflightProbeRunner:

@@ -31,6 +31,14 @@ REAL_LLM_CALLS_AUTHORIZED = False
 REAL_SIMULATOR_PROBE_AUTHORIZED = False
 REAL_SIMULATOR_PROBE_STATUS = "BLOCKED_NO_LOCAL_CRAFTAX"
 
+#: probe seed policies. The symbolic runner is seedless by construction; the
+#: real Craftax seam must use explicitly banked seeds (never implicit global
+#: RNG state) so every episode is reproducible and auditable.
+SEED_POLICY_NONE_SYMBOLIC = "NONE_SYMBOLIC"
+SEED_POLICY_JAX_PRNG_SEEDED = "JAX_PRNG_SEEDED"
+SEED_POLICIES = frozenset({SEED_POLICY_NONE_SYMBOLIC,
+                           SEED_POLICY_JAX_PRNG_SEEDED})
+
 # ---------------------------------------------------------------------------
 # Round status flags (director review board). Everything whose truth would
 # mean a REAL capability was exercised stays False until the corresponding
