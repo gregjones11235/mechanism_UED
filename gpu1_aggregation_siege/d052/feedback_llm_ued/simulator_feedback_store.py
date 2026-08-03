@@ -20,7 +20,7 @@ Hard invariants (fail-closed, never silent coercion):
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from pydantic import Field, model_validator
 
@@ -71,6 +71,15 @@ class SimulatorFeedbackRecord(CanonicalModel):
     expected_observed_match: str = MATCH_UNGRADED
     match_detail: Dict[str, object] = Field(default_factory=dict)
     provenance: Dict[str, object] = Field(default_factory=dict)
+    # -- Student identity binding (CC4 consume-only seam). Defaults keep the
+    # -- record constructible without a binding; a NON-EMPTY hash must be a
+    # -- legal sha256 hex digest and every role must be a known Student role.
+    student_identity_hash: str = ""
+    reference_identity_hash: str = ""
+    student_parameter_tree_hash: str = ""
+    student_checkpoint_step: int = Field(default=0, ge=0)
+    student_roles: Tuple[str, ...] = Field(default_factory=tuple)
+    memory_compatibility_status: str = C.MEMORY_COMPATIBILITY_NOT_APPLICABLE
     record_hash: str = ""
 
     @model_validator(mode="after")
@@ -84,6 +93,18 @@ class SimulatorFeedbackRecord(CanonicalModel):
         if not is_sha256_hex(self.candidate_hash):
             raise ValueError(
                 f"CANDIDATE_HASH_NOT_SHA256: {self.candidate_hash!r}")
+        for field_name in ("student_identity_hash", "reference_identity_hash",
+                           "student_parameter_tree_hash"):
+            value = getattr(self, field_name)
+            if value and not is_sha256_hex(value):
+                raise ValueError(
+                    f"STUDENT_IDENTITY_HASH_NOT_SHA256: {field_name}="
+                    f"{value!r}")
+        unknown_roles = set(self.student_roles) - C.STUDENT_ROLES
+        if unknown_roles:
+            raise ValueError(
+                f"UNKNOWN_STUDENT_ROLE: {sorted(unknown_roles)} — allowed "
+                f"roles are {sorted(C.STUDENT_ROLES)}")
         unknown = set(self.reference_stats) - C.REFERENCE_ALLOWED_FIELDS
         if unknown:
             raise ValueError(

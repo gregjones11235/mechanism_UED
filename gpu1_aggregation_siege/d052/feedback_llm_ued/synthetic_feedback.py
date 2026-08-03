@@ -41,7 +41,8 @@ def synthetic_feedback_record(*, feedback_id: str,
                               reference_success_rate: float = 0.9,
                               global_retention: float = 0.9,
                               learnability: float = 0.6,
-                              distinguishes_hypothesis_ids: Optional[List[str]] = None
+                              distinguishes_hypothesis_ids: Optional[List[str]] = None,
+                              student_identity_hash: str = "",
                               ) -> SimulatorFeedbackRecord:
     metrics = ProbeMetrics(
         stage="full",
@@ -70,4 +71,5 @@ def synthetic_feedback_record(*, feedback_id: str,
         reference_stats={"episode_success_rate": reference_success_rate},
         expected_signature=dict(expected_signature),
         provenance=dict(source=C.SOURCE_SYNTHETIC_TEST_TRACE,
-                        note="synthetic test trace, not a simulator probe"))
+                        note="synthetic test trace, not a simulator probe"),
+        student_identity_hash=student_identity_hash)

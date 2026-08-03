@@ -78,6 +78,10 @@ from d052.feedback_llm_ued.simulator_probe import (
     DeterministicSymbolicProbeRunner,
     run_staged_funnel,
 )
+from d052.feedback_llm_ued.student_binding import (
+    StudentTrainingSeam,
+    local_symbolic_binding,
+)
 
 #: deterministic bootstrap: first four families, seeded hypotheses + plan
 _BOOTSTRAP_FAMILIES = C.ENVIRONMENT_FAMILIES[:4]
@@ -152,6 +156,13 @@ class FeedbackUEDController:
         self.comparator = ExpectedObservedComparator()
         self.reconciler = DeterministicReconciler()
         self.isolation = FormalSourceIsolationGuard()
+        # CC4 Student binding seam: the CC4 shared StudentAdapter is absent
+        # from this worktree (verified), so the loop carries the honest local
+        # symbolic binding (NOT_LOADED_LOCAL / ENGINEERING_SCAFFOLD) and the
+        # training seam only records SKIPPED_UNAUTHORIZED this round.
+        self.student_binding = local_symbolic_binding()
+        self.training_seam = StudentTrainingSeam(self.launch_gate,
+                                                 self.student_binding)
         self.revisions: List[PlanRevisionRecord] = []
         self.envelopes: List[object] = []
         self.plans: Dict[str, CurriculumPlan] = {}
@@ -503,7 +514,13 @@ class FeedbackUEDController:
                     runner_id=self.runner.runner_id,
                     real_adapter_status=C.REAL_SIMULATOR_PROBE_STATUS,
                     binding=("shuffled" if self.mode
-                             == C.MODE_SHUFFLED_FEEDBACK else "normal")))
+                             == C.MODE_SHUFFLED_FEEDBACK else "normal")),
+                student_identity_hash=self.student_binding.identity_hash,
+                student_parameter_tree_hash=(
+                    self.student_binding.parameter_tree_hash),
+                student_checkpoint_step=(
+                    self.student_binding.checkpoint_global_step),
+                student_roles=(C.STUDENT_ROLE_SEARCH,))
             self.isolation.assert_record_clean(
                 record.model_dump(), label=f"feedback:{fid}")
             self.store.add(record)

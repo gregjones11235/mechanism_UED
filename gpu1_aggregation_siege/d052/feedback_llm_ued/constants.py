@@ -297,6 +297,26 @@ GLOBAL_CANONICAL_ANCHOR_IDS = (
     "GLOBAL_ANCHOR_LONG_HORIZON_PLANNING",
 )
 
+# ---------------------------------------------------------------------------
+# Strong Student identity (director: fixed candidate). Direction two only
+# CONSUMES the CC4 shared StudentAdapter/StudentInitContract — it never builds
+# a second loader/registry/codec. The vocabulary below is the direction's own
+# bookkeeping; candidate id reused from
+# experiments/henry_dicode_student_upgrade/student_candidate_registry_v1.json.
+# ---------------------------------------------------------------------------
+STRONG_STUDENT_CANDIDATE_ID = "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+
+#: how a Student checkpoint is used inside a window (recorded per feedback)
+STUDENT_ROLE_CAPTURE = "capture"
+STUDENT_ROLE_SEARCH = "search"
+STUDENT_ROLE_TRAIN = "train"
+STUDENT_ROLES = frozenset({STUDENT_ROLE_CAPTURE, STUDENT_ROLE_SEARCH,
+                           STUDENT_ROLE_TRAIN})
+
+#: memory-compatibility status stamped on feedback records while no real
+#: Student weights / memory state exists locally (CC4 adapter absent).
+MEMORY_COMPATIBILITY_NOT_APPLICABLE = "NOT_APPLICABLE_LOCAL"
+
 #: candidate descriptor field whitelist (legality gate; mock-namespaced —
 #: the real TaskParams adapter is BLOCKED_EXTERNAL_DEPENDENCY and its real
 #: field names MUST NOT be guessed).
