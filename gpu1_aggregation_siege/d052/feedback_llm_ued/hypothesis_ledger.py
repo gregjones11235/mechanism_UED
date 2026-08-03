@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 
 from pydantic import Field, model_validator
 
-from d052.bagr_ued.hashing import canonical_sha256
+from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
 from d052.feedback_llm_ued import constants as C
 from d052.schemas.common import CanonicalModel
 
@@ -44,10 +44,13 @@ class HypothesisRecord(CanonicalModel):
         if self.environment_family not in C.ENVIRONMENT_FAMILIES:
             raise ValueError(
                 f"UNKNOWN_ENVIRONMENT_FAMILY: {self.environment_family!r}")
-        if not self.record_hash:
-            payload = self.model_dump()
-            payload.pop("record_hash", None)
-            object.__setattr__(self, "record_hash", canonical_sha256(payload))
+        # C14: an externally carried record_hash is recomputed and compared
+        # verbatim (CONTENT_HASH_MISMATCH fails closed)
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="record_hash",
+                                       carried=self.record_hash,
+                                       kind="HypothesisRecord")
+        object.__setattr__(self, "record_hash", computed)
         return self
 
     def rehash(self) -> str:

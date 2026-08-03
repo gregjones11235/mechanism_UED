@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Set
 
 from pydantic import Field, model_validator
 
-from d052.bagr_ued.hashing import canonical_sha256
+from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
 from d052.feedback_llm_ued import constants as C
 from d052.schemas.common import CanonicalModel
 
@@ -98,10 +98,13 @@ class PlanRevisionRecord(CanonicalModel):
                 f"REVISION_LABEL_FORCED: cited-feedback union "
                 f"{'is empty' if not union else 'is non-empty'}, so the label "
                 f"must be {expected_label!r}, got {self.label!r}")
-        if not self.record_hash:
-            payload = self.model_dump()
-            payload.pop("record_hash", None)
-            object.__setattr__(self, "record_hash", canonical_sha256(payload))
+        # C14: an externally carried record_hash is recomputed and compared
+        # verbatim (CONTENT_HASH_MISMATCH fails closed)
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="record_hash",
+                                       carried=self.record_hash,
+                                       kind="PlanRevisionRecord")
+        object.__setattr__(self, "record_hash", computed)
         return self
 
     def rehash(self) -> str:

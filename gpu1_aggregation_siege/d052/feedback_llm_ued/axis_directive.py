@@ -20,7 +20,7 @@ from typing import Dict, List, Sequence, Tuple
 
 from pydantic import Field, model_validator
 
-from d052.bagr_ued.hashing import canonical_sha256
+from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.environment_generator import (
     AXIS_LEVELS,
@@ -126,11 +126,13 @@ class AxisDirective(CanonicalModel):
                 raise ValueError(
                     f"NON_FINITE_EXPECTATION: {key}={value!r}")
 
-        if not self.directive_hash:
-            payload = self.model_dump()
-            payload.pop("directive_hash", None)
-            object.__setattr__(self, "directive_hash",
-                               canonical_sha256(payload))
+        # C14: an externally carried directive_hash is recomputed and
+        # compared verbatim (CONTENT_HASH_MISMATCH fails closed)
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="directive_hash",
+                                       carried=self.directive_hash,
+                                       kind="AxisDirective")
+        object.__setattr__(self, "directive_hash", computed)
         return self
 
     def rehash(self) -> str:

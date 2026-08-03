@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 from pydantic import Field, model_validator
 
-from d052.bagr_ued.hashing import canonical_sha256
+from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.feedback_contracts import ProbeMetrics
 from d052.feedback_llm_ued.formal_isolation import (
@@ -120,10 +120,13 @@ class SimulatorFeedbackRecord(CanonicalModel):
         if self.expected_observed_match not in MATCH_STATES:
             raise ValueError(
                 f"ILLEGAL_MATCH_STATE: {self.expected_observed_match!r}")
-        if not self.record_hash:
-            payload = self.model_dump()
-            payload.pop("record_hash", None)
-            object.__setattr__(self, "record_hash", canonical_sha256(payload))
+        # C14: an externally carried record_hash is recomputed and compared
+        # verbatim (CONTENT_HASH_MISMATCH fails closed)
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="record_hash",
+                                       carried=self.record_hash,
+                                       kind="SimulatorFeedbackRecord")
+        object.__setattr__(self, "record_hash", computed)
         return self
 
     def rehash(self) -> str:

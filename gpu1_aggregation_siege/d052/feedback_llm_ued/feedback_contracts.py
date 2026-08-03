@@ -16,7 +16,11 @@ from typing import Dict, List
 
 from pydantic import Field, model_validator
 
-from d052.bagr_ued.hashing import canonical_sha256, text_sha256
+from d052.bagr_ued.hashing import (
+    canonical_sha256,
+    text_sha256,
+    verify_content_hash,
+)
 from d052.feedback_llm_ued import constants as C
 from d052.schemas.common import CanonicalModel, validate_sha256_hex
 
@@ -63,11 +67,13 @@ class CandidateEnvironment(CanonicalModel):
         for a in self.mutation_axes:
             if a not in C.MUTATION_AXES:
                 raise ValueError(f"ILLEGAL_CANDIDATE_AXIS: {a!r}")
-        if not self.candidate_hash:
-            payload = self.model_dump()
-            payload.pop("candidate_hash", None)
-            object.__setattr__(self, "candidate_hash",
-                               canonical_sha256(payload))
+        # C14: an externally carried candidate_hash is recomputed and
+        # compared verbatim (CONTENT_HASH_MISMATCH fails closed)
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="candidate_hash",
+                                       carried=self.candidate_hash,
+                                       kind="CandidateEnvironment")
+        object.__setattr__(self, "candidate_hash", computed)
         return self
 
 
@@ -138,10 +144,13 @@ class CurriculumPlan(CanonicalModel):
     def _hash(self) -> "CurriculumPlan":
         if self.mode not in C.FEEDBACK_MODES:
             raise ValueError(f"UNKNOWN_MODE: {self.mode!r}")
-        if not self.plan_hash:
-            payload = self.model_dump()
-            payload.pop("plan_hash", None)
-            object.__setattr__(self, "plan_hash", canonical_sha256(payload))
+        # C14: an externally carried plan_hash is recomputed and compared
+        # verbatim (CONTENT_HASH_MISMATCH fails closed)
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="plan_hash",
+                                       carried=self.plan_hash,
+                                       kind="CurriculumPlan")
+        object.__setattr__(self, "plan_hash", computed)
         return self
 
     def signature(self) -> Dict[str, object]:
@@ -188,7 +197,15 @@ def extract_context(prompt: str) -> Dict[str, object]:
 
 
 class FeedbackRoleEnvelope(CanonicalModel):
-    """Identity binding for one feedback-loop LLM invocation (audit-grade)."""
+    """Identity binding for one feedback-loop LLM invocation (audit-grade).
+
+    C14: the envelope stores the prompt itself and RECOMPUTES all three
+    carried hashes from stored content — ``request_hash`` (canonical hash of
+    role+prompt_version+prompt), ``prompt_sha256`` (text hash of the prompt,
+    the same key the ReplayBackend corpus uses) and ``response_hash`` (text
+    hash of the raw response). Any mismatch fails closed with
+    CONTENT_HASH_MISMATCH, so a substituted prompt or response cannot parse.
+    """
 
     role: str = Field(min_length=1)
     prompt_version: str = Field(min_length=1)
@@ -196,6 +213,8 @@ class FeedbackRoleEnvelope(CanonicalModel):
     model_id: str = Field(min_length=1)
     window: int = Field(ge=0)
     sequence: int = Field(ge=0)
+    prompt: str = Field(min_length=1)
+    prompt_sha256: str
     request_hash: str
     response_hash: str
     raw_response: str
@@ -203,8 +222,30 @@ class FeedbackRoleEnvelope(CanonicalModel):
 
     @model_validator(mode="after")
     def _hashes(self) -> "FeedbackRoleEnvelope":
+        validate_sha256_hex(self.prompt_sha256, "prompt_sha256")
         validate_sha256_hex(self.request_hash, "request_hash")
         validate_sha256_hex(self.response_hash, "response_hash")
+        #: recompute + verbatim-compare every externally provided hash
+        expected_prompt_sha = text_sha256(self.prompt)
+        if self.prompt_sha256 != expected_prompt_sha:
+            raise ValueError(
+                f"CONTENT_HASH_MISMATCH: FeedbackRoleEnvelope carried "
+                f"prompt_sha256={self.prompt_sha256!r} but the stored "
+                f"prompt recomputes to {expected_prompt_sha!r}")
+        expected_request = canonical_sha256(
+            {"role": self.role, "prompt_version": self.prompt_version,
+             "prompt": self.prompt})
+        if self.request_hash != expected_request:
+            raise ValueError(
+                f"CONTENT_HASH_MISMATCH: FeedbackRoleEnvelope carried "
+                f"request_hash={self.request_hash!r} but role/"
+                f"prompt_version/prompt recompute to {expected_request!r}")
+        expected_response = text_sha256(self.raw_response)
+        if self.response_hash != expected_response:
+            raise ValueError(
+                f"CONTENT_HASH_MISMATCH: FeedbackRoleEnvelope carried "
+                f"response_hash={self.response_hash!r} but the stored "
+                f"raw_response recomputes to {expected_response!r}")
         return self
 
     @staticmethod
@@ -214,6 +255,8 @@ class FeedbackRoleEnvelope(CanonicalModel):
         return FeedbackRoleEnvelope(
             role=role, prompt_version=prompt_version, backend_id=backend_id,
             model_id=model_id, window=window, sequence=sequence,
+            prompt=prompt,
+            prompt_sha256=text_sha256(prompt),
             request_hash=canonical_sha256(
                 {"role": role, "prompt_version": prompt_version,
                  "prompt": prompt}),
