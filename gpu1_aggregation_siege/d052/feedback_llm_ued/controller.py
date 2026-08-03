@@ -73,6 +73,19 @@ The stopped window is closed to revision exactly like a frozen one: its
 phase is not REVISION, so apply_board_verdicts / revise_plan raise
 SAME_WINDOW_REVISION_FORBIDDEN.
 
+C13 shared anchor manifest: the four standard-reset anchor slots are filled
+ONLY through the ``anchor_manifest.AnchorManifestSource`` seam — explicit
+injection of a cross-direction shared FROZEN manifest (manifest_hash
+recomputed and compared) or fail closed. Verified fact for this worktree:
+no such frozen manifest exists, so every window falls back to the scaffold
+placeholder (the four canonical anchor ids, explicitly labeled
+``SCAFFOLD_PLACEHOLDER_NOT_SHARED`` — NOT a shared binding) with the budget
+unchanged (12 dynamic + 4 anchors) in all three modes, and
+``SHARED_ANCHOR_MANIFEST_BOUND`` stays False. Every WindowRecord carries its
+``anchor_binding`` label; formal retention may only count manifest-bound
+anchor probes, and this round's placeholder anchors are reported as exactly
+that.
+
 Honesty posture re-asserted at construction: every real-world authorization
 flag must be False this round; the loop runs on the deterministic mock LLM
 backend + the deterministic symbolic probe runner and says so in every
@@ -84,6 +97,13 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Mapping, Optional, Tuple
 
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.anchor_manifest import (
+    SCAFFOLD_PLACEHOLDER_NOT_SHARED,
+    SHARED_MANIFEST_BOUND_LABEL,
+    AnchorManifestBlocked,
+    AnchorManifestSource,
+    SharedAnchorManifest,
+)
 from d052.feedback_llm_ued.behavior_failure import assemble_board_context
 from d052.feedback_llm_ued.deterministic_reconciler import (
     DeterministicReconciler,
@@ -192,6 +212,10 @@ class WindowRecord:
     funnel_stats: Dict[str, int] = field(default_factory=dict)
     window_aggregates: Dict[str, float] = field(default_factory=dict)
     training_step_status: str = ""
+    #: C13: provenance label of this window's four anchor slots —
+    #: SCAFFOLD_PLACEHOLDER_NOT_SHARED (this round, always) or
+    #: SHARED_ANCHOR_MANIFEST_BOUND (only with an injected frozen manifest)
+    anchor_binding: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -236,7 +260,7 @@ class FeedbackUEDController:
     """Deterministic, replayable driver of the double-window loop."""
 
     def __init__(self, mode: str, *, backend=None, probe_runner=None,
-                 human_reopen_families=()) -> None:
+                 human_reopen_families=(), anchor_manifest=None) -> None:
         if mode not in C.FEEDBACK_MODES:
             raise ValueError(f"UNKNOWN_MODE: {mode!r}")
         _assert_authorization_posture()
@@ -285,6 +309,21 @@ class FeedbackUEDController:
         #: first one, so at most one entry in practice — the list keeps the
         #: type honest for future resume-after-human-decision work)
         self.human_decision_artifacts: List[HumanDecisionArtifact] = []
+        # -- C13 shared anchor manifest seam --------------------------------
+        # Explicit injection only. A frozen manifest with a matching
+        # recomputed hash binds the anchor slots; anything else (absent,
+        # unfrozen) fails closed into the LABELED scaffold placeholder — the
+        # budget (12 dynamic + 4 anchors) is identical in both cases, and
+        # every WindowRecord records which of the two states applied.
+        if isinstance(anchor_manifest, Mapping):
+            anchor_manifest = SharedAnchorManifest(**anchor_manifest)
+        self.anchor_source = AnchorManifestSource(manifest=anchor_manifest)
+        try:
+            self.anchor_ids = self.anchor_source.resolve()
+            self.anchor_binding = SHARED_MANIFEST_BOUND_LABEL
+        except AnchorManifestBlocked:
+            self.anchor_ids = self.anchor_source.scaffold_placeholder()
+            self.anchor_binding = SCAFFOLD_PLACEHOLDER_NOT_SHARED
 
     # ------------------------------------------------------------------ seeds
     def _seed(self) -> None:
@@ -375,7 +414,8 @@ class FeedbackUEDController:
                 n_feedback_records=0,
                 funnel_stats={},
                 window_aggregates={},
-                training_step_status="NOT_EXECUTED_REQUEST_CONTROL")
+                training_step_status="NOT_EXECUTED_REQUEST_CONTROL",
+                anchor_binding=self.anchor_binding)
 
         # -- C. REVISION phase: verdicts -> ledger; proposals -> plan_k -----
         self._set_phase(window, PHASE_REVISION)
@@ -419,7 +459,8 @@ class FeedbackUEDController:
             n_feedback_records=len(staged),
             funnel_stats=dict(batch.funnel_stats),
             window_aggregates=agg,
-            training_step_status=training.status)
+            training_step_status=training.status,
+            anchor_binding=self.anchor_binding)
 
     # ------------------------------------------------------- phase machine
     def phase_of(self, window: int) -> Optional[str]:
@@ -755,7 +796,11 @@ class FeedbackUEDController:
         candidates = generate_candidates_from_directives(
             plan, directives=list(directives),
             hypothesis_families=hyp_by_family)
-        batch = run_staged_funnel(candidates, self.runner, window=window)
+        # C13: the anchor ids come from the shared-manifest seam (this
+        # round: the labeled scaffold placeholder), never from a hardcode
+        # inside the funnel
+        batch = run_staged_funnel(candidates, self.runner, window=window,
+                                  anchor_ids=self.anchor_ids)
 
         cand_by_id = {c.candidate_id: c for c in candidates}
         fast_obs = {r["candidate_id"]: r["metrics"]

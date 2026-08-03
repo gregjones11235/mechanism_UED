@@ -22,9 +22,17 @@ Runners
 Staged funnel (task §4): 64 raw candidates -> L1 legality/static -> L2 fast
 probe (Student 2ep, Reference 1ep; legality/reset/step, behavior activation,
 coarse progress, too-hard/too-easy via ``route``) keeping ~24 -> L3 full probe
-(Student 4-8ep, Reference 2-4ep; regret, learnability, front progress, global
-retention, simulator cost + family-diversity penalty) keeping 12 dynamic UED
-slots, plus 4 frozen global canonical anchors = final batch of 16.
+(Student 4-8ep, Reference 2-4ep) keeping 12 dynamic UED slots, plus 4 anchor
+slots = final batch of 16.
+
+C12: the L3 cut is NO LONGER a hand-written weighted-sum scalar. The full
+probe metrics are mapped to the eight RAW criteria and ranked by the SHARED
+``d052.bagr_ued.soft_copeland`` implementation (criterion-wise Soft Copeland,
+hash-bound audit trail); the family-diverse greedy pick of the 12 dynamic
+slots is driven by those Copeland scores (see ``multi_criterion_selection``).
+C13: the 4 anchor ids are injected by the controller through the shared
+frozen-manifest seam (this round: labeled scaffold placeholder, budget
+unchanged).
 """
 from __future__ import annotations
 
@@ -37,6 +45,9 @@ from d052.feedback_llm_ued.feedback_contracts import (
     ProbeMetrics,
 )
 from d052.feedback_llm_ued.formal_isolation import ReferenceOutputGuard
+from d052.feedback_llm_ued.multi_criterion_selection import (
+    copeland_stage2_selection,
+)
 from d052.feedback_llm_ued.skill_preflight_core import (
     Decision,
     PreflightResult,
@@ -236,6 +247,9 @@ class ProbeBatch:
     dynamic_selected: List[str] = field(default_factory=list)
     anchor_ids: Tuple[str, ...] = C.GLOBAL_CANONICAL_ANCHOR_IDS
     total_simulator_transitions: int = 0
+    #: C12: hash-bound audit trail of the shared Soft Copeland ranking that
+    #: drove the dynamic selection ("" when no stage-2 pool was probed)
+    copeland_ranking_hash: str = ""
 
     @property
     def final_batch(self) -> List[str]:
@@ -276,30 +290,29 @@ def _fast_preflight(candidate: CandidateEnvironment,
         extra=dict(metrics=m.model_dump()))
 
 
-def _full_score(m: ProbeMetrics, max_transitions: int) -> float:
-    """Deterministic Stage-2 composite: learnability + progress + retention,
-    penalized by regret and simulator cost."""
-    cost = (m.simulator_transitions / max_transitions) if max_transitions else 0.0
-    return (0.30 * m.learnability
-            + 0.20 * m.student_front_progress
-            + 0.20 * (1.0 - min(1.0, m.regret))
-            + 0.15 * m.global_retention
-            + 0.10 * m.student_behavior_activation
-            - 0.05 * cost)
-
-
 def run_staged_funnel(candidates: List[CandidateEnvironment],
                       runner: SimulatorProbeRunner, *, window: int,
                       raw_cap: int = C.RAW_CANDIDATES,
                       stage1_keep: int = C.STAGE1_KEEP,
-                      stage2_keep: int = C.STAGE2_KEEP) -> ProbeBatch:
-    """64 raw -> L1 static -> L2 fast (~24) -> L3 full (12 dynamic) + 4 anchors.
+                      stage2_keep: int = C.STAGE2_KEEP,
+                      anchor_ids: Tuple[str, ...]
+                      = C.GLOBAL_CANONICAL_ANCHOR_IDS) -> ProbeBatch:
+    """64 raw -> L1 static -> L2 fast (~24) -> L3 full (12 dynamic) + anchors.
 
     Deterministic at every cut: static rejects, hash dedup, route-based
-    accept/reject, score-sorted trimming with a family-diversity penalty on
-    the final greedy pick.
+    accept/reject, then the C12 shared Soft-Copeland ranking over the eight
+    RAW criteria with a family-diversity penalty on the final greedy pick.
+    The anchor ids are INJECTED (C13 shared-manifest seam; the controller
+    passes its resolved/labeled placeholders) and must fill exactly
+    GLOBAL_ANCHOR_SLOTS slots.
     """
-    batch = ProbeBatch(window=window)
+    if len(anchor_ids) != C.GLOBAL_ANCHOR_SLOTS:
+        raise ValueError(
+            f"ILLEGAL_ANCHOR_SLOT_COUNT: {len(anchor_ids)} anchor id(s); "
+            f"the final batch reserves exactly {C.GLOBAL_ANCHOR_SLOTS}")
+    if len(set(anchor_ids)) != len(anchor_ids):
+        raise ValueError("DUPLICATE_ANCHOR_ID")
+    batch = ProbeBatch(window=window, anchor_ids=tuple(anchor_ids))
     # probe cost is accounted PER BATCH (the runner's counter is cumulative
     # across windows; a window record must show its own window's cost)
     transitions_before = runner.total_transitions
@@ -340,7 +353,7 @@ def run_staged_funnel(candidates: List[CandidateEnvironment],
     survivors = accepted[:stage1_keep]
     batch.stage1_survivors = [c.candidate_id for _, c, _ in survivors]
 
-    # -- L3: full probe + composite score -------------------------------------
+    # -- L3: full probe + C12 shared Soft-Copeland selection ------------------
     if not survivors:
         batch.total_simulator_transitions = (runner.total_transitions
                                              - transitions_before)
@@ -348,44 +361,31 @@ def run_staged_funnel(candidates: List[CandidateEnvironment],
     student_ep = C.STAGE2_STUDENT_EPISODES_MAX
     reference_ep = C.STAGE2_REFERENCE_EPISODES_MAX
     max_transitions = (student_ep + reference_ep) * C.ROLLOUT_LENGTH
-    scored: List[Tuple[float, CandidateEnvironment, ProbeMetrics]] = []
-    full_probed: Dict[str, Tuple[float, ProbeMetrics]] = {}
+    pool: List[Tuple[CandidateEnvironment, ProbeMetrics]] = []
+    full_probed: Dict[str, ProbeMetrics] = {}
     for _key, cand, _res in survivors:
         m_full = runner.probe(cand, stage="full",
                               student_episodes=student_ep,
                               reference_episodes=reference_ep)
-        score = _full_score(m_full, max_transitions)
-        full_probed[cand.candidate_id] = (score, m_full)
-        scored.append((score, cand, m_full))
-    scored.sort(key=lambda t: (-t[0], t[1].candidate_id))
+        full_probed[cand.candidate_id] = m_full
+        pool.append((cand, m_full))
 
-    # greedy pick with a family-diversity penalty (deterministic)
-    family_counts: Dict[str, int] = {}
-    picked: List[Tuple[float, CandidateEnvironment, ProbeMetrics]] = []
-    remaining = list(scored)
-    while len(picked) < stage2_keep and remaining:
-        best_i = None
-        best_eff = None
-        for i, (score, cand, m) in enumerate(remaining):
-            eff = score - 0.10 * family_counts.get(cand.environment_family, 0)
-            if best_eff is None or eff > best_eff or \
-                    (eff == best_eff
-                     and cand.candidate_id
-                     < remaining[best_i][1].candidate_id):
-                best_eff = eff
-                best_i = i
-        score, cand, m = remaining.pop(best_i)
-        family_counts[cand.environment_family] = \
-            family_counts.get(cand.environment_family, 0) + 1
-        picked.append((score, cand, m))
-    selected_ids = {cand.candidate_id for _s, cand, _m in picked}
+    # the ONLY scalar driving the cut is the shared Soft Copeland score —
+    # the eight RAW criteria stay separate on every audit record
+    picked, audit, ranking = copeland_stage2_selection(
+        pool, keep=stage2_keep, max_transitions=max_transitions)
+    selected_ids = {cand.candidate_id for cand, _m in picked}
     for cand_id in sorted(full_probed):
-        score, m = full_probed[cand_id]
+        m = full_probed[cand_id]
         batch.stage2_results.append(dict(
-            candidate_id=cand_id, score=round(score, 6),
+            candidate_id=cand_id,
+            score=round(audit[cand_id]["copeland_score"], 6),
+            copeland_rank=audit[cand_id]["copeland_rank"],
+            criteria=dict(audit[cand_id]["criteria"]),
             selected=cand_id in selected_ids, metrics=m.model_dump()))
-    # preserve deterministic selection order (score-desc greedy) in the output
-    batch.dynamic_selected = [cand.candidate_id for _s, cand, _m in picked]
+    # preserve deterministic selection order (greedy over Copeland scores)
+    batch.dynamic_selected = [cand.candidate_id for cand, _m in picked]
+    batch.copeland_ranking_hash = ranking.ranking_hash
     batch.total_simulator_transitions = (runner.total_transitions
                                          - transitions_before)
     return batch

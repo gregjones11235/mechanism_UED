@@ -232,6 +232,14 @@ DYNAMIC_UED_SLOTS = 12
 GLOBAL_ANCHOR_SLOTS = 4
 FINAL_BATCH = DYNAMIC_UED_SLOTS + GLOBAL_ANCHOR_SLOTS      # 12 + 4 = 16
 
+#: C12: run-level front/global regret weighting for the Stage-2 Soft
+#: Copeland (consumed by d052.bagr_ued.soft_copeland). Structurally < 1 so
+#: the global pairwise weight (1 - alpha) stays strictly positive.
+ALPHA_FRONT_STAGE2 = 0.5
+#: C12: per-family greedy diversity penalty applied to the Copeland score
+#: when picking the 12 dynamic slots
+STAGE2_FAMILY_PENALTY = 0.10
+
 STAGE1_STUDENT_EPISODES = 2
 STAGE1_REFERENCE_EPISODES = 1
 STAGE2_STUDENT_EPISODES_MIN = 4
