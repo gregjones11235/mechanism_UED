@@ -1,0 +1,103 @@
+# @package _global_
+# E1 formal teacher: Behavior-Aware Regret-Guided LLM-UED (plan C10).
+# Usage: append `+teacher=e1_formal` to the command line; config.yaml is
+# untouched. All scientific identity/threshold values are
+# supervisor-frozen artifacts: NOTHING here carries a usable default.
+# Until the frozen values arrive, the teacher constructs fully
+# degraded (anchors + REUSE only) and fail-closed:
+#   reference_contract.frozen=false  -> REFERENCE_CONTRACT_UNFROZEN
+#   learnability.*=null              -> LEARNABILITY_THRESHOLD_MISSING
+# Both codes surface in status_report()/blocked gates, never a guess.
+
+teacher:
+  teacher_type: e1_formal
+
+  # D7: REAL_* flags — declared here AND pinned in the frozen manifest
+  # configs/e1_formal_ued.yaml; init fails closed on any mismatch
+  # (FLAG_MANIFEST_MISMATCH). No code path sets these true this round.
+  flags:
+    real_envcoder_used: false
+    real_student_reference_eval: false
+    real_training_update_executed: false
+
+  # Strong Student identity (CC4 consumes the real checkpoint; E1 only
+  # carries the pinned candidate id).
+  strong_student:
+    candidate_id: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304
+
+  # G1: ReferenceIdentityContract — every identity field has NO default.
+  # The supervisor freezes the values; until then frozen stays false and
+  # the evaluation seam remains blocked (E1 never guesses a Reference).
+  reference_contract:
+    frozen: false
+    candidate_id: null
+    checkpoint_ref: null
+    file_sha256: null
+    params_sha256: null
+    architecture_family: null
+    architecture_version: null
+    architecture_config_hash: null
+    memory_semantics: null
+    memory_semantics_hash: null
+    global_step: null
+    source_commit: null
+    seed: null
+    episode_reset_protocol_id: null
+    episode_reset_protocol_hash: null
+    frozen_manifest_hash: null
+
+  # G2: learnability thresholds — NO defaults; every null here fails
+  # closed as LEARNABILITY_THRESHOLD_MISSING until frozen by the
+  # supervisor.
+  learnability:
+    tau_saturated: null
+    tau_reachable: null
+    tau_unreachable: null
+    delta_min: null
+    min_episodes: null
+    ci_level: null
+
+  # Selection knobs (mechanical determinism, explicitly pinned — not
+  # scientific defaults). k must equal the 12 dynamic slots; seed is the
+  # audit-date determinism pin for this branch.
+  selection:
+    critic_policy: hard_veto
+    k: 12
+    seed: 20260803
+
+  # 12 dynamic + 4 standard-reset anchors (original_craftax ALWAYS last;
+  # beta=1/4, s=2/5 are pinned rationals inside layout.py).
+  anchors:
+    task_ids:
+      - task_1
+      - task_2
+      - task_3
+      - original_craftax
+    manifest_path: configs/e1_formal_ued_anchor_manifest.DRAFT.json
+
+  # EnvCoder prompt whitelist input (seed examples rotate by variant).
+  envcoder:
+    seed_examples:
+      - task_id: task_1
+        description: "collect coal near spawn"
+      - task_id: task_2
+        description: "cross a narrow gap"
+      - task_id: task_3
+        description: "defeat the orc soldier"
+
+  # Replay provider identity (plan D11); record mode is DISABLED this
+  # round — no paid API, no real LLM, REAL_ENVCODER_USED stays false.
+  replay:
+    provider: replay
+    model_id: e1-replay-mock-v1
+    record: disabled
+
+  # Candidate evaluation seam (C11): disabled until the G1 contract is
+  # frozen AND the CC4 StudentAdapter exists; the seam fails closed
+  # regardless of this knob.
+  candidate_eval:
+    enabled: false
+
+hydra:
+  run:
+    dir: outputs/e1_formal_ued/${now:%Y-%m-%d}_${now:%H-%M-%S}

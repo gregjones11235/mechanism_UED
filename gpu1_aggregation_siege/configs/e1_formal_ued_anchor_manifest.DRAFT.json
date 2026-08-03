@@ -1,0 +1,46 @@
+{
+  "status": "DRAFT_UNFROZEN",
+  "anchors": [
+    {
+      "anchor_id": "anchor_task_1",
+      "source_task_id": "task_1",
+      "task_params_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "seed_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "code_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "reset_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "frozen_by": "",
+      "frozen_at": ""
+    },
+    {
+      "anchor_id": "anchor_task_2",
+      "source_task_id": "task_2",
+      "task_params_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "seed_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "code_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "reset_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "frozen_by": "",
+      "frozen_at": ""
+    },
+    {
+      "anchor_id": "anchor_task_3",
+      "source_task_id": "task_3",
+      "task_params_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "seed_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "code_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "reset_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "frozen_by": "",
+      "frozen_at": ""
+    },
+    {
+      "anchor_id": "anchor_original_craftax",
+      "source_task_id": "original_craftax",
+      "task_params_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "seed_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "code_hash": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "reset_protocol": "DRAFT_UNFROZEN_PENDING_SUPERVISOR",
+      "frozen_by": "",
+      "frozen_at": ""
+    }
+  ],
+  "manifest_sha256": "5b81204102e3843fa7d33ce7c14f9258345ffb21759aafa39df7c0e8bce9a1e4"
+}
