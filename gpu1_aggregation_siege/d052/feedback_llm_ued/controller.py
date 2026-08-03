@@ -40,6 +40,10 @@ from d052.feedback_llm_ued.deterministic_reconciler import (
     DeterministicReconciler,
 )
 from d052.feedback_llm_ued.environment_generator import generate_candidates
+from d052.feedback_llm_ued.execution_mode import (
+    EXECUTION_MODE_MOCK_DRY_RUN,
+    FeedbackLaunchGate,
+)
 from d052.feedback_llm_ued.expected_observed import ExpectedObservedComparator
 from d052.feedback_llm_ued.feedback_contracts import (
     CurriculumPlan,
@@ -56,7 +60,10 @@ from d052.feedback_llm_ued.hypothesis_ledger import (
     HypothesisLedger,
     HypothesisRecord,
 )
-from d052.feedback_llm_ued.llm_backend import DeterministicMockFeedbackBackend
+from d052.feedback_llm_ued.llm_backend import (
+    DeterministicMockFeedbackBackend,
+    assert_no_real_llm_usage,
+)
 from d052.feedback_llm_ued.plan_revision import (
     FEEDBACK_DRIVEN_LABEL,
     PlanModification,
@@ -119,11 +126,12 @@ class RunSummary:
 
 
 def _assert_authorization_posture() -> None:
-    if C.TRAINING_AUTHORIZED or C.FORMAL_EVALUATION_AUTHORIZED or \
-            C.REAL_LLM_CALLS_AUTHORIZED or C.REAL_SIMULATOR_PROBE_AUTHORIZED:
-        raise RuntimeError(
-            "AUTHORIZATION_POSTURE_VIOLATED: this package is written for a "
-            "round where every real-world capability flag is False")
+    for name in C.NEVER_TRUE_REAL_CAPABILITY_FLAGS:
+        if getattr(C, name):
+            raise RuntimeError(
+                f"AUTHORIZATION_POSTURE_VIOLATED: {name}=True, but this "
+                "package is written for a round where every real-world "
+                "capability flag is False")
 
 
 class FeedbackUEDController:
@@ -134,7 +142,10 @@ class FeedbackUEDController:
             raise ValueError(f"UNKNOWN_MODE: {mode!r}")
         _assert_authorization_posture()
         self.mode = mode
+        self.launch_gate = FeedbackLaunchGate(EXECUTION_MODE_MOCK_DRY_RUN)
+        self.launch_decision = self.launch_gate.evaluate()
         self.backend = backend or DeterministicMockFeedbackBackend()
+        self.launch_gate.assert_backend_allowed(self.backend.kind)
         self.runner = probe_runner or DeterministicSymbolicProbeRunner()
         self.ledger = HypothesisLedger()
         self.store = SimulatorFeedbackStore()
@@ -191,7 +202,7 @@ class FeedbackUEDController:
                 wrec, prev_plan = self._window_adaptive(window, prev_plan, state)
             records.append(wrec)
         self._summary = self._build_summary(records)
-        self.backend.assert_no_real_calls()
+        assert_no_real_llm_usage(self.backend.usage)
         return self._summary
 
     # ------------------------------------------------------------- window 0
@@ -260,7 +271,7 @@ class FeedbackUEDController:
         if self.mode == C.MODE_STATIC_LLM:
             invoke = False                     # baseline never reads feedback
 
-        n_calls_before = self.backend.mock_calls
+        n_calls_before = self.backend.usage.total_calls
         if not invoke:
             state["plan_age"] += 1
             agg = self._window_aggregates(window - 1)
@@ -296,7 +307,7 @@ class FeedbackUEDController:
         wrec = WindowRecord(
             window=window, mode=self.mode,
             gate_conditions=list(gate["conditions"]), invoked_llm=True,
-            n_llm_calls=self.backend.mock_calls - n_calls_before,
+            n_llm_calls=self.backend.usage.total_calls - n_calls_before,
             reviewer_invoked=reviewer_invoked, risk_triggers=triggers,
             reused_previous_plan=False, plan_id=plan.plan_id,
             plan_signature_hash=plan_signature_hash(plan),
@@ -593,7 +604,7 @@ class FeedbackUEDController:
         return RunSummary(
             mode=self.mode,
             n_windows=n_windows,
-            n_llm_calls=self.backend.mock_calls,
+            n_llm_calls=self.backend.usage.total_calls,
             revision_rate=round(n_revisions / n_windows, 4) if n_windows else 0.0,
             decision_distribution=decision_dist,
             feedback_citation_coverage=round(citation_coverage, 4),

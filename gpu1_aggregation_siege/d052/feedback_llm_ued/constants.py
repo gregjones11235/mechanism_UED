@@ -32,11 +32,66 @@ REAL_SIMULATOR_PROBE_AUTHORIZED = False
 REAL_SIMULATOR_PROBE_STATUS = "BLOCKED_NO_LOCAL_CRAFTAX"
 
 # ---------------------------------------------------------------------------
+# Round status flags (director review board). Everything whose truth would
+# mean a REAL capability was exercised stays False until the corresponding
+# real integration lands; the current implementation is ENGINEERING_SCAFFOLD.
+# ---------------------------------------------------------------------------
+ENGINEERING_SCAFFOLD = "ENGINEERING_SCAFFOLD"
+
+#: SOTA integration readiness (false until the real minimal closed loop with
+#: real Craftax + real Student + real feedback + plan revision passes).
+SOTA_INTEGRATION_READY = False
+#: A real high-capability Student checkpoint was loaded via the CC4 shared
+#: StudentAdapter (false: CC4 contract not present in this worktree yet).
+REAL_CHECKPOINT_LOADED = False
+#: A real optimizer step on the high-capability Student was executed.
+REAL_TRAINING_UPDATE_EXECUTED = False
+#: A real LLM EnvCoder generated candidate environment code that compiled.
+REAL_ENVCODER_USED = False
+#: A real Craftax probe (not the symbolic runner) produced feedback.
+REAL_SIMULATOR_PROBE = False
+#: The four standard-reset anchors were bound to the cross-direction shared
+#: FROZEN manifest (false: no such frozen manifest exists in this worktree).
+SHARED_ANCHOR_MANIFEST_BOUND = False
+BLOCKED_SHARED_ANCHOR_MANIFEST = "BLOCKED_SHARED_ANCHOR_MANIFEST"
+
+#: engineering-progress flags (may flip True as scaffold pieces land):
+E2_FORMAL_PLAN_ALIGNED = False
+SIX_ROLE_BOARD_IMPLEMENTED = False
+FEEDBACK_REVISION_BOUND = False
+NEXT_WINDOW_REVISION_ONLY = False
+SAME_WINDOW_REVISION_REJECTED = False
+STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
+SHUFFLE_PERMUTATION_FROZEN = False
+
+#: flags that must NEVER be True this round (authorization posture re-asserts)
+NEVER_TRUE_REAL_CAPABILITY_FLAGS = (
+    "TRAINING_AUTHORIZED",
+    "FORMAL_EVALUATION_AUTHORIZED",
+    "REAL_LLM_CALLS_AUTHORIZED",
+    "REAL_SIMULATOR_PROBE_AUTHORIZED",
+    "SOTA_INTEGRATION_READY",
+    "REAL_CHECKPOINT_LOADED",
+    "REAL_TRAINING_UPDATE_EXECUTED",
+    "REAL_ENVCODER_USED",
+    "REAL_SIMULATOR_PROBE",
+)
+
+# ---------------------------------------------------------------------------
 # Loop + role identity
 # ---------------------------------------------------------------------------
 FEEDBACK_LOOP_VERSION = "feedback_llm_ued.loop.v1"
 MOCK_BACKEND_ID = "mock.feedback_llm_ued.deterministic.v1"
 MOCK_MODEL_ID = "deterministic-rule-synth.v1"
+REPLAY_BACKEND_ID = "replay.feedback_llm_ued.v1"
+REPLAY_MODEL_ID = "replayed-corpus.v1"
+
+#: backend kinds (P0-1 abstraction; the launch gate decides which are allowed)
+BACKEND_KIND_MOCK = "mock"
+BACKEND_KIND_REPLAY = "replay"
+BACKEND_KIND_REAL = "real"
+BACKEND_KINDS = frozenset({BACKEND_KIND_MOCK, BACKEND_KIND_REPLAY,
+                           BACKEND_KIND_REAL})
 ROLE_PROMPT_VERSION = "feedback_llm_ued.roles.v1"
 RECONCILE_RULE_VERSION = "feedback_llm_ued.reconcile.v1"
 

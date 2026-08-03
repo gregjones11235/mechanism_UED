@@ -41,12 +41,32 @@ class TestAuthorizationPosture:
         assert C.REAL_LLM_CALLS_AUTHORIZED is False
         assert C.REAL_SIMULATOR_PROBE_AUTHORIZED is False
         assert C.REAL_SIMULATOR_PROBE_STATUS == "BLOCKED_NO_LOCAL_CRAFTAX"
+        # round status flags (director review board): every real capability
+        # flag stays False; the implementation is ENGINEERING_SCAFFOLD
+        for name in C.NEVER_TRUE_REAL_CAPABILITY_FLAGS:
+            assert getattr(C, name) is False, name
+        assert C.SOTA_INTEGRATION_READY is False
+        assert C.REAL_CHECKPOINT_LOADED is False
+        assert C.REAL_TRAINING_UPDATE_EXECUTED is False
+        assert C.REAL_ENVCODER_USED is False
+        assert C.REAL_SIMULATOR_PROBE is False
+        assert C.SHARED_ANCHOR_MANIFEST_BOUND is False
 
     def test_controller_refuses_any_true_flag(self, monkeypatch):
         monkeypatch.setattr(C, "TRAINING_AUTHORIZED", True)
         with pytest.raises(RuntimeError,
                            match="AUTHORIZATION_POSTURE_VIOLATED"):
             FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+
+    def test_controller_refuses_any_never_true_status_flag(self, monkeypatch):
+        for name in ("SOTA_INTEGRATION_READY", "REAL_CHECKPOINT_LOADED",
+                     "REAL_TRAINING_UPDATE_EXECUTED", "REAL_ENVCODER_USED",
+                     "REAL_SIMULATOR_PROBE"):
+            monkeypatch.setattr(C, name, True)
+            with pytest.raises(RuntimeError,
+                               match="AUTHORIZATION_POSTURE_VIOLATED"):
+                FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+            monkeypatch.setattr(C, name, False)
 
     def test_unknown_mode_rejected(self):
         with pytest.raises(ValueError, match="UNKNOWN_MODE"):
@@ -162,7 +182,8 @@ class TestNormalFeedbackLoop:
             assert len(e.request_hash) == 64
             assert len(e.response_hash) == 64
             assert e.backend_id == C.MOCK_BACKEND_ID
-        assert ctl.backend.real_calls == 0
+        assert ctl.backend.usage.real_calls == 0
+        assert ctl.backend.usage.total_calls == 15
         assert ctl.runner.real_simulator is False
 
     def test_simulator_cost_accounting(self, runs):
