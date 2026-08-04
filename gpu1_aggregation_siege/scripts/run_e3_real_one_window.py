@@ -207,8 +207,8 @@ def main(argv=None) -> int:
         two_llm_runtime=None,  # no authorized real LLM runtime this round
         anchor_manifest=None,     # controller-signed manifest pending
         retention=None,
-        loss_fn=None,             # original loss injection pending audit
-        optimizer_update_fn=None,  # optimizer update injection pending audit
+        training_runtime=None,    # bound original training runtime pending audit
+        taskparam_apply_fn=None,  # injected TaskParams application pending audit
     )
 
     pre = run_e3_preflight(config)

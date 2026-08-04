@@ -18,8 +18,9 @@ Honesty rules enforced structurally:
   instead of running on fakes.
 * The Student network, reward, action head, optimizer and the original loss
   definition are NEVER modified or redefined here: the loss and the optimizer
-  update are injected callables (``loss_fn`` / ``optimizer_update_fn``) and
-  the pipeline only verifies their outputs.
+  update arrive through ONE minted ``OriginalTrainingRuntime`` binding
+  (CC4 follow-up P0-12 — no plain callables) and the pipeline only verifies
+  their outputs.
 * ZERO_MEMORY is never accepted as a production memory mode.
 * REAL_* execution flags in the report reflect ONLY what actually ran.
 """
@@ -96,6 +97,12 @@ from .anchor_manifest import (
     validate_anchor_manifest,
 )
 from .student_binding import bind_capture_entry
+from .training_runtime import (
+    BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME,
+    OriginalTrainingRuntime,
+    runtime_binding_summary,
+    verify_original_training_runtime,
+)
 from .verified_restore_context import mint_verified_restore_context
 from dicode.student_adapters.protocol import StudentAdapter
 
@@ -112,8 +119,6 @@ CHECKPOINT_RELOAD = False
 
 BLOCKED_TRAINING_SURFACE_PENDING_R9 = "BLOCKED_TRAINING_SURFACE_PENDING_R9"
 BLOCKED_NO_CAPTURE_PROVENANCE = "BLOCKED_NO_CAPTURE_PROVENANCE"
-BLOCKED_NO_INJECTED_ORIGINAL_LOSS = "BLOCKED_NO_INJECTED_ORIGINAL_LOSS"
-BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE = "BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE"
 BLOCKED_NO_INJECTED_TASKPARAM_APPLY_FN = "BLOCKED_NO_INJECTED_TASKPARAM_APPLY_FN"
 BLOCKED_NO_INJECTED_PREDICATES = "BLOCKED_NO_INJECTED_PREDICATES"
 BLOCKED_NO_OBSERVE_FN = "BLOCKED_NO_OBSERVE_FN"
@@ -206,8 +211,12 @@ class E3WindowConfig:
     # --- mixed-start update -----------------------------------------------------
     mixed_episodes: int = 0
     episode_horizon: int = 0
-    loss_fn: Callable[..., Any] | None = None            # ORIGINAL loss, injected
-    optimizer_update_fn: Callable[..., Any] | None = None  # exactly one update
+    # CC4 follow-up (P0-12): the original loss and the optimizer update are
+    # never plain callables on the production path.  They arrive through ONE
+    # minted OriginalTrainingRuntime binding (descriptors + per-callable
+    # source hashes + recomputed runtime hash); an unbound or drifted runtime
+    # is a named preflight blocker (no second loss, no second optimizer).
+    training_runtime: OriginalTrainingRuntime | None = None
     # CC4 follow-up (P0-11): the compiled distributions' TaskParams must
     # EXECUTE: every frontier episode applies its binding's taskparams to the
     # base env params through this injected surface
@@ -335,12 +344,19 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     if not isinstance(config.two_llm_runtime, AuthorizedTwoLLMRuntime):
         blockers.append(REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT)
 
-    gates["ORIGINAL_LOSS_INJECTED"] = bool(callable(config.loss_fn))
-    if not callable(config.loss_fn):
-        blockers.append(BLOCKED_NO_INJECTED_ORIGINAL_LOSS)
-    gates["ORIGINAL_OPTIMIZER_UPDATE_INJECTED"] = bool(callable(config.optimizer_update_fn))
-    if not callable(config.optimizer_update_fn):
-        blockers.append(BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE)
+    # CC4 follow-up (P0-12): the original loss + optimizer update must arrive
+    # as ONE minted, verified OriginalTrainingRuntime binding — plain
+    # callables are no longer accepted on the production path.
+    runtime = config.training_runtime
+    runtime_ok = isinstance(runtime, OriginalTrainingRuntime)
+    if runtime_ok:
+        try:
+            verify_original_training_runtime(runtime)
+        except InvalidEvidenceError:
+            runtime_ok = False
+    gates["ORIGINAL_TRAINING_RUNTIME_BOUND"] = bool(runtime_ok)
+    if not runtime_ok:
+        blockers.append(BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME)
     # CC4 follow-up (P0-11): every compiled distribution carries non-empty
     # taskparam_ranges (the compiler enforces it), so the mixed-start step
     # ALWAYS needs the injected TaskParams application surface — an unbound
@@ -1116,16 +1132,28 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         "executed_distribution_ids": tuple(executed_distribution_ids),
     }
 
-    # STEP 9 — injected ORIGINAL loss (never redefined here).
-    loss_value = config.loss_fn(batch, config.student_params)
+    # STEP 9 — ORIGINAL loss through the bound training runtime (P0-12).
+    # Defense in depth: preflight already verified the binding; re-verify
+    # here so a drifted runtime object can never reach the loss call.
+    training_runtime = config.training_runtime
+    if not isinstance(training_runtime, OriginalTrainingRuntime):
+        raise ProductionBlockedError(
+            f"{BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME}: STEP09 requires the "
+            "minted OriginalTrainingRuntime binding (plain callables are never "
+            "accepted)")
+    verify_original_training_runtime(training_runtime)
+    loss_value = training_runtime.loss_fn(batch, config.student_params)
     loss_float = float(np.asarray(loss_value))
     if not math.isfinite(loss_float):
         raise ProductionBlockedError(
             f"injected original loss returned a non-finite value: {loss_float}")
-    steps["STEP09_INJECTED_ORIGINAL_LOSS"] = {"loss": loss_float}
+    steps["STEP09_INJECTED_ORIGINAL_LOSS"] = {
+        "loss": loss_float,
+        "runtime_binding": runtime_binding_summary(training_runtime),
+    }
 
-    # STEP 10 — EXACTLY ONE injected optimizer update.
-    update_out = config.optimizer_update_fn(config.student_params, batch)
+    # STEP 10 — EXACTLY ONE optimizer update from the SAME bound runtime.
+    update_out = training_runtime.optimizer_update_fn(config.student_params, batch)
     if not isinstance(update_out, Mapping) or "params" not in update_out:
         raise ProductionBlockedError(
             "optimizer_update_fn must return a mapping containing 'params'")
@@ -1147,6 +1175,7 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         "params_sha256_before": params_sha,
         "params_sha256_after": new_sha,
         "grad_norm": grad_norm,
+        "runtime_hash": training_runtime.runtime_hash,
     }
 
     # STEP 11 — checkpoint save/load round trip via the adapter.
