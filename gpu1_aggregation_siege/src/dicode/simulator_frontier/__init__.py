@@ -273,6 +273,20 @@ from .surface_capability import (
     mint_training_surface_capability,
     verify_training_surface_capability,
 )
+from .runtime_bundle import (
+    RUNTIME_BUNDLE_SCHEMA,
+    RUNTIME_BUNDLE_VERSION,
+    anchor_manifest_from_payload,
+    capability_from_payload,
+    capture_provenance_from_payload,
+    discovery_registry_from_payload,
+    import_entrypoint,
+    load_runtime_bundle_manifest,
+    resolve_bundle_asset_files,
+    restore_request_from_payload,
+    retention_from_payload,
+    validate_runtime_bundle_manifest,
+)
 from .anchor_manifest import (
     ANCHOR_SLOT_COUNT,
     BLOCKED_SHARED_ANCHOR_MANIFEST,
@@ -405,6 +419,12 @@ __all__ = [
     "BLOCKED_NO_SIGNED_TRAINING_SURFACE_CAPABILITY", "SURFACE_CAPABILITY_VERSION",
     "TrainingSurfaceCapability", "mint_training_surface_capability",
     "verify_training_surface_capability",
+    "RUNTIME_BUNDLE_SCHEMA", "RUNTIME_BUNDLE_VERSION",
+    "anchor_manifest_from_payload", "capability_from_payload",
+    "capture_provenance_from_payload", "discovery_registry_from_payload",
+    "import_entrypoint", "load_runtime_bundle_manifest",
+    "resolve_bundle_asset_files", "restore_request_from_payload",
+    "retention_from_payload", "validate_runtime_bundle_manifest",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
     "AnchorDefinition", "AnchorManifest", "RetentionContract",
