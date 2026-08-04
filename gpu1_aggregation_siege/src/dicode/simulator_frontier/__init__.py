@@ -266,6 +266,13 @@ from .round_trip_evidence import (
     mint_checkpoint_round_trip_evidence,
     verify_checkpoint_round_trip_evidence,
 )
+from .surface_capability import (
+    BLOCKED_NO_SIGNED_TRAINING_SURFACE_CAPABILITY,
+    SURFACE_CAPABILITY_VERSION,
+    TrainingSurfaceCapability,
+    mint_training_surface_capability,
+    verify_training_surface_capability,
+)
 from .anchor_manifest import (
     ANCHOR_SLOT_COUNT,
     BLOCKED_SHARED_ANCHOR_MANIFEST,
@@ -395,6 +402,9 @@ __all__ = [
     "RESTORE_DRIVER_IN_PROCESS_ADAPTER", "ROUND_TRIP_EVIDENCE_VERSION",
     "CheckpointRoundTripEvidence", "measure_replay_equivalence",
     "mint_checkpoint_round_trip_evidence", "verify_checkpoint_round_trip_evidence",
+    "BLOCKED_NO_SIGNED_TRAINING_SURFACE_CAPABILITY", "SURFACE_CAPABILITY_VERSION",
+    "TrainingSurfaceCapability", "mint_training_surface_capability",
+    "verify_training_surface_capability",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
     "AnchorDefinition", "AnchorManifest", "RetentionContract",

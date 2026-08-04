@@ -209,6 +209,7 @@ def main(argv=None) -> int:
         retention=None,
         training_runtime=None,    # bound original training runtime pending audit
         taskparam_apply_fn=None,  # injected TaskParams application pending audit
+        training_surface_capability=None,  # signed capability descriptor pending
     )
 
     pre = run_e3_preflight(config)

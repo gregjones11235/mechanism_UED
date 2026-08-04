@@ -110,6 +110,11 @@ from .anchor_manifest import (
     validate_anchor_manifest,
 )
 from .student_binding import bind_capture_entry
+from .surface_capability import (
+    BLOCKED_NO_SIGNED_TRAINING_SURFACE_CAPABILITY,
+    TrainingSurfaceCapability,
+    verify_training_surface_capability,
+)
 from .training_runtime import (
     BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME,
     OriginalTrainingRuntime,
@@ -173,6 +178,10 @@ class E3WindowConfig:
     student: Any = None                       # StudentAdapter
     student_params: Any = None
     loaded_state: Mapping[str, Any] | None = None  # adapter.load_full_state output
+    # CC4 follow-up (P0-15): training-surface capability arrives as a signed
+    # descriptor (never inferred from exception probes).  Unbound/invalid/
+    # self-signed/foreign-identity descriptors block the preflight.
+    training_surface_capability: TrainingSurfaceCapability | None = None
     reference_student: Any = None
     reference_params: Any = None
     # CC4 follow-up (P0-5): the Reference identity/checkpoint/memory binding.
@@ -250,28 +259,6 @@ class E3PreflightResult:
     preflight_version: str = PREFLIGHT_VERSION
 
 
-def _probe_training_surface(student: Any, method_name: str) -> bool:
-    """True unless the adapter's method raises NotImplementedError.
-
-    The probe argument is an empty path: a real implementation fails with a
-    file/schema error (surface exists); the R9-pending read-only mount raises
-    NotImplementedError (surface absent).  Nothing is written either way.
-    """
-    method = getattr(student, method_name, None)
-    if method is None:
-        return False
-    try:
-        if method_name == "restore_full_state":
-            method("")
-        else:  # save_full_state: empty path can only fail, never write
-            method("", None, {})
-    except NotImplementedError:
-        return False
-    except Exception:
-        return True
-    return True
-
-
 def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     """Fail-closed production preflight: every gap is a named blocker."""
     gates: dict[str, bool] = {}
@@ -283,15 +270,44 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     if not mounted:
         blockers.append("BLOCKED_STUDENT_NOT_MOUNTED")
 
-    surface = mounted and _probe_training_surface(student, "restore_full_state")
+    # CC4 follow-up (P0-15): training-surface capability is never inferred
+    # from exception behaviour — the old empty-path probes were spoofable
+    # (any adapter raising a generic error got certified) and are DELETED.
+    # Capability is now evidence: a signed TrainingSurfaceCapability
+    # descriptor, verified here, bound to the MOUNTED adapter's identity,
+    # and carrying a non-synthetic controller signature.
+    capability = config.training_surface_capability
+    capability_verified = isinstance(capability, TrainingSurfaceCapability)
+    if capability_verified:
+        try:
+            verify_training_surface_capability(capability)
+        except InvalidEvidenceError:
+            capability_verified = False
+    if capability_verified and str(capability.signature_ref).startswith(
+            SYNTHETIC_SIGNATURE_PREFIX):
+        # A self-signed capability descriptor is never production evidence.
+        capability_verified = False
+    if capability_verified and mounted and str(
+            capability.adapter_identity_hash) != str(
+                student.identity().identity_hash()):
+        # A descriptor for ANOTHER adapter never certifies this mount.
+        capability_verified = False
+    gates["TRAINING_SURFACE_CAPABILITY_SIGNED"] = bool(capability_verified)
+    if not capability_verified:
+        blockers.append(BLOCKED_NO_SIGNED_TRAINING_SURFACE_CAPABILITY)
+
+    surface = (mounted and capability_verified
+               and bool(capability.save_full_state_capable)
+               and bool(capability.restore_full_state_capable))
     gates["STUDENT_TRAINING_SURFACE"] = bool(surface)
-    if not surface:
+    if mounted and capability_verified and not surface:
+        # The signed descriptor itself declares the surface absent (R9).
         blockers.append(BLOCKED_TRAINING_SURFACE_PENDING_R9)
 
-    round_trip = mounted and _probe_training_surface(student, "save_full_state")
+    # A round trip requires BOTH save and restore, so it is green exactly
+    # when the signed descriptor certifies the full surface.
+    round_trip = surface
     gates["CHECKPOINT_ROUND_TRIP_CAPABILITY"] = bool(round_trip)
-    if not round_trip:
-        blockers.append(f"{BLOCKED_TRAINING_SURFACE_PENDING_R9}:save_full_state")
 
     request = config.restore_request
     bundle_ok = (
