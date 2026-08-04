@@ -62,14 +62,15 @@ from .fresh_process_restore import (
     verdict_from_evidence,
 )
 from .invocation_gate import (
-    InvocationReason,
     build_aggregate_evidence,
-    decide_invocation,
+    evidence_hash_of,
 )
 from .llm_contracts import (
     REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT,
     AuthorizedTwoLLMRuntime,
     PlannerOutput,
+    assert_planner_output_bound,
+    derive_invocation_from_evidence,
     run_two_llm_production,
 )
 from .memory_modes import MemoryRestoreMode, MemoryRestoreRequest
@@ -180,8 +181,11 @@ class E3WindowConfig:
     # (mint-only authorization + call journal); a bare client factory is no
     # longer accepted on the official path.
     two_llm_runtime: AuthorizedTwoLLMRuntime | None = None
-    previous_plan_ref: str | None = None      # None -> REVISION_REQUIRED (2 calls)
-    reuse_plan: PlannerOutput | None = None   # required when 0 calls reuse it
+    # CC4 follow-up (P0-9): the 0-or-2 decision is DERIVED from measured
+    # evidence change; a reuse is only possible with the full typed previous
+    # plan AND the evidence hash that plan was bound to.
+    reuse_plan: PlannerOutput | None = None
+    previous_evidence_hash: str = ""
     # --- selector / distributions ----------------------------------------------
     anchor_manifest: AnchorManifest | None = None
     retention: RetentionContract | None = None
@@ -762,11 +766,19 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     }
     evidence = build_aggregate_evidence(
         estimate, archive_summary, data_source=DataSource.TRAINING_FRONTIER_CAPTURE)
-    if config.previous_plan_ref:
-        decision = decide_invocation(InvocationReason.NO_SIGNIFICANT_CHANGE,
-                                     reuse_plan_ref=config.previous_plan_ref)
-    else:
-        decision = decide_invocation(InvocationReason.REVISION_REQUIRED)
+    # CC4 follow-up (P0-9): the 0-or-2 decision is DERIVED from measured
+    # evidence change — never from the mere presence of a previous plan
+    # reference.  A revision (2 calls) is forced whenever the aggregate
+    # evidence, the search budget or the memory mode drifted since the
+    # previous typed plan was issued.
+    decision, invocation_reasons = derive_invocation_from_evidence(
+        current_evidence_hash=evidence_hash_of(evidence),
+        previous_plan=config.reuse_plan,
+        previous_evidence_hash=config.previous_evidence_hash,
+        requested_n=int(config.requested_n),
+        horizon=int(config.horizon),
+        memory_mode=str(MemoryRestoreMode(str(config.memory_mode)).value),
+    )
     llm_result = run_two_llm_production(
         decision, evidence, runtime=config.two_llm_runtime,
         expected_state_id=state_id)
@@ -779,12 +791,18 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
             raise ProductionBlockedError(
                 "0-call reuse requires the explicit typed previous plan "
                 "(reuse is never implied)")
+        # The FULL typed plan must genuinely bind the previous evidence hash
+        # before it may be reused (defense in depth: the derivation step
+        # already re-verified it).
+        assert_planner_output_bound(config.reuse_plan,
+                                    evidence_hash=config.previous_evidence_hash)
         plan = config.reuse_plan
     steps["STEP05_TWO_LLM_TYPED_PRODUCTION_GATE"] = {
         "llm_calls": llm_result["llm_calls"],
         "role_order": list(llm_result["role_order"]),
         "evidence_hash": llm_result["evidence_hash"],
         "plan_id": plan.plan_id,
+        "invocation_reasons": list(invocation_reasons),
         # CC4 follow-up (P0-8): authorization + call journal audit trail.
         "authorization_id": llm_result["authorization_id"],
         "journal_entries": len(llm_result["journal"]["entries"]),

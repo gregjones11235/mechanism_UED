@@ -39,7 +39,9 @@ from .invocation_gate import (
     INVOCATION_FORBIDDEN_KEYS,
     InvocationContractError,
     InvocationDecision,
+    InvocationReason,
     LLM_ROLE_SEQUENCE,
+    decide_invocation,
     evidence_hash_of,
 )
 from .memory_modes import MemoryRestoreMode
@@ -345,6 +347,92 @@ def validate_planner_output(raw: Any, *, evidence_hash: str,
         reason=reason,
         plan_hash=plan_hash,
     )
+
+
+def assert_planner_output_bound(plan: Any, *, evidence_hash: str) -> None:
+    """Verify a FULL typed plan genuinely binds the evidence hash it claims.
+
+    CC4 follow-up (P0-9): a reused plan is never trusted by reference — its
+    ``plan_hash`` is recomputed from the typed plan's own fields and must
+    equal the stored hash for the supplied evidence hash.  Any field
+    mutation, or a plan bound to different evidence, raises.
+    """
+    if isinstance(plan, Mapping):
+        raise LLMContractError(
+            "plain mappings are not a PlannerOutput (a reused plan must be "
+            "fully typed; hand-built mappings are refused)")
+    if not isinstance(plan, PlannerOutput):
+        raise LLMContractError(
+            f"reused plan must be a typed PlannerOutput, got {type(plan).__name__}")
+    if not evidence_hash:
+        raise LLMContractError(
+            "assert_planner_output_bound requires the evidence hash the plan claims")
+    recomputed = compute_planner_hash(asdict(plan), evidence_hash=evidence_hash)
+    if recomputed != plan.plan_hash:
+        raise LLMContractError(
+            "PREVIOUS_PLAN_HASH_MISMATCH: the typed previous plan does not "
+            "recompute to its own plan_hash for the claimed evidence "
+            "(reuse refused; fail closed)")
+
+
+def derive_invocation_from_evidence(
+        *, current_evidence_hash: str,
+        previous_plan: Any,
+        previous_evidence_hash: str,
+        requested_n: int,
+        horizon: int,
+        memory_mode: str) -> tuple[InvocationDecision, tuple[str, ...]]:
+    """CC4 follow-up (P0-9): derive the 0-or-2 decision from EVIDENCE CHANGE.
+
+    The decision no longer depends on whether somebody supplied a previous
+    plan reference: it is computed by deterministic rules comparing the
+    current aggregate evidence against what the previous typed plan was
+    bound to.  Revision (2 calls) is required whenever:
+
+    - there is no previous typed plan at all (``NO_PREVIOUS_PLAN``);
+    - the previous plan's bound evidence hash is missing
+      (``NO_PREVIOUS_EVIDENCE_HASH``);
+    - the aggregate evidence changed (``EVIDENCE_HASH_CHANGED``);
+    - the plan's search budget / memory mode no longer matches the window's
+      configured budget / memory mode (``PLAN_ACTUAL_N_STALE``,
+      ``PLAN_HORIZON_STALE``, ``PLAN_MEMORY_MODE_STALE``).
+
+    Only when NONE of those rules fire is NO_SIGNIFICANT_CHANGE (0 calls,
+    reuse of the exact typed plan) returned.  The previous plan is
+    mechanically re-verified (``assert_planner_output_bound``) before reuse
+    is even considered; a stale or tampered plan always forces a revision.
+    """
+    _require_sha256("current_evidence_hash", current_evidence_hash)
+    reasons: list[str] = []
+    if previous_plan is None:
+        reasons.append("NO_PREVIOUS_PLAN")
+    else:
+        if isinstance(previous_plan, Mapping):
+            raise LLMContractError(
+                "previous plan must be a typed PlannerOutput, not a mapping "
+                "(an untyped reference can never suppress the two LLM calls)")
+        if not isinstance(previous_plan, PlannerOutput):
+            raise LLMContractError(
+                f"previous plan must be a typed PlannerOutput, got "
+                f"{type(previous_plan).__name__}")
+        if not str(previous_evidence_hash).strip():
+            reasons.append("NO_PREVIOUS_EVIDENCE_HASH")
+        else:
+            # Full typed verification: raises on ANY tampering or stale bind.
+            assert_planner_output_bound(previous_plan,
+                                        evidence_hash=previous_evidence_hash)
+            if str(previous_evidence_hash) != str(current_evidence_hash):
+                reasons.append("EVIDENCE_HASH_CHANGED")
+            if int(previous_plan.actual_n) != int(requested_n):
+                reasons.append("PLAN_ACTUAL_N_STALE")
+            if int(previous_plan.horizon) != int(horizon):
+                reasons.append("PLAN_HORIZON_STALE")
+            if str(previous_plan.memory_mode) != str(memory_mode):
+                reasons.append("PLAN_MEMORY_MODE_STALE")
+    if reasons:
+        return decide_invocation(InvocationReason.REVISION_REQUIRED), tuple(reasons)
+    return decide_invocation(InvocationReason.NO_SIGNIFICANT_CHANGE,
+                             reuse_plan_ref=previous_plan.plan_id), ()
 
 
 def run_typed_two_llm_gate(decision: InvocationDecision, evidence: Mapping[str, Any], *,
