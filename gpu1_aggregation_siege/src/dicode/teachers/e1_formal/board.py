@@ -5,6 +5,15 @@ Every TRIGGERED window runs ALL six roles in the fixed order
     student_modeler -> behavior_auditor -> causal_failure_analyst
     -> intervention_tutor -> explorer -> critic
 
+SEQUENTIAL COOPERATION (round-3 P0-1): role k's prompt binds
+(a) the board context — window identity, session, trigger code,
+evidence hash and the pinned Student candidate id — and (b) every
+SUCCESSFULLY PARSED structured output of roles 0..k-1, rendered into
+the user prompt AND hash-bound into the prompt envelope. Roles never
+see a bare evidence-only prompt, and no later role can be replayed
+against an earlier role's envelope: the replay key changes with the
+whole upstream chain.
+
 There is NO two-role subset and NO conditional reviewer path. The
 critic always runs and is never conditioned away. All six calls are
 recorded by the accounting ledger even when the window's outputs are
@@ -23,16 +32,17 @@ Discipline per role output:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from ..static_llm.guards import raise_if_forbidden
 from ..static_llm.schemas import parse_diagnosis, parse_intervention_plan
-from .canonical import canonical_sha256
+from .canonical import canonical_json, canonical_sha256
 from .evidence import EvidenceSnapshot, render_evidence_for_prompt
 from .json_parse import extract_json_block
 from .llm_client import make_replay_key
 from .manifest import BOARD_PROMPT_VERSION, BOARD_ROLE_ORDER, ROLE_OUTPUT_SCHEMA_VERSION
 from .schemas import E1Code, E1SchemaError
+from .student_contract import PINNED_STUDENT_CANDIDATE_ID
 
 WINDOW_STATUS_COMPLETE = "COMPLETE"
 WINDOW_STATUS_VOID = "VOID"
@@ -64,6 +74,7 @@ class _BCode:
     OUTPUT_OUT_OF_RANGE = "BOARD_OUTPUT_OUT_OF_RANGE"
     DUPLICATE_ID = "BOARD_OUTPUT_DUPLICATE_ID"
     TOO_MANY_ITEMS = "BOARD_OUTPUT_TOO_MANY_ITEMS"
+    CHAIN_HASH_MISMATCH = "BOARD_CHAIN_HASH_MISMATCH"
     WINDOW_HASH_MISMATCH = "WINDOW_HASH_MISMATCH"
     RECORD_BAD_TYPE = "WINDOW_RECORD_BAD_TYPE"
     RECORD_UNKNOWN_FIELD = "WINDOW_RECORD_UNKNOWN_FIELD"
@@ -129,29 +140,139 @@ class ReviewWindow:
     window_hash: str
 
 
+@dataclass(frozen=True)
+class BoardContext:
+    """Identity every role prompt is bound to (round-3 P0-1).
+
+    ``student_candidate_id`` is the pinned strong-Student identity of
+    this pipeline; every role models/audits/intervenes with respect to
+    THAT student, never an anonymous one.
+    """
+
+    window_id: str
+    session_idx: int
+    trigger_code: str
+    evidence_hash: str
+    student_candidate_id: str
+
+
+@dataclass(frozen=True)
+class UpstreamOutput:
+    """One successfully-parsed earlier role output in the chain."""
+
+    role: str
+    output: Any  # canonical-encodable parsed JSON object
+    output_hash: str  # == role_output_hash(role, output)
+
+
+def make_board_context(
+    *, window_id: str, session_idx: int, trigger_code: str,
+    evidence_hash: str,
+) -> BoardContext:
+    """Build the board context with the pinned Student identity."""
+    return BoardContext(
+        window_id=window_id,
+        session_idx=session_idx,
+        trigger_code=trigger_code,
+        evidence_hash=evidence_hash,
+        student_candidate_id=PINNED_STUDENT_CANDIDATE_ID,
+    )
+
+
+def role_output_hash(role: str, parsed: Any) -> str:
+    """Canonical hash of one role's parsed structured output."""
+    return canonical_sha256({"role": role, "output": parsed})
+
+
 # ---------------------------------------------------------------------------
-# Prompt construction (deterministic)
+# Prompt construction (deterministic; context + upstream chain bound)
 # ---------------------------------------------------------------------------
-def build_role_prompt(role: str, evidence: EvidenceSnapshot) -> Tuple[str, str]:
-    """Return (system_prompt, user_prompt) for a board role."""
+def _render_upstream(upstream: Sequence[UpstreamOutput]) -> str:
+    if not upstream:
+        return "(none — you are the first role in the sequence)"
+    lines = []
+    for entry in upstream:
+        lines.append(
+            f"[role={entry.role} output_hash={entry.output_hash}]\n"
+            f"{canonical_json(entry.output)}"
+        )
+    return "\n".join(lines)
+
+
+def build_role_prompt(
+    role: str,
+    evidence: EvidenceSnapshot,
+    *,
+    context: BoardContext,
+    upstream: Sequence[UpstreamOutput] = (),
+) -> Tuple[str, str]:
+    """Return (system_prompt, user_prompt) for a board role.
+
+    The user prompt carries TASK / WINDOW / STUDENT / EVIDENCE /
+    UPSTREAM_ROLE_OUTPUTS sections: every later role literally reads
+    the structured outputs of all earlier roles that parsed
+    successfully, and the envelope hash binds the same chain.
+    """
     if role not in ROLE_SYSTEM_PROMPTS:
         raise BoardError(
             _BCode.OUTPUT_UNKNOWN_FIELD,
             f"no prompt defined for role {role!r} (allowed: "
             f"{list(BOARD_ROLE_ORDER)})",
         )
+    if not isinstance(context, BoardContext):
+        raise BoardError(
+            _BCode.OUTPUT_BAD_TYPE,
+            f"build_role_prompt requires a BoardContext, got "
+            f"{type(context).__name__}",
+        )
+    upstream = tuple(upstream)
+    for i, entry in enumerate(upstream):
+        if not isinstance(entry, UpstreamOutput):
+            raise BoardError(
+                _BCode.OUTPUT_BAD_TYPE,
+                f"upstream[{i}] must be an UpstreamOutput, got "
+                f"{type(entry).__name__}",
+            )
+        if entry.output_hash != role_output_hash(entry.role, entry.output):
+            raise BoardError(
+                _BCode.CHAIN_HASH_MISMATCH,
+                f"upstream[{i}] ({entry.role}) output_hash does not match "
+                f"its output (chain corruption)",
+            )
     user_prompt = (
         f"TASK: {_ROLE_TASK_LINES[role]}\n"
+        f"WINDOW: window_id={context.window_id} "
+        f"session_idx={context.session_idx} "
+        f"trigger_code={context.trigger_code}\n"
+        f"STUDENT: student_candidate_id={context.student_candidate_id}\n"
         f"EVIDENCE:\n{render_evidence_for_prompt(evidence)}\n"
+        f"UPSTREAM_ROLE_OUTPUTS (parsed outputs of earlier roles in the "
+        f"fixed sequence; build on them, do not contradict them without "
+        f"stating why):\n{_render_upstream(upstream)}\n"
         "Respond with exactly one JSON object matching your role output "
         "contract."
     )
     return ROLE_SYSTEM_PROMPTS[role], user_prompt
 
 
-def build_prompt_envelope_hash(role: str, evidence: EvidenceSnapshot) -> str:
-    """Canonical hash of the full prompt envelope for a board role."""
-    system_prompt, user_prompt = build_role_prompt(role, evidence)
+def build_prompt_envelope_hash(
+    role: str,
+    evidence: EvidenceSnapshot,
+    *,
+    context: BoardContext,
+    upstream: Sequence[UpstreamOutput] = (),
+) -> str:
+    """Canonical hash of the full prompt envelope for a board role.
+
+    Binds the prompts AND the board identity (window/session/trigger/
+    evidence hash as ``window_identity``, Student candidate id) AND the
+    hash chain of every upstream role output — so the envelope (and the
+    replay key derived from it) changes with the sequential chain.
+    """
+    system_prompt, user_prompt = build_role_prompt(
+        role, evidence, context=context, upstream=upstream
+    )
+    upstream = tuple(upstream)
     return canonical_sha256(
         {
             "role": role,
@@ -159,6 +280,17 @@ def build_prompt_envelope_hash(role: str, evidence: EvidenceSnapshot) -> str:
             "schema_version": ROLE_OUTPUT_SCHEMA_VERSION,
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
+            "base_evidence_hash": evidence.evidence_hash,
+            "window_identity": [
+                context.window_id,
+                context.session_idx,
+                context.trigger_code,
+                context.evidence_hash,
+            ],
+            "student_candidate_id": context.student_candidate_id,
+            "upstream_outputs": [
+                [entry.role, entry.output_hash] for entry in upstream
+            ],
         }
     )
 
@@ -543,20 +675,39 @@ def run_review_board(
 ) -> ReviewWindow:
     """Run the full six-role board; every call is accounted.
 
+    SEQUENTIAL COOPERATION (round-3 P0-1): the board context (window
+    identity + pinned Student candidate id + evidence hash) is built
+    once; each role k receives the parsed structured outputs of roles
+    0..k-1 THAT PARSED SUCCESSFULLY, rendered into its user prompt and
+    hash-bound into its envelope (hence into its replay key). A failed
+    earlier role therefore changes every later envelope — the chain is
+    honest, never patched over.
+
     All six roles ALWAYS run once the window is open; any per-role
     failure voids the whole window (``INCOMPLETE_REVIEW_WINDOW``) but
     does not skip the remaining roles. A replay cache miss is a HARD
     FAIL and propagates (no fallback).
     """
+    board_context = make_board_context(
+        window_id=window_id,
+        session_idx=session_idx,
+        trigger_code=trigger_code,
+        evidence_hash=evidence.evidence_hash,
+    )
     ledger.record_window_open(window_id)
     role_results: List[Tuple[str, Any]] = []
     failures: List[Dict[str, str]] = []
     parsed: Dict[str, Any] = {}
+    upstream: List[UpstreamOutput] = []
 
     for role in BOARD_ROLE_ORDER:
         ledger.record_board_call(window_id, role)
-        system_prompt, user_prompt = build_role_prompt(role, evidence)
-        envelope_hash = build_prompt_envelope_hash(role, evidence)
+        system_prompt, user_prompt = build_role_prompt(
+            role, evidence, context=board_context, upstream=upstream
+        )
+        envelope_hash = build_prompt_envelope_hash(
+            role, evidence, context=board_context, upstream=upstream
+        )
         cache_key = make_replay_key(
             role=role,
             evidence_hash=evidence.evidence_hash,
@@ -587,6 +738,13 @@ def run_review_board(
         else:
             parsed[role] = obj
             role_results.append((role, obj))
+            upstream.append(
+                UpstreamOutput(
+                    role=role,
+                    output=obj,
+                    output_hash=role_output_hash(role, obj),
+                )
+            )
 
     if failures:
         status, void_code = WINDOW_STATUS_VOID, E1Code.INCOMPLETE_REVIEW_WINDOW

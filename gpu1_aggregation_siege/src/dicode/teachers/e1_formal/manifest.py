@@ -40,7 +40,11 @@ BOARD_ROLE_ORDER = (
 #: Independent artifact producer, OUTSIDE the board window.
 ENVCODER_ROLE = "envcoder"
 
-BOARD_PROMPT_VERSION = "e1-board-prompt-v1"
+#: v2 (round-3 P0-1): the per-role prompt now binds the board context
+#: (window identity, student candidate id, evidence hash) and every
+#: successfully-parsed upstream role output, so the envelope hash — and
+#: therefore every replay key — changes with the sequential chain.
+BOARD_PROMPT_VERSION = "e1-board-prompt-v2"
 ENVCODER_PROMPT_VERSION = "e1-envcoder-prompt-v1"
 ROLE_OUTPUT_SCHEMA_VERSION = "e1-role-output-v1"
 ENVCODER_OUTPUT_SCHEMA_VERSION = "e1-envcoder-output-v1"

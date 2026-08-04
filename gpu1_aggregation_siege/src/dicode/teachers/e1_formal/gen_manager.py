@@ -9,9 +9,10 @@ GenManager`` surface consumed by ``setup.py`` / ``run_dicode.py`` /
 * ``.archive``                provenance-admissible ``ArchiveView``;
 * ``.env_generator.check_compilation(code) -> (bool, str)``;
 * ``.evolve_tasks(dict_of_tasks, global_agent_profile) -> list[dict]``
-  returns EXACTLY 12 worker dicts; BOTH arguments are IGNORED entirely
-  (provenance rule: evolve-side metrics never enter the teacher, its
-  prompts, or its ledger);
+  returns the window's compiled worker pool (>= 12 real compiled
+  workers, or the honest 12-entry reuse batch while blocked/refused);
+  BOTH arguments are IGNORED entirely (provenance rule: evolve-side
+  metrics never enter the teacher, its prompts, or its ledger);
 * ``.select_context_tasks(...)`` -> ``[]`` (honest: no admissible
   context tasks exist without real probes);
 * ``.observe_session_feedback(session_idx, metrics)`` re-verifies
@@ -92,6 +93,12 @@ from .controller import run_review_cycle
 from .envcoder import EnvCoderError, run_envcoder
 from .evidence import build_evidence_snapshot
 from .flags import parse_flags
+from .gate_signals import (
+    INVOCATION_THRESHOLD_MISSING,
+    GateSignalError,
+    compute_gate_signals,
+    consume_gate_thresholds,
+)
 from .invocation_gate import build_gate_state
 from .llm_client import ReplayLLMClient
 from .reference_contract import (
@@ -356,6 +363,59 @@ class E1FormalGenManager:
             else:
                 raise
 
+        # ---- P0-3: invocation thresholds (no defaults; may stay unfrozen)
+        self._invocation_thresholds = None
+        self._invocation_threshold_version = None
+        self._invocation_degradation = ""
+        self.invocation_thresholds_present = False
+        invocation = _require_block(teacher, "invocation", ctx)
+        version = invocation.get("threshold_version")
+        if not isinstance(version, str) or not version.strip():
+            raise GenManagerError(
+                GEN_MANAGER_MISSING_FIELD,
+                f"{ctx}.invocation: missing non-empty threshold_version",
+            )
+        self._invocation_threshold_version = version.strip()
+        thresholds_block = invocation.get("thresholds")
+        if thresholds_block is None:
+            # honest degradation, NOT an error and NOT a training-gate
+            # blocker: the gate signals are genuinely computed and the
+            # threshold-driven ones stay False with
+            # INVOCATION_THRESHOLD_MISSING reasons until the supervisor
+            # freezes the values. The invocation regime governs when a
+            # review WINDOW opens; it never invalidates the verified
+            # dual-probe/anchor-manifest evidence chain that the C13
+            # training gate audits, so it stays out of
+            # current_blocked_codes() by design.
+            self._invocation_degradation = INVOCATION_THRESHOLD_MISSING
+        else:
+            try:
+                self._invocation_thresholds = consume_gate_thresholds(
+                    thresholds_block, f"{ctx}.invocation"
+                )
+            except GateSignalError as e:
+                if e.code == INVOCATION_THRESHOLD_MISSING:
+                    self._invocation_degradation = e.code
+                else:
+                    raise
+        if self._invocation_thresholds is not None:
+            self.invocation_thresholds_present = True
+        # pin: the teacher's threshold version must equal the frozen
+        # manifest's — the gate-signal regime is not self-updatable
+        manifest_invocation = _require_block(
+            self._frozen_manifest, "invocation", f"{ctx}.manifest"
+        )
+        if (
+            manifest_invocation.get("threshold_version")
+            != self._invocation_threshold_version
+        ):
+            raise GenManagerError(
+                GEN_MANAGER_MANIFEST_MISMATCH,
+                f"{ctx}.manifest.invocation: threshold_version "
+                f"{manifest_invocation.get('threshold_version')!r} != "
+                f"teacher {self._invocation_threshold_version!r}",
+            )
+
         # ---- selection knobs (mechanical; pinned, not defaulted) --------
         selection = _require_block(teacher, "selection", ctx)
         critic_policy = selection.get("critic_policy")
@@ -452,6 +512,11 @@ class E1FormalGenManager:
         self._cycles_run = 0
         self._pending_feedback: List[Dict[str, Any]] = []
         self._real_selection_completed = False
+        # P0-3: previous review window (prev_window_hash source for the
+        # gate signals) and the count of consecutive review cycles that
+        # produced no usable window since the last COMPLETE one
+        self._last_window = None
+        self._consecutive_reuses = 0
         # compiled E1 artifacts recorded by consume_worker_results (C11);
         # promotion happens ONLY via E1 selection, never legacy activation
         self._artifact_registry: Dict[str, Dict[str, Any]] = {}
@@ -572,7 +637,16 @@ class E1FormalGenManager:
         dict_of_tasks: Any = None,
         global_agent_profile: Any = None,
     ) -> List[Dict[str, Any]]:
-        """Return EXACTLY 12 worker dicts (plan D9).
+        """Return the window's compiled worker pool (plan D9; round-3).
+
+        P0-2 semantics: a COMPLETE window yields one EnvCoder call per
+        UNIQUE template and one worker dict per (template, variant)
+        spec. If >= 12 workers compiled, the FULL pool is returned
+        (never truncated to 12 here — selection happens downstream).
+        If fewer than 12 compiled, the WHOLE window is refused with
+        INSUFFICIENT_DYNAMIC_ARTIFACTS: no stub/placeholder slot
+        padding exists anywhere in this path. REUSE/void/no-evidence
+        paths still return the honest 12-entry reuse batch.
 
         BOTH arguments are ignored entirely — the provenance rule says
         evolve-side metrics/status never enter the E1 teacher. Nothing
@@ -596,21 +670,28 @@ class E1FormalGenManager:
             )
 
         evidence = build_evidence_snapshot(raw_items, ctx)
+        # feedback facts are consumed exactly once into the evidence
+        # snapshot (hash-bound there); they never accumulate unboundedly
+        self._pending_feedback.clear()
+
+        # P0-3: the eight gate signals are COMPUTED from the real
+        # training-window facts, the previous window, the teacher's
+        # session counters and the frozen thresholds — never hardcoded.
+        signals = compute_gate_signals(
+            session_idx=self.session_idx,
+            cycles_run=self._cycles_run,
+            evidence=evidence,
+            raw_items=raw_items,
+            prev_window=self._last_window,
+            thresholds=self._invocation_thresholds,
+            threshold_version=self._invocation_threshold_version,
+            consecutive_reuses=self._consecutive_reuses,
+        )
         gate_state = build_gate_state(
             {
                 "session_idx": self.session_idx,
-                # honest computation only: a window is first-window iff
-                # no review cycle has run before. The other seven
-                # triggers have NO honest signal source this round and
-                # stay False (fail-closed; never fabricated).
-                "is_first_window": self._cycles_run == 0,
-                "capability_shift": False,
-                "new_failure_pattern": False,
-                "interventions_exhausted": False,
-                "stagnation": False,
-                "forgetting_regression": False,
-                "exploration_slot_available": False,
-                "curriculum_drift": False,
+                **{name: value for name, value in signals.signals},
+                "signals_binding_hash": signals.binding_hash,
             },
             ctx,
         )
@@ -623,8 +704,11 @@ class E1FormalGenManager:
             ledger=self._ledger,
         )
         self._cycles_run += 1
+        if outcome.window is not None:
+            self._last_window = outcome.window
 
         if outcome.reuse:
+            self._consecutive_reuses += 1
             reason = (
                 outcome.void_code
                 if outcome.void_code
@@ -635,26 +719,48 @@ class E1FormalGenManager:
                 f"review cycle produced no usable window: {reason}",
             )
 
-        # COMPLETE window -> canonical specs -> independent EnvCoder
+        # COMPLETE window -> canonical templates/specs -> EnvCoder
         assert outcome.window is not None
         assert outcome.window.status == WINDOW_STATUS_COMPLETE
         compile_result = compile_task_specs(outcome.window)
-        workers: List[Dict[str, Any]] = []
-        for spec in compile_result.specs[: layout.NUM_DYNAMIC_SLOTS]:
+
+        # P0-2: ONE EnvCoder call per UNIQUE template (K1 counts
+        # templates); every variant of a template shares its artifact.
+        template_artifacts: Dict[str, Any] = {}
+        template_outcomes: Dict[str, Tuple[bool, str]] = {}
+        for template in compile_result.templates:
+            representative = next(
+                spec
+                for spec in compile_result.specs
+                if spec.template_hash == template.template_hash
+            )
             try:
                 artifact = run_envcoder(
                     self._llm,
-                    spec=spec,
+                    spec=representative,
                     seed_examples=self._seed_examples,
                     ledger=self._ledger,
                     window_id=window_id,
                 )
             except EnvCoderError as e:
-                # single-pass: parse/guard failure produces a
-                # non-compiled worker; NO repair loop (F1 stays 0)
-                workers.append(self._failed_worker(window_id, spec, e.code))
+                # parse/guard failure: the whole template (all its
+                # variants) is non-compiled; honest per-template record
+                template_outcomes[template.template_hash] = (False, e.code)
                 continue
             ok, note = self._env_generator.check_compilation(artifact.env_code)
+            template_artifacts[template.template_hash] = artifact
+            template_outcomes[template.template_hash] = (ok, note)
+
+        workers: List[Dict[str, Any]] = []
+        for spec in compile_result.specs:
+            if spec.template_hash not in template_artifacts:
+                _ok, failure_note = template_outcomes[spec.template_hash]
+                workers.append(
+                    self._failed_worker(window_id, spec, failure_note)
+                )
+                continue
+            artifact = template_artifacts[spec.template_hash]
+            ok, note = template_outcomes[spec.template_hash]
             workers.append(
                 {
                     "task_id": spec.spec_id,
@@ -670,6 +776,8 @@ class E1FormalGenManager:
                         "reuse": False,
                         "artifact_id": spec.artifact_id,
                         "spec_hash": spec.spec_hash,
+                        "template_hash": spec.template_hash,
+                        "template_artifact_id": spec.template_artifact_id,
                         "window_id": window_id,
                         "window_hash": spec.window_hash,
                         "compiled": ok,
@@ -678,18 +786,20 @@ class E1FormalGenManager:
                     },
                 }
             )
-        # pad to EXACTLY 12 with honest REUSE stubs
-        index = 0
-        while len(workers) < layout.NUM_DYNAMIC_SLOTS:
-            workers.append(
-                self._reuse_stub(
-                    window_id,
-                    index,
-                    self.current_blocked_codes(),
-                    "fewer than 12 admissible artifacts this window",
-                )
+
+        # P0-2: the 12 dynamic slots are filled ONLY by real compiled
+        # artifacts; fewer than 12 refuses the whole window.
+        compiled_count = sum(1 for w in workers if w["compiled"])
+        if compiled_count < layout.NUM_DYNAMIC_SLOTS:
+            self._consecutive_reuses += 1
+            return self._reuse_batch(
+                [E1Code.INSUFFICIENT_DYNAMIC_ARTIFACTS]
+                + self.current_blocked_codes(),
+                f"window {window_id} produced {compiled_count} compiled "
+                f"dynamic artifact(s) < {layout.NUM_DYNAMIC_SLOTS}; the "
+                "whole window is refused (no stub/placeholder padding)",
             )
-            index += 1
+        self._consecutive_reuses = 0
         return workers
 
     def select_context_tasks(self, config: Any = None, num_tasks: Any = None) -> List[str]:
@@ -1744,6 +1854,12 @@ class E1FormalGenManager:
             "anchor_manifest_status": self._anchor_manifest.status,
             "anchor_manifest_sha256": self._anchor_manifest.manifest_sha256,
             "learnability_thresholds_present": self._thresholds is not None,
+            # round-3 P0-3: the invocation regime's honest state. When
+            # False, threshold-driven gate signals compute to False with
+            # INVOCATION_THRESHOLD_MISSING reasons (window invocation
+            # degrades; the training gate is untouched by design)
+            "invocation_thresholds_present": self.invocation_thresholds_present,
+            "invocation_degradation": self._invocation_degradation,
             "copeland": {
                 "protocol_version": selector.COPELAND_PROTOCOL_VERSION,
                 "source_sha256": selector.COPELAND_SOURCE_SHA256,

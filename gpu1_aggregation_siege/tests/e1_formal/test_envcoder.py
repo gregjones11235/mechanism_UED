@@ -28,10 +28,12 @@ def _specs(n_families=1):
 
 
 def _store_for(spec, seeds, payload):
+    # round-3 P0-2: the EnvCoder is TEMPLATE-keyed — the replay key's
+    # evidence hash is the template hash, one call per unique template
     envelope = EC.build_envcoder_envelope_hash(spec, seed_examples=seeds)
     key = LC.make_replay_key(
         role=M.ENVCODER_ROLE,
-        evidence_hash=spec.spec_hash,
+        evidence_hash=spec.template_hash,
         prompt_envelope_hash=envelope,
         prompt_version=M.ENVCODER_PROMPT_VERSION,
         schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
@@ -40,7 +42,7 @@ def _store_for(spec, seeds, payload):
 
 
 def _payload(spec, env_code="def make_env():\n    return env"):
-    return {"artifact_id": spec.artifact_id, "env_code": env_code}
+    return {"artifact_id": spec.template_artifact_id, "env_code": env_code}
 
 
 class TestPromptWhitelist:
@@ -59,15 +61,23 @@ class TestPromptWhitelist:
         # rotation is modulo the seed count
         assert EC.rotate_seeds(tuple(SEEDS), 3) == EC.rotate_seeds(tuple(SEEDS), 0)
 
-    def test_prompt_shows_rotated_order(self):
-        window = _window_with_families([_family("fam_0")])
+    def test_prompt_is_variant_independent_and_seeds_fixed(self):
+        # round-3 P0-2: one EnvCoder call per TEMPLATE — every variant
+        # of the same family renders the IDENTICAL prompt (fixed seed
+        # order, no variant rotation), while distinct templates differ
+        window = _window_with_families([_family("fam_0"), _family("fam_1")])
         from dicode.teachers.e1_formal import task_specs as TS
 
-        v0, v1 = TS.compile_task_specs(window).specs
+        specs = TS.compile_task_specs(window).specs
+        v0, v1 = specs[0], specs[1]  # same template, two variants
+        assert v0.template_hash == v1.template_hash
+        assert EC.build_envcoder_prompt(v0, seed_examples=SEEDS) == \
+            EC.build_envcoder_prompt(v1, seed_examples=SEEDS)
         _, p0 = EC.build_envcoder_prompt(v0, seed_examples=SEEDS)
-        _, p1 = EC.build_envcoder_prompt(v1, seed_examples=SEEDS)
-        assert "SEED[0] task_id=task_1" in p0
-        assert "SEED[0] task_id=task_2" in p1
+        assert "SEED[0] task_id=task_1" in p0  # fixed order
+        other = next(s for s in specs if s.template_hash != v0.template_hash)
+        _, p_other = EC.build_envcoder_prompt(other, seed_examples=SEEDS)
+        assert p0 != p_other
 
     def test_builder_signatures_accept_no_board_objects(self):
         # whitelist sentinel: the prompt builder cannot even RECEIVE board
@@ -127,10 +137,13 @@ class TestPromptWhitelist:
         assert "BOARD_SENTINEL_DIAGNOSIS_XYZ" not in user_prompt
         assert "BOARD_SENTINEL_FINDING_XYZ" not in user_prompt
         assert "EVIDENCE_SNAPSHOT" not in user_prompt
-        # the whitelist content IS present
+        # the whitelist content IS present (round-3: template rendering)
         assert "ENV CONTRACT" in user_prompt
-        assert "TASK_SPEC spec_id=" in user_prompt
-        assert spec.artifact_id in user_prompt
+        assert "TASK_TEMPLATE template_hash=" in user_prompt
+        assert spec.template_artifact_id in user_prompt
+        # variant identity never enters the template prompt
+        assert spec.artifact_id not in user_prompt
+        assert spec.spec_id not in user_prompt
 
     def test_bad_seeds_rejected(self):
         spec = _specs()[0]
@@ -159,8 +172,8 @@ class TestRunEnvCoder:
             ledger=ledger,
             window_id="w01",
         )
-        assert artifact.artifact_id == spec.artifact_id
-        assert artifact.spec_id == spec.spec_id
+        assert artifact.artifact_id == spec.template_artifact_id
+        assert artifact.template_hash == spec.template_hash
         assert artifact.env_code == "def make_env():\n    return env"
         assert len(artifact.prompt_envelope_hash) == 64
         assert ledger.counts()["K1"] == 1
@@ -192,7 +205,10 @@ class TestRunEnvCoder:
 
     def test_artifact_id_mismatch_fails_closed(self):
         spec = _specs()[0]
-        bad = {"artifact_id": spec.artifact_id + "x", "env_code": "code"}
+        bad = {
+            "artifact_id": spec.template_artifact_id + "x",
+            "env_code": "code",
+        }
         store = _store_for(spec, SEEDS, bad)
         with pytest.raises(EC.EnvCoderError) as excinfo:
             EC.run_envcoder(
@@ -204,7 +220,9 @@ class TestRunEnvCoder:
 
     def test_missing_field_fails_closed(self):
         spec = _specs()[0]
-        store = _store_for(spec, SEEDS, {"artifact_id": spec.artifact_id})
+        store = _store_for(
+            spec, SEEDS, {"artifact_id": spec.template_artifact_id}
+        )
         with pytest.raises(EC.EnvCoderError) as excinfo:
             EC.run_envcoder(
                 LC.ReplayLLMClient(store, "t"),
@@ -231,7 +249,7 @@ class TestRunEnvCoder:
         envelope = EC.build_envcoder_envelope_hash(spec, seed_examples=SEEDS)
         key = LC.make_replay_key(
             role=M.ENVCODER_ROLE,
-            evidence_hash=spec.spec_hash,
+            evidence_hash=spec.template_hash,
             prompt_envelope_hash=envelope,
             prompt_version=M.ENVCODER_PROMPT_VERSION,
             schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
@@ -270,11 +288,32 @@ class TestRunEnvCoder:
             )
         assert str(excinfo.value).startswith(LC.HARD_FAIL_PREFIX)
 
-    def test_variants_get_distinct_cache_keys(self):
-        window = _window_with_families([_family("fam_0")])
+    def test_envelope_shared_across_variants_distinct_across_templates(self):
+        # round-3 P0-2: one call per UNIQUE template — variants of the
+        # same family share the envelope (same replay key), different
+        # templates get different envelopes
+        window = _window_with_families([_family("fam_0"), _family("fam_1")])
         from dicode.teachers.e1_formal import task_specs as TS
 
-        v0, v1 = TS.compile_task_specs(window).specs
+        specs = TS.compile_task_specs(window).specs
+        v0, v1 = specs[0], specs[1]
+        assert v0.template_hash == v1.template_hash
         h0 = EC.build_envcoder_envelope_hash(v0, seed_examples=SEEDS)
         h1 = EC.build_envcoder_envelope_hash(v1, seed_examples=SEEDS)
-        assert h0 != h1  # seed rotation changes the envelope
+        assert h0 == h1
+        assert LC.make_replay_key(
+            role=M.ENVCODER_ROLE,
+            evidence_hash=v0.template_hash,
+            prompt_envelope_hash=h0,
+            prompt_version=M.ENVCODER_PROMPT_VERSION,
+            schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
+        ) == LC.make_replay_key(
+            role=M.ENVCODER_ROLE,
+            evidence_hash=v1.template_hash,
+            prompt_envelope_hash=h1,
+            prompt_version=M.ENVCODER_PROMPT_VERSION,
+            schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
+        )
+        other = next(s for s in specs if s.template_hash != v0.template_hash)
+        h_other = EC.build_envcoder_envelope_hash(other, seed_examples=SEEDS)
+        assert h0 != h_other

@@ -2,7 +2,8 @@
 
 Counting rules under test:
 * board calls belong to TRIGGERED windows (exactly 6 roles per window);
-* EnvCoder calls are counted per UNIQUE artifact (deduped);
+* EnvCoder calls are counted per UNIQUE TEMPLATE artifact (deduped;
+  round-3 P0-2 — variants share their template's single call);
 * repair calls are a separate counter (F1), never merged into K1;
 * E1 has no TaskGenerator (T1 == 0; reconcile fails closed otherwise);
 * no fixed "per-window total" language exists in the modules.
@@ -36,22 +37,24 @@ class TestFormulaScenarios:
         assert counts["N1"] == 0
         assert ledger.to_records() == ()
 
-    def test_one_window_ten_specs_two_variants(self):
-        # Plan scenario: 1 triggered window + 10 specs x 2 variants.
+    def test_one_window_ten_templates_two_variants(self):
+        # Round-3 P0-2 scenario: 1 triggered window + 10 unique
+        # templates, each expanded into 2 variant specs. The EnvCoder
+        # runs ONCE per unique template (template_artifact_id), so
+        # K1 == 10 — never 20 (the variants share the template call).
         ledger = A.LLMCallLedger()
         _open_and_fill(ledger, "w01")
-        for spec_i in range(10):
-            for variant in (0, 1):
-                ledger.record_envcoder_call(
-                    "w01", f"w01::fam_{spec_i}::v{variant}"
-                )
+        for template_i in range(10):
+            ledger.record_envcoder_call(
+                "w01", f"tpl-hash-{template_i:02d}::tpl"
+            )
         counts = ledger.reconcile()
         assert counts["G1"] == 1
         assert counts["board_calls"] == 6
-        assert counts["K1"] == 20
+        assert counts["K1"] == 10
         assert counts["T1"] == 0
         assert counts["F1"] == 0
-        assert counts["N1"] == 6 * 1 + 0 + 20 + 0 == 26
+        assert counts["N1"] == 6 * 1 + 0 + 10 + 0 == 16
 
     def test_two_windows_board_calls_scale_with_g1(self):
         ledger = A.LLMCallLedger()

@@ -3,6 +3,7 @@
 # Cross-checked against conf/teacher/e1_formal.yaml at teacher init:
 #   flags mismatch          -> FLAG_MANIFEST_MISMATCH
 #   copeland/replay/anchors -> GEN_MANAGER_MANIFEST_MISMATCH
+#   invocation threshold_version -> GEN_MANAGER_MANIFEST_MISMATCH
 # The copeland pins duplicate the values hard-pinned in
 # src/dicode/teachers/e1_formal/selector.py (G4); they are verified
 # against the branch canonical bytes and the supervisor-frozen report
@@ -30,6 +31,13 @@ replay:
   provider: replay
   model_id: e1-replay-mock-v1
   record: disabled
+
+# P0-3: review-window invocation regime identity. Only the version is
+# frozen here; the threshold VALUES are supervisor-owned and live in
+# conf/teacher/e1_formal.yaml (all null until frozen =>
+# INVOCATION_THRESHOLD_MISSING, gate signals stay honestly computed).
+invocation:
+  threshold_version: e1-gate-thresholds-v1
 
 anchors:
   task_ids:

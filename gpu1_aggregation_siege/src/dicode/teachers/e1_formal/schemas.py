@@ -73,6 +73,10 @@ class E1Code:
     INCOMPLETE_REVIEW_WINDOW = "INCOMPLETE_REVIEW_WINDOW"
     LLM_BUDGET_EXCEEDED = "LLM_BUDGET_EXCEEDED"
     ALL_FAMILIES_VETOED = "ALL_FAMILIES_VETOED"
+    # dynamic-slot integrity (stage 3/4, round-3 P0-2): fewer than 12
+    # real compiled dynamic artifacts => the whole window is refused;
+    # stub/placeholder slot padding is structurally absent.
+    INSUFFICIENT_DYNAMIC_ARTIFACTS = "INSUFFICIENT_DYNAMIC_ARTIFACTS"
     # invocation gate / selection degradation (G2/G3)
     SELECTION_BLOCKED_NO_REAL_EVIDENCE = "SELECTION_BLOCKED_NO_REAL_EVIDENCE"
 

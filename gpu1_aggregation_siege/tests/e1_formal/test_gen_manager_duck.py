@@ -66,6 +66,10 @@ def _frozen_manifest():
             "model_id": GM.REPLAY_MODEL_ID,
             "record": "disabled",
         },
+        # round-3 P0-3: the gate-signal regime version is frozen; the
+        # threshold VALUES stay supervisor-owned (null in the teacher
+        # config => INVOCATION_THRESHOLD_MISSING, honestly blocked)
+        "invocation": {"threshold_version": "e1-gate-thresholds-v1"},
         "anchors": {"task_ids": list(L.ANCHOR_TASK_IDS)},
         "strong_student": {
             "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
@@ -113,6 +117,21 @@ def _teacher_config():
                 "min_episodes": None,
                 "ci_level": None,
             },
+            # round-3 P0-3: mirrors conf/teacher/e1_formal.yaml — the
+            # version is pinned, all six threshold values stay null
+            # (unfrozen) => gate signals computed False with
+            # INVOCATION_THRESHOLD_MISSING reasons
+            "invocation": {
+                "threshold_version": "e1-gate-thresholds-v1",
+                "thresholds": {
+                    "capability_shift_delta": None,
+                    "stagnation_max_delta": None,
+                    "stagnation_min_sessions": None,
+                    "forgetting_regression_drop": None,
+                    "intervention_exhaustion_max_reuses": None,
+                    "exploration_slot_period": None,
+                },
+            },
             "selection": {
                 "critic_policy": "hard_veto",
                 "k": 12,
@@ -159,30 +178,61 @@ def _evidence_from_archive():
     return build_evidence_snapshot(view.evidence_items(), "test")
 
 
-def _board_store(evidence):
+def _board_store(evidence, families=None):
     """Replay store for a COMPLETE window whose families target
-    REGISTRY-valid achievements (collect_coal)."""
+    REGISTRY-valid achievements (collect_coal).
+
+    Round-3 P0-1/P0-3: the manager's FIRST evolve opens window
+    ``e1-w000001`` at session_idx=1 via FIRST_WINDOW — the sequential
+    board envelopes bind exactly that identity, so the store must too.
+    """
+    if families is None:
+        families = [_family("fam_a"), _family("fam_b")]
     return _build_store(
         evidence,
         overrides={
             "intervention_tutor": {
-                "families": [_family("fam_a"), _family("fam_b")],
+                "families": families,
                 "explorations": [],
             }
         },
+        window_id="e1-w000001",
+        session_idx=1,
+        trigger_code="FIRST_WINDOW",
     )
 
 
 def _envcoder_entry(spec, seeds, env_code="def make_env():\n    return 'env'"):
+    # round-3 P0-2: the EnvCoder is TEMPLATE-keyed (one call per unique
+    # template; the replay key's evidence hash is the template hash)
     envelope = EC.build_envcoder_envelope_hash(spec, seed_examples=seeds)
     key = LC.make_replay_key(
         role=M.ENVCODER_ROLE,
-        evidence_hash=spec.spec_hash,
+        evidence_hash=spec.template_hash,
         prompt_envelope_hash=envelope,
         prompt_version=M.ENVCODER_PROMPT_VERSION,
         schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
     )
-    return {key: json.dumps({"artifact_id": spec.artifact_id, "env_code": env_code})}
+    return {
+        key: json.dumps(
+            {"artifact_id": spec.template_artifact_id, "env_code": env_code}
+        )
+    }
+
+
+def _add_template_entries(store, specs, seeds, env_code_by_template=None):
+    """One EnvCoder replay entry per UNIQUE template in ``specs``."""
+    seen = set()
+    for spec in specs:
+        if spec.template_hash in seen:
+            continue
+        seen.add(spec.template_hash)
+        code = (
+            env_code_by_template(spec)
+            if env_code_by_template is not None
+            else "def make_env():\n    return 'env'"
+        )
+        store.update(_envcoder_entry(spec, seeds, env_code=code))
 
 
 def _specs_via_board(evidence, store):
@@ -207,9 +257,18 @@ class TestInit:
         assert "LEARNABILITY_THRESHOLD_MISSING" in blocked
         assert AM.BLOCKED_SHARED_ANCHOR_MANIFEST in blocked
         assert "SELECTION_BLOCKED_NO_REAL_EVIDENCE" in blocked
+        # round-3 P0-3: unfrozen invocation thresholds degrade window
+        # INVOCATION (signals computed False + explicit reason) but are
+        # NOT a training-gate blocker — the C13 gate's evidence chain
+        # is the verified dual-probe/anchor-manifest snapshot
+        assert "INVOCATION_THRESHOLD_MISSING" not in blocked
         assert manager.reference_contract is None
         assert manager.thresholds is None
         assert manager.anchor_manifest.status == AM.STATUS_DRAFT_UNFROZEN
+        assert manager.invocation_thresholds_present is False
+        report = manager.status_report()
+        assert report["invocation_thresholds_present"] is False
+        assert report["invocation_degradation"] == "INVOCATION_THRESHOLD_MISSING"
 
     def test_wrong_teacher_type_fails_closed(self):
         config = _teacher_config()
@@ -395,39 +454,64 @@ class TestEvolveDuck:
         assert "INCOMPLETE_REVIEW_WINDOW" in note
 
     def test_full_window_produces_compiled_workers_and_exact_12(self):
+        # round-3 P0-2: 6 families x 2 variants = exactly the 12
+        # dynamic slots, ALL real compiled artifacts — zero stubs
+        families = [_family(f"fam_{i}") for i in range(6)]
         evidence = _evidence_from_archive()
-        store = _board_store(evidence)
+        store = _board_store(evidence, families=families)
         specs = _specs_via_board(evidence, dict(store))
-        assert len(specs) == 4  # 2 families x 2 variants
-        for spec in specs:
-            store.update(_envcoder_entry(spec, SEEDS))
+        assert len(specs) == 12
+        _add_template_entries(store, specs, SEEDS)
         manager = _manager(
             replay_store=store, archive_snapshot=ARCHIVE_SNAPSHOT
         )
         workers = manager.evolve_tasks({"ignored": 1}, {"ignored": 2})
         assert len(workers) == 12
-        real = [w for w in workers if not w["e1_status"]["reuse"]]
-        reuse = [w for w in workers if w["e1_status"]["reuse"]]
-        assert len(real) == 4
-        assert len(reuse) == 8
-        for worker in real:
+        assert all(w["e1_status"]["reuse"] is False for w in workers)
+        for worker in workers:
             assert worker["compiled"] is True
             assert worker["code"].startswith("def make_env")
             assert worker["e1_status"]["compiled"] is True
             assert worker["e1_status"]["window_id"] == "e1-w000001"
+            assert worker["e1_status"]["template_artifact_id"].endswith("::tpl")
         counts = manager.ledger.reconcile()
         assert counts["G1"] == 1
         assert counts["board_calls"] == 6
-        assert counts["K1"] == 4
+        assert counts["K1"] == 6  # one EnvCoder call per unique template
         assert counts["T1"] == 0
         assert counts["F1"] == 0
-        assert counts["N1"] == 6 + 4
+        assert counts["N1"] == 6 + 6
+
+    def test_fewer_than_12_compiled_refuses_the_whole_window(self):
+        # round-3 P0-2: 2 families x 2 variants = 4 compiled artifacts
+        # < 12 => INSUFFICIENT_DYNAMIC_ARTIFACTS; the whole window is
+        # refused and the batch is the honest 12-entry reuse batch —
+        # never stub/placeholder padding of the missing slots
+        evidence = _evidence_from_archive()
+        store = _board_store(evidence)  # default: fam_a + fam_b
+        specs = _specs_via_board(evidence, dict(store))
+        assert len(specs) == 4
+        _add_template_entries(store, specs, SEEDS)
+        manager = _manager(
+            replay_store=store, archive_snapshot=ARCHIVE_SNAPSHOT
+        )
+        workers = manager.evolve_tasks()
+        assert len(workers) == L.NUM_DYNAMIC_SLOTS == 12
+        assert all(w["e1_status"]["reuse"] is True for w in workers)
+        blocked = workers[0]["e1_status"]["blocked_codes"]
+        assert "INSUFFICIENT_DYNAMIC_ARTIFACTS" in blocked
+        assert "produced 4 compiled" in workers[0]["e1_status"]["note"]
+        counts = manager.ledger.reconcile()
+        assert counts["K1"] == 2  # the honest template calls still count
+        assert counts["board_calls"] == 6
 
     def test_double_run_equality(self):
+        families = [_family(f"fam_{i}") for i in range(6)]
         evidence = _evidence_from_archive()
-        store = _board_store(evidence)
-        for spec in _specs_via_board(evidence, dict(store)):
-            store.update(_envcoder_entry(spec, SEEDS))
+        store = _board_store(evidence, families=families)
+        _add_template_entries(
+            store, _specs_via_board(evidence, dict(store)), SEEDS
+        )
         first = _manager(
             replay_store=store, archive_snapshot=ARCHIVE_SNAPSHOT
         ).evolve_tasks()
@@ -436,57 +520,73 @@ class TestEvolveDuck:
         ).evolve_tasks()
         assert first == second
 
-    def test_syntax_error_env_code_marks_worker_not_compiled(self):
+    def test_one_broken_template_among_six_refuses_the_window(self):
+        # round-3 P0-2: one template's env-code has a syntax error =>
+        # 10 compiled < 12 => the WHOLE window is refused (the broken
+        # template's 2 variants are never padded with stubs)
+        families = [_family(f"fam_{i}") for i in range(6)]
         evidence = _evidence_from_archive()
-        store = _board_store(evidence)
+        store = _board_store(evidence, families=families)
         specs = _specs_via_board(evidence, dict(store))
-        for i, spec in enumerate(specs):
-            code = "def broken(:" if i == 0 else "def make_env():\n    return 'env'"
-            store.update(_envcoder_entry(spec, SEEDS, env_code=code))
+
+        def code_for(spec):
+            if spec.family_id == "fam_0":
+                return "def broken(:"
+            return "def make_env():\n    return 'env'"
+
+        _add_template_entries(store, specs, SEEDS, env_code_by_template=code_for)
         manager = _manager(
             replay_store=store, archive_snapshot=ARCHIVE_SNAPSHOT
         )
-        workers = [
-            w for w in manager.evolve_tasks() if not w["e1_status"]["reuse"]
-        ]
-        assert len(workers) == 4
-        failed = [w for w in workers if not w["compiled"]]
-        assert len(failed) == 1
-        assert "SYNTAX_ERROR" in failed[0]["e1_status"]["compile_note"]
+        workers = manager.evolve_tasks()
+        assert len(workers) == 12
+        assert all(w["e1_status"]["reuse"] is True for w in workers)
+        blocked = workers[0]["e1_status"]["blocked_codes"]
+        assert "INSUFFICIENT_DYNAMIC_ARTIFACTS" in blocked
+        assert "produced 10 compiled" in workers[0]["e1_status"]["note"]
 
     def test_envcoder_parse_failure_yields_failed_worker_no_repair(self):
+        # round-3 P0-2: with 8 families (the board contract maximum)
+        # one template's artifact_id mismatch kills only its 2
+        # variants; 14 compiled >= 12, so the pool is returned with
+        # honest failed workers and still NO repair call (F1=0)
+        families = [_family(f"fam_{i}") for i in range(8)]
         evidence = _evidence_from_archive()
-        store = _board_store(evidence)
+        store = _board_store(evidence, families=families)
         specs = _specs_via_board(evidence, dict(store))
-        for i, spec in enumerate(specs):
-            if i == 0:
-                # artifact_id mismatch -> EnvCoderError -> failed worker
-                envelope = EC.build_envcoder_envelope_hash(
-                    spec, seed_examples=SEEDS
-                )
-                key = LC.make_replay_key(
-                    role=M.ENVCODER_ROLE,
-                    evidence_hash=spec.spec_hash,
-                    prompt_envelope_hash=envelope,
-                    prompt_version=M.ENVCODER_PROMPT_VERSION,
-                    schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
-                )
-                store[key] = json.dumps(
-                    {"artifact_id": "WRONG::id", "env_code": "x = 1"}
-                )
-            else:
-                store.update(_envcoder_entry(spec, SEEDS))
+        assert len(specs) == 16
+        broken = next(s for s in specs if s.family_id == "fam_0")
+        envelope = EC.build_envcoder_envelope_hash(
+            broken, seed_examples=SEEDS
+        )
+        key = LC.make_replay_key(
+            role=M.ENVCODER_ROLE,
+            evidence_hash=broken.template_hash,
+            prompt_envelope_hash=envelope,
+            prompt_version=M.ENVCODER_PROMPT_VERSION,
+            schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
+        )
+        store[key] = json.dumps(
+            {"artifact_id": "WRONG::id", "env_code": "x = 1"}
+        )
+        _add_template_entries(
+            store,
+            [s for s in specs if s.template_hash != broken.template_hash],
+            SEEDS,
+        )
         manager = _manager(
             replay_store=store, archive_snapshot=ARCHIVE_SNAPSHOT
         )
-        workers = [
-            w for w in manager.evolve_tasks() if not w["e1_status"]["reuse"]
-        ]
+        workers = manager.evolve_tasks()
+        assert len(workers) == 16
         failed = [w for w in workers if not w["compiled"]]
-        assert len(failed) == 1
-        assert failed[0]["e1_status"]["envcoder_failed_code"] != ""
+        assert len(failed) == 2  # both variants of the broken template
+        for worker in failed:
+            assert worker["e1_status"]["reuse"] is False
+            assert worker["e1_status"]["envcoder_failed_code"] != ""
         counts = manager.ledger.reconcile()
-        assert counts["F1"] == 0  # NO repair loop
+        assert counts["K1"] == 8
+        assert counts["F1"] == 0  # NO repair loop this round
 
     def test_replay_miss_is_a_hard_fail(self):
         manager = _manager(archive_snapshot=ARCHIVE_SNAPSHOT)  # empty store

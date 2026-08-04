@@ -21,6 +21,7 @@ Anything else => REUSE (no window, no LLM calls).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -70,11 +71,22 @@ class _GateCode:
     MISSING_FIELD = "INVOCATION_GATE_MISSING_FIELD"
     UNKNOWN_FIELD = "INVOCATION_GATE_UNKNOWN_FIELD"
     BAD_STEP = "INVOCATION_GATE_BAD_STEP"
+    BAD_BINDING = "INVOCATION_GATE_BAD_BINDING"
+
+#: 64 lowercase hex chars (sha256 hex digest)
+_BINDING_RE = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
 class GateState:
-    """Immutable snapshot of every trigger condition for one session."""
+    """Immutable snapshot of every trigger condition for one session.
+
+    ``signals_binding_hash`` binds the eight boolean signals to the
+    inputs that produced them (session/cycle counters, evidence hash,
+    previous window hash, reuse counter, threshold version) — see
+    ``gate_signals.GateSignalReport.binding_hash``. It is REQUIRED:
+    a gate state without its signal provenance is rejected.
+    """
 
     session_idx: int
     is_first_window: bool
@@ -85,6 +97,7 @@ class GateState:
     forgetting_regression: bool
     exploration_slot_available: bool
     curriculum_drift: bool
+    signals_binding_hash: str
 
 
 @dataclass(frozen=True)
@@ -104,7 +117,7 @@ def build_gate_state(raw: Mapping[str, object], context: str) -> GateState:
             f"{context}: gate state must be a mapping, got "
             f"{type(raw).__name__}",
         )
-    required = ("session_idx",) + tuple(
+    required = ("session_idx", "signals_binding_hash") + tuple(
         sorted(_TRIGGER_FIELD_BY_CODE.values())
     )
     for key in raw:
@@ -130,6 +143,13 @@ def build_gate_state(raw: Mapping[str, object], context: str) -> GateState:
             _GateCode.BAD_STEP,
             f"{context}: session_idx must be >= 0, got {session_idx}",
         )
+    binding = raw["signals_binding_hash"]
+    if not isinstance(binding, str) or not _BINDING_RE.fullmatch(binding):
+        raise InvocationGateError(
+            _GateCode.BAD_BINDING,
+            f"{context}: signals_binding_hash must be a 64-char lowercase "
+            f"hex string, got {binding!r} (no defaults)",
+        )
     values = {}
     for code, field in _TRIGGER_FIELD_BY_CODE.items():
         value = raw[field]
@@ -140,7 +160,9 @@ def build_gate_state(raw: Mapping[str, object], context: str) -> GateState:
                 f"{value!r} (no coercion)",
             )
         values[field] = value
-    return GateState(session_idx=session_idx, **values)
+    return GateState(
+        session_idx=session_idx, signals_binding_hash=binding, **values
+    )
 
 
 def evaluate_invocation_gate(state: GateState) -> GateDecision:

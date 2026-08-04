@@ -54,12 +54,24 @@ class TestCompile:
         window = _window_with_families([_family("fam_a")])
         assert TS.compile_task_specs(window) == TS.compile_task_specs(window)
 
-    def test_variants_share_content_hash_but_differ_in_identity(self):
+    def test_variants_share_template_but_differ_in_content(self):
+        # round-3 P0-2: variants of one family share the TEMPLATE hash
+        # (one EnvCoder call) but their spec hashes/artifacts differ —
+        # variant params are derived deterministically (no LLM)
         window = _window_with_families([_family("fam_a")])
-        v0, v1 = TS.compile_task_specs(window).specs
-        assert v0.spec_hash == v1.spec_hash
+        result = TS.compile_task_specs(window)
+        v0, v1 = result.specs
+        assert v0.template_hash == v1.template_hash
+        assert v0.template_artifact_id == v1.template_artifact_id
+        assert v0.template_artifact_id == f"{v0.template_hash}::tpl"
+        assert v0.spec_hash != v1.spec_hash
         assert v0.artifact_id != v1.artifact_id
         assert v0.spec_id != v1.spec_id
+        assert v0.variant_params != v1.variant_params
+        # exact rational levels between from_value (0) and to_value (1)
+        assert dict(v0.variant_params)["enemy_density:level"] == "0"
+        assert dict(v1.variant_params)["enemy_density:level"] == "1"
+        assert len(result.templates) == 1
 
     def test_alias_resolves_to_canonical_registry_name(self):
         # explicit audited alias: defeat_orc_soldier -> defeat_orc_solider
@@ -118,6 +130,8 @@ class TestFailClosed:
 
 class TestDedupAndCap:
     def test_duplicate_content_is_deduped_with_note(self):
+        # round-3 P0-2: dedup is per TEMPLATE (family content), first
+        # family wins; the duplicate yields one note, not per-variant
         base = _family("fam_a")
         dup = dict(base)
         dup["family_id"] = "fam_dup"  # same CONTENT, different id
@@ -125,20 +139,58 @@ class TestDedupAndCap:
         result = TS.compile_task_specs(window)
         assert {s.family_id for s in result.specs} == {"fam_a"}
         assert len(result.specs) == 2  # only the first family's variants
-        assert len(result.notes) == 2
-        for note in result.notes:
-            assert note["note"] == TS.DEDUPED_SPEC
-            assert note["family_id"] == "fam_dup"
+        assert len(result.templates) == 1
+        assert len(result.notes) == 1
+        assert result.notes[0]["note"] == TS.DEDUPED_TEMPLATE
+        assert result.notes[0]["family_id"] == "fam_dup"
 
-    def test_cap_truncates_deterministically_with_notes(self):
-        families = [_family(f"fam_{i}") for i in range(6)]  # 12 specs > cap 10
+    def test_six_families_yield_full_12_pool_without_truncation(self):
+        # round-3 P0-2: 6 families x 2 variants = exactly the 12
+        # dynamic slots; nothing is truncated and no notes are emitted
+        families = [_family(f"fam_{i}") for i in range(6)]
         window = _window_with_families(families)
         result = TS.compile_task_specs(window)
-        assert len(result.specs) == TS.MAX_WINDOW_SPECS
-        kept = {s.family_id for s in result.specs}
-        assert kept == {f"fam_{i}" for i in range(5)}
-        truncated = [n for n in result.notes if n["note"] == TS.SPECS_TRUNCATED_TO_CAP]
-        assert len(truncated) == 2
-        assert {n["family_id"] for n in truncated} == {"fam_5"}
+        assert len(result.templates) == 6
+        assert len(result.specs) == 12
+        assert {s.family_id for s in result.specs} == {
+            f"fam_{i}" for i in range(6)
+        }
+        assert result.notes == ()
+        assert TS.MAX_WINDOW_TEMPLATES == 10
+        assert TS.MAX_WINDOW_SPEC_POOL == 20
+
+    def test_template_cap_truncates_deterministically_with_notes(self):
+        # 11 unique families > MAX_WINDOW_TEMPLATES=10: the 11th is
+        # truncated with a recorded note (never silent, never padded).
+        # NOTE: the committed board contract caps a real window at
+        # MAX_INTERVENTION_FAMILIES=8 families (< the template cap 10),
+        # so this truncation is a COMPILER BACKSTOP — exercised here on
+        # a window synthesized from a REAL complete board window (the
+        # compiler never re-derives families from anywhere else).
+        import dataclasses
+
+        real = _window_with_families([_family("fam_0")])
+        families = [_family(f"fam_{i}") for i in range(11)]
+        window = dataclasses.replace(
+            real,
+            role_results=tuple(
+                ("intervention_tutor", {"families": families, "explorations": []})
+                if role == "intervention_tutor"
+                else (role, obj)
+                for role, obj in real.role_results
+            ),
+            surviving_families=tuple(f["family_id"] for f in families),
+        )
+        result = TS.compile_task_specs(window)
+        assert len(result.templates) == TS.MAX_WINDOW_TEMPLATES
+        kept = {t.family_id for t in result.templates}
+        assert kept == {f"fam_{i}" for i in range(10)}
+        truncated = [
+            n for n in result.notes if n["note"] == TS.TEMPLATES_TRUNCATED_TO_CAP
+        ]
+        assert len(truncated) == 1
+        assert truncated[0]["family_id"] == "fam_10"
+        # 10 templates x 2 variants = 20 specs = the pool cap
+        assert len(result.specs) == TS.MAX_WINDOW_SPEC_POOL
         # deterministic rerun
         assert TS.compile_task_specs(window) == result

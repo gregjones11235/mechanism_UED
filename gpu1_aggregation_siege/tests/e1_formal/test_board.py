@@ -96,15 +96,43 @@ def _role_payloads():
     }
 
 
-def _build_store(evidence, overrides=None, drop=()):
+def _build_store(
+    evidence,
+    overrides=None,
+    drop=(),
+    window_id="w01",
+    session_idx=3,
+    trigger_code="FIRST_WINDOW",
+):
+    """Replay store matching the SEQUENTIAL board (round-3 P0-1).
+
+    Mirrors ``run_review_board`` exactly: the board context is built
+    once, and each role's envelope binds every SUCCESSFULLY PARSED
+    upstream output. Roles whose payload fails guards/parsing are
+    recorded in the store but excluded from the upstream chain of
+    later roles — precisely what the board computes at runtime.
+
+    ``window_id`` / ``session_idx`` / ``trigger_code`` must match the
+    values the caller hands to ``run_review_board`` (the controller
+    derives them from the gate state, hence the parameters).
+    """
     payloads = _role_payloads()
     if overrides:
         payloads.update(overrides)
     store = {}
-    for role, payload in payloads.items():
+    context = B.make_board_context(
+        window_id=window_id,
+        session_idx=session_idx,
+        trigger_code=trigger_code,
+        evidence_hash=evidence.evidence_hash,
+    )
+    upstream = []
+    for role in M.BOARD_ROLE_ORDER:
         if role in drop:
-            continue
-        envelope = B.build_prompt_envelope_hash(role, evidence)
+            break  # replay miss => HARD FAIL; the board never goes on
+        envelope = B.build_prompt_envelope_hash(
+            role, evidence, context=context, upstream=upstream
+        )
         key = LC.make_replay_key(
             role=role,
             evidence_hash=evidence.evidence_hash,
@@ -112,13 +140,29 @@ def _build_store(evidence, overrides=None, drop=()):
             prompt_version=M.BOARD_PROMPT_VERSION,
             schema_version=M.ROLE_OUTPUT_SCHEMA_VERSION,
         )
-        store[key] = json.dumps(payload)
+        payload = payloads[role]
+        content = payload if isinstance(payload, str) else json.dumps(payload)
+        store[key] = content
+        # mimic the board's parse outcome for the upstream chain
+        try:
+            parsed = B._parse_role_content(role, content, f"store-build {role}")
+        except Exception:
+            continue  # failed role is NOT bound by later roles
+        upstream.append(
+            B.UpstreamOutput(
+                role=role,
+                output=parsed,
+                output_hash=B.role_output_hash(role, parsed),
+            )
+        )
     return store
 
 
 def _run(evidence=None, store=None, window_id="w01"):
     evidence = evidence or _evidence()
-    store = store if store is not None else _build_store(evidence)
+    store = store if store is not None else _build_store(
+        evidence, window_id=window_id
+    )
     llm = LC.ReplayLLMClient(store, "board-test")
     ledger = LLMCallLedger()
     window = B.run_review_board(
@@ -256,16 +300,11 @@ class TestVoidWindows:
 
     def test_invalid_json_voids_window(self):
         evidence = _evidence()
-        store = _build_store(evidence)
-        envelope = B.build_prompt_envelope_hash("explorer", evidence)
-        key = LC.make_replay_key(
-            role="explorer",
-            evidence_hash=evidence.evidence_hash,
-            prompt_envelope_hash=envelope,
-            prompt_version=M.BOARD_PROMPT_VERSION,
-            schema_version=M.ROLE_OUTPUT_SCHEMA_VERSION,
+        # the chain builder stores this raw string under the
+        # explorer's sequential envelope key (no JSON object inside)
+        store = _build_store(
+            evidence, overrides={"explorer": "this is not JSON at all"}
         )
-        store[key] = "this is not JSON at all"
         window, _ = _run(evidence=evidence, store=store)
         assert window.status == B.WINDOW_STATUS_VOID
         assert window.void_code == "INCOMPLETE_REVIEW_WINDOW"
@@ -327,26 +366,93 @@ class TestPersistence:
 
 
 class TestPrompts:
-    def test_prompt_is_deterministic(self):
-        evidence = _evidence()
-        assert B.build_role_prompt("critic", evidence) == B.build_role_prompt(
-            "critic", evidence
+    def _context(self, evidence):
+        return B.make_board_context(
+            window_id="w01",
+            session_idx=3,
+            trigger_code="FIRST_WINDOW",
+            evidence_hash=evidence.evidence_hash,
         )
 
-    def test_unknown_role_rejected(self):
-        with pytest.raises(B.BoardError):
-            B.build_role_prompt("envcoder", _evidence())
-
-    def test_user_prompt_embeds_evidence_rendering(self):
+    def test_prompt_is_deterministic(self):
         evidence = _evidence()
-        _, user_prompt = B.build_role_prompt("student_modeler", evidence)
+        context = self._context(evidence)
+        assert B.build_role_prompt(
+            "critic", evidence, context=context
+        ) == B.build_role_prompt("critic", evidence, context=context)
+
+    def test_unknown_role_rejected(self):
+        evidence = _evidence()
+        with pytest.raises(B.BoardError):
+            B.build_role_prompt(
+                "envcoder", evidence, context=self._context(evidence)
+            )
+
+    def test_user_prompt_embeds_identity_and_evidence(self):
+        evidence = _evidence()
+        context = self._context(evidence)
+        _, user_prompt = B.build_role_prompt(
+            "student_modeler", evidence, context=context
+        )
         assert "EVIDENCE_SNAPSHOT hash=" in user_prompt
         assert evidence.evidence_hash in user_prompt
+        # round-3 P0-1: window + Student identity are bound into every
+        # role prompt
+        assert "WINDOW: window_id=w01" in user_prompt
+        assert context.student_candidate_id in user_prompt
+        assert "UPSTREAM_ROLE_OUTPUTS" in user_prompt
+
+    def test_upstream_output_is_rendered_and_bound(self):
+        evidence = _evidence()
+        context = self._context(evidence)
+        modeler_payload = _role_payloads()["student_modeler"]
+        upstream = [
+            B.UpstreamOutput(
+                role="student_modeler",
+                output=modeler_payload,
+                output_hash=B.role_output_hash(
+                    "student_modeler", modeler_payload
+                ),
+            )
+        ]
+        _, user_prompt = B.build_role_prompt(
+            "behavior_auditor", evidence, context=context, upstream=upstream
+        )
+        # the later role literally reads the earlier role's output
+        assert modeler_payload["model_summary"] in user_prompt
+        assert upstream[0].output_hash in user_prompt
+        # and the envelope changes with the chain
+        bare = B.build_prompt_envelope_hash(
+            "behavior_auditor", evidence, context=context
+        )
+        chained = B.build_prompt_envelope_hash(
+            "behavior_auditor", evidence, context=context, upstream=upstream
+        )
+        assert bare != chained
+
+    def test_corrupted_upstream_hash_rejected(self):
+        evidence = _evidence()
+        context = self._context(evidence)
+        modeler_payload = _role_payloads()["student_modeler"]
+        corrupted = B.UpstreamOutput(
+            role="student_modeler",
+            output=modeler_payload,
+            output_hash="0" * 64,
+        )
+        with pytest.raises(B.BoardError) as excinfo:
+            B.build_role_prompt(
+                "behavior_auditor",
+                evidence,
+                context=context,
+                upstream=[corrupted],
+            )
+        assert excinfo.value.code == "BOARD_CHAIN_HASH_MISMATCH"
 
     def test_envelope_hash_differs_per_role(self):
         evidence = _evidence()
+        context = self._context(evidence)
         hashes = {
-            B.build_prompt_envelope_hash(role, evidence)
+            B.build_prompt_envelope_hash(role, evidence, context=context)
             for role in M.BOARD_ROLE_ORDER
         }
         assert len(hashes) == len(M.BOARD_ROLE_ORDER)

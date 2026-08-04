@@ -21,6 +21,8 @@ def _gate_state(**over):
         "forgetting_regression": False,
         "exploration_slot_available": False,
         "curriculum_drift": False,
+        # round-3 P0-3: signal provenance binding (64 lowercase hex)
+        "signals_binding_hash": "0" * 64,
     }
     base.update(over)
     return G.build_gate_state(base, "t")
@@ -49,7 +51,9 @@ class TestReusePath:
 class TestTriggeredPath:
     def test_triggered_window_runs_full_board(self):
         evidence = _evidence()
-        store = _build_store(evidence)
+        # the controller feeds the gate state's session_idx and the
+        # decision code into the board context (round-3 P0-1 binding)
+        store = _build_store(evidence, session_idx=5)
         ledger = LLMCallLedger()
         outcome = run_review_cycle(
             LC.ReplayLLMClient(store, "t"),
@@ -69,7 +73,12 @@ class TestTriggeredPath:
 
     def test_void_window_yields_reuse(self):
         evidence = _evidence()
-        store = _build_store(evidence, overrides={"behavior_auditor": {"bad": 1}})
+        store = _build_store(
+            evidence,
+            overrides={"behavior_auditor": {"bad": 1}},
+            session_idx=5,
+            trigger_code="STAGNATION",
+        )
         ledger = LLMCallLedger()
         outcome = run_review_cycle(
             LC.ReplayLLMClient(store, "t"),
@@ -85,7 +94,7 @@ class TestTriggeredPath:
 
     def test_double_run_equality(self):
         evidence = _evidence()
-        store = _build_store(evidence)
+        store = _build_store(evidence, session_idx=5)
         o1 = run_review_cycle(
             LC.ReplayLLMClient(store, "t"),
             window_id="w01",

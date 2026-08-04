@@ -15,6 +15,8 @@ def _raw(**over):
         "forgetting_regression": False,
         "exploration_slot_available": False,
         "curriculum_drift": False,
+        # round-3 P0-3: signal provenance binding (64 lowercase hex)
+        "signals_binding_hash": "0" * 64,
     }
     base.update(over)
     return base
@@ -70,12 +72,22 @@ class TestGateEvaluation:
 
 class TestGateStateConsumption:
     def test_all_fields_required(self):
-        for field in _FIELD_BY_CODE.values():
+        # the eight trigger fields AND the signal provenance binding
+        fields = tuple(_FIELD_BY_CODE.values()) + ("signals_binding_hash",)
+        for field in fields:
             raw = _raw()
             del raw[field]
             with pytest.raises(G.InvocationGateError) as excinfo:
                 G.build_gate_state(raw, "t")
             assert excinfo.value.code == "INVOCATION_GATE_MISSING_FIELD"
+
+    @pytest.mark.parametrize(
+        "bad", [True, 0, "abc", "0" * 63, "0" * 65, "G" * 64, None]
+    )
+    def test_signals_binding_hash_strict(self, bad):
+        with pytest.raises(G.InvocationGateError) as excinfo:
+            G.build_gate_state(_raw(signals_binding_hash=bad), "t")
+        assert excinfo.value.code == "INVOCATION_GATE_BAD_BINDING"
 
     def test_unknown_field_rejected(self):
         with pytest.raises(G.InvocationGateError) as excinfo:

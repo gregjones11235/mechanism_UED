@@ -7,7 +7,17 @@
 # degraded (anchors + REUSE only) and fail-closed:
 #   reference_contract.frozen=false  -> REFERENCE_CONTRACT_UNFROZEN
 #   learnability.*=null              -> LEARNABILITY_THRESHOLD_MISSING
-# Both codes surface in status_report()/blocked gates, never a guess.
+#   invocation.thresholds.*=null     -> INVOCATION_THRESHOLD_MISSING
+# The first two codes surface in status_report() AND the blocked
+# training gates, never a guess. The third is a window-invocation
+# degradation only (it surfaces in status_report() and as the explicit
+# reason on every threshold-driven gate signal): it governs when a
+# review WINDOW opens, and by design it never blocks the C13 training
+# gate, whose evidence chain is the verified dual-probe/anchor-manifest
+# snapshot. With invocation thresholds unfrozen the gate signals are
+# COMPUTED honestly from real facts (every threshold-driven signal is
+# False with an explicit INVOCATION_THRESHOLD_MISSING reason), never
+# hardcoded.
 
 teacher:
   teacher_type: e1_formal
@@ -57,6 +67,21 @@ teacher:
     min_episodes: null
     ci_level: null
 
+  # P0-3: review-window invocation thresholds — NO defaults. Every null
+  # fails closed as INVOCATION_THRESHOLD_MISSING: threshold-driven gate
+  # signals are COMPUTED False with an explicit reason (never
+  # hardcoded) until the supervisor freezes the values. The
+  # threshold_version is pinned against configs/e1_formal_ued.yaml.
+  invocation:
+    threshold_version: e1-gate-thresholds-v1
+    thresholds:
+      capability_shift_delta: null
+      stagnation_max_delta: null
+      stagnation_min_sessions: null
+      forgetting_regression_drop: null
+      intervention_exhaustion_max_reuses: null
+      exploration_slot_period: null
+
   # Selection knobs (mechanical determinism, explicitly pinned — not
   # scientific defaults). k must equal the 12 dynamic slots; seed is the
   # audit-date determinism pin for this branch.
@@ -75,7 +100,9 @@ teacher:
       - original_craftax
     manifest_path: configs/e1_formal_ued_anchor_manifest.DRAFT.json
 
-  # EnvCoder prompt whitelist input (seed examples rotate by variant).
+  # EnvCoder prompt whitelist input. The EnvCoder is template-keyed
+  # (one call per unique family template), so seeds enter in FIXED
+  # order — the envelope is variant-independent by construction.
   envcoder:
     seed_examples:
       - task_id: task_1
