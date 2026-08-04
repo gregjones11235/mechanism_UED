@@ -5,8 +5,12 @@
   never reach feedback by construction — not by prompt discipline.
 * ``PermutedFeedbackView`` is a FROZEN, recomputable permutation of the
   frozen records, presented under anonymized ids with every identity side
-  channel (candidate id / mutation axes / axis values / held-constant axes)
-  masked: two views built from the same inputs are bit-identical, the real
+  channel removed or consistently anonymized: candidate id / mutation axes /
+  axis values / held-constant axes masked, the family-grain predicted
+  signature dropped, and the exact probe rates / evidence gaps (which are
+  deterministic per-candidate-hash fingerprints) published ONLY as per-
+  family window aggregates, identical at the prompt layer and the evidence
+  layer. Two views built from the same inputs are bit-identical, the real
   candidate<->feedback pairing never appears in any board-visible payload,
   and de-anonymization is only possible through ``resolve_citation`` —
   which fails closed on anything the view did not present (including the
@@ -24,6 +28,7 @@ from d052.feedback_llm_ued.feedback_view import (
     NormalFeedbackView,
     NullFeedbackView,
     PermutedFeedbackView,
+    family_level_metrics,
     record_payload,
 )
 from d052.feedback_llm_ued.synthetic_feedback import (
@@ -131,8 +136,12 @@ class TestPermutedFeedbackViewFrozen:
 
     def test_presentation_is_a_permutation_of_the_input_records(self):
         """Anonymized slots de-anonymize to EXACTLY the input record set —
-        nothing added, nothing dropped — and each payload's evidence content
-        is precisely the resolved record's content (only identity masked)."""
+        nothing added, nothing dropped. What moves verbatim with the record
+        is loop-essential COARSE content (window, family, distinguished
+        hypotheses, match state); every identity side channel is removed or
+        consistently anonymized (CC4 C9 gate round two): ids/axes masked,
+        family-grain predicted signature dropped, exact per-candidate rates
+        replaced by the public family-level window aggregates."""
         recs = _records()
         view = _view(recs)
         by_id = {r.feedback_id: r for r in recs}
@@ -141,14 +150,20 @@ class TestPermutedFeedbackViewFrozen:
         resolved = [view.resolve_citation(p["feedback_id"]) for p in payloads]
         assert sorted(resolved) == sorted(by_id)
         assert len(set(resolved)) == N_RECORDS
+        coarse = family_level_metrics(recs)
         for payload in payloads:
             rec = by_id[view.resolve_citation(payload["feedback_id"])]
             expected = record_payload(rec)
             for key in ("window", "environment_family",
                         "distinguishes_hypothesis_ids",
-                        "expected_observed_match", "expected_signature",
-                        "student_success_rate", "reference_success_rate"):
+                        "expected_observed_match"):
                 assert payload[key] == expected[key], key
+            fam = coarse[rec.environment_family]
+            assert payload["student_success_rate"] == \
+                fam["student_success_rate"]
+            assert payload["reference_success_rate"] == \
+                fam["reference_success_rate"]
+            assert payload["expected_signature"] == {}
             assert payload["candidate_id"] == MASKED_IDENTITY
             assert payload["mutation_axes"] == []
             assert payload["axis_values"] == {}

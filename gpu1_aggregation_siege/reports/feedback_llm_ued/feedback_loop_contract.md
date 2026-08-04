@@ -8,8 +8,16 @@
 三模式结构性隔离 + 共享 Soft Copeland + anchor manifest 接缝 + 哈希重算 +
 持久化/跨窗恢复），并按 CC3 C9 门禁（2026-08-04）收紧两处：BoardContext
 只经 FeedbackView 装配（原始 store 被拒绝）；窗口滞后由 ≤k−1 收紧为
-**恰好 k−1**（旧/当前/未来记录一律 STALE_FEEDBACK_ID）。旧两角色/条件
-调用门版本已随 C8 废除。
+**恰好 k−1**（旧/当前/未来记录一律 STALE_FEEDBACK_ID）。再按 CC4 C9
+门禁第二轮（2026-08-04）收紧两处：(1) shuffled 置换视图的**所有身份关联
+字段在 prompt 层与 BehaviorFailureEvidence 层一致匿名化或移除**——精确
+探针率/证据缺口是候选哈希的确定性指纹，只允许以族级窗口聚合发布（两层
+同一数值、缺口与 severity 由聚合值重建），family-grain 预测签名移除；
+(2) **static phase A 不得触碰 store**——退休生命周期是反馈驱动的，static
+使用冻结空生命周期（retired/cooldown 结构性为空），读取 store 的退休状态
+查询对 static fail-closed（STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE）；
+验收标准为仅反馈记录不同的两个 store 下 static BoardContext 与全部六个
+board prompt 逐字节一致（负测锁定）。旧两角色/条件调用门版本已随 C8 废除。
 
 ## 1. 双窗口状态机（窗口时序规范）
 
@@ -18,7 +26,8 @@
  ├─ A. EVIDENCE：行为失败证据（窗 k−1 probe 提取）+ FeedbackView(k−1)
  │     （**恰好** k−1 的已冻结反馈，CC3 C9 门禁；BoardContext 只经该视图
  │      装配，原始 store 被 BOARD_CONTEXT_STORE_FORBIDDEN 拒绝；
- │      static=结构性 NullFeedbackView；shuffled=冻结可复算置换视图）
+ │      static=结构性 NullFeedbackView + 冻结空退休生命周期（CC4 门禁：
+ │      phase A 不得触碰 store）；shuffled=冻结可复算置换视图）
  ├─ B. BOARD：完整六角色 Review Board（6 次 LLM 族调用，无条件）：
  │     StudentModeler→BehaviorAuditor→CausalFailureAnalyst→InterventionTutor
  │     →Explorer→Critic/Skeptic；输出：对 k−1 反馈的 verdict（显式引用
@@ -69,9 +78,9 @@ phase 机常量：`PHASE_EVIDENCE / PHASE_BOARD / PHASE_REVISION / PHASE_PROBING
 
 | 模式 | 反馈视图 | 隔离方式 |
 |---|---|---|
-| `static_llm` | `NullFeedbackView` | **类型级**不持有 SimulatorFeedbackStore 引用，board 上下文结构性零反馈载荷（证据/SR/CI/候选 id/历史全空，非提示词省略） |
+| `static_llm` | `NullFeedbackView` | **类型级**不持有 SimulatorFeedbackStore 引用，board 上下文结构性零反馈载荷（证据/SR/CI/候选 id/历史全空，非提示词省略）；phase A 的 retired/cooldown 来自**冻结空退休生命周期**（CC4 门禁：退休查询读 store，对 static fail-closed），BoardContext 与六个 board prompt 是纯非反馈状态的函数（外来 store 污染下逐字节一致，负测锁定） |
 | `normal_feedback` | `NormalFeedbackView` | 只读冻结快照，**恰好 k−1**（混合窗口记录在构造时即 STALE_FEEDBACK_ID） |
-| `shuffled_feedback` | `PermutedFeedbackView` | **冻结可复算置换**：仅由 (mode, 窗口, SEED_SCHEDULE_HASH)+记录集派生，无运行时随机；匿名化 id 呈现（prompt 层与 BoardContext 证据层一致，candidate id 掩码），board 上下文不可还原真实 candidate↔feedback 配对 |
+| `shuffled_feedback` | `PermutedFeedbackView` | **冻结可复算置换**：仅由 (mode, 窗口, SEED_SCHEDULE_HASH)+记录集派生，无运行时随机；匿名化 id 呈现（prompt 层与 BoardContext 证据层一致，candidate id 掩码）；**所有身份关联字段一致匿名化或移除（CC4 门禁）**：轴/轴值/恒置轴掩码、family-grain 预测签名移除、精确率/缺口（候选哈希指纹）只发布族级窗口聚合（两层同值，缺口与 severity 由聚合重建）；board 上下文不可还原真实 candidate↔feedback 配对（store 联接负测锁定），唯一还原路径为 controller 的 resolve_citation |
 
 三模式保持相同六角色/EnvCoder/probe/训练接缝/seed/预算（每窗 7 次调用、
 61440 transitions）；差异只能归因于反馈的使用方式。所有模式的 BoardContext

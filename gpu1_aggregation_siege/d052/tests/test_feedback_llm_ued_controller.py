@@ -31,16 +31,21 @@ evidence) — so each family retires at most ONCE per run, a STALE verdict
 can never resurrect it, and the board context carries the blocked lists so
 the six roles skip cooldown/retired families by construction.
 
-CC3 C9 gate re-baseline (6 windows, deterministic mock, exact k-1 lag):
-42 LLM-family calls and 368640 simulator transitions per mode; normal
-coverage 0.8047 with {MUTATE: 7, RETIRE: 4, RETAIN: 3} — threat_distance
-retired@1, day_night_rest_need@4, visibility@4, resource_pressure@5;
-shuffled coverage 0.8047 with {MUTATE: 7, RETIRE: 3, RETAIN: 3} —
+CC4 C9 gate round-two re-baseline (6 windows, deterministic mock, exact k-1
+lag, shuffled numeric side channel removed): 42 LLM-family calls and 368640
+simulator transitions per mode; normal coverage 0.8047 with {MUTATE: 7,
+RETIRE: 4, RETAIN: 3} — threat_distance retired@1, day_night_rest_need@4,
+visibility@4, resource_pressure@5 (the normal view is honest and untouched);
+shuffled coverage 0.8047 with {MUTATE: 9, RETIRE: 3, RETAIN: 1} —
 threat_distance@1, resource_pressure@2, day_night_rest_need@5 (a DIFFERENT
-retirement set than normal, so feedback_binding_matters stays True); both
-modes keep six unique plan signatures and anon-citation resolution into
-honest ledger/revision ids; static keeps {MUTATE: 6}, a single plan
-signature and 0.0 coverage.
+retirement set and decision mix than normal, so feedback_binding_matters
+stays True). The shuffled shift vs the CC3 baseline ({MUTATE: 7, RETIRE: 3,
+RETAIN: 3}) is expected: the shuffled view now publishes ONLY family-level
+window aggregates instead of exact per-candidate rates/gaps (which were
+candidate-hash fingerprints), so the mock roles rank and retire from coarser
+numbers. Both modes keep six unique plan signatures and anon-citation
+resolution into honest ledger/revision ids; static keeps {MUTATE: 6}, a
+single plan signature and 0.0 coverage.
 
 C11 REQUEST_CONTROL blocking: a board that requests human control (critic
 escalation and/or a tutor REQUEST_CONTROL proposal) halts the loop right
@@ -151,15 +156,21 @@ class TestAuthorizationPosture:
         # C8 double-window flags are ON
         assert C.NEXT_WINDOW_REVISION_ONLY is True
         assert C.SAME_WINDOW_REVISION_REJECTED is True
-        # CC4 C9 GATE ROUND TWO (2026-08-04): the two C9 isolation flags are
-        # False again while the shuffled view's identity-correlated NUMERIC
-        # side channels (exact probe rates / exact evidence gaps — per-
-        # candidate-hash fingerprints) are consistently anonymized at the
-        # prompt layer AND the BehaviorFailureEvidence layer. They are
-        # earned back only after the uniqueness/re-identification negative
-        # tests and the full-prompt byte-parity tests all pass.
-        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is False
-        assert C.SHUFFLE_PERMUTATION_FROZEN is False
+        # CC4 C9 GATE ROUND TWO (2026-08-04), EARNED AGAIN: both director
+        # findings fixed and locked by negative tests
+        # (test_feedback_llm_ued_c9_gate.py, 18 cases): (1) the shuffled
+        # view's identity-correlated NUMERIC side channels (exact probe
+        # rates / exact evidence gaps — deterministic per-candidate-hash
+        # fingerprints) are consistently anonymized at the prompt layer AND
+        # the BehaviorFailureEvidence layer (family-level window aggregates
+        # only; family-grain predicted signature dropped); (2) the STATIC
+        # phase-A assembly no longer touches the RETIRE lifecycle query
+        # (whose reopen gate reads the raw store) — static uses the frozen
+        # empty lifecycle and the query itself fails closed, so the static
+        # BoardContext and all six prompts are a pure function of the
+        # non-feedback state (byte-identical under foreign-store pollution).
+        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is True
+        assert C.SHUFFLE_PERMUTATION_FROZEN is True
         assert len(C.SEED_SCHEDULE_HASH) == 64
         # C10 RETIRE lifecycle constant
         assert C.RETIRE_COOLDOWN_WINDOWS == 3
@@ -641,13 +652,16 @@ class TestShuffledFeedback:
         _ctls, sums = runs
         s = sums[C.MODE_SHUFFLED_FEEDBACK]
         assert s.feedback_citation_coverage == 0.8047
-        # CC3 C9 gate re-baseline (EXACT k-1 lag): the shuffled numbers
-        # shift with the normal ones, but the two modes STILL differ — the
-        # permutation changes which families retire (3 vs 4), which is the
-        # point of the comparison
-        assert s.decision_distribution == {C.DECISION_MUTATE: 7,
+        # CC4 C9 gate round-two re-baseline (numeric side-channel
+        # hardening): the shuffled view now publishes ONLY family-level
+        # window aggregates (exact rates/gaps were per-candidate-hash
+        # fingerprints), so the mock roles see coarser numbers and the
+        # shuffled decision distribution shifts again — but the two modes
+        # STILL differ (3 vs 4 retirements, different decision mix), which
+        # is the point of the comparison
+        assert s.decision_distribution == {C.DECISION_MUTATE: 9,
                                            C.DECISION_RETIRE: 3,
-                                           C.DECISION_RETAIN: 3}
+                                           C.DECISION_RETAIN: 1}
         assert s.supported_retention_rate == 1.0
         assert s.refuted_retirement_rate == 1.0
         assert len(set(s.plan_signature_hashes)) == 6

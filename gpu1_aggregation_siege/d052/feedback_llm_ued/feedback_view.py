@@ -16,11 +16,23 @@ The board never receives a store. It receives a view:
                              derives ONLY from (mode, board window, window
                              scope, seed_schedule_hash) — never from runtime
                              randomness — and every record is shown under an
-                             anonymized id with its identity side channels
-                             (candidate id / mutation axes / axis values /
-                             held-constant axes) masked, so the real
-                             candidate<->feedback pairing is unrecoverable
-                             from the board context.
+                             anonymized id with EVERY identity side channel
+                             removed or consistently anonymized at the prompt
+                             layer AND the evidence layer: candidate id /
+                             mutation axes / axis values / held-constant axes
+                             masked; the redundant family-grain predicted
+                             signature dropped; the numeric fields — exact
+                             probe rates are deterministic per-candidate-hash
+                             fingerprints, so they are a pairing channel when
+                             joined against the honest store — published ONLY
+                             as per-family window aggregates (a public
+                             function of the (window, family) partition,
+                             identical in both layers, gaps and severity
+                             rebuilt from the aggregates). The real
+                             candidate<->feedback pairing is therefore
+                             unrecoverable from the board context; the only
+                             de-anonymization path is ``resolve_citation``,
+                             held by the controller.
 
 Every view exposes the same prompt payload shape, so the six roles are
 identical across modes — only what they can see differs. Citations coming
@@ -34,7 +46,10 @@ from typing import Dict, List, Protocol, Sequence, runtime_checkable
 
 from d052.bagr_ued.hashing import canonical_sha256
 from d052.feedback_llm_ued import constants as C
-from d052.feedback_llm_ued.behavior_failure import BehaviorFailureEvidence
+from d052.feedback_llm_ued.behavior_failure import (
+    BehaviorFailureEvidence,
+    severity_for,
+)
 from d052.feedback_llm_ued.simulator_feedback_store import (
     SimulatorFeedbackRecord,
 )
@@ -63,9 +78,11 @@ class FeedbackView(Protocol):
         """The BoardContext evidence layer, derived ONLY from the records the
         view presents (CC3 C9 gate: the board context is built from the view,
         never from the raw store). Null view: empty. Normal view: real-id
-        evidence. Permuted view: anonymized evidence (anonymized feedback ids
-        consistent with the prompt payload, candidate id masked) — no
-        identity side channel at the evidence layer either.
+        evidence. Permuted view: anonymized evidence CONSISTENT with the
+        prompt payload — the same anonymized feedback ids, candidate id
+        masked, and the SAME family-level window aggregates for every
+        numeric field (rates, gaps, severity): the evidence layer carries
+        no identity side channel the prompt layer does not.
         """
         ...
 
@@ -193,15 +210,69 @@ def _permutation_unit(seed: str, index: int) -> float:
     return int(digest[:16], 16) / (16 ** 16)
 
 
-def _anonymized_payload(anon_id: str,
-                        record: SimulatorFeedbackRecord) -> Dict[str, object]:
+def family_level_metrics(records: Sequence[SimulatorFeedbackRecord]
+                         ) -> Dict[str, Dict[str, object]]:
+    """CC4 C9 gate: the shuffled view's numeric anonymization.
+
+    Exact probe rates and the gaps derived from them are deterministic
+    functions of the candidate hash (see ``simulator_probe``), so at full
+    precision they are per-candidate fingerprints: anyone holding the honest
+    store could join a shuffled payload item against it and recover the true
+    candidate<->feedback pairing despite the anonymized ids. The permuted
+    view therefore publishes ONLY per-family window aggregates — the mean
+    Student/Reference success rates, the mean activation / front-progress
+    gaps, the return shortfall and reference gap rebuilt from those
+    aggregates, and the severity of that rebuilt gap.
+
+    These aggregates are a deterministic function of the PUBLIC (window,
+    family) partition — strictly less information than the family and window
+    the payload shows anyway plus the honest store any joining adversary
+    already holds — so they add NO identifying power: within one family of
+    one window every record publishes byte-identical numbers. The same
+    aggregates feed the prompt payload and the evidence layer (consistent
+    anonymization at both layers).
+    """
+    by_family: Dict[str, List[SimulatorFeedbackRecord]] = {}
+    for record in records:
+        by_family.setdefault(record.environment_family, []).append(record)
+    aggregates: Dict[str, Dict[str, object]] = {}
+    for family in sorted(by_family):
+        exact = [BehaviorFailureEvidence.from_record(r)
+                 for r in by_family[family]]
+        n = len(exact)
+        student = round(sum(e.student_success_rate for e in exact) / n, 6)
+        reference = round(sum(e.reference_success_rate for e in exact) / n, 6)
+        activation = round(sum(e.behavior_activation_gap for e in exact) / n,
+                           6)
+        progress = round(sum(e.front_progress_gap for e in exact) / n, 6)
+        shortfall = round(max(0.0, reference - student), 6)
+        gap = round(max(shortfall, activation, progress), 6)
+        aggregates[family] = dict(
+            student_success_rate=student,
+            reference_success_rate=reference,
+            behavior_activation_gap=activation,
+            front_progress_gap=progress,
+            return_shortfall=shortfall,
+            reference_gap=gap,
+            severity=severity_for(gap))
+    return aggregates
+
+
+def _anonymized_payload(anon_id: str, record: SimulatorFeedbackRecord,
+                        coarse: Dict[str, Dict[str, object]]
+                        ) -> Dict[str, object]:
     """One record's board-visible slice under an anonymized identity.
 
-    The identity side channels (candidate id / mutation axes / axis values /
-    held-constant axes) are masked; the evidence content (window, family,
-    distinguished hypotheses, expected-vs-observed match, predicted
-    signature, episode-level rates) moves together with the record, so a
-    verdict graded on this payload binds to exactly the record shown.
+    Every identity side channel is removed or consistently anonymized:
+    candidate id / mutation axes / axis values / held-constant axes are
+    masked; the family-grain predicted signature is dropped (redundant with
+    the visible family-level hypotheses, identity-correlated at family
+    granularity); the exact episode-level rates — per-candidate-hash
+    fingerprints — are replaced by the family-level window aggregates
+    (``family_level_metrics``), identical to the evidence layer's numbers.
+    What moves together with the record is loop-essential coarse content
+    only: window, family, distinguished hypotheses (family granularity),
+    expected-vs-observed match state.
     """
     payload = record_payload(record)
     payload["feedback_id"] = anon_id
@@ -209,24 +280,39 @@ def _anonymized_payload(anon_id: str,
     payload["mutation_axes"] = []
     payload["axis_values"] = {}
     payload["held_constant_axes"] = {}
+    payload["expected_signature"] = {}
+    fam = coarse[record.environment_family]
+    payload["student_success_rate"] = fam["student_success_rate"]
+    payload["reference_success_rate"] = fam["reference_success_rate"]
     return payload
 
 
-def _anonymized_evidence(anon_id: str,
-                         record: SimulatorFeedbackRecord
+def _anonymized_evidence(anon_id: str, record: SimulatorFeedbackRecord,
+                         coarse: Dict[str, Dict[str, object]]
                          ) -> BehaviorFailureEvidence:
     """BoardContext evidence for one permuted record under its anonymized id.
 
-    CC3 C9 gate: the evidence layer must carry NO identity side channel
-    either — the feedback id is the SAME anonymized id the prompt payload
-    shows (evidence<->payload consistency), and the candidate id is masked.
-    The statistical content (rates, gaps, severity, match state, window,
-    family) moves together with the record, exactly like the payload.
+    CC3 C9 gate + CC4 hardening: the evidence layer carries NO identity side
+    channel and NO identifying numeric channel — the feedback id is the SAME
+    anonymized id the prompt payload shows (evidence<->payload consistency),
+    the candidate id is masked, and EVERY numeric field (both success rates,
+    all three gaps, reference gap, severity) is the SAME family-level window
+    aggregate the prompt payload publishes (``family_level_metrics``). What
+    moves together with the record is loop-essential coarse content only:
+    window, family, match state.
     """
     evidence = BehaviorFailureEvidence.from_record(record)
+    fam = coarse[record.environment_family]
     payload = evidence.model_dump()
     payload["feedback_id"] = anon_id
     payload["candidate_id"] = MASKED_IDENTITY
+    payload["student_success_rate"] = fam["student_success_rate"]
+    payload["reference_success_rate"] = fam["reference_success_rate"]
+    payload["return_shortfall"] = fam["return_shortfall"]
+    payload["behavior_activation_gap"] = fam["behavior_activation_gap"]
+    payload["front_progress_gap"] = fam["front_progress_gap"]
+    payload["reference_gap"] = fam["reference_gap"]
+    payload["severity"] = fam["severity"]
     return BehaviorFailureEvidence(**payload)
 
 
@@ -243,11 +329,17 @@ class PermutedFeedbackView:
     * slot ``j`` presents the record at permuted position ``order[j]`` (the
       indices sorted by hash-derived pseudo-uniform keys) under the
       anonymized id ``anon-w{board_window:02d}-{j:03d}``;
-    * every identity side channel is masked (``_anonymized_payload``).
+    * every identity side channel is removed or consistently anonymized at
+      BOTH the prompt layer and the evidence layer (``_anonymized_payload``
+      / ``_anonymized_evidence``): ids/axes masked, family-grain predicted
+      signature dropped, exact per-candidate rates and gaps replaced by the
+      shared per-family window aggregates (``family_level_metrics``).
 
     Two views constructed with identical inputs present bit-identical
-    payloads and mappings (recomputable); the real candidate<->feedback
-    pairing never appears in any payload (negative-tested).
+    payloads, evidence and mappings (recomputable); the real
+    candidate<->feedback pairing never appears in any payload, and no
+    published number refines the public (window, family) partition
+    (negative-tested: uniqueness/re-identification tests).
     """
 
     def __init__(self, records: Sequence[SimulatorFeedbackRecord], *,
@@ -279,15 +371,21 @@ class PermutedFeedbackView:
             key=lambda i: (_permutation_unit(self._permutation_seed, i), i))
         self._records = tuple(ordered[i] for i in order)
 
+        #: CC4 C9 gate: one set of family-level window aggregates, shared by
+        #: the prompt payload and the evidence layer (consistent
+        #: anonymization; a pure function of the presented record set).
+        self._coarse = family_level_metrics(records)
+
         self._anon_to_real: Dict[str, str] = {}
         self._payloads: List[Dict[str, object]] = []
         self._evidence: List[BehaviorFailureEvidence] = []
         for slot, record in enumerate(self._records):
             anon_id = f"anon-w{board_window:02d}-{slot:03d}"
             self._anon_to_real[anon_id] = record.feedback_id
-            self._payloads.append(_anonymized_payload(anon_id, record))
+            self._payloads.append(
+                _anonymized_payload(anon_id, record, self._coarse))
             self._evidence.append(
-                _anonymized_evidence(anon_id, record))
+                _anonymized_evidence(anon_id, record, self._coarse))
         self.label = f"{VIEW_LABEL_PERMUTED}:{self._permutation_seed[:16]}"
 
     @property

@@ -103,17 +103,27 @@ NEXT_WINDOW_REVISION_ONLY = True
 #: feedback_k is staged raises SAME_WINDOW_REVISION_FORBIDDEN (fail closed);
 #: negative tests prove the refusal.
 SAME_WINDOW_REVISION_REJECTED = True
-#: CC4 C9 GATE ROUND TWO (2026-08-04): RE-OPENED. The CC4 audit found that
-#: the shuffled view still carried identity-correlated NUMERIC side channels
-#: — the exact probe success rates and the exact evidence gaps derived from
-#: them are deterministic per-candidate-hash fingerprints, so a store-joining
-#: adversary could still recover the true candidate<->feedback pairing
-#: despite the anonymized ids. Both C9 flags stay False until the permuted
-#: view's numeric fields are consistently coarsened at the prompt layer AND
-#: the BehaviorFailureEvidence layer, the uniqueness/re-identification
-#: negative tests and the full-prompt byte-parity tests all pass.
-STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
-SHUFFLE_PERMUTATION_FROZEN = False
+#: CC4 C9 GATE ROUND TWO (2026-08-04), EARNED AGAIN after BOTH director
+#: findings were fixed and locked by negative tests
+#: (test_feedback_llm_ued_c9_gate.py, 18 cases):
+#:
+#: 1. STATIC leak: window phase A used to derive the BoardContext's
+#:    retired/cooldown fields from the RETIRE lifecycle query whose reopen
+#:    gate reads the raw SimulatorFeedbackStore — feedback-independent only
+#:    by coincidence. Now the static mode uses the FROZEN EMPTY lifecycle
+#:    (the store-reading query itself fails closed with
+#:    STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE), and the negative test proves
+#:    the static BoardContext AND all six board prompts byte-identical under
+#:    two stores differing ONLY in feedback records.
+#: 2. SHUFFLED numeric side channel: exact probe rates/gaps are
+#:    deterministic per-candidate-hash fingerprints, so the permuted view
+#:    publishes ONLY per-family window aggregates — the SAME numbers at the
+#:    prompt layer and the BehaviorFailureEvidence layer — and drops the
+#:    family-grain predicted signature; store-joining and exact-value scans
+#:    prove no presented item narrows below its public (family, match)
+#:    class, and two independent runs are byte-identical at every window.
+STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = True
+SHUFFLE_PERMUTATION_FROZEN = True
 
 #: flags that must NEVER be True this round (authorization posture re-asserts)
 NEVER_TRUE_REAL_CAPABILITY_FLAGS = (

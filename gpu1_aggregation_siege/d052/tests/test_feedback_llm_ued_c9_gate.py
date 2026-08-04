@@ -1,8 +1,9 @@
-"""CC3 C9 GATE — targeted bypass and lag tests (2026-08-04).
+"""C9 GATE — targeted bypass, lag, re-identification and byte-parity tests.
 
-The director's CC3 gate re-opened the two C9 isolation flags until THIS
-file's targeted tests pass again. The gate's two mandates, tested here
-against real three-mode runs (deterministic mock backend + symbolic probe):
+The director's CC3 gate (and the CC4 round-two gate, 2026-08-04) keep the
+two C9 isolation flags open until THIS file's targeted tests pass. The
+mandates, tested here against real three-mode runs (deterministic mock
+backend + symbolic probe):
 
 BYPASS — the BoardContext is built ONLY from the window's FeedbackView:
 
@@ -21,6 +22,33 @@ BYPASS — the BoardContext is built ONLY from the window's FeedbackView:
   consistency); the permutation presents EXACTLY the honest window k-1
   record set and only ``resolve_citation`` maps back.
 
+RE-IDENTIFICATION (CC4 round two) — no numeric side channel either:
+
+* exact probe rates/gaps are deterministic per-candidate-hash fingerprints,
+  so the shuffled view publishes ONLY per-family window aggregates, the
+  SAME numbers at the prompt layer and the evidence layer (consistent
+  anonymization); the family-grain predicted signature is dropped;
+* a store-joining adversary cannot narrow any presented item below its
+  public (window, family, match) class — the view adds NO identifying
+  power, and in this gate's windows every such class holds >= 2 records
+  (uniqueness negative test);
+* no exact per-record metric appears anywhere in the serialized prompt
+  context (every published float is checked against the honest store).
+
+BYTE PARITY (CC4 round two) — the frozen permutation is byte-reproducible:
+two INDEPENDENT full runs assemble byte-identical prompt contexts (view
+payload + board context + hypotheses, canonical JSON) at every window.
+
+STATIC INDEPENDENCE (CC4 round two, director REQUEST_CHANGES) — the static
+leak: phase A used to derive ``families_in_cooldown``/``retired_families``
+from the RETIRE lifecycle query, whose reopen gate reads the raw
+SimulatorFeedbackStore — feedback-independent only BY COINCIDENCE (the
+static registry is empty). The fix makes it STRUCTURAL: the static mode
+uses the frozen empty lifecycle, and the store-reading query itself fails
+closed (STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE). Proven here: two static
+runs whose stores differ ONLY in feedback records assemble byte-identical
+board contexts and all six board prompts at every window.
+
 LAG — the double-window lag is EXACTLY one window (rec.window == window-1):
 
 * a window-k view presents EXACTLY window k-1's 64 frozen records (window
@@ -34,11 +62,15 @@ LAG — the double-window lag is EXACTLY one window (rec.window == window-1):
   lags its window by EXACTLY one, in all three modes.
 """
 import json
+from collections import Counter
 
 import pytest
 
 from d052.feedback_llm_ued import constants as C
-from d052.feedback_llm_ued.behavior_failure import assemble_board_context
+from d052.feedback_llm_ued.behavior_failure import (
+    BehaviorFailureEvidence,
+    assemble_board_context,
+)
 from d052.feedback_llm_ued.causal_failure_analyst import BoardHypothesisVerdict
 from d052.feedback_llm_ued.controller import FeedbackUEDController
 from d052.feedback_llm_ued.feedback_view import (
@@ -46,6 +78,7 @@ from d052.feedback_llm_ued.feedback_view import (
     NormalFeedbackView,
     NullFeedbackView,
     PermutedFeedbackView,
+    family_level_metrics,
 )
 from d052.feedback_llm_ued.review_board import (
     build_board_prompt_context,
@@ -214,6 +247,283 @@ class TestShuffledBypassSealed:
             [e.model_dump() for e in b.behavior_evidence()]
         assert a.permutation_seed == b.permutation_seed
         assert a.label == b.label
+
+
+# ---------------------- RE-IDENTIFICATION: no numeric side channel (CC4)
+def _all_floats(obj):
+    """Every float reachable in a JSON-serializable structure."""
+    if isinstance(obj, bool):
+        return
+    if isinstance(obj, float):
+        yield obj
+    elif isinstance(obj, dict):
+        for value in obj.values():
+            yield from _all_floats(value)
+    elif isinstance(obj, (list, tuple)):
+        for value in obj:
+            yield from _all_floats(value)
+
+
+class TestShuffledNoReidentification:
+    """CC4 C9 gate round two: the exact probe rates/gaps are deterministic
+    per-candidate-hash fingerprints, so the shuffled view must publish only
+    per-family window aggregates — consistent at the prompt layer and the
+    evidence layer — and a store-joining adversary must not be able to
+    recover the true candidate<->feedback pairing."""
+
+    def test_published_numbers_are_public_family_aggregates_both_layers(
+            self, runs):
+        """Every numeric field at BOTH layers equals the adversarially
+        recomputable family-level window aggregate; the family-grain
+        predicted signature is dropped. The view publishes nothing finer
+        than the public (window, family) partition."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_SHUFFLED_FEEDBACK]
+        for window in range(1, WINDOWS):
+            honest = _records_of(ctl, window - 1)
+            coarse = family_level_metrics(honest)
+            view = ctl._feedback_view(window)
+            evidence = {e.feedback_id: e for e in view.behavior_evidence()}
+            for payload in view.to_prompt_payload():
+                rec = ctl.store.get(view.resolve_citation(
+                    payload["feedback_id"]))
+                fam = coarse[rec.environment_family]
+                assert payload["expected_signature"] == {}
+                assert payload["student_success_rate"] == \
+                    fam["student_success_rate"], window
+                assert payload["reference_success_rate"] == \
+                    fam["reference_success_rate"], window
+                ev = evidence[payload["feedback_id"]]
+                assert ev.student_success_rate == fam["student_success_rate"]
+                assert ev.reference_success_rate == \
+                    fam["reference_success_rate"]
+                assert ev.return_shortfall == fam["return_shortfall"]
+                assert ev.behavior_activation_gap == \
+                    fam["behavior_activation_gap"]
+                assert ev.front_progress_gap == fam["front_progress_gap"]
+                assert ev.reference_gap == fam["reference_gap"]
+                assert ev.severity == fam["severity"]
+                assert ev.expected_observed_match == \
+                    rec.expected_observed_match
+
+    def test_store_joining_adversary_cannot_narrow_to_a_singleton(self,
+                                                                    runs):
+        """Uniqueness negative test: the adversary joins a presented item
+        against the honest store on EVERY visible field (family, match,
+        distinguished hypotheses, all published numbers). Because every
+        published number is a family-level aggregate, the candidate set is
+        exactly the item's public (family, match) class — which in this
+        gate's windows always holds >= 2 records: the real pairing is never
+        uniquely recoverable."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_SHUFFLED_FEEDBACK]
+        for window in range(1, WINDOWS):
+            honest = _records_of(ctl, window - 1)
+            classes = Counter((r.environment_family,
+                               r.expected_observed_match) for r in honest)
+            assert min(classes.values()) >= 2, \
+                (window, min(classes, key=classes.get))
+            coarse = family_level_metrics(honest)
+            view = ctl._feedback_view(window)
+            for payload in view.to_prompt_payload():
+                real_id = view.resolve_citation(payload["feedback_id"])
+                candidates = [
+                    r for r in honest
+                    if r.environment_family == payload["environment_family"]
+                    and r.expected_observed_match
+                    == payload["expected_observed_match"]
+                    and tuple(r.distinguishes_hypothesis_ids)
+                    == tuple(payload["distinguishes_hypothesis_ids"])
+                    and r.window == payload["window"]
+                    # the published numbers join too — they are family-level
+                    # aggregates, so they narrow nothing below the class
+                    and coarse[r.environment_family]["student_success_rate"]
+                    == payload["student_success_rate"]
+                    and coarse[r.environment_family][
+                        "reference_success_rate"]
+                    == payload["reference_success_rate"]]
+                assert len(candidates) >= 2, (window, real_id)
+                # the adversary's set always contains a record OTHER than
+                # the true one — the pairing itself is unrecoverable
+                assert any(r.feedback_id != real_id for r in candidates)
+
+    def test_no_exact_per_record_metric_in_the_serialized_context(self,
+                                                                  runs):
+        """Full serialized-context scan: no exact per-record rate or gap
+        (any value differing from every family's published aggregate) occurs
+        anywhere in the shuffled prompt context — payload layer or evidence
+        layer."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_SHUFFLED_FEEDBACK]
+        for window in range(1, WINDOWS):
+            honest = _records_of(ctl, window - 1)
+            coarse = family_level_metrics(honest)
+            public_values = set()
+            for fam in coarse.values():
+                public_values.update(fam.values())
+            view = ctl._feedback_view(window)
+            ctx = assemble_board_context(
+                view, window=window - 1, mode=C.MODE_SHUFFLED_FEEDBACK)
+            context = build_board_prompt_context(
+                window=window, mode=C.MODE_SHUFFLED_FEEDBACK,
+                board_context=ctx, view=view,
+                hypotheses=normalize_hypothesis_inputs(ctl.ledger.all()))
+            published = set(_all_floats(context))
+            # the schema clamp bounds are universal public constants (they
+            # bound EVERY conforming value and appear in the context even
+            # with zero records) — never per-record fingerprints
+            clamp_constants = {0.0, 1.0}
+            for rec in honest:
+                ev = BehaviorFailureEvidence.from_record(rec)
+                exact = {ev.student_success_rate,
+                         ev.reference_success_rate,
+                         ev.return_shortfall,
+                         ev.behavior_activation_gap,
+                         ev.front_progress_gap,
+                         ev.reference_gap}
+                for value in exact - public_values - clamp_constants:
+                    assert value not in published, \
+                        (window, rec.feedback_id, value)
+
+
+# ------------------------------------- BYTE PARITY: frozen permutation (CC4)
+def _prompt_context_of(ctl, window):
+    """The EXACT full prompt context the window-k board assembles (same
+    construction path as the controller's phase A + board). The static
+    branch mirrors the controller: the static lifecycle is the frozen empty
+    one — the retirement-state query reads the store and is refused."""
+    view = ctl._feedback_view(window)
+    if ctl.mode == C.MODE_STATIC_LLM:
+        in_cooldown, blocked_retired = [], []
+    else:
+        in_cooldown, blocked_retired, _reopened = \
+            ctl._retirement_state(window)
+    ctx = assemble_board_context(
+        view, window=max(0, window - 1), mode=ctl.mode,
+        families_in_cooldown=in_cooldown,
+        retired_families=blocked_retired)
+    return build_board_prompt_context(
+        window=window, mode=ctl.mode, board_context=ctx, view=view,
+        hypotheses=normalize_hypothesis_inputs(ctl.ledger.all()))
+
+
+class TestFrozenPromptByteParity:
+    """CC4 C9 gate round two: the frozen deterministic permutation must be
+    byte-reproducible at the FULL prompt-context level, not just the view
+    internals."""
+
+    def test_independent_runs_are_byte_identical_at_every_window(self):
+        """Two fully independent shuffled runs assemble byte-identical
+        prompt contexts (payload + board context + hypotheses, canonical
+        JSON) at every window — the permutation has no runtime randomness."""
+        first = FeedbackUEDController(C.MODE_SHUFFLED_FEEDBACK)
+        first.run(max_windows=WINDOWS)
+        second = FeedbackUEDController(C.MODE_SHUFFLED_FEEDBACK)
+        second.run(max_windows=WINDOWS)
+        for window in range(WINDOWS):
+            a = json.dumps(_prompt_context_of(first, window),
+                           sort_keys=True)
+            b = json.dumps(_prompt_context_of(second, window),
+                           sort_keys=True)
+            assert a == b, window
+
+    def test_independent_normal_runs_are_byte_identical_too(self):
+        first = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+        first.run(max_windows=WINDOWS)
+        second = FeedbackUEDController(C.MODE_NORMAL_FEEDBACK)
+        second.run(max_windows=WINDOWS)
+        for window in range(WINDOWS):
+            a = json.dumps(_prompt_context_of(first, window),
+                           sort_keys=True)
+            b = json.dumps(_prompt_context_of(second, window),
+                           sort_keys=True)
+            assert a == b, window
+
+    def test_reassembly_inside_one_run_is_byte_identical(self, runs):
+        """Re-assembling the same window's context twice (fresh view, fresh
+        BoardContext) reproduces it byte-for-byte."""
+        ctls, _sums = runs
+        ctl = ctls[C.MODE_SHUFFLED_FEEDBACK]
+        for window in range(WINDOWS):
+            a = json.dumps(_prompt_context_of(ctl, window), sort_keys=True)
+            b = json.dumps(_prompt_context_of(ctl, window), sort_keys=True)
+            assert a == b, window
+
+
+# ------------------------- STATIC INDEPENDENCE: no store read in phase A
+class TestStaticContextIsFeedbackIndependent:
+    """CC4 C9 gate round two (director REQUEST_CHANGES): the static
+    BoardContext and all six board prompts must be byte-identical for two
+    stores differing ONLY in feedback records — the retirement lifecycle
+    is feedback-driven, so the static mode gets the FROZEN EMPTY lifecycle
+    and the store-reading retirement-state query is refused outright."""
+
+    @staticmethod
+    def _pollute(ctl):
+        """Add foreign feedback records to the controller's store BEFORE
+        the run — exactly the shape ``_reopen_eligible`` consumes: records
+        distinguishing live ledger hypotheses, spread over every board
+        window. If ANY static production path consulted the store, these
+        records would be visible there."""
+        for window in range(WINDOWS):
+            for i in range(4):
+                ctl.store.add(synthetic_feedback_record(
+                    feedback_id=f"fb-junk-w{window}-{i}",
+                    candidate=synthetic_candidate(
+                        candidate_id=f"c-junk-w{window}-{i}",
+                        family=C.ENVIRONMENT_FAMILIES[i % 7]),
+                    plan_id="plan-junk", window=window,
+                    student_success_rate=0.31,
+                    expected_signature={"student_success_rate": 0.42},
+                    distinguishes_hypothesis_ids=["hyp-00", "hyp-01"]))
+
+    def test_static_context_and_prompts_byte_identical_under_foreign_store(
+            self):
+        clean = FeedbackUEDController(C.MODE_STATIC_LLM)
+        polluted = FeedbackUEDController(C.MODE_STATIC_LLM)
+        self._pollute(polluted)
+        # the two stores genuinely differ in feedback records BEFORE the
+        # runs start (and the difference survives them)
+        assert set(polluted.store.ids()) - set(clean.store.ids()) == {
+            f"fb-junk-w{w}-{i}" for w in range(WINDOWS) for i in range(4)}
+        clean.run(max_windows=WINDOWS)
+        polluted.run(max_windows=WINDOWS)
+        assert set(polluted.store.ids()) - set(clean.store.ids()) == {
+            f"fb-junk-w{w}-{i}" for w in range(WINDOWS) for i in range(4)}
+        # 1) the full prompt context (view payload + BoardContext, incl.
+        #    families_in_cooldown/retired_families + hypotheses) is
+        #    byte-identical at every window
+        for window in range(WINDOWS):
+            a = json.dumps(_prompt_context_of(clean, window), sort_keys=True)
+            b = json.dumps(_prompt_context_of(polluted, window),
+                           sort_keys=True)
+            assert a == b, window
+        # 2) all six board prompts are byte-identical at every window
+        clean_board = [e for e in clean.envelopes
+                       if e.role in C.BOARD_ROLES]
+        polluted_board = [e for e in polluted.envelopes
+                          if e.role in C.BOARD_ROLES]
+        assert len(clean_board) == len(polluted_board) == 6 * WINDOWS
+        for window in range(WINDOWS):
+            for role in C.BOARD_ROLES:
+                slot = window * len(C.BOARD_ROLES) + C.BOARD_ROLES.index(role)
+                a, b = clean_board[slot], polluted_board[slot]
+                assert a.role == b.role == role, (window, slot)
+                assert a.prompt == b.prompt, (window, role)
+                assert a.prompt_sha256 == b.prompt_sha256, (window, role)
+                assert a.request_hash == b.request_hash, (window, role)
+
+    def test_retirement_state_is_structurally_unreachable_in_static(self):
+        """The store-reading retirement-state query fails closed for the
+        static mode — the frozen empty lifecycle is the ONLY static
+        lifecycle, by construction rather than by coincidence."""
+        ctl = FeedbackUEDController(C.MODE_STATIC_LLM)
+        ctl.run(max_windows=2)
+        assert ctl._retired_at == {}
+        with pytest.raises(
+                ValueError,
+                match="STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE"):
+            ctl._retirement_state(1)
 
 
 # -------------------------------------------------------- LAG: exactly k-1

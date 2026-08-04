@@ -401,8 +401,19 @@ class FeedbackUEDController:
         self._set_phase(window, PHASE_EVIDENCE)
         evidence_window = max(0, window - 1)
         view = self._feedback_view(window)
-        in_cooldown, blocked_retired, _reopened = \
-            self._retirement_state(window)
+        if self.mode == C.MODE_STATIC_LLM:
+            # CC4 C9 gate (director review): the static BoardContext must
+            # be a pure function of the NON-feedback state — no production
+            # path may read the store to build it. The RETIRE lifecycle is
+            # feedback-driven (a retirement is a verdict that cites
+            # feedback, and the static view resolves no citation), so the
+            # static lifecycle is the FROZEN EMPTY one by construction:
+            # the store-reading retirement-state query is omitted entirely
+            # (not merely empty by coincidence).
+            in_cooldown, blocked_retired, _reopened = [], [], ()
+        else:
+            in_cooldown, blocked_retired, _reopened = \
+                self._retirement_state(window)
         board_context = assemble_board_context(
             view, window=evidence_window, mode=self.mode,
             families_in_cooldown=in_cooldown,
@@ -588,7 +599,21 @@ class FeedbackUEDController:
           blocked (a retired family stays retired until reopened);
         * ``reopened``             — cooldown over AND authorized: behaves
           like a normal family this window.
+
+        CC4 C9 gate: this query is FEEDBACK-DRIVEN by construction — the
+        reopen gate reads the raw SimulatorFeedbackStore (``_reopen_eligible``),
+        which is exactly the store the static mode must never consult to
+        build its board context. Static has no retirement lifecycle (a
+        RETIRE decision cites feedback, and the NullFeedbackView resolves no
+        citation), so the query fails closed for it instead of returning a
+        value that is empty only by coincidence.
         """
+        if self.mode == C.MODE_STATIC_LLM:
+            raise ValueError(
+                "STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE: the static board "
+                "context must be a pure function of the non-feedback state; "
+                "the retirement-state query reads the feedback store and is "
+                "therefore refused for mode %r" % (self.mode,))
         retired_windows: Mapping[str, int] = dict(self._retired_at)
         reopened = self._reopen_eligible(window, retired_windows)
         in_cooldown = sorted(
