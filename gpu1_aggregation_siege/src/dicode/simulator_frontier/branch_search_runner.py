@@ -30,6 +30,25 @@ checkpoint id, memory spec hash and the search Student identity hash must all
 agree with the archive entry and the mounted Student.  Without a verified
 context ``run_actual_n`` stays blocked; the blocking interface is explicit,
 never papered over.
+
+Per-branch isolation (CC4 follow-up, P0-4, Option B — the verifier-signed
+restore context is consumed in-process with per-branch mechanical
+verification):
+
+- EVERY branch re-restores its own state from the archive (fresh decode,
+  payload hash recomputed) and re-prepares its own memory (artifact re-read /
+  burn-in re-execution).  No state object and no memory object is ever shared
+  across branches; a mutating adapter cannot let one branch leak into another.
+- every branch's start state leaf digest is recomputed and must equal every
+  other branch's — any divergence fails the whole run closed; each outcome's
+  provenance attests its start digest, executing-policy identity hash, memory
+  status and the restore context hash that authorized the run.
+- Reference branches NEVER run on Student memory: the REFERENCE_POLICY source
+  consumes ONLY the Reference-specific memory surface
+  (``reference_memory_artifact`` / ``reference_burn_in_executor``); an unbound
+  Reference memory surface blocks the run instead of silently substituting
+  Student memory.
+- ``actual_N`` counts ONLY completed AND attested branches.
 """
 
 from __future__ import annotations
@@ -48,7 +67,11 @@ from .combined_restore_contract import REQUIRED_COMPONENTS
 from .discovery_provenance import DiscoveryProvenance
 from .env_restore import flatten_env_state, restore_env_state
 from .errors import BranchSearchBlockedError, InvalidEvidenceError, ProvenanceViolationError
-from .fresh_process_restore import BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE
+from .fresh_process_restore import (
+    BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE,
+    leaves_digest_of,
+    tree_leaf_records,
+)
 from .memory_modes import MemoryRestoreMode
 from .provenance import SearchActionLeakageGuard
 from .search_statistics import BranchOutcome
@@ -136,6 +159,13 @@ class BranchSearchRunConfig:
     memory_loader: Callable[[MemoryArtifactRef], Any] | None = None
     history_artifact_ref: str = ""
     burn_in_executor: Callable[[Any], Any] | None = None
+    # CC4 follow-up (P0-4): the Reference memory surface is SEPARATE from the
+    # Student's.  Reference branches consume ONLY these bindings; an unbound
+    # Reference surface blocks the run — Student memory is never substituted.
+    reference_memory_artifact: MemoryArtifactRef | None = None
+    reference_memory_loader: Callable[[MemoryArtifactRef], Any] | None = None
+    reference_history_artifact_ref: str = ""
+    reference_burn_in_executor: Callable[[Any], Any] | None = None
     epsilon: float = 0.0
     temperature: float = 1.0
 
@@ -223,6 +253,9 @@ class BranchSearchRunner:
         if not isinstance(student, StudentAdapter):
             raise BranchSearchBlockedError(
                 "search student does not satisfy the StudentAdapter protocol (fail closed)")
+        if reference_student is not None and not isinstance(reference_student, StudentAdapter):
+            raise BranchSearchBlockedError(
+                "reference student does not satisfy the StudentAdapter protocol (fail closed)")
         for label, value in (("capture_student_id", capture_student_id),
                              ("search_student_id", search_student_id),
                              ("train_student_id", train_student_id)):
@@ -261,7 +294,36 @@ class BranchSearchRunner:
     # ------------------------------------------------------------------
 
     def _prepare_memory(self, entry: Any, bundle: Any,
-                        config: BranchSearchRunConfig) -> tuple[Any, str]:
+                        config: BranchSearchRunConfig, *,
+                        source: str) -> tuple[Any, str]:
+        """Memory for ONE branch of ONE source (CC4 follow-up, P0-4).
+
+        The memory surface is chosen by the EXECUTING policy: Student sources
+        consume the Student memory bindings; REFERENCE_POLICY consumes ONLY
+        the Reference bindings.  Student memory is NEVER substituted into a
+        Reference branch — an unbound Reference surface blocks the run.
+        Every call prepares a FRESH memory instance (artifact re-read /
+        burn-in re-execution) so branches never share a memory object.
+        """
+        if source == SEARCH_SOURCE_REFERENCE_POLICY:
+            adapter = self._reference_student
+            artifact = config.reference_memory_artifact
+            loader = config.reference_memory_loader
+            history_ref = config.reference_history_artifact_ref
+            burn_in = config.reference_burn_in_executor
+            who = "Reference"
+        else:
+            adapter = self._student
+            artifact = config.memory_artifact
+            loader = config.memory_loader
+            history_ref = config.history_artifact_ref
+            burn_in = config.burn_in_executor
+            who = "Student"
+        if adapter is None:
+            raise BranchSearchBlockedError(
+                f"{source} branch blocked: no executing adapter mounted for the "
+                f"{who} memory surface (fail closed)")
+
         mode = config.memory_mode
         request_mode = MemoryRestoreMode(str(config.memory_request.mode))
         if request_mode is not mode:
@@ -275,60 +337,65 @@ class BranchSearchRunner:
 
         if mode is MemoryRestoreMode.ZERO_MEMORY:
             # Ablation only: never a production memory mode, always labelled.
-            memory = self._student.initial_memory(1)
-            check = self._student.validate_memory(memory, 1)
+            memory = adapter.initial_memory(1)
+            check = adapter.validate_memory(memory, 1)
             if not bool(check.get("ok")):
                 raise BranchSearchBlockedError(
                     f"ZERO_MEMORY initial memory failed validate_memory: {tuple(check.get('reasons', ()))}")
             return memory, "ZERO_MEMORY_ABLATION_ONLY"
 
         if mode is MemoryRestoreMode.SAVED_POLICY_MEMORY:
-            artifact = config.memory_artifact
             if artifact is None:
                 raise BranchSearchBlockedError(
-                    "SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT: the run config carries no "
-                    "real saved-policy-memory artifact (an empty reference is never accepted)")
-            if config.memory_loader is None:
+                    f"SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT: no {who} "
+                    "saved-policy-memory artifact is bound for this source (an empty "
+                    f"reference is never accepted; Student memory is never substituted "
+                    f"into {who} branches)")
+            if loader is None:
                 raise BranchSearchBlockedError(
-                    "SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_LOADER: no production memory loader "
-                    "was injected (never fabricate memory)")
+                    f"SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_LOADER: no {who} memory "
+                    "loader was injected (never fabricate memory)")
             actual_sha = _file_sha256(artifact.path)
             if actual_sha != artifact.sha256:
                 raise BranchSearchBlockedError(
                     f"memory artifact sha256 mismatch: file recomputes to {actual_sha[:16]}…, "
                     f"ref declares {artifact.sha256[:16]}… (fail closed)")
-            spec_hash = self._student.memory_spec().spec_hash()
+            spec_hash = adapter.memory_spec().spec_hash()
             if artifact.memory_spec_hash != spec_hash:
                 raise BranchSearchBlockedError(
-                    "memory artifact spec hash does not equal the search Student memory spec hash")
-            identity_hash = self._student.identity().identity_hash()
+                    f"memory artifact spec hash does not equal the executing {who} "
+                    "adapter memory spec hash (cross-policy memory rejected)")
+            identity_hash = adapter.identity().identity_hash()
             if artifact.student_identity_hash != identity_hash:
                 raise BranchSearchBlockedError(
-                    "memory artifact student identity hash does not equal the search Student identity hash")
-            memory = config.memory_loader(artifact)
-            check = self._student.validate_memory(memory, 1)
+                    f"memory artifact identity hash does not equal the executing {who} "
+                    "adapter identity hash (cross-policy memory rejected)")
+            memory = loader(artifact)
+            check = adapter.validate_memory(memory, 1)
             if not bool(check.get("ok")):
                 raise BranchSearchBlockedError(
-                    f"loaded policy memory failed validate_memory: {tuple(check.get('reasons', ()))}")
+                    f"loaded {who} policy memory failed validate_memory: "
+                    f"{tuple(check.get('reasons', ()))}")
             return memory, "SAVED_POLICY_MEMORY_VERIFIED"
 
         if mode is MemoryRestoreMode.HISTORY_BURN_IN:
-            if not str(config.history_artifact_ref).strip():
+            if not str(history_ref).strip():
                 raise BranchSearchBlockedError(
-                    "HISTORY_BURN_IN_BLOCKED_NO_HISTORY_REFERENCE: the run config carries no "
-                    "history artifact reference (never guess)")
-            if config.burn_in_executor is None:
+                    f"HISTORY_BURN_IN_BLOCKED_NO_HISTORY_REFERENCE: no {who} history "
+                    f"artifact reference is bound for this source (never guess)")
+            if burn_in is None:
                 raise BranchSearchBlockedError(
-                    "HISTORY_BURN_IN_BLOCKED_NO_BURN_IN_EXECUTOR: no burn-in executor is "
-                    "available (never fabricate burn-in memory)")
+                    f"HISTORY_BURN_IN_BLOCKED_NO_BURN_IN_EXECUTOR: no {who} burn-in "
+                    "executor is bound (never fabricate burn-in memory)")
             if bundle.history_reference is None:
                 raise BranchSearchBlockedError(
                     "HISTORY_BURN_IN blocked: the archived bundle carries no history_reference")
-            memory = config.burn_in_executor(bundle.history_reference)
-            check = self._student.validate_memory(memory, 1)
+            memory = burn_in(bundle.history_reference)
+            check = adapter.validate_memory(memory, 1)
             if not bool(check.get("ok")):
                 raise BranchSearchBlockedError(
-                    f"burn-in memory failed validate_memory: {tuple(check.get('reasons', ()))}")
+                    f"burn-in {who} memory failed validate_memory: "
+                    f"{tuple(check.get('reasons', ()))}")
             return memory, "HISTORY_BURN_IN_VERIFIED"
 
         raise BranchSearchBlockedError(f"unhandled memory mode: {mode!r} (fail closed)")
@@ -372,11 +439,16 @@ class BranchSearchRunner:
 
     def run_branch(self, restored: Any, *, config: BranchSearchRunConfig, source: str,
                    branch_id: str, seed_base: int, branch_index: int, env_seed: int,
-                   policy_seed: int, memory: Any, memory_status: str) -> BranchOutcome:
-        """Execute ONE real branch from the restored state (bare env steps).
+                   policy_seed: int, memory: Any, memory_status: str,
+                   start_digest: str, policy_identity_hash: str,
+                   context_hash: str) -> BranchOutcome:
+        """Execute ONE real branch from ITS OWN restored state (bare env steps).
 
         Bare stepping (no AutoResetEnvWrapper) means terminal-before-autoreset
         holds by construction: the branch stops at the real terminal state.
+        CC4 follow-up (P0-4): the outcome attests the per-branch start-state
+        digest, the executing policy's identity hash, the memory status and
+        the restore context hash — only completed, attested branches count.
         """
         if source not in SEARCH_SOURCES:
             raise BranchSearchBlockedError(f"unknown search source: {source!r}")
@@ -432,6 +504,9 @@ class BranchSearchRunner:
         else:
             failure_category = "HORIZON_EXHAUSTED"
 
+        _require_sha256("branch attestation start_digest", start_digest)
+        _require_sha256("branch attestation policy_identity_hash", policy_identity_hash)
+        _require_sha256("branch attestation context_hash", context_hash)
         aggregate = {
             "branch_id": branch_id,
             "state_id": config.state_id,
@@ -460,6 +535,16 @@ class BranchSearchRunner:
             "epsilon": config.epsilon,
             "temperature": config.temperature,
             "memory_status": memory_status,
+            # CC4 follow-up (P0-4): mechanical attestation that THIS branch
+            # completed from ITS OWN isolated state + memory under the minted
+            # restore context.  actual_N counts only attested branches.
+            "branch_attestation": {
+                "completed": True,
+                "start_state_digest": start_digest,
+                "policy_identity_hash": policy_identity_hash,
+                "memory_status": memory_status,
+                "restore_context_hash": context_hash,
+            },
         }
         SearchActionLeakageGuard.validate_aggregate(
             {"provenance": provenance, "aggregate": aggregate})
@@ -548,21 +633,59 @@ class BranchSearchRunner:
                 "search Student identity (identity-substitution search rejected "
                 "fail closed)")
 
-        entry, restored = self.restore_entry(archive, config.state_id)
-        memory, memory_status = self._prepare_memory(entry, restored, config)
-
         outcomes: list[BranchOutcome] = []
         branch_index = 0
+        first_start_digest: str | None = None
         while len(outcomes) < config.requested_n:
             source = source_tuple[branch_index % len(source_tuple)]
+            # CC4 follow-up (P0-4): EVERY branch re-restores its OWN state
+            # (fresh decode, payload hash recomputed) and prepares its OWN
+            # memory — no state object or memory object crosses branches.
+            entry, restored = self.restore_entry(archive, config.state_id)
+            if entry.state_hash != context.state_hash:
+                raise BranchSearchBlockedError(
+                    f"branch {branch_index}: per-branch restore drifted from the "
+                    "verified restore context state hash (wrong-state branch start "
+                    "rejected fail closed)")
+            start_digest = leaves_digest_of(
+                tree_leaf_records(flatten_env_state(restored.env_state)))
+            if first_start_digest is None:
+                first_start_digest = start_digest
+            elif start_digest != first_start_digest:
+                raise BranchSearchBlockedError(
+                    f"branch {branch_index}: per-branch state isolation violated — "
+                    f"start digest {start_digest[:16]}… differs from the first "
+                    f"branch {first_start_digest[:16]}… (all branches must start "
+                    "from the identical restored state; fail closed)")
+            memory, memory_status = self._prepare_memory(entry, restored, config,
+                                                         source=source)
+            executing = self._reference_student \
+                if source == SEARCH_SOURCE_REFERENCE_POLICY else self._student
+            policy_identity_hash = executing.identity().identity_hash()
             env_seed, policy_seed = derive_branch_seeds(
                 seed_base=seed_base, state_id=config.state_id, source=source,
                 branch_index=branch_index)
             branch_id = f"{config.state_id}:{source}:{branch_index:04d}"
-            outcomes.append(self.run_branch(
+            outcome = self.run_branch(
                 restored, config=config, source=source, branch_id=branch_id,
                 seed_base=seed_base, branch_index=branch_index, env_seed=env_seed,
-                policy_seed=policy_seed, memory=memory, memory_status=memory_status))
+                policy_seed=policy_seed, memory=memory, memory_status=memory_status,
+                start_digest=start_digest, policy_identity_hash=policy_identity_hash,
+                context_hash=context.context_hash)
+            # Attestation gate: only COMPLETED AND ATTESTED branches count
+            # toward actual_N — anything less fails the whole run closed.
+            attestation = outcome.provenance.get("branch_attestation", {})
+            if not (attestation.get("completed") is True
+                    and attestation.get("start_state_digest") == start_digest
+                    and attestation.get("policy_identity_hash") == policy_identity_hash
+                    and attestation.get("memory_status") == memory_status
+                    and attestation.get("restore_context_hash") == context.context_hash
+                    and str(outcome.memory_compatibility_status) == memory_status):
+                raise BranchSearchBlockedError(
+                    f"branch {branch_index} outcome attestation is incomplete or "
+                    "inconsistent (unattested branches never count toward actual_N; "
+                    "fail closed)")
+            outcomes.append(outcome)
             branch_index += 1
         return tuple(outcomes)
 
