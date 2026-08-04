@@ -18,6 +18,16 @@ signature ``run_combined_restore``.  The actual combined execution is pending
 params+manifest only, so optimizer/train-rng/policy-memory are
 ABSENT_IN_CHECKPOINT this round).  Until a real combined run has executed:
 ``COMBINED_FRESH_PROCESS_RESTORE`` MUST stay false.
+
+Audit closure (2026-08-04): ``run_combined_restore`` executes caller-supplied
+callbacks in the CURRENT process — freshness there is only a caller
+obligation and component statuses are self-asserted, so it is frozen as
+CONTRACT-LEVEL ONLY (``CALLBACK_DRIVER_IS_CONTRACT_ONLY``).  The mechanically
+enforced production proof lives in ``fresh_process_restore``: exactly one
+spawned child process, atomic PID/argv/timestamp evidence, authoritative
+per-component leaf hashes, checkpoint-leaf optimizer binding and
+``production_joint_pass`` as the only gate that may ever upgrade
+``COMBINED_FRESH_PROCESS_RESTORE``.
 """
 
 from __future__ import annotations
@@ -55,6 +65,13 @@ REQUIRED_COMPONENTS = (
 CROSS_CHECKS = ("policy_step_next_replay",)
 
 RESTORED_STATUSES = ("RESTORED_HASH_BOUND", "RESTORED_CROSS_VERIFIED")
+
+# Frozen after the independent audit: the callback driver below can NEVER be
+# the production proof (it runs callbacks in the current process and trusts
+# self-asserted ComponentResult statuses).  Production joint proof requires
+# fresh_process_restore.run_fresh_process_restore_production with verified
+# ProcessEvidence; production_joint_pass is the only composition gate.
+CALLBACK_DRIVER_IS_CONTRACT_ONLY = True
 
 
 class ComponentStatus(str, Enum):
@@ -147,11 +164,16 @@ def _passed(result: ComponentResult | None) -> bool:
 
 def evaluate_verdict(components: Mapping[str, ComponentResult],
                      cross_checks: Mapping[str, ComponentResult]) -> CombinedRestoreVerdict:
-    """Pure evaluation rule — the heart of the R4c gate.
+    """Pure COMPONENT-COMPOSITION rule of the R4c gate.
 
     combined_pass requires EVERY required component and EVERY cross-check to
     be restored/verified.  env_only_pass / checkpoint_only_pass are reported
     alongside so the honest gap (one-sided passes) is always visible.
+
+    IMPORTANT (audit closure): combined_pass here composes SELF-ASSERTED
+    ComponentResult statuses only; it is NEVER a production proof by itself.
+    The production joint proof additionally requires mechanically verified
+    fresh-process evidence — see ``fresh_process_restore.production_joint_pass``.
     """
     missing = [c for c in REQUIRED_COMPONENTS if c not in components]
     if missing:
