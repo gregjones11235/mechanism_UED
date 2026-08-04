@@ -32,7 +32,11 @@ from .archive_guards import (
 from .errors import (
     ArchiveWriteGuardError,
     BranchSearchBlockedError,
+    InvalidEvidenceError,
     ProductionBlockedError,
+    ProvenanceViolationError,
+    SchemaMismatchError,
+    SimulatorFrontierError,
 )
 from .search_statistics import BranchOutcome, FeasibilityEstimate, estimate_feasibility
 from .memory_modes import (
@@ -170,6 +174,27 @@ from .llm_contracts import (
     validate_diagnostician_output,
     validate_planner_output,
 )
+from .feasibility_classifier import (
+    CLASSIFICATION_VERSION,
+    FrontierClass,
+    FrontierClassification,
+    classify_frontier,
+)
+from .evidence_selector import (
+    FRONTIER_START_WEIGHTS,
+    PRODUCTION_MEMORY_STATUSES,
+    SELECTOR_VERSION,
+    EvidenceSelectionResult,
+    SelectionEvidence,
+    evidence_based_select,
+)
+from .frontier_distributions import (
+    DISTRIBUTION_SCHEMA,
+    FrontierDistribution,
+    FrontierDistributionPlan,
+    compose_12_plus_4,
+    validate_frontier_distribution_plan,
+)
 from .anchor_manifest import (
     ANCHOR_SLOT_COUNT,
     BLOCKED_SHARED_ANCHOR_MANIFEST,
@@ -194,7 +219,9 @@ __all__ = [
     "ARCHIVE_PRODUCTION_WRITE_READY", "ENTRY_PROVENANCE_SCHEMA",
     "compute_entry_provenance_hash", "finalize_entry_provenance",
     "verify_production_entry",
-    "ArchiveWriteGuardError", "BranchSearchBlockedError", "ProductionBlockedError",
+    "ArchiveWriteGuardError", "BranchSearchBlockedError", "InvalidEvidenceError",
+    "ProductionBlockedError", "ProvenanceViolationError", "SchemaMismatchError",
+    "SimulatorFrontierError",
     "BranchOutcome",
     "RESTORE_CONTEXT_DRIVER", "RUNNER_VERSION", "SEARCH_SOURCES",
     "SEARCH_SOURCE_REFERENCE_POLICY", "SEARCH_SOURCE_STUDENT_DETERMINISTIC",
@@ -249,6 +276,12 @@ __all__ = [
     "compute_diagnostician_hash", "compute_planner_hash",
     "run_two_llm_production", "run_typed_two_llm_gate",
     "validate_diagnostician_output", "validate_planner_output",
+    "CLASSIFICATION_VERSION", "FrontierClass", "FrontierClassification",
+    "classify_frontier",
+    "FRONTIER_START_WEIGHTS", "PRODUCTION_MEMORY_STATUSES", "SELECTOR_VERSION",
+    "EvidenceSelectionResult", "SelectionEvidence", "evidence_based_select",
+    "DISTRIBUTION_SCHEMA", "FrontierDistribution", "FrontierDistributionPlan",
+    "compose_12_plus_4", "validate_frontier_distribution_plan",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
     "AnchorDefinition", "AnchorManifest", "RetentionContract",

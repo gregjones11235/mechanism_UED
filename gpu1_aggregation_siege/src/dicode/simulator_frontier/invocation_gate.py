@@ -249,7 +249,15 @@ def _canonical_json(value: Any) -> str:
 
 def deterministic_select(candidates: Sequence[Mapping[str, Any]], *,
                          evidence_hash: str) -> SelectionResult:
-    """Deterministically choose among advisory LLM candidates.
+    """ABLATION-ONLY advisory ranking by LLM priority_score (behaviour frozen).
+
+    OFFICIAL production selection authority lives in
+    ``evidence_selector.evidence_based_select`` (pure evidence rules; no
+    priority_score input surface).  This function is retained unchanged for
+    regression and ablation comparison only — it must never decide a
+    production frontier window.
+
+    Deterministically choose among advisory LLM candidates.
 
     A candidate is VALID only if it carries plan_id/curriculum_ref and a
     finite priority_score AND contains no forbidden action-guidance field —
