@@ -37,14 +37,31 @@ requirement instead of documenting it:
     composition rejected), and exit code must be 0 with readable, untorn
     evidence (crash / torn report rejected).
   * Synthetic callbacks are rejected in production: the production entry
-    point accepts NO callbacks at all (structurally), refuses
-    fixture-labelled requests, and the child fails closed when no
-    controller-registered production loaders/replay are bound.
+    point accepts NO callbacks at all (structurally) and refuses
+    fixture-labelled requests / synthetic controller signatures.
+
+Audit follow-up (2026-08-04, round 2) — child resolution is bundle-driven:
+an earlier design kept ``_PRODUCTION_LOADERS`` / ``_PRODUCTION_REPLAY`` as
+PARENT-process globals, but the spawned child imports a fresh module where
+those registries are always empty — no parent state survives ``Popen``, so
+the parent globals were dead surface that could only be bypassed by hidden
+import side effects.  That surface is REMOVED entirely.  The child now
+receives ONLY the immutable, controller-signed ``ProductionRegistryBundle``
+nested in (and hash-bound to) the request, and resolves every component
+loader and the replay ONLY through the bundle's explicit entry points,
+imported fresh in the child.  The request is hash-bound to the bundle
+(``registry_hash == bundle_sha256``), the bundle is cross-bound to the
+Student ABI / manifest hashes, the child RE-VERIFIES all of these bindings
+on its side, and the evidence echoes the bundle hash back to the parent.
+``production_joint_pass`` additionally refuses any ``CombinedRestoreVerdict``
+whose component statuses/bound digests do not correspond to the SAME
+verified ``ProcessEvidence`` (canonical builder: ``verdict_from_evidence``).
 
 Honest status (this round): the audited CC2 pkl carries params + manifest
-only, so no REAL joint run can execute yet —
-``COMBINED_FRESH_PROCESS_RESTORE_EXECUTED`` stays False and the only green
-path is the labelled synthetic subprocess contract test
+only, and NO controller-signed registry bundle exists yet
+(``CONTROLLER_SIGNED_REGISTRY_BUNDLE_BOUND`` is False), so no REAL joint run
+can execute yet — ``COMBINED_FRESH_PROCESS_RESTORE_EXECUTED`` stays False
+and the only green path is the labelled synthetic subprocess contract test
 (SYNTHETIC_FIXTURE_NOT_SCIENTIFIC_CONTENT), which proves the enforcement
 mechanism, not a real restore.
 """
@@ -52,6 +69,7 @@ mechanism, not a real restore.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -60,23 +78,34 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
 from .combined_restore_contract import (
     CROSS_CHECKS,
     REQUIRED_COMPONENTS,
     RESTORED_STATUSES,
     CombinedRestoreVerdict,
+    ComponentResult,
+    ComponentStatus,
+    evaluate_verdict,
 )
 from .errors import InvalidEvidenceError
 
 EVIDENCE_SCHEMA = "simulator_frontier.fresh_process_restore_evidence/v1"
 REQUEST_SCHEMA = "simulator_frontier.fresh_process_restore_request/v1"
 ARTIFACT_SCHEMA = "simulator_frontier.restore_artifact/v1"
+BUNDLE_SCHEMA = "simulator_frontier.production_registry_bundle/v1"
 WORKER_MODULE = "dicode.simulator_frontier.restore_worker"
 REPLAY_CHECK = CROSS_CHECKS[0]  # "policy_step_next_replay"
 
 SYNTHETIC_FIXTURE_LABEL = "SYNTHETIC_FIXTURE_NOT_SCIENTIFIC_CONTENT"
+# Controller-signature discipline: labelled synthetic bundles must carry a
+# signature reference marked synthetic; an unlabelled (production-intent)
+# bundle must NOT carry one, and is admitted only once real controller
+# signature verification material is bound (not this round).
+SYNTHETIC_SIGNATURE_PREFIX = "SYNTHETIC_SIGNATURE_"
+BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE = (
+    "BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE")
 
 # Optimizer origin discipline: the optimizer must be restored from the
 # checkpoint's own leaves.  A fresh ``tx.init`` re-initialization is a
@@ -88,10 +117,14 @@ ORIGIN_SOURCE_ARTIFACT = "SOURCE_ARTIFACT"
 # ---------------------------------------------------------------------------
 # Honest round status: the enforcement mechanism is contract-ready (green via
 # the labelled synthetic subprocess test), but NO real artifact run has
-# executed -> the combined flag stays false.
+# executed -> the combined flag stays false.  The bundle-driven child
+# resolution contract is likewise ready, but NO controller-signed registry
+# bundle exists yet -> production runs stay blocked and honest.
 # ---------------------------------------------------------------------------
 FRESH_PROCESS_DRIVER_CONTRACT_READY = True
 COMBINED_FRESH_PROCESS_RESTORE_EXECUTED = False
+PRODUCTION_REGISTRY_BUNDLE_CONTRACT_READY = True
+CONTROLLER_SIGNED_REGISTRY_BUNDLE_BOUND = False
 
 _STATUS_DISCLAIMER = (
     "env-only restore PASS /\\ checkpoint-only restore PASS != combined "
@@ -139,6 +172,157 @@ class ComponentArtifactSpec:
 
 
 @dataclass(frozen=True)
+class LoaderEntryPoint:
+    """Explicit child-side entry point named by the registry bundle.
+
+    The child imports ``entry_module`` FRESH and resolves ``entry_attr`` on
+    it — no parent-process object, global registry or import side effect is
+    ever consulted.  Fail closed on anything but a plain importable target.
+    """
+
+    entry_module: str
+    entry_attr: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.entry_module, str) or not self.entry_module.strip():
+            raise InvalidEvidenceError("LoaderEntryPoint.entry_module must be a non-empty str")
+        if not isinstance(self.entry_attr, str) or not self.entry_attr.isidentifier():
+            raise InvalidEvidenceError(
+                f"LoaderEntryPoint.entry_attr must be a valid identifier, got {self.entry_attr!r}")
+        root = self.entry_module.split(".")[0]
+        if root in FORBIDDEN_ENTRY_MODULE_ROOTS:
+            raise InvalidEvidenceError(
+                f"entry point module {self.entry_module!r} rejected: {root!r} is a "
+                "forbidden entry-point namespace (fail closed)")
+
+    def to_payload(self) -> dict:
+        return {"entry_module": self.entry_module, "entry_attr": self.entry_attr}
+
+    @classmethod
+    def from_payload(cls, payload: Any) -> "LoaderEntryPoint":
+        if not isinstance(payload, Mapping):
+            raise InvalidEvidenceError("loader entry point must be a mapping")
+        return cls(entry_module=str(payload.get("entry_module", "")),
+                   entry_attr=str(payload.get("entry_attr", "")))
+
+
+@dataclass(frozen=True)
+class ProductionRegistryBundle:
+    """Immutable controller-signed registry/spec bundle.
+
+    This is the ONLY thing the fresh child process receives to resolve
+    loaders/replay — there is deliberately NO parent-process loader registry
+    anywhere in this module (the earlier ``_PRODUCTION_LOADERS`` /
+    ``_PRODUCTION_REPLAY`` globals were removed: a spawned child imports a
+    fresh module where parent globals never exist, so any design relying on
+    them could only work through hidden import side effects).
+
+    The bundle is hash-bound into the request (``registry_hash`` must equal
+    ``bundle_sha256()``) and cross-bound to the Student ABI identity hash
+    and the manifest hash; the child re-verifies every one of these
+    bindings before resolving a single entry point.
+    """
+
+    registry_id: str
+    controller_signature_ref: str
+    student_abi_identity_hash: str
+    manifest_hash: str
+    loader_entry_points: Mapping[str, LoaderEntryPoint]
+    replay_entry_point: LoaderEntryPoint
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.registry_id, str) or not self.registry_id.strip():
+            raise InvalidEvidenceError("ProductionRegistryBundle.registry_id is required")
+        if not isinstance(self.controller_signature_ref, str) \
+                or not self.controller_signature_ref.strip():
+            raise InvalidEvidenceError(
+                "ProductionRegistryBundle.controller_signature_ref is required "
+                "(controller-signed bundles only; fail closed)")
+        for name in ("student_abi_identity_hash", "manifest_hash"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _SHA256_RE.match(value):
+                raise InvalidEvidenceError(
+                    f"ProductionRegistryBundle.{name} must be a 64-hex sha256, got {value!r}")
+        points = dict(self.loader_entry_points or {})
+        missing = [c for c in REQUIRED_COMPONENTS if c not in points]
+        if missing:
+            raise InvalidEvidenceError(
+                f"registry bundle must name a loader entry point for every required "
+                f"component; missing {missing}")
+        unknown = [c for c in points if c not in REQUIRED_COMPONENTS]
+        if unknown:
+            raise InvalidEvidenceError(f"registry bundle names unknown components {unknown}")
+        for name, point in points.items():
+            if not isinstance(point, LoaderEntryPoint):
+                raise InvalidEvidenceError(
+                    f"loader_entry_points[{name!r}] must be a LoaderEntryPoint, "
+                    f"got {type(point).__name__}")
+        if not isinstance(self.replay_entry_point, LoaderEntryPoint):
+            raise InvalidEvidenceError("replay_entry_point must be a LoaderEntryPoint")
+        object.__setattr__(self, "loader_entry_points", points)
+
+    def to_payload(self) -> dict:
+        return {
+            "schema": BUNDLE_SCHEMA,
+            "registry_id": self.registry_id,
+            "controller_signature_ref": self.controller_signature_ref,
+            "student_abi_identity_hash": self.student_abi_identity_hash,
+            "manifest_hash": self.manifest_hash,
+            "loader_entry_points": {
+                name: point.to_payload()
+                for name, point in sorted(self.loader_entry_points.items())},
+            "replay_entry_point": self.replay_entry_point.to_payload(),
+        }
+
+    def bundle_sha256(self) -> str:
+        """Deterministic hash of the immutable bundle payload."""
+        return _sha256_hex(_canonical_json(self.to_payload()).encode("utf-8"))
+
+    @classmethod
+    def from_payload(cls, payload: Any) -> "ProductionRegistryBundle":
+        if not isinstance(payload, Mapping):
+            raise InvalidEvidenceError("registry bundle must be a JSON object")
+        if payload.get("schema") != BUNDLE_SCHEMA:
+            raise InvalidEvidenceError(
+                f"registry bundle schema must be {BUNDLE_SCHEMA!r}, got {payload.get('schema')!r}")
+        raw_points = payload.get("loader_entry_points")
+        if not isinstance(raw_points, Mapping):
+            raise InvalidEvidenceError("registry bundle loader_entry_points must be a mapping")
+        points = {str(name): LoaderEntryPoint.from_payload(raw)
+                  for name, raw in raw_points.items()}
+        return cls(registry_id=str(payload.get("registry_id", "")),
+                   controller_signature_ref=str(payload.get("controller_signature_ref", "")),
+                   student_abi_identity_hash=str(payload.get("student_abi_identity_hash", "")),
+                   manifest_hash=str(payload.get("manifest_hash", "")),
+                   loader_entry_points=points,
+                   replay_entry_point=LoaderEntryPoint.from_payload(
+                       payload.get("replay_entry_point")))
+
+
+def verify_controller_signature(bundle: ProductionRegistryBundle) -> None:
+    """Controller-signature verification for production-intent bundles.
+
+    HONEST STATE THIS ROUND: no controller signature verification material
+    is bound (``CONTROLLER_SIGNED_REGISTRY_BUNDLE_BOUND`` is False), so every
+    unlabelled production bundle FAILS CLOSED here with the blocked status.
+    Synthetic-signature references can never masquerade as controller
+    signatures.  Upgrading this gate requires the controller to bind real
+    verification material — a code-level change, never a runtime knob.
+    """
+    if not isinstance(bundle, ProductionRegistryBundle):
+        raise InvalidEvidenceError("verify_controller_signature requires ProductionRegistryBundle")
+    if bundle.controller_signature_ref.startswith(SYNTHETIC_SIGNATURE_PREFIX):
+        raise InvalidEvidenceError(
+            f"synthetic controller signature {bundle.controller_signature_ref!r} can never "
+            "be admitted on the production path")
+    raise InvalidEvidenceError(
+        f"{BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE}: controller signature "
+        f"verification material is NOT bound (CONTROLLER_SIGNED_REGISTRY_BUNDLE_BOUND="
+        f"{CONTROLLER_SIGNED_REGISTRY_BUNDLE_BOUND}); production registry bundle "
+        f"{bundle.registry_id!r} cannot be admitted this round (fail closed)")
+
+
+@dataclass(frozen=True)
 class FreshProcessRestoreRequest:
     """Everything the single fresh child process needs, hash-bound.
 
@@ -147,6 +331,11 @@ class FreshProcessRestoreRequest:
     hash must all be exact 64-hex sha256 values, and every required component
     must have an authoritative artifact spec.  ``optimizer_source`` is pinned
     to "checkpoint" — tx.init substitution is forbidden by construction.
+
+    The request is HASH-BOUND to its ``registry_bundle``: ``registry_hash``
+    must equal the bundle's canonical sha256, and the bundle's Student ABI /
+    manifest hashes must equal the request's.  The bundle is the child's
+    ONLY loader/replay resolution surface.
     """
 
     checkpoint_path: str
@@ -157,6 +346,7 @@ class FreshProcessRestoreRequest:
     expected_global_step: int
     expected_next_step_digest: str
     component_artifacts: Mapping[str, ComponentArtifactSpec]
+    registry_bundle: ProductionRegistryBundle
     optimizer_source: str = "checkpoint"
     fixture_label: str = ""
     notes: Mapping[str, Any] = field(default_factory=dict)
@@ -190,6 +380,37 @@ class FreshProcessRestoreRequest:
             raise InvalidEvidenceError(
                 f"fixture_label must be empty or exactly {SYNTHETIC_FIXTURE_LABEL!r}, "
                 f"got {self.fixture_label!r}")
+        if not isinstance(self.registry_bundle, ProductionRegistryBundle):
+            raise InvalidEvidenceError(
+                "registry_bundle must be a ProductionRegistryBundle — the child's only "
+                f"loader/replay resolution surface; got {type(self.registry_bundle).__name__}")
+        bundle_hash = self.registry_bundle.bundle_sha256()
+        if self.registry_hash != bundle_hash:
+            raise InvalidEvidenceError(
+                f"request must be hash-bound to the registry bundle: registry_hash "
+                f"{self.registry_hash!r} != bundle sha256 {bundle_hash}")
+        if self.registry_bundle.student_abi_identity_hash != self.student_abi_identity_hash:
+            raise InvalidEvidenceError(
+                "registry bundle student_abi_identity_hash "
+                f"{self.registry_bundle.student_abi_identity_hash!r} != request "
+                f"student_abi_identity_hash {self.student_abi_identity_hash!r} "
+                "(explicit child binding requires EXACT hashes)")
+        if self.registry_bundle.manifest_hash != self.manifest_hash:
+            raise InvalidEvidenceError(
+                f"registry bundle manifest_hash {self.registry_bundle.manifest_hash!r} != "
+                f"request manifest_hash {self.manifest_hash!r} "
+                "(explicit child binding requires EXACT hashes)")
+        signature = self.registry_bundle.controller_signature_ref
+        if self.fixture_label == SYNTHETIC_FIXTURE_LABEL:
+            if not signature.startswith(SYNTHETIC_SIGNATURE_PREFIX):
+                raise InvalidEvidenceError(
+                    "labelled synthetic requests must carry a "
+                    f"{SYNTHETIC_SIGNATURE_PREFIX!r}-prefixed bundle signature, got "
+                    f"{signature!r} (signature/label cross-binding)")
+        elif signature.startswith(SYNTHETIC_SIGNATURE_PREFIX):
+            raise InvalidEvidenceError(
+                f"production-intent requests reject synthetic bundle signatures "
+                f"({signature!r}); a controller-signed bundle is required")
         object.__setattr__(self, "component_artifacts", artifacts)
 
     def to_payload(self) -> dict:
@@ -204,6 +425,7 @@ class FreshProcessRestoreRequest:
             "expected_next_step_digest": self.expected_next_step_digest,
             "optimizer_source": self.optimizer_source,
             "fixture_label": self.fixture_label,
+            "registry_bundle": self.registry_bundle.to_payload(),
             "component_artifacts": {
                 name: {"path": spec.path, "sha256": spec.sha256,
                        "expected_leaves_digest": spec.expected_leaves_digest}
@@ -296,57 +518,56 @@ def leaves_digest_of(records: tuple[LeafRecord, ...] | list) -> str:
 
 def synthetic_replay_digest(digest_map: Mapping[str, str]) -> str:
     """Labelled synthetic next-step replay: a pure function of the JOINTLY
-    restored component digests.  Real network replay is injected via
-    ``register_production_replay`` (fail closed until bound)."""
+    restored component digests.  Real network replay arrives only through
+    the controller-signed registry bundle's replay entry point (fail closed
+    until a controller-signed bundle is bound)."""
     payload = {"replay": "SYNTHETIC_FIXTURE_NOT_SCIENTIFIC_CONTENT",
                "components": {k: digest_map[k] for k in sorted(digest_map)}}
     return _sha256_hex(_canonical_json(payload).encode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
-# Production loader/replay registry (controller injection surface; empty and
-# fail closed this round — no real artifacts can run yet).
+# Child-side entry-point resolution (bundle-driven ONLY).
+#
+# There is deliberately NO parent-process loader/replay registry in this
+# module.  The earlier ``_PRODUCTION_LOADERS`` / ``_PRODUCTION_REPLAY``
+# globals were removed (audit follow-up 2026-08-04 round 2): a spawned child
+# imports a fresh module where parent globals never exist, so they were dead
+# surface that could only ever be bypassed through hidden import side
+# effects.  The child resolves every loader and the replay exclusively
+# through the explicit entry points named by the request's hash-bound
+# ``ProductionRegistryBundle``.
 # ---------------------------------------------------------------------------
 
-_PRODUCTION_LOADERS: dict[str, Callable[[Mapping[str, Any]], Any]] = {}
-_PRODUCTION_REPLAY: Callable[[Mapping[str, str], Mapping[str, Any]], str] | None = None
+# Defense in depth: bundle entry points must never name process/system
+# manipulation namespaces, even though the bundle is controller-signed.
+FORBIDDEN_ENTRY_MODULE_ROOTS = frozenset({
+    "os", "sys", "subprocess", "socket", "shutil", "signal", "ctypes",
+    "builtins", "multiprocessing", "threading", "_thread", "importlib",
+    "webbrowser",
+})
 
 
-def register_production_component_loader(component: str,
-                                         loader: Callable[[Mapping[str, Any]], Any]) -> None:
-    if component not in REQUIRED_COMPONENTS:
-        raise InvalidEvidenceError(f"unknown component {component!r} for production loader")
-    if not callable(loader):
-        raise InvalidEvidenceError("production loader must be callable")
-    if component in _PRODUCTION_LOADERS:
+def resolve_bundle_entry_point(point: LoaderEntryPoint, purpose: str) -> Any:
+    """Import ``point.entry_module`` FRESH (in the child) and return the
+    callable ``point.entry_attr``.  Fail closed on any resolution problem."""
+    root = point.entry_module.split(".")[0]
+    if root in FORBIDDEN_ENTRY_MODULE_ROOTS:
         raise InvalidEvidenceError(
-            f"production loader for {component!r} already registered (explicit clear required)")
-    _PRODUCTION_LOADERS[component] = loader
-
-
-def register_production_replay(
-        replay: Callable[[Mapping[str, str], Mapping[str, Any]], str]) -> None:
-    if not callable(replay):
-        raise InvalidEvidenceError("production replay must be callable")
-    global _PRODUCTION_REPLAY
-    if _PRODUCTION_REPLAY is not None:
-        raise InvalidEvidenceError("production replay already registered (explicit clear required)")
-    _PRODUCTION_REPLAY = replay
-
-
-def clear_production_registrations() -> None:
-    global _PRODUCTION_REPLAY
-    _PRODUCTION_LOADERS.clear()
-    _PRODUCTION_REPLAY = None
-
-
-def production_registrations_status() -> dict:
-    return {
-        "loaders_bound": sorted(_PRODUCTION_LOADERS),
-        "loaders_missing": sorted(c for c in REQUIRED_COMPONENTS if c not in _PRODUCTION_LOADERS),
-        "replay_bound": _PRODUCTION_REPLAY is not None,
-        "combined_fresh_process_restore_executed": COMBINED_FRESH_PROCESS_RESTORE_EXECUTED,
-    }
+            f"entry point for {purpose!r} rejected: module {point.entry_module!r} is a "
+            "forbidden namespace")
+    try:
+        module = importlib.import_module(point.entry_module)
+    except Exception as exc:
+        raise InvalidEvidenceError(
+            f"entry point for {purpose!r}: cannot import module {point.entry_module!r} "
+            f"in the child process: {exc}")
+    target = getattr(module, point.entry_attr, None)
+    if not callable(target):
+        raise InvalidEvidenceError(
+            f"entry point for {purpose!r}: {point.entry_module}.{point.entry_attr} is not "
+            "callable in the child process")
+    return target
 
 
 # ---------------------------------------------------------------------------
@@ -426,79 +647,91 @@ def restore_worker_main(argv: list[str] | None = None) -> int:
         if missing:
             raise _WorkerFailure(f"request component_artifacts missing {missing}")
         fixture = request.get("fixture_label", "")
+        if fixture not in ("", SYNTHETIC_FIXTURE_LABEL):
+            raise _WorkerFailure(
+                f"fixture_label must be empty or {SYNTHETIC_FIXTURE_LABEL!r}")
         optimizer_source = request.get("optimizer_source", "")
         if optimizer_source != "checkpoint":
             raise _WorkerFailure(
                 f"optimizer_source {optimizer_source!r} rejected: optimizer must restore "
                 "checkpoint leaves (tx.init substitution forbidden)")
 
+        # --- CHILD-SIDE BUNDLE RE-VERIFICATION (trust nothing) -------------
+        # The bundle is the ONLY loader/replay resolution surface this child
+        # ever sees — there is no parent registry to fall back to.
+        bundle = ProductionRegistryBundle.from_payload(request.get("registry_bundle"))
+        bundle_hash = bundle.bundle_sha256()
+        if bundle_hash != request["registry_hash"]:
+            raise _WorkerFailure(
+                f"registry bundle hash {bundle_hash} != request registry_hash "
+                f"{request['registry_hash']} (request must be hash-bound to the bundle)")
+        if bundle.student_abi_identity_hash != request["student_abi_identity_hash"]:
+            raise _WorkerFailure(
+                "registry bundle student_abi_identity_hash != request identity hash "
+                "(explicit child binding requires EXACT hashes)")
+        if bundle.manifest_hash != request["manifest_hash"]:
+            raise _WorkerFailure(
+                "registry bundle manifest_hash != request manifest_hash "
+                "(explicit child binding requires EXACT hashes)")
+        if fixture == SYNTHETIC_FIXTURE_LABEL:
+            if not bundle.controller_signature_ref.startswith(SYNTHETIC_SIGNATURE_PREFIX):
+                raise _WorkerFailure(
+                    "labelled synthetic requests must carry a "
+                    f"{SYNTHETIC_SIGNATURE_PREFIX!r}-prefixed bundle signature")
+        else:
+            # PRODUCTION path: fail closed until the controller binds real
+            # signature verification material (not this round).
+            verify_controller_signature(bundle)
+
+        identity_echo = {
+            "checkpoint_path": request["checkpoint_path"],
+            "checkpoint_sha256": request["checkpoint_sha256"],
+            "student_abi_identity_hash": request["student_abi_identity_hash"],
+            "manifest_hash": request["manifest_hash"],
+            "registry_bundle_sha256": bundle_hash,
+            "expected_global_step": request["expected_global_step"],
+        }
+
+        # --- resolve loaders/replay THROUGH THE BUNDLE ONLY ----------------
+        loaders = {name: resolve_bundle_entry_point(bundle.loader_entry_points[name],
+                                                    f"component loader {name!r}")
+                   for name in REQUIRED_COMPONENTS}
+        replay = resolve_bundle_entry_point(bundle.replay_entry_point,
+                                            f"replay {REPLAY_CHECK!r}")
+
         components: list[dict] = []
         digests: dict[str, str] = {}
-        if fixture == SYNTHETIC_FIXTURE_LABEL:
-            # Labelled synthetic contract path ONLY: authoritative artifact
-            # files are still hash-verified before parsing.
-            for name in REQUIRED_COMPONENTS:
-                spec = artifacts[name]
-                try:
-                    with open(spec["path"], "rb") as handle:
-                        blob = handle.read()
-                except OSError as exc:
-                    raise _WorkerFailure(f"component {name!r}: cannot read artifact: {exc}")
-                if _sha256_hex(blob) != spec["sha256"]:
-                    raise _WorkerFailure(
-                        f"component {name!r}: artifact file sha256 mismatch "
-                        f"(authoritative source hash violated)")
-                try:
-                    payload = json.loads(blob.decode("utf-8"))
-                except Exception as exc:
-                    raise _WorkerFailure(f"component {name!r}: artifact not parseable: {exc}")
-                if not isinstance(payload, dict) or payload.get("schema") != ARTIFACT_SCHEMA:
-                    raise _WorkerFailure(
-                        f"component {name!r}: artifact schema must be {ARTIFACT_SCHEMA}")
-                origin = (OPTIMIZER_ORIGIN_CHECKPOINT if name == "optimizer"
-                          else ORIGIN_SOURCE_ARTIFACT)
-                evidence_row, digest = _worker_component_evidence(
-                    name, spec, payload["tree"], pid, origin)
-                components.append(evidence_row)
-                digests[name] = digest
-            replay_digest = synthetic_replay_digest(digests)
-        elif fixture == "":
-            # PRODUCTION path: controller-registered loaders + replay only.
-            # Fail closed while nothing is bound (this round).
-            status = production_registrations_status()
-            if status["loaders_missing"] or not status["replay_bound"]:
+        for name in REQUIRED_COMPONENTS:
+            spec = artifacts[name]
+            # Authoritative source hash is verified by the worker itself,
+            # before any loader runs (defense in depth: loaders re-verify).
+            try:
+                with open(spec["path"], "rb") as handle:
+                    blob = handle.read()
+            except OSError as exc:
+                raise _WorkerFailure(f"component {name!r}: cannot read artifact: {exc}")
+            if _sha256_hex(blob) != spec["sha256"]:
                 raise _WorkerFailure(
-                    "production restore requires controller-registered production loaders "
-                    f"and replay bound in the child process; missing loaders="
-                    f"{status['loaders_missing']} replay_bound={status['replay_bound']} -> "
-                    "BLOCKED (COMBINED_FRESH_PROCESS_RESTORE stays false)")
-            for name in REQUIRED_COMPONENTS:
-                spec = artifacts[name]
-                try:
-                    with open(spec["path"], "rb") as handle:
-                        blob = handle.read()
-                except OSError as exc:
-                    raise _WorkerFailure(f"component {name!r}: cannot read artifact: {exc}")
-                if _sha256_hex(blob) != spec["sha256"]:
-                    raise _WorkerFailure(
-                        f"component {name!r}: artifact file sha256 mismatch")
-                tree = _PRODUCTION_LOADERS[name](spec)
-                origin = (OPTIMIZER_ORIGIN_CHECKPOINT if name == "optimizer"
-                          else ORIGIN_SOURCE_ARTIFACT)
-                evidence_row, digest = _worker_component_evidence(
-                    name, spec, tree, pid, origin)
-                components.append(evidence_row)
-                digests[name] = digest
-            replay_digest = _PRODUCTION_REPLAY(digests, {
-                "checkpoint_sha256": request["checkpoint_sha256"],
-                "student_abi_identity_hash": request["student_abi_identity_hash"],
-                "registry_hash": request["registry_hash"],
-                "manifest_hash": request["manifest_hash"],
-                "expected_global_step": request["expected_global_step"],
-            })
-        else:
+                    f"component {name!r}: artifact file sha256 mismatch "
+                    "(authoritative source hash violated)")
+            context = {"component": name, "spec": dict(spec), **identity_echo}
+            tree = loaders[name](context)
+            origin = (OPTIMIZER_ORIGIN_CHECKPOINT if name == "optimizer"
+                      else ORIGIN_SOURCE_ARTIFACT)
+            evidence_row, digest = _worker_component_evidence(
+                name, spec, tree, pid, origin)
+            components.append(evidence_row)
+            digests[name] = digest
+
+        replay_context = {
+            "component_digests": digests,
+            "registry_hash": request["registry_hash"],
+            **identity_echo,
+        }
+        replay_digest = replay(replay_context)
+        if not isinstance(replay_digest, str) or not _SHA256_RE.match(replay_digest):
             raise _WorkerFailure(
-                f"fixture_label must be empty or {SYNTHETIC_FIXTURE_LABEL!r}")
+                f"replay entry point must return a 64-hex digest, got {replay_digest!r}")
 
         if replay_digest != request["expected_next_step_digest"]:
             raise _WorkerFailure(
@@ -518,6 +751,7 @@ def restore_worker_main(argv: list[str] | None = None) -> int:
                 "manifest_hash": request["manifest_hash"],
                 "expected_global_step": request["expected_global_step"],
                 "optimizer_source": request["optimizer_source"],
+                "registry_bundle_sha256": bundle_hash,
             },
             "components": components,
             "cross_checks": [{"name": REPLAY_CHECK, "status": "RESTORED_CROSS_VERIFIED",
@@ -525,6 +759,18 @@ def restore_worker_main(argv: list[str] | None = None) -> int:
         }
         _atomic_write_json(ev_path, evidence)
         return 0
+    except InvalidEvidenceError as exc:
+        # Fail-closed contract violations (bundle parsing, entry-point
+        # resolution, controller signature block) — never exit 0.
+        try:
+            _atomic_write_json(ev_path, {
+                "schema": EVIDENCE_SCHEMA, "fixture_label": "", "error": str(exc),
+                "process": process_block(4), "request_echo": {},
+                "components": [], "cross_checks": []})
+        except Exception:
+            pass
+        sys.stderr.write(f"restore_worker FAILED: {exc}\n")
+        return 4
     except _WorkerFailure as exc:
         try:
             _atomic_write_json(ev_path, {
@@ -698,6 +944,7 @@ def verify_fresh_process_evidence(payload: Mapping[str, Any], *,
                           "(crash/failure rejected fail closed)")
 
     # --- request echo: exact source checkpoint / ABI / registry / manifest -
+    # plus the registry-bundle hash the child actually resolved through.
     echo = payload.get("request_echo", {}) if isinstance(payload.get("request_echo"), Mapping) else {}
     expected_echo = {
         "checkpoint_path": request.checkpoint_path,
@@ -707,6 +954,7 @@ def verify_fresh_process_evidence(payload: Mapping[str, Any], *,
         "manifest_hash": request.manifest_hash,
         "expected_global_step": int(request.expected_global_step),
         "optimizer_source": request.optimizer_source,
+        "registry_bundle_sha256": request.registry_bundle.bundle_sha256(),
     }
     for key, expected in expected_echo.items():
         if echo.get(key) != expected:
@@ -896,7 +1144,9 @@ def run_fresh_process_restore(request: FreshProcessRestoreRequest, *,
                               timeout_s: float = 120.0) -> FreshProcessRestoreOutcome:
     """Spawn exactly one fresh child process and mechanically verify its
     atomic joint-restore evidence.  NO callback surface exists here: the
-    child restores from authoritative hash-bound artifacts only."""
+    child restores from authoritative hash-bound artifacts only, resolving
+    loaders/replay exclusively through the request's hash-bound registry
+    bundle entry points (there is no parent-process loader registry)."""
     if not isinstance(request, FreshProcessRestoreRequest):
         raise InvalidEvidenceError("run_fresh_process_restore requires FreshProcessRestoreRequest")
     if not allow_synthetic_fixture and request.fixture_label:
@@ -966,27 +1216,95 @@ def run_fresh_process_restore_production(request: FreshProcessRestoreRequest, *,
                                          scratch_dir: str | Path,
                                          timeout_s: float = 120.0) -> FreshProcessRestoreOutcome:
     """PRODUCTION entry point (R4c).  Structurally callback-free: no
-    restorers/cross_checkers parameters exist; synthetic fixtures are
-    rejected; the child fails closed without controller-registered loaders.
+    restorers/cross_checkers parameters exist; synthetic fixtures and
+    synthetic controller signatures are rejected; the child resolves
+    loaders/replay ONLY through the request's hash-bound, controller-signed
+    registry bundle and fails closed while no controller signature
+    verification material is bound (this round).
     """
     if request.fixture_label:
         raise InvalidEvidenceError(
             "run_fresh_process_restore_production rejects synthetic fixture requests "
             f"(fixture_label={request.fixture_label!r})")
+    signature = request.registry_bundle.controller_signature_ref
+    if signature.startswith(SYNTHETIC_SIGNATURE_PREFIX):
+        raise InvalidEvidenceError(
+            f"run_fresh_process_restore_production rejects synthetic controller "
+            f"signatures ({signature!r}); a controller-signed registry bundle is "
+            "required on the production path")
     return run_fresh_process_restore(request, allow_synthetic_fixture=False,
                                      scratch_dir=scratch_dir, timeout_s=timeout_s)
 
 
+def verdict_from_evidence(evidence: ProcessEvidence) -> CombinedRestoreVerdict:
+    """The CANONICAL builder for a CombinedRestoreVerdict grounded in
+    mechanically verified fresh-process evidence: every component result is
+    bound to that component's authoritative leaves digest from the SAME
+    evidence, and the replay cross-check is bound to the evidence replay
+    digest.  ``production_joint_pass`` accepts verdicts corresponding to the
+    evidence; this builder is how such a verdict is produced honestly."""
+    if not isinstance(evidence, ProcessEvidence):
+        raise InvalidEvidenceError(
+            "verdict_from_evidence requires mechanically verified ProcessEvidence")
+    components = {
+        comp.component: ComponentResult(
+            comp.component, ComponentStatus.RESTORED_HASH_BOUND,
+            "fresh-process authoritative leaf evidence", bound_digest=comp.leaves_digest)
+        for comp in evidence.components}
+    cross = {
+        row.name: ComponentResult(
+            row.name, ComponentStatus.RESTORED_CROSS_VERIFIED,
+            "policy-step replay on the jointly restored state", bound_digest=row.digest)
+        for row in evidence.cross_checks}
+    return evaluate_verdict(components, cross)
+
+
 def production_joint_pass(verdict: CombinedRestoreVerdict,
                           evidence: ProcessEvidence) -> bool:
-    """The ONLY composition that may upgrade COMBINED_FRESH_PROCESS_RESTORE:
-    the component verdict AND mechanically verified fresh-process evidence
-    from a real (non-fixture) run.  Missing/unverified evidence raises."""
+    """The ONLY composition that may upgrade COMBINED_FRESH_PROCESS_RESTORE.
+
+    Requirements (ALL fail closed):
+      * mechanically verified, non-fixture ProcessEvidence with exit code 0;
+      * ``verdict.combined_pass`` true;
+      * the verdict CORRESPONDS TO THE SAME evidence — not an independently
+        fabricated CombinedRestoreVerdict: exact component coverage, every
+        verdict component status in the frozen RESTORED set, every verdict
+        ``bound_digest`` EQUAL to that component's evidence leaves digest,
+        and the replay cross-check bound to the evidence replay digest.
+    Self-asserted verdicts without digest binding can never compose.
+    """
     if not isinstance(verdict, CombinedRestoreVerdict):
         raise InvalidEvidenceError("production_joint_pass requires CombinedRestoreVerdict")
     if not isinstance(evidence, ProcessEvidence):
         raise InvalidEvidenceError(
             "production_joint_pass requires mechanically verified ProcessEvidence; "
             "self-asserted component statuses alone can never compose a joint proof")
-    return bool(verdict.combined_pass) and evidence.exit_code == 0 \
-        and evidence.fixture_label == ""
+    if not (bool(verdict.combined_pass) and evidence.exit_code == 0
+            and evidence.fixture_label == ""):
+        return False
+
+    # --- verdict <-> same-evidence correspondence --------------------------
+    evidence_map = evidence.component_map()
+    if set(verdict.components) != set(REQUIRED_COMPONENTS) \
+            or set(evidence_map) != set(REQUIRED_COMPONENTS):
+        return False
+    for name in REQUIRED_COMPONENTS:
+        result = verdict.components[name]
+        if result.status.value not in RESTORED_STATUSES:
+            return False
+        if result.bound_digest != evidence_map[name].leaves_digest:
+            return False  # unbound/fabricated digest: not the same evidence
+        if evidence_map[name].pid != evidence.child_pid:
+            return False  # split-process evidence can never compose
+    evidence_cross = {row.name: row for row in evidence.cross_checks}
+    for check in CROSS_CHECKS:
+        if check not in verdict.cross_checks or check not in evidence_cross:
+            return False
+        result = verdict.cross_checks[check]
+        if result.status.value not in RESTORED_STATUSES:
+            return False
+        if result.bound_digest != evidence_cross[check].digest:
+            return False
+        if evidence_cross[check].pid != evidence.child_pid:
+            return False
+    return True

@@ -28,6 +28,14 @@ spawned child process, atomic PID/argv/timestamp evidence, authoritative
 per-component leaf hashes, checkpoint-leaf optimizer binding and
 ``production_joint_pass`` as the only gate that may ever upgrade
 ``COMBINED_FRESH_PROCESS_RESTORE``.
+
+Audit follow-up (2026-08-04, round 2): ``ComponentResult`` gained the
+additive ``bound_digest`` field.  ``production_joint_pass`` now requires the
+verdict's component statuses AND bound digests to correspond to the SAME
+mechanically verified ``ProcessEvidence`` (per-component digest equality and
+replay digest equality); an independently fabricated ``CombinedRestoreVerdict``
+— self-asserted statuses with no digest binding — can never compose.  The
+canonical builder is ``fresh_process_restore.verdict_from_evidence``.
 """
 
 from __future__ import annotations
@@ -87,6 +95,15 @@ class ComponentResult:
     component: str
     status: ComponentStatus
     detail: str = ""
+    # Additive (audit follow-up 2026-08-04): the digest this result is bound
+    # to — the component's authoritative leaves digest, or the replay digest
+    # for cross-checks.  ``fresh_process_restore.production_joint_pass``
+    # refuses any verdict whose bound digests do not match the SAME verified
+    # ProcessEvidence, so an independently fabricated verdict can never
+    # compose a joint proof.  Contract-level (callback driver) results may
+    # leave it empty; empty means "unbound" and can never pass the
+    # production composition gate.
+    bound_digest: str = ""
 
     def __post_init__(self) -> None:
         if not self.component:
@@ -94,6 +111,10 @@ class ComponentResult:
         if not isinstance(self.status, ComponentStatus):
             raise InvalidEvidenceError(f"component status must be ComponentStatus, "
                                        f"got {self.status!r}")
+        if self.bound_digest and not _SHA256_RE.match(self.bound_digest):
+            raise InvalidEvidenceError(
+                f"ComponentResult.bound_digest must be empty or 64-hex, "
+                f"got {self.bound_digest!r}")
 
 
 @dataclass(frozen=True)
