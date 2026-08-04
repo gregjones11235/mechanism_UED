@@ -18,6 +18,10 @@ selector: LLM outputs are advisory candidates only.
 This module is CONTRACT ONLY: all tests use ``FakeLLMClient``; no real API is
 called.  Enabling a real two-LLM run requires explicit 总控 authorization, so
 ``REAL_TWO_LLM_CALL_EXECUTED`` stays false for this round.
+
+The TYPED production two-LLM path lives in ``llm_contracts.py`` (strict
+DiagnosticianOutput / PlannerOutput schemas with hash recomputation, and a
+production entry that fails closed rather than falling back to fake clients).
 """
 
 from __future__ import annotations
