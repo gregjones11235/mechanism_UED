@@ -257,10 +257,21 @@ def make_state_bundle(state: Any, *, next_step_key: Any, previous_action: Any, p
 
 def encode_env_state(state: Any, *, next_step_key: Any, previous_action: Any, previous_reward: Any,
                      wrapper_state: Mapping[str, Any] | None = None,
+                     policy_memory: Any = None, history_reference: Any = None,
                      codec: StateCodec | None = None) -> tuple[EncodedState, StateBundle]:
+    """Encode a captured state, forwarding the mode-conditional memory fields.
+
+    CC4 follow-up (P0-3): a capture that omits ``policy_memory`` /
+    ``history_reference`` cannot back a SAVED_POLICY_MEMORY / HISTORY_BURN_IN
+    production entry — callers MUST forward the live rollout memory here; the
+    archive guard chain independently re-verifies the mode-conditional
+    presence inside the encoded bundle before any production write.
+    """
     codec = codec or StateCodec()
     bundle = make_state_bundle(state, next_step_key=next_step_key, previous_action=previous_action,
-                               previous_reward=previous_reward, wrapper_state=wrapper_state)
+                               previous_reward=previous_reward, wrapper_state=wrapper_state,
+                               policy_memory=policy_memory,
+                               history_reference=history_reference)
     return codec.encode(bundle), bundle
 
 

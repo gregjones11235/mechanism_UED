@@ -26,6 +26,7 @@ Honesty rules enforced structurally:
 
 from __future__ import annotations
 
+import base64
 import math
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
@@ -446,7 +447,23 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     }
 
     # STEP 1 — standard-reset real rollout up to the capture point.
+    # CC4 follow-up (P0-3): the capture records the ACTUAL executed steps and,
+    # per memory mode, the policy memory / history reference that make the
+    # captured state a faithful branch point.  ZERO_MEMORY is ablation-only and
+    # can never back a production capture.
     from .craftax_checks import build_core_setup
+    try:
+        capture_mode = MemoryRestoreMode(str(config.memory_mode))
+    except ValueError as exc:
+        raise ProductionBlockedError(
+            f"unknown memory mode {config.memory_mode!r}: capture refuses to "
+            "construct any entry with an unresolvable memory mode (fail closed)") from exc
+    if capture_mode is MemoryRestoreMode.ZERO_MEMORY:
+        raise ProductionBlockedError(
+            f"{ZERO_MEMORY_NOT_A_PRODUCTION_MODE}: ZERO_MEMORY is an ablation-only "
+            "mode and can never back a production frontier capture (the formal "
+            "archive write is refused before any entry is constructed)")
+    record_history = capture_mode is MemoryRestoreMode.HISTORY_BURN_IN
     setup = build_core_setup(max_timesteps=config.max_timesteps,
                              reset_seed=config.reset_seed)
     env, params_env = setup["env"], setup["params"]
@@ -461,12 +478,24 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     prev_action, prev_reward = 0, 0.0
     done = False
     steps_executed = 0
+    rollout_history: list[dict[str, Any]] = []
     for _ in range(int(config.capture_at_step)):
         obs_batch = np.asarray(obs).reshape(1, -1)
         out = student.policy_step(config.student_params, obs_batch, memory,
                                   prev_action, prev_reward, None, True)
         memory = out.get("new_memory", out.get("memory"))
         action = int(np.asarray(out["action"]).reshape(-1)[0])
+        if record_history:
+            obs_arr = np.ascontiguousarray(np.asarray(obs_batch))
+            rollout_history.append({
+                "timestep": steps_executed,
+                "obs_b64": base64.b64encode(obs_arr.tobytes()).decode("ascii"),
+                "obs_dtype": str(obs_arr.dtype),
+                "obs_shape": [int(x) for x in obs_arr.shape],
+                "action": action,
+                "prev_action": int(prev_action),
+                "prev_reward": float(prev_reward),
+            })
         runner_key, step_key = jax.random.split(runner_key)
         obs, state, reward, done, _info = setup["step_fn"](step_key, state,
                                                            action, params_env)
@@ -474,16 +503,64 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         steps_executed += 1
         if bool(np.asarray(done)):
             break
+    terminal_before_capture = bool(np.asarray(done))
     steps["STEP01_STANDARD_RESET_ROLLOUT"] = {
         "capture_at_step": int(config.capture_at_step),
         "steps_executed": steps_executed,
-        "terminal_before_capture": bool(np.asarray(done)),
+        "terminal_before_capture": terminal_before_capture,
     }
 
+    # CC4 follow-up (P0-3): a capture taken AFTER a terminal transition is not
+    # a live branch point — the formal archive write is refused BEFORE any
+    # entry is constructed (fail closed; terminal states never enter the
+    # production archive as frontier captures).
+    if terminal_before_capture:
+        raise ProductionBlockedError(
+            "CAPTURE_REFUSED_TERMINAL_BEFORE_CAPTURE: the rollout reached a "
+            f"terminal state after {steps_executed} executed step(s), before the "
+            f"planned capture point {int(config.capture_at_step)}; a terminal "
+            "capture is never a frontier branch point, so the formal archive "
+            "write is refused (fail closed)")
+
     # STEP 2 — frontier capture through the PRODUCTION archive write path.
+    # CC4 follow-up (P0-3) memory binding: SAVED_POLICY_MEMORY entries carry
+    # the LIVE rollout policy memory; HISTORY_BURN_IN entries carry the
+    # recorded rollout history that a burn-in executor can replay into memory.
+    # The guard chain re-verifies mode-conditional presence independently.
+    policy_memory_payload: Any = None
+    history_payload: Any = None
+    if capture_mode is MemoryRestoreMode.SAVED_POLICY_MEMORY:
+        if memory is None:
+            raise ProductionBlockedError(
+                "SAVED_POLICY_MEMORY capture blocked: the rollout produced no "
+                "policy memory at the capture point (fail closed)")
+        policy_memory_payload = memory
+    elif capture_mode is MemoryRestoreMode.HISTORY_BURN_IN:
+        if not rollout_history:
+            raise ProductionBlockedError(
+                "HISTORY_BURN_IN capture blocked: no rollout steps were executed "
+                "before the capture point (history_length must be positive)")
+        history_payload = {
+            "mode": capture_mode.value,
+            "history_length": len(rollout_history),
+            "source_episode": f"{config.run_id}:standard-reset:{config.reset_seed}",
+            "steps": rollout_history,
+        }
     encoded, bundle = encode_env_state(state, next_step_key=runner_key,
                                        previous_action=prev_action,
-                                       previous_reward=prev_reward)
+                                       previous_reward=prev_reward,
+                                       policy_memory=policy_memory_payload,
+                                       history_reference=history_payload)
+    if capture_mode is MemoryRestoreMode.SAVED_POLICY_MEMORY \
+            and bundle.policy_memory is None:
+        raise ProductionBlockedError(
+            "capture memory binding invariant violated: the encoded bundle lost "
+            "the SAVED_POLICY_MEMORY policy memory (fail closed)")
+    if capture_mode is MemoryRestoreMode.HISTORY_BURN_IN \
+            and bundle.history_reference is None:
+        raise ProductionBlockedError(
+            "capture memory binding invariant violated: the encoded bundle lost "
+            "the HISTORY_BURN_IN history reference (fail closed)")
     state_id = encoded.payload_hash
     facts = _measure_entry_facts(state, terminal=bool(np.asarray(done)))
     entry = FrontierArchiveEntry(
@@ -491,7 +568,9 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         source_checkpoint_id=str(identity.params_sha256),
         source_episode_id=f"{config.run_id}:standard-reset:{config.reset_seed}",
         source_seed=int(config.reset_seed),
-        source_timestep=int(config.capture_at_step),
+        # CC4 follow-up (P0-3): the EXECUTED step count, never the planned
+        # capture_at_step — the entry must record what actually happened.
+        source_timestep=int(steps_executed),
         capture_reason="E3_WINDOW_STANDARD_RESET_CAPTURE",
         floor=facts["floor"],
         gate_progress=facts["gate_progress"],
@@ -534,6 +613,10 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         "archive_size": len(archive),
         "provenance_hash_bound": bool(finalized.provenance_hash),
         "archive_path": config.archive_path,
+        "source_timestep": int(steps_executed),
+        "memory_mode": capture_mode.value,
+        "policy_memory_bound": policy_memory_payload is not None,
+        "history_length": len(rollout_history),
     }
 
     # STEP 3 — joint full-state restore in ONE fresh process (P0-3).
