@@ -7,6 +7,7 @@ re-derived from the test itself; a mismatch is a real config bug.
 """
 import json
 import os
+import sys
 
 import pytest
 import yaml
@@ -31,6 +32,14 @@ FROZEN_YAML = os.path.join(REPO_ROOT, "configs", "e1_formal_ued.yaml")
 DRAFT_JSON = os.path.join(
     REPO_ROOT, "configs", "e1_formal_ued_anchor_manifest.DRAFT.json"
 )
+
+# fix(e1): require real probe and update for readiness — the
+# readiness gate lives in scripts/ (not a package); same bootstrap
+# convention as conftest.py's src/ insert
+SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
+if SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, SCRIPTS_DIR)
+import e1_formal_readiness as RD  # noqa: E402
 
 
 def _teacher_config():
@@ -228,3 +237,128 @@ class TestTeacherFromCommittedFiles:
         assert len(workers) == 12
         assert all(w["compiled"] is False for w in workers)
         assert manager.ledger.counts()["N1"] == 0
+
+
+# ----------------------------------------------------------------------
+# fix(e1): require real probe and update for readiness (CC2 P0).
+# The final e1_real_smoke_ready conjunction must demand REAL
+# EXECUTION evidence from the one-update entrypoint's own status
+# report — structural capability gates alone NEVER grant readiness.
+# Hosted here (round-3 forbids NEW test files); static/CPU only, no
+# API, no training.
+# ----------------------------------------------------------------------
+
+
+def _structural_pass() -> dict:
+    """Every structural capability gate true, zero blockers."""
+    return dict(
+        sequential=True,
+        dynamic_12=True,
+        criterionwise=True,
+        bounded_repair=True,
+        student_adapter_bound=True,
+        reference_adapter_bound=True,
+        anchor_manifest_bound=True,
+        blockers=[],
+    )
+
+
+def _executed_report(probe: bool = True, update: bool = True) -> dict:
+    """The shape run_e1_real_one_update.py writes on COMPLETE success."""
+    return {
+        "entrypoint": "scripts/run_e1_real_one_update.py",
+        "status": "EXECUTED",
+        "blockers": [],
+        "flags": {
+            "real_envcoder_used": True,
+            "real_student_reference_eval": probe,
+            "real_training_update_executed": True,
+        },
+        "real_one_update_executed": update,
+    }
+
+
+def _write_status(tmp_path, report: dict) -> str:
+    path = tmp_path / "real_one_update_status.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return str(path)
+
+
+class TestRealSmokeReadinessGate:
+    def test_structural_gates_alone_never_grant_readiness(self, tmp_path):
+        # all structural gates pass but NO real execution report on disk
+        missing = str(tmp_path / "no_such_report.json")
+        probe, update = RD._compute_real_execution_flags(missing)
+        assert (probe, update) == (False, False)
+        assert RD.decide_real_smoke_ready(
+            probe_executed=probe,
+            update_executed=update,
+            **_structural_pass(),
+        ) is False
+
+    def test_status_missing_stays_false(self, tmp_path):
+        report = _executed_report()  # flags forged true...
+        del report["status"]         # ...but no EXECUTED status
+        probe, update = RD._compute_real_execution_flags(
+            _write_status(tmp_path, report)
+        )
+        assert (probe, update) == (False, False)
+        assert RD.decide_real_smoke_ready(
+            probe_executed=probe,
+            update_executed=update,
+            **_structural_pass(),
+        ) is False
+
+    def test_status_blocked_stays_false_even_with_forged_flags(self, tmp_path):
+        report = _executed_report()  # flags stay forged true
+        report["status"] = "BLOCKED"
+        probe, update = RD._compute_real_execution_flags(
+            _write_status(tmp_path, report)
+        )
+        assert (probe, update) == (False, False)
+        assert RD.decide_real_smoke_ready(
+            probe_executed=probe,
+            update_executed=update,
+            **_structural_pass(),
+        ) is False
+
+    def test_probe_true_but_update_false_stays_false(self, tmp_path):
+        probe, update = RD._compute_real_execution_flags(
+            _write_status(tmp_path, _executed_report(update=False))
+        )
+        assert (probe, update) == (True, False)
+        assert RD.decide_real_smoke_ready(
+            probe_executed=probe,
+            update_executed=update,
+            **_structural_pass(),
+        ) is False
+
+    def test_executed_probe_and_update_grant_readiness(self, tmp_path):
+        # the ONLY true path: real EXECUTED evidence + all gates pass
+        probe, update = RD._compute_real_execution_flags(
+            _write_status(tmp_path, _executed_report())
+        )
+        assert (probe, update) == (True, True)
+        assert RD.decide_real_smoke_ready(
+            probe_executed=probe,
+            update_executed=update,
+            **_structural_pass(),
+        ) is True
+
+    def test_blockers_still_refuse_even_with_execution_evidence(self, tmp_path):
+        probe, update = RD._compute_real_execution_flags(
+            _write_status(tmp_path, _executed_report())
+        )
+        kwargs = _structural_pass()
+        kwargs["blockers"] = [
+            {
+                "stage": "shared_runtime_resolution",
+                "code": "BLOCKED_WAITING_SHARED_RUNTIME_STUDENT_ADAPTER",
+                "detail": "unbound",
+            }
+        ]
+        assert RD.decide_real_smoke_ready(
+            probe_executed=probe,
+            update_executed=update,
+            **kwargs,
+        ) is False

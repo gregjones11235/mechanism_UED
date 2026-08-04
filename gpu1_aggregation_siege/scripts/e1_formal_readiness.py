@@ -22,9 +22,17 @@ hand-written and no value is ever guessed:
   all False — ``dicode.shared_runtime`` does not exist yet);
 * ``real_candidate_probe_executed`` / ``real_optimizer_update_executed``
   — true ONLY if the one-update entrypoint's own status report on
-  disk records an EXECUTED run; absent/blocked => false;
+  disk records an EXECUTED run; absent / missing status / BLOCKED =>
+  false (never inferred from anything else);
 * ``e1_real_smoke_ready`` — every capability flag true AND every
-  shared contract bound AND zero production-gate blockers;
+  shared contract bound AND the real dual probe AND the real single
+  optimizer update actually EXECUTED (per the one-update entrypoint's
+  own report) AND zero production-gate blockers; structural gates
+  alone NEVER grant readiness (fix(e1): require real probe and
+  update for readiness);
+* ``head_sha`` — a SNAPSHOT of ``git rev-parse HEAD`` at generation
+  time; the commit enclosing this report advances HEAD past the
+  snapshot (see ``head_sha_note``) — never hand-edited;
 * ``blockers[]`` — the live production-gate blockers (the same
   resolution the one-update entrypoint consumes).
 """
@@ -140,12 +148,22 @@ def _compute_bounded_envcoder_repair() -> bool:
     return len(EB.STAGES) == 8
 
 
-def _compute_real_execution_flags() -> tuple:
-    """From the one-update entrypoint's OWN status report (absent or
-    blocked => both false; never inferred from anything else)."""
+def _compute_real_execution_flags(report_path: str = None) -> tuple:
+    """From the one-update entrypoint's OWN status report.
+
+    Both flags are true ONLY when that report records
+    ``status == "EXECUTED"`` — absent file, missing status, a
+    ``BLOCKED`` status, or any malformed JSON yields (False, False).
+    Never inferred from anything else. ``report_path`` overrides the
+    canonical location (regression tests only).
+    """
     probe_executed = False
     update_executed = False
-    path = os.path.join(RT.SIEGE_ROOT, ONE_UPDATE_REPORT)
+    path = (
+        report_path
+        if report_path is not None
+        else os.path.join(RT.SIEGE_ROOT, ONE_UPDATE_REPORT)
+    )
     if os.path.isfile(path):
         try:
             with open(path, "r", encoding="utf-8") as handle:
@@ -163,6 +181,43 @@ def _compute_real_execution_flags() -> tuple:
                 is True
             )
     return probe_executed, update_executed
+
+
+def decide_real_smoke_ready(
+    *,
+    sequential: bool,
+    dynamic_12: bool,
+    criterionwise: bool,
+    bounded_repair: bool,
+    student_adapter_bound: bool,
+    reference_adapter_bound: bool,
+    anchor_manifest_bound: bool,
+    probe_executed: bool,
+    update_executed: bool,
+    blockers: list,
+) -> bool:
+    """The FINAL readiness conjunction — strictly fail-closed.
+
+    Structural capability gates are necessary but NEVER sufficient:
+    readiness additionally requires REAL EXECUTION evidence — both
+    the real dual probe and the real single optimizer update recorded
+    EXECUTED by the one-update entrypoint's own status report — and
+    zero live production-gate blockers. (fix(e1): the probe/update
+    execution evidence was missing from this conjunction; structural
+    gates alone could have granted the E1 Pilot prematurely.)
+    """
+    return bool(
+        sequential
+        and dynamic_12
+        and criterionwise
+        and bounded_repair
+        and student_adapter_bound
+        and reference_adapter_bound
+        and anchor_manifest_bound
+        and probe_executed
+        and update_executed
+        and not blockers
+    )
 
 
 def main(argv=None) -> int:
@@ -200,20 +255,28 @@ def main(argv=None) -> int:
     probe_executed, update_executed = _compute_real_execution_flags()
 
     blockers = list(gates["blockers"])
-    e1_real_smoke_ready = (
-        sequential
-        and dynamic_12
-        and criterionwise
-        and bounded_repair
-        and student_adapter_bound
-        and reference_adapter_bound
-        and anchor_manifest_bound
-        and not blockers
+    e1_real_smoke_ready = decide_real_smoke_ready(
+        sequential=sequential,
+        dynamic_12=dynamic_12,
+        criterionwise=criterionwise,
+        bounded_repair=bounded_repair,
+        student_adapter_bound=student_adapter_bound,
+        reference_adapter_bound=reference_adapter_bound,
+        anchor_manifest_bound=anchor_manifest_bound,
+        probe_executed=probe_executed,
+        update_executed=update_executed,
+        blockers=blockers,
     )
 
     report = {
         "branch": RT.git_branch(),
         "head_sha": RT.git_head_sha(),
+        "head_sha_note": (
+            "head_sha is the SNAPSHOT of `git rev-parse HEAD` at "
+            "report generation time; the commit enclosing this "
+            "report advances HEAD past the snapshot — never "
+            "hand-edited"
+        ),
         "sequential_six_role_context": sequential,
         "dynamic_12_reachable": dynamic_12,
         "criterionwise_selector": criterionwise,
@@ -229,8 +292,10 @@ def main(argv=None) -> int:
         "note": (
             "computed by scripts/e1_formal_readiness.py from live "
             "code/config/seam state; real_*_executed read from the "
-            "one-update entrypoint's own status report (absent => "
-            "false). Entry: " + ENTRYPOINT
+            "one-update entrypoint's own status report (absent or "
+            "status != EXECUTED => false); e1_real_smoke_ready "
+            "additionally requires BOTH execution flags and zero "
+            "blockers. Entry: " + ENTRYPOINT
         ),
     }
     path = RT.write_json_report(report, args.out)
