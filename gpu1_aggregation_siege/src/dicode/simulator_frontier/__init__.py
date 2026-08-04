@@ -124,6 +124,20 @@ from .fresh_process_restore import (
     verify_controller_signature,
     verify_fresh_process_evidence,
 )
+from .branch_search_runner import (
+    RESTORE_CONTEXT_DRIVER,
+    RUNNER_VERSION,
+    SEARCH_SOURCES,
+    SEARCH_SOURCE_REFERENCE_POLICY,
+    SEARCH_SOURCE_STUDENT_DETERMINISTIC,
+    SEARCH_SOURCE_STUDENT_STOCHASTIC,
+    BranchSearchRunConfig,
+    BranchSearchRunner,
+    MemoryArtifactRef,
+    actual_n_summary,
+    derive_branch_seeds,
+    require_production_restore_context,
+)
 from .invocation_gate import (
     LLM_ROLE_SEQUENCE,
     FakeLLMClient,
@@ -164,6 +178,11 @@ __all__ = [
     "verify_production_entry",
     "ArchiveWriteGuardError", "BranchSearchBlockedError", "ProductionBlockedError",
     "BranchOutcome",
+    "RESTORE_CONTEXT_DRIVER", "RUNNER_VERSION", "SEARCH_SOURCES",
+    "SEARCH_SOURCE_REFERENCE_POLICY", "SEARCH_SOURCE_STUDENT_DETERMINISTIC",
+    "SEARCH_SOURCE_STUDENT_STOCHASTIC",
+    "BranchSearchRunConfig", "BranchSearchRunner", "MemoryArtifactRef",
+    "actual_n_summary", "derive_branch_seeds", "require_production_restore_context",
     "FeasibilityEstimate", "estimate_feasibility", "MemoryCompatibilityReport",
     "MemoryRestoreMode", "MemoryRestoreRequest", "MemoryRestoreResult", "validate_memory_request", "DataSource",
     "FormalDataLeakageGuard", "SearchActionLeakageGuard",
