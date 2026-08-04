@@ -208,6 +208,20 @@ from .anchor_manifest import (
     unbound_status,
     validate_anchor_manifest,
 )
+from .e3_window import (
+    BLOCKED_TRAINING_SURFACE_PENDING_R9,
+    CHECKPOINT_RELOAD,
+    E3_WINDOW_SCHEMA,
+    E3_WINDOW_STEPS,
+    PREFLIGHT_VERSION,
+    REAL_ACTUAL_N_EXECUTED,
+    REAL_ONE_UPDATE_EXECUTED,
+    REAL_TWO_LLM_EXECUTED,
+    E3PreflightResult,
+    E3WindowConfig,
+    one_window_pipeline,
+    run_e3_preflight,
+)
 
 __all__ = [
     "AchievementGoal", "CompositeGoal", "GateProgressGoal", "GoalEvaluation",
@@ -287,4 +301,9 @@ __all__ = [
     "AnchorDefinition", "AnchorManifest", "RetentionContract",
     "bind_anchor_manifest", "manifest_hash_of", "unbound_status",
     "validate_anchor_manifest",
+    "BLOCKED_TRAINING_SURFACE_PENDING_R9", "CHECKPOINT_RELOAD",
+    "E3_WINDOW_SCHEMA", "E3_WINDOW_STEPS", "PREFLIGHT_VERSION",
+    "REAL_ACTUAL_N_EXECUTED", "REAL_ONE_UPDATE_EXECUTED",
+    "REAL_TWO_LLM_EXECUTED", "E3PreflightResult", "E3WindowConfig",
+    "one_window_pipeline", "run_e3_preflight",
 ]
