@@ -66,3 +66,12 @@
 - 只改 `mechanism_UED_sim_foundation` worktree；路径限定提交、不 push。
 - `FOUNDATION_READY=true` **仅指 A–D 基础门禁**，不得表述为「方向三可训练」；`SOTA_INTEGRATION_READY=false`（蕴含规则下本轮恒 false）。
 - 门禁值与证据路径见 `sota_launch_gate.json`、`student_adapter_matrix.json`、`student_compatibility_report.md`。
+
+## 8. ONE_REAL_FRONTIER_WINDOW_READY_FOR_AUDIT 语义边界（本轮冻结）
+
+- 本轮交付 = **生产链路代码完成并冻结、等待外部审核**；**不等于**任何真实执行：
+  `REAL_ACTUAL_N_EXECUTED / REAL_TWO_LLM_EXECUTED / REAL_ONE_UPDATE_EXECUTED / CHECKPOINT_RELOAD` 全部为 false，且只反映实际执行，阻断路径不得升级。
+- 生产代码面（不得依赖 fake/synthetic）：Archive 生产写入口守卫链+原子持久化+加载复验；真实 actual-N runner（actual_N==实际执行分支数，禁记 action sequence/成功路线/logits/hidden state/Reference memory）；类型化双 LLM 生产路径（严格 schema、hash 重算、无 fake 回退）；证据权威 Selector（`evidence_based_select` 为正式最终权威，正式路径无 priority_score 输入面；`deterministic_select` 冻为消融咨询面）；12+4 组合（未获总控签名 anchor manifest 即 `BLOCKED_SHARED_ANCHOR_MANIFEST`）；单窗口 13 步编排（`e3_window.one_window_pipeline`，fail-closed 预检）；长跑入口（total_env_steps=98304，只冻结配置、审核放行前绝不启动）。
+- 联合恢复生产路径只认 `fresh_process_restore.run_fresh_process_restore_production`（总控签名 RegistryBundle、单一 fresh process、原子证据、无父进程全局 registry 回退）。
+- 本轮阻断清单与解除条件见 `E3_AUDIT_BLOCKERS.md`；就绪状态固定键见 `production_readiness.json`。
+- 本节**不翻动**任何既有门禁值：A–D、E=false、F=false 及全部 REAL_* 旗标维持原值；`SOTA_INTEGRATION_READY=false` 在蕴含规则下本轮恒 false。

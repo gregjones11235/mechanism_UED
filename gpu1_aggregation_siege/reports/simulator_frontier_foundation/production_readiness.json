@@ -1,0 +1,46 @@
+{
+  "schema": "simulator_frontier.production_readiness/v1",
+  "state": "ONE_REAL_FRONTIER_WINDOW_READY_FOR_AUDIT",
+  "branch": "henry/simulator-frontier-foundation-codex",
+  "head_sha": "90afca2dd3b92e802fb04987da50d985404e993a",
+  "head_sha_note": "code HEAD at freeze time (C5 entrypoints commit); this freeze document is itself committed as the C6 docs commit",
+  "archive_production_ready": true,
+  "actual_n_runner": true,
+  "two_llm_production_path": true,
+  "evidence_selector": true,
+  "frontier_12_plus_4": true,
+  "one_window_entrypoint": true,
+  "longrun_entrypoint": true,
+  "combined_restore_path": "fresh_process_restore.run_fresh_process_restore_production",
+  "real_actual_n_executed": false,
+  "real_two_llm_executed": false,
+  "real_one_update_executed": false,
+  "checkpoint_reload": false,
+  "test_baseline": "312 passed (gpu1_aggregation_siege/tests/simulator_frontier, JAX_PLATFORMS=cpu)",
+  "production_code_paths": {
+    "archive": "frontier_archive.add_production_entry / save_production / load_production + archive_guards.verify_production_entry",
+    "actual_n_runner": "branch_search_runner.BranchSearchRunner.run_actual_n (actual_N == executed branch count; no action sequences/routes/logits/hidden states/reference memory recorded)",
+    "two_llm": "llm_contracts.run_two_llm_production (strict DiagnosticianOutput/PlannerOutput schemas; no fake-client fallback; unbound factory -> REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT)",
+    "selector": "evidence_selector.evidence_based_select (official final authority; no priority_score input surface) + feasibility_classifier.classify_frontier",
+    "distributions": "frontier_distributions.compose_12_plus_4 (hard-blocked until the controller-signed shared anchor manifest binds)",
+    "one_window": "e3_window.one_window_pipeline (13 steps; fail-closed preflight) + scripts/run_e3_real_one_window.py",
+    "longrun": "scripts/run_e3_longrun.py (total_env_steps=98304 frozen config, prepare-only; launch requires external audit approval)",
+    "combined_restore": "fresh_process_restore.run_fresh_process_restore_production (single fresh process; controller-signed ProductionRegistryBundle only; no parent-global registry fallback)"
+  },
+  "honesty_rules": [
+    "the four real-execution flags above reflect ONLY actually executed runs; no blocked path may upgrade them",
+    "production paths never import fake adapters, never construct synthetic registry bundles, never fall back to fake LLM clients, never accept fake branch outcomes",
+    "ZERO_MEMORY is ablation-only and can never back a production frontier distribution or window",
+    "the Student network/reward/action head/optimizer/original loss definitions are never modified; loss and update are injected callables",
+    "the long run is NEVER started without explicit external audit approval"
+  ],
+  "blockers": [
+    "BLOCKED_TRAINING_SURFACE_PENDING_R9: RMT16 save_full_state/restore_full_state raise NotImplementedError (read-only mount this round); exactly-one real optimizer update and checkpoint round trip are impossible until R9 lands",
+    "BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE: no controller-signed ProductionRegistryBundle exists; run_fresh_process_restore_production stays blocked",
+    "BLOCKED_SHARED_ANCHOR_MANIFEST: no controller-signed shared anchor manifest; compose_12_plus_4 refuses to invent anchor science",
+    "BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY: no controller-injected PRODUCTION discovery registry; production capture provenance validation fails closed",
+    "SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT: the audited CC2 pkl carries contains_memory=False, so no real saved-policy-memory artifact exists; no burn-in executor exists either (NO_BURN_IN_EXECUTOR)",
+    "REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT: no controller-authorized real LLM client factory is bound; the production two-LLM path never falls back to a fake client",
+    "BLOCKED_REFERENCE_IDENTITY_PENDING_CONTROLLER_DESIGNATION: the stronger Reference policy identity is a controller designation, never self-invented"
+  ]
+}

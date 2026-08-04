@@ -42,7 +42,8 @@
     "CONTROLLER_SIGNED_REGISTRY_BUNDLE_BOUND stays false with status BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE until the controller signs a real registry bundle with verification material bound; the bundle-driven child resolution contract itself is green on labelled synthetic subprocess evidence only (PRODUCTION_REGISTRY_BUNDLE_CONTRACT_READY=true), which proves mechanism, not a real restore",
     "REAL_CHECKPOINT_LOADED / REAL_FORWARD_SMOKE_PASS are read-only R4b statements; forward smoke is never a performance evaluation",
     "DISCOVERY_FORMAL_PROVENANCE_ISOLATED stays false until the controller injects the REAL frozen formal asset identity registry; until then only DISCOVERY_PROVENANCE_CONTRACT_READY may be claimed, with status BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY (registry-bound contract + bypass-closure tests are green, but synthetic registries in tests are fixtures, not real isolation proof)",
-    "PRODUCTION capture paths are mechanically restricted to the controller injection slot: inject_frozen_formal_asset_registry binds ONLY usage=PRODUCTION registries and validate_capture_provenance_production reads ONLY that slot (never synthetic fixtures); TEST_ONLY registries can never enter the production slot, an un-injected PRODUCTION registry used directly is rejected, and while unbound the production entry point fails closed with BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY"
+    "PRODUCTION capture paths are mechanically restricted to the controller injection slot: inject_frozen_formal_asset_registry binds ONLY usage=PRODUCTION registries and validate_capture_provenance_production reads ONLY that slot (never synthetic fixtures); TEST_ONLY registries can never enter the production slot, an un-injected PRODUCTION registry used directly is rejected, and while unbound the production entry point fails closed with BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY",
+    "ONE_REAL_FRONTIER_WINDOW_READY_FOR_AUDIT means the direction-3 production pipeline CODE is complete and frozen awaiting external audit; it is NOT a real-execution statement: REAL_ACTUAL_N_EXECUTED / REAL_TWO_LLM_EXECUTED / REAL_ONE_UPDATE_EXECUTED / CHECKPOINT_RELOAD all stay false and reflect ONLY actually executed runs (no blocked path may upgrade them); the combined restore production path stays run_fresh_process_restore_production only (controller-signed RegistryBundle, no parent-global registry fallback); the long run (total_env_steps=98304) is prepare-only and NEVER started without explicit external audit approval; this boundary flips NO gate value (A–D unchanged, E=false, F=false, all REAL_* flags unchanged, SOTA_INTEGRATION_READY stays false under the implication rules)"
   ],
   "implication_rules": [
     "FOUNDATION_READY := A && B && C && D",
@@ -84,5 +85,30 @@
     "COMBINED_FRESH_PROCESS_RESTORE false: optimizer/train-rng/policy-memory/history restore is Phase 2; the audited CC2 pkl carries params + manifest only; the single-fresh-process production driver and its mechanical evidence verification are contract-ready (labelled synthetic subprocess evidence green), but no real artifact run has executed; additionally no controller-signed registry bundle exists (BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE), so the production entry stays blocked even mechanically until the controller binds a signed bundle with verification material",
     "SHARED_ANCHOR_MANIFEST_BOUND false: awaiting the controller-signed shared manifest",
     "DISCOVERY_FORMAL_PROVENANCE_ISOLATED false: awaiting the controller-injected frozen formal asset identity registry (BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY); contract + allowlist binding + forbidden identity sweep are implemented and bypass-closure tests are green, but only synthetic fixture registries exist this round"
-  ]
+  ],
+  "e3_one_window_ready_for_audit": {
+    "state": "ONE_REAL_FRONTIER_WINDOW_READY_FOR_AUDIT",
+    "state_note": "production pipeline code complete and frozen, awaiting external audit; NOT a real-execution statement",
+    "branch": "henry/simulator-frontier-foundation-codex",
+    "archive_production_ready": true,
+    "actual_n_runner": true,
+    "two_llm_production_path": true,
+    "evidence_selector": true,
+    "frontier_12_plus_4": true,
+    "one_window_entrypoint": true,
+    "longrun_entrypoint": true,
+    "combined_restore_path": "fresh_process_restore.run_fresh_process_restore_production",
+    "real_actual_n_executed": false,
+    "real_two_llm_executed": false,
+    "real_one_update_executed": false,
+    "checkpoint_reload": false,
+    "long_run_started": false,
+    "long_run_policy": "PREPARE_ONLY: total_env_steps=98304 config frozen by scripts/run_e3_longrun.py; launch requires explicit external audit approval of every frozen parameter plus a green E3 preflight",
+    "gate_values_flipped_by_this_block": [],
+    "cross_references": [
+      "reports/simulator_frontier_foundation/production_readiness.json",
+      "reports/simulator_frontier_foundation/E3_AUDIT_BLOCKERS.md",
+      "reports/simulator_frontier_foundation/SOTA_INTEGRATION_CONTRACT.md (section 8)"
+    ]
+  }
 }
