@@ -37,7 +37,13 @@ from pydantic import Field, model_validator
 from d052.bagr_ued.hashing import canonical_sha256, text_sha256, \
     verify_content_hash
 from d052.feedback_llm_ued import constants as C
-from d052.feedback_llm_ued.axis_directive import AxisDirective
+from d052.feedback_llm_ued.axis_directive import (
+    AxisDirective,
+    DIRECTIONS,
+    EXPERIMENT_ROLES,
+    OLD_LEVELS,
+)
+from d052.feedback_llm_ued.environment_generator import AXIS_LEVELS
 from d052.feedback_llm_ued.env_coder import RealEnvCoderBlocked
 from d052.feedback_llm_ued.feedback_contracts import (
     CONTEXT_CLOSE,
@@ -56,7 +62,12 @@ from d052.feedback_llm_ued.runtime_authorization import (
 from d052.schemas.common import CanonicalModel
 
 ROLE = C.ROLE_ENV_CODER
-PROMPT_VERSION = f"{C.ROLE_PROMPT_VERSION}.{ROLE}.real.v1"
+#: v2 (P0-4, CC3 follow-up audit): the coder must echo every directive's
+#: controlled-experiment content (changed axis triple, held axes, predicted
+#: signature, treatment/control role) so the strict content binding can be
+#: verified verbatim — a v1-format response fails the schema and enters the
+#: bounded repair loop.
+PROMPT_VERSION = f"{C.ROLE_PROMPT_VERSION}.{ROLE}.real.v2"
 
 #: per-link verification statuses
 STATUS_PASSED = "PASSED"
@@ -89,6 +100,12 @@ the declared axes constant. Each module MUST define module-level
 callables reset(seed) -> state and step(state, action) ->
 (state, reward, terminal, info). Do not invent axes; do not touch action,
 reward, or policy knobs.
+STRICT CONTENT BINDING (P0-4): every directive_binding MUST echo its
+directive's controlled-experiment content VERBATIM — directive_id,
+directive_hash, environment_family, changed_axis, old_level, new_level,
+direction, experiment_control_role, held_constant_axes and
+expected_next_signature. Any divergence (extra, missing, duplicate or
+altered echo) is rejected fail-closed.
 Prompt version: {{prompt_version}}
 {CONTEXT_OPEN}
 {{context_json}}
@@ -143,11 +160,30 @@ class CanonicalTaskSpec(CanonicalModel):
 
 
 class RealDirectiveBinding(CanonicalModel):
-    """One directive's real coded artifact: Python source + contracts."""
+    """One directive's real coded artifact: Python source + contracts +
+    the directive's FULL controlled-experiment content echoed verbatim.
+
+    P0-4 (CC3 follow-up audit): the coder must ECHO every directive's
+    content — changed axis triple, held axes, predicted signature,
+    treatment/control role — so the strict content binding can be checked
+    verbatim against the board's AxisDirective. A missing echo field fails
+    the schema outright (NO_SILENT_SCHEMA_COERCION); a WRONG echo is
+    refused by ``directive_content_binding_blockers``. Vocabulary legality
+    is checked here; consistency with the directive is the content
+    checker's job (an echo of legal-but-wrong values must be constructible
+    so the mismatch can be reported with its exact code).
+    """
 
     directive_id: str = Field(min_length=1)
     directive_hash: str = Field(min_length=1)
     environment_family: str = Field(min_length=1)
+    changed_axis: str = Field(min_length=1)
+    old_level: str = Field(min_length=1)
+    new_level: str = Field(min_length=1)
+    direction: str = Field(min_length=1)
+    experiment_control_role: str = Field(min_length=1)
+    held_constant_axes: Dict[str, str] = Field(default_factory=dict)
+    expected_next_signature: Dict[str, float] = Field(default_factory=dict)
     python_source: str = Field(min_length=1)
     reset_contract: str = Field(min_length=1)
     step_contract: str = Field(min_length=1)
@@ -157,6 +193,26 @@ class RealDirectiveBinding(CanonicalModel):
         if self.environment_family not in C.ENVIRONMENT_FAMILIES:
             raise ValueError(
                 f"UNKNOWN_ENVIRONMENT_FAMILY: {self.environment_family!r}")
+        if self.changed_axis not in C.MUTATION_AXES:
+            raise ValueError(
+                f"ILLEGAL_BINDING_AXIS: {self.changed_axis!r}")
+        if self.old_level not in OLD_LEVELS:
+            raise ValueError(
+                f"ILLEGAL_BINDING_OLD_LEVEL: {self.old_level!r}")
+        if self.new_level not in AXIS_LEVELS:
+            raise ValueError(
+                f"ILLEGAL_BINDING_NEW_LEVEL: {self.new_level!r}")
+        if self.direction not in DIRECTIONS:
+            raise ValueError(
+                f"ILLEGAL_BINDING_DIRECTION: {self.direction!r}")
+        if self.experiment_control_role not in EXPERIMENT_ROLES:
+            raise ValueError(
+                f"ILLEGAL_BINDING_EXPERIMENT_ROLE: "
+                f"{self.experiment_control_role!r}")
+        if not self.expected_next_signature:
+            raise ValueError(
+                "EMPTY_BINDING_EXPECTED_SIGNATURE: the coder must echo "
+                "the directive's predicted signature")
         return self
 
 
@@ -274,6 +330,115 @@ def build_real_env_coder_prompt(spec: CanonicalTaskSpec, *,
 
 def parse_real_env_coder(raw: str) -> RealEnvCoderOutput:
     return RealEnvCoderOutput.model_validate_json(raw)
+
+
+# ---------------------------------------------------------------------------
+# P0-4: strict per-directive content binding (spec vs echoed output)
+# ---------------------------------------------------------------------------
+def directive_content_binding_blockers(*,
+                                       spec: CanonicalTaskSpec,
+                                       directives: List[AxisDirective],
+                                       parsed: RealEnvCoderOutput
+                                       ) -> List[str]:
+    """Strict directive-to-artifact content binding: fail-closed reasons
+    ([] = bound exactly).
+
+    Every binding must echo its directive's content VERBATIM — id, hash,
+    family, window, changed-axis triple, held axes, predicted signature,
+    treatment/control role — and the batch hash must bind the exact
+    directive batch. Extra / missing bindings are rejected; duplicates are
+    refused by the output schema itself. Codes (audit-mandated):
+
+    * DIRECTIVE_BATCH_HASH_MISSING / TASK_SPEC_HASH_MISMATCH
+    * DIRECTIVE_BINDING_MISSING / DIRECTIVE_BINDING_EXTRA
+    * DIRECTIVE_SOURCE_WINDOW_MISMATCH
+    * DIRECTIVE_HASH_MISMATCH / FAMILY_BINDING_MISMATCH
+    * CHANGED_AXES_MISMATCH / HELD_AXES_MISMATCH
+    * EXPECTED_SIGNATURE_MISMATCH / EXPERIMENT_ROLE_MISMATCH
+    """
+    blockers: List[str] = []
+    recomputed_batch = canonical_sha256([d.model_dump() for d in directives])
+    if not parsed.directive_batch_hash:
+        blockers.append(
+            "DIRECTIVE_BATCH_HASH_MISSING: the parsed EnvCoder output "
+            "carries no directive_batch_hash — the batch binding is "
+            "mandatory, never defaulted")
+    elif parsed.directive_batch_hash != recomputed_batch:
+        blockers.append(
+            "TASK_SPEC_HASH_MISMATCH: parsed directive_batch_hash="
+            f"{parsed.directive_batch_hash!r} but the carried directive "
+            f"batch recomputes to {recomputed_batch!r} (spec binds "
+            f"{spec.directive_batch_hash!r})")
+
+    directive_by_id = {d.directive_id: d for d in directives}
+    binding_by_id = {b.directive_id: b for b in parsed.directive_bindings}
+    for did in sorted(set(directive_by_id) - set(binding_by_id)):
+        blockers.append(
+            f"DIRECTIVE_BINDING_MISSING: directive {did!r} has no binding "
+            "in the EnvCoder output")
+    for did in sorted(set(binding_by_id) - set(directive_by_id)):
+        blockers.append(
+            f"DIRECTIVE_BINDING_EXTRA: binding {did!r} does not correspond "
+            "to any directive in the spec batch")
+
+    for did in sorted(set(directive_by_id) & set(binding_by_id)):
+        directive = directive_by_id[did]
+        binding = binding_by_id[did]
+        if directive.source_window != spec.window:
+            blockers.append(
+                f"DIRECTIVE_SOURCE_WINDOW_MISMATCH: directive {did!r} is "
+                f"from window {directive.source_window} but the spec "
+                f"window is {spec.window}")
+        if binding.directive_hash != directive.directive_hash:
+            blockers.append(
+                f"DIRECTIVE_HASH_MISMATCH: binding {did!r} carries "
+                f"directive_hash={binding.directive_hash!r}, the board "
+                f"directive recomputes to {directive.directive_hash!r}")
+        if binding.environment_family != directive.environment_family:
+            blockers.append(
+                f"FAMILY_BINDING_MISMATCH: binding {did!r} claims family "
+                f"{binding.environment_family!r}, the directive belongs "
+                f"to {directive.environment_family!r}")
+        echoed_changed = (binding.changed_axis, binding.old_level,
+                          binding.new_level, binding.direction)
+        directive_changed = (directive.axis, directive.old_level,
+                             directive.new_level, directive.direction)
+        if echoed_changed != directive_changed:
+            blockers.append(
+                f"CHANGED_AXES_MISMATCH: binding {did!r} echoes "
+                f"{echoed_changed!r}, the directive is {directive_changed!r}")
+        if dict(binding.held_constant_axes) != dict(
+                directive.held_constant_axes):
+            blockers.append(
+                f"HELD_AXES_MISMATCH: binding {did!r} holds "
+                f"{dict(binding.held_constant_axes)!r}, the directive "
+                f"holds {dict(directive.held_constant_axes)!r}")
+        if canonical_sha256(dict(binding.expected_next_signature)) != \
+                canonical_sha256(dict(directive.expected_next_signature)):
+            blockers.append(
+                f"EXPECTED_SIGNATURE_MISMATCH: binding {did!r} echoes "
+                f"signature {dict(binding.expected_next_signature)!r}, "
+                "the directive predicts "
+                f"{dict(directive.expected_next_signature)!r}")
+        if binding.experiment_control_role != \
+                directive.experiment_control_role:
+            blockers.append(
+                f"EXPERIMENT_ROLE_MISMATCH: binding {did!r} echoes role "
+                f"{binding.experiment_control_role!r}, the directive is "
+                f"{directive.experiment_control_role!r}")
+    return blockers
+
+
+def assert_directive_content_binding(*,
+                                     spec: CanonicalTaskSpec,
+                                     directives: List[AxisDirective],
+                                     parsed: RealEnvCoderOutput) -> None:
+    """Fail closed on ANY strict content-binding violation."""
+    blockers = directive_content_binding_blockers(
+        spec=spec, directives=directives, parsed=parsed)
+    if blockers:
+        raise RealEnvCoderBlocked(
+            "DIRECTIVE_CONTENT_BINDING_MISMATCH: " + "; ".join(blockers[:8]))
 
 
 # ---------------------------------------------------------------------------
@@ -449,14 +614,13 @@ def execute_real_env_coder(*, window: int, plan_id: str,
                     f"ENVCODER_PLAN_MISMATCH: output plan_id="
                     f"{parsed.plan_id!r} but the spec plan_id is "
                     f"{plan_id!r}")
-            if spec.directive_batch_hash and parsed.directive_batch_hash \
-                    and parsed.directive_batch_hash \
-                    != spec.directive_batch_hash:
-                raise RealEnvCoderBlocked(
-                    "CONTENT_HASH_MISMATCH: RealEnvCoderOutput carried "
-                    f"directive_batch_hash={parsed.directive_batch_hash!r} "
-                    f"but the spec recomputes to "
-                    f"{spec.directive_batch_hash!r}")
+            #: P0-4: the strict per-directive content binding — every echo
+            #: (hash, family, window, changed/held axes, predicted
+            #: signature, role, batch hash) must match the board's
+            #: directives VERBATIM. Violations are repair-eligible
+            #: blockers; a mismatch is never silently accepted.
+            blockers.extend(directive_content_binding_blockers(
+                spec=spec, directives=directives, parsed=parsed))
             bound_ids = {b.directive_id for b in parsed.directive_bindings}
             spec_ids = {d.directive_id for d in directives}
             if bound_ids != spec_ids:
@@ -511,5 +675,6 @@ __all__ = [
     "CanonicalTaskSpec", "RealDirectiveBinding", "RealEnvCoderOutput",
     "RealDirectiveArtifact", "RealEnvCoderArtifact",
     "build_real_env_coder_prompt", "parse_real_env_coder",
+    "directive_content_binding_blockers", "assert_directive_content_binding",
     "verify_directive_artifact", "execute_real_env_coder",
 ]

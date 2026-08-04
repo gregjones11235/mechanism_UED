@@ -62,6 +62,8 @@ from d052.feedback_llm_ued.real_env_coder import (
     RealDirectiveBinding,
     RealEnvCoderArtifact,
     RealEnvCoderOutput,
+    assert_directive_content_binding,
+    directive_content_binding_blockers,
     execute_real_env_coder,
     verify_directive_artifact,
 )
@@ -156,6 +158,34 @@ def make_directives(window=1):
     ]
 
 
+def echo_binding(d, *, python_source=GOOD_MODULE_SOURCE, **overrides):
+    """One binding echoing its directive's content VERBATIM (the P0-4
+    strict content binding); tests tamper via ``overrides``."""
+    payload = dict(
+        directive_id=d.directive_id, directive_hash=d.directive_hash,
+        environment_family=d.environment_family,
+        changed_axis=d.axis, old_level=d.old_level, new_level=d.new_level,
+        direction=d.direction,
+        experiment_control_role=d.experiment_control_role,
+        held_constant_axes=dict(d.held_constant_axes),
+        expected_next_signature=dict(d.expected_next_signature),
+        python_source=python_source,
+        reset_contract="reset(seed)->state",
+        step_contract="step(state,action)->(state,reward,terminal,info)")
+    payload.update(overrides)
+    return RealDirectiveBinding(**payload)
+
+
+def reparse(chain, *, bindings=None, batch_hash=None):
+    """Rebuild the parsed output over (possibly tampered) bindings."""
+    return RealEnvCoderOutput(
+        window=chain["parsed"].window, plan_id=chain["parsed"].plan_id,
+        directive_bindings=list(bindings if bindings is not None
+                                else chain["parsed"].directive_bindings),
+        directive_batch_hash=(batch_hash if batch_hash is not None else
+                              chain["parsed"].directive_batch_hash))
+
+
 def build_chain(window=1, plan_id="plan-bind-01", directives=None):
     """A fully consistent spec + parsed output + PASSED source artifact."""
     directives = list(directives if directives is not None
@@ -163,13 +193,7 @@ def build_chain(window=1, plan_id="plan-bind-01", directives=None):
     spec = CanonicalTaskSpec(
         window=window, plan_id=plan_id,
         directives=[d.model_dump() for d in directives])
-    bindings = [RealDirectiveBinding(
-        directive_id=d.directive_id, directive_hash=d.directive_hash,
-        environment_family=d.environment_family,
-        python_source=GOOD_MODULE_SOURCE,
-        reset_contract="reset(seed)->state",
-        step_contract="step(state,action)->(state,reward,terminal,info)")
-        for d in directives]
+    bindings = [echo_binding(d) for d in directives]
     parsed = RealEnvCoderOutput(
         window=window, plan_id=plan_id, directive_bindings=bindings,
         directive_batch_hash=spec.directive_batch_hash)
@@ -500,18 +524,10 @@ class TestDeriveFailClosedLadder:
 
     def test_directive_hash_mismatch_rejected(self):
         chain = build_chain()
-        first = chain["parsed"].directive_bindings[0]
-        forged = RealDirectiveBinding(
-            directive_id=first.directive_id, directive_hash="f" * 64,
-            environment_family=first.environment_family,
-            python_source=first.python_source,
-            reset_contract=first.reset_contract,
-            step_contract=first.step_contract)
-        forged_parsed = RealEnvCoderOutput(
-            window=chain["parsed"].window, plan_id=chain["parsed"].plan_id,
-            directive_bindings=[forged] +
-            chain["parsed"].directive_bindings[1:],
-            directive_batch_hash=chain["parsed"].directive_batch_hash)
+        forged = echo_binding(chain["directives"][0], directive_hash="f" * 64)
+        forged_parsed = reparse(
+            chain, bindings=[forged] +
+            list(chain["parsed"].directive_bindings[1:]))
         with pytest.raises(
                 ExecutableArtifactBlocked,
                 match="EXECUTABLE_ARTIFACT_DIRECTIVE_HASH_MISMATCH"):
@@ -523,19 +539,11 @@ class TestDeriveFailClosedLadder:
 
     def test_family_mismatch_rejected(self):
         chain = build_chain()
-        first = chain["parsed"].directive_bindings[0]
-        lying = RealDirectiveBinding(
-            directive_id=first.directive_id,
-            directive_hash=first.directive_hash,
-            environment_family="visibility_family",
-            python_source=first.python_source,
-            reset_contract=first.reset_contract,
-            step_contract=first.step_contract)
-        lying_parsed = RealEnvCoderOutput(
-            window=chain["parsed"].window, plan_id=chain["parsed"].plan_id,
-            directive_bindings=[lying] +
-            chain["parsed"].directive_bindings[1:],
-            directive_batch_hash=chain["parsed"].directive_batch_hash)
+        lying = echo_binding(chain["directives"][0],
+                             environment_family="visibility_family")
+        lying_parsed = reparse(
+            chain, bindings=[lying] +
+            list(chain["parsed"].directive_bindings[1:]))
         with pytest.raises(ExecutableArtifactBlocked,
                            match="EXECUTABLE_ARTIFACT_FAMILY_MISMATCH"):
             derive_executable_artifacts(
@@ -571,6 +579,239 @@ class TestDeriveFailClosedLadder:
         chain = build_chain()
         with pytest.raises(ValueError):
             derive_ok(chain, observation_abi_hash="not-a-sha")
+
+
+# ---------------------------------------------------------------------------
+# P0-4: strict per-directive content binding (echo must match verbatim)
+# ---------------------------------------------------------------------------
+class TestDirectiveContentBinding:
+    def _blockers(self, chain, *, parsed=None):
+        return directive_content_binding_blockers(
+            spec=chain["spec"], directives=chain["directives"],
+            parsed=parsed if parsed is not None else chain["parsed"])
+
+    def _assert_code(self, chain, parsed, code):
+        blockers = self._blockers(chain, parsed=parsed)
+        assert any(code in b for b in blockers), blockers
+
+    def test_consistent_binding_has_no_blockers(self):
+        chain = build_chain()
+        assert self._blockers(chain) == []
+        #: the asserting wrapper passes silently as well
+        assert_directive_content_binding(
+            spec=chain["spec"], directives=chain["directives"],
+            parsed=chain["parsed"])
+
+    def test_missing_batch_hash_rejected(self):
+        chain = build_chain()
+        self._assert_code(chain, reparse(chain, batch_hash=""),
+                          "DIRECTIVE_BATCH_HASH_MISSING")
+
+    def test_task_spec_hash_mismatch_rejected(self):
+        chain = build_chain()
+        self._assert_code(chain, reparse(chain, batch_hash="ab" * 32),
+                          "TASK_SPEC_HASH_MISMATCH")
+
+    def test_missing_and_extra_bindings_rejected(self):
+        chain = build_chain()
+        missing = reparse(chain,
+                          bindings=[chain["parsed"].directive_bindings[0]])
+        self._assert_code(chain, missing,
+                          "DIRECTIVE_BINDING_MISSING: directive 'dir-bind-r'")
+        extra_directive = make_directive("dir-bind-x", family=FAM_T,
+                                         axis="threat_count")
+        extra = reparse(chain,
+                        bindings=list(chain["parsed"].directive_bindings)
+                        + [echo_binding(extra_directive)])
+        self._assert_code(chain, extra,
+                          "DIRECTIVE_BINDING_EXTRA: binding 'dir-bind-x'")
+
+    def test_source_window_mismatch_rejected(self):
+        #: directives from window 2 presented under a window-1 spec
+        chain = build_chain(window=1, directives=make_directives(window=2))
+        self._assert_code(chain, chain["parsed"],
+                          "DIRECTIVE_SOURCE_WINDOW_MISMATCH")
+
+    def test_directive_hash_mismatch_rejected(self):
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(chain["directives"][0],
+                                   directive_hash="f" * 64)]
+            + list(chain["parsed"].directive_bindings[1:]))
+        self._assert_code(chain, tampered,
+                          "DIRECTIVE_HASH_MISMATCH: binding 'dir-bind-t'")
+
+    def test_family_binding_mismatch_rejected(self):
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(chain["directives"][0],
+                                   environment_family="visibility_family")]
+            + list(chain["parsed"].directive_bindings[1:]))
+        self._assert_code(chain, tampered,
+                          "FAMILY_BINDING_MISMATCH: binding 'dir-bind-t'")
+
+    @pytest.mark.parametrize("override", [
+        dict(changed_axis="threat_count"),
+        dict(old_level="medium"),
+        dict(new_level="medium"),
+        dict(direction="decrease"),
+    ])
+    def test_changed_axes_mismatch_rejected(self, override):
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(chain["directives"][0], **override)]
+            + list(chain["parsed"].directive_bindings[1:]))
+        self._assert_code(chain, tampered,
+                          "CHANGED_AXES_MISMATCH: binding 'dir-bind-t'")
+
+    def test_held_axes_mismatch_rejected(self):
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(
+                chain["directives"][0],
+                held_constant_axes={"threat_count": "high"})]
+            + list(chain["parsed"].directive_bindings[1:]))
+        self._assert_code(chain, tampered,
+                          "HELD_AXES_MISMATCH: binding 'dir-bind-t'")
+
+    def test_expected_signature_mismatch_rejected(self):
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(
+                chain["directives"][0],
+                expected_next_signature={"student_success_rate": 0.55})]
+            + list(chain["parsed"].directive_bindings[1:]))
+        self._assert_code(chain, tampered,
+                          "EXPECTED_SIGNATURE_MISMATCH: binding 'dir-bind-t'")
+
+    def test_experiment_role_mismatch_rejected(self):
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(
+                chain["directives"][0],
+                experiment_control_role="control")]
+            + list(chain["parsed"].directive_bindings[1:]))
+        self._assert_code(chain, tampered,
+                          "EXPERIMENT_ROLE_MISMATCH: binding 'dir-bind-t'")
+
+    def test_duplicate_bindings_refused_by_schema(self):
+        chain = build_chain()
+        first = chain["parsed"].directive_bindings[0]
+        with pytest.raises(Exception) as exc_info:
+            reparse(chain, bindings=[first, echo_binding(
+                chain["directives"][0])])
+        assert "DUPLICATE_REAL_DIRECTIVE_BINDING" in str(exc_info.value)
+
+    def test_missing_echo_field_refused_by_schema(self):
+        d = make_directives()[0]
+        payload = dict(
+            directive_id=d.directive_id, directive_hash=d.directive_hash,
+            environment_family=d.environment_family,
+            #: changed_axis deliberately omitted
+            old_level=d.old_level, new_level=d.new_level,
+            direction=d.direction,
+            experiment_control_role=d.experiment_control_role,
+            held_constant_axes={}, expected_next_signature={"k": 0.1},
+            python_source=GOOD_MODULE_SOURCE,
+            reset_contract="reset(seed)->state",
+            step_contract="step(state,action)->4-tuple")
+        with pytest.raises(Exception):
+            RealDirectiveBinding(**payload)
+
+    @pytest.mark.parametrize("override, code", [
+        (dict(direction="sideways"), "ILLEGAL_BINDING_DIRECTION"),
+        (dict(experiment_control_role="observer"),
+         "ILLEGAL_BINDING_EXPERIMENT_ROLE"),
+        (dict(new_level="extreme"), "ILLEGAL_BINDING_NEW_LEVEL"),
+        (dict(old_level="extreme"), "ILLEGAL_BINDING_OLD_LEVEL"),
+        (dict(changed_axis="not_an_axis"), "ILLEGAL_BINDING_AXIS"),
+        (dict(expected_next_signature={}),
+         "EMPTY_BINDING_EXPECTED_SIGNATURE"),
+    ])
+    def test_illegal_echo_vocabulary_refused(self, override, code):
+        d = make_directives()[0]
+        with pytest.raises(Exception) as exc_info:
+            echo_binding(d, **override)
+        assert code in str(exc_info.value)
+
+
+class TestContentBindingExecution:
+    """P0-4 content violations are repair-eligible blockers inside the
+    bounded-repair loop; they are never silently accepted."""
+
+    def _backend(self, responses):
+        queue = list(responses)
+
+        def transport(role, prompt):
+            assert role == C.ROLE_ENV_CODER
+            return queue.pop(0)
+
+        return RealBackendAdapter(transport, backend_id=BACKEND_ID,
+                                  model_id=MODEL_ID, authorized=True)
+
+    def test_content_mismatch_repaired_then_success(self):
+        chain = build_chain(window=2, plan_id="plan-cb-repair")
+        lying = reparse(
+            chain,
+            bindings=[echo_binding(chain["directives"][0],
+                                   experiment_control_role="control")]
+            + list(chain["parsed"].directive_bindings[1:]))
+        backend = self._backend(
+            [lying.model_dump_json(), chain["parsed"].model_dump_json()])
+        artifact = execute_real_env_coder(
+            window=2, plan_id="plan-cb-repair",
+            directives=chain["directives"], backend=backend,
+            authorization=RealRuntimeAuthorization(
+                real_llm_backend=True, real_envcoder=True),
+            sequence=6)
+        assert artifact.n_calls == 2
+        assert artifact.repair_attempts == 1
+        assert artifact.overall_status == STATUS_PASSED
+
+    def test_content_mismatch_exhausts_repair_budget(self):
+        chain = build_chain(window=2, plan_id="plan-cb-exhaust")
+        lying = reparse(
+            chain,
+            bindings=[echo_binding(
+                chain["directives"][0],
+                expected_next_signature={"student_success_rate": 0.99})]
+            + list(chain["parsed"].directive_bindings[1:]))
+        raw = lying.model_dump_json()
+        backend = self._backend([raw, raw, raw])
+        with pytest.raises(RealEnvCoderBlocked,
+                           match="REAL_ENVCODER_REPAIR_BUDGET_EXHAUSTED"):
+            execute_real_env_coder(
+                window=2, plan_id="plan-cb-exhaust",
+                directives=chain["directives"], backend=backend,
+                authorization=RealRuntimeAuthorization(
+                    real_llm_backend=True, real_envcoder=True),
+                sequence=6)
+
+    def test_derive_second_gate_refuses_signature_tamper(self):
+        #: hash / coverage / family all pass; ONLY the echoed predicted
+        #: signature lies -> the derivation's second gate fails closed
+        chain = build_chain()
+        tampered = reparse(
+            chain,
+            bindings=[echo_binding(
+                chain["directives"][0],
+                expected_next_signature={"student_success_rate": 0.55})]
+            + list(chain["parsed"].directive_bindings[1:]))
+        with pytest.raises(
+                ExecutableArtifactBlocked,
+                match="EXECUTABLE_ARTIFACT_CONTENT_BINDING_MISMATCH.*"
+                      "EXPECTED_SIGNATURE_MISMATCH"):
+            derive_executable_artifacts(
+                spec=chain["spec"], parsed=tampered,
+                source_artifact=chain["source"],
+                directives=chain["directives"],
+                runtime_adapter_id=ADAPTER_ID, **ABI_HASHES)
 
 
 # ---------------------------------------------------------------------------
@@ -638,11 +879,8 @@ class TestRunSinkSeam:
         chain = build_chain(window=2, plan_id="plan-repair")
         broken = RealEnvCoderOutput(
             window=2, plan_id="plan-repair",
-            directive_bindings=[RealDirectiveBinding(
-                directive_id=d.directive_id, directive_hash=d.directive_hash,
-                environment_family=d.environment_family,
-                python_source=NO_STEP_MODULE_SOURCE,
-                reset_contract="reset(seed)->state",
+            directive_bindings=[echo_binding(
+                d, python_source=NO_STEP_MODULE_SOURCE,
                 step_contract="step(state,action)->4-tuple")
                 for d in chain["directives"]],
             directive_batch_hash=chain["spec"].directive_batch_hash)
@@ -679,11 +917,8 @@ class TestRunSinkSeam:
         chain = build_chain(window=2, plan_id="plan-exhaust")
         broken = RealEnvCoderOutput(
             window=2, plan_id="plan-exhaust",
-            directive_bindings=[RealDirectiveBinding(
-                directive_id=d.directive_id, directive_hash=d.directive_hash,
-                environment_family=d.environment_family,
-                python_source=NO_STEP_MODULE_SOURCE,
-                reset_contract="reset(seed)->state",
+            directive_bindings=[echo_binding(
+                d, python_source=NO_STEP_MODULE_SOURCE,
                 step_contract="step(state,action)->4-tuple")
                 for d in chain["directives"]],
             directive_batch_hash=chain["spec"].directive_batch_hash)

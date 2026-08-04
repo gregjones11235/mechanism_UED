@@ -35,8 +35,10 @@ from d052.feedback_llm_ued.real_env_coder import (
     CanonicalTaskSpec,
     RealEnvCoderArtifact,
     RealEnvCoderOutput,
+    assert_directive_content_binding,
 )
 from d052.feedback_llm_ued.axis_directive import AxisDirective
+from d052.feedback_llm_ued.env_coder import RealEnvCoderBlocked
 from d052.feedback_llm_ued.feedback_contracts import CandidateEnvironment
 from d052.schemas.common import CanonicalModel, is_sha256_hex
 
@@ -221,6 +223,18 @@ def derive_executable_artifacts(*,
                 f"claims family "
                 f"{binding_by_id[did].environment_family!r}, the directive "
                 f"belongs to {directive.environment_family!r}")
+
+    #: P0-4: the strict content binding is the SECOND gate every derived
+    #: artifact must pass (changed/held axes, predicted signature,
+    #: treatment/control role, window, batch hash — all verbatim). A run
+    #: that passed execution already satisfied it; derivation re-checks
+    #: fail-closed so no tampered re-derivation can slip through.
+    try:
+        assert_directive_content_binding(
+            spec=spec, directives=list(directives), parsed=parsed)
+    except RealEnvCoderBlocked as exc:
+        raise ExecutableArtifactBlocked(
+            f"EXECUTABLE_ARTIFACT_CONTENT_BINDING_MISMATCH: {exc}") from exc
 
     #: group the directives by family, preserving batch order
     by_family: Dict[str, List[AxisDirective]] = {}
