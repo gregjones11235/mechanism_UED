@@ -250,6 +250,14 @@ from .training_runtime import (
     runtime_binding_summary,
     verify_original_training_runtime,
 )
+from .optimizer_attestation import (
+    BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED,
+    OPTIMIZER_ATTESTATION_VERSION,
+    OptimizerUpdateAttestation,
+    attestation_fields,
+    mint_optimizer_update_attestation,
+    verify_optimizer_update_attestation,
+)
 from .anchor_manifest import (
     ANCHOR_SLOT_COUNT,
     BLOCKED_SHARED_ANCHOR_MANIFEST,
@@ -373,6 +381,9 @@ __all__ = [
     "BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME", "TRAINING_RUNTIME_VERSION",
     "OriginalTrainingRuntime", "mint_original_training_runtime",
     "runtime_binding_summary", "verify_original_training_runtime",
+    "BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED", "OPTIMIZER_ATTESTATION_VERSION",
+    "OptimizerUpdateAttestation", "attestation_fields",
+    "mint_optimizer_update_attestation", "verify_optimizer_update_attestation",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
     "AnchorDefinition", "AnchorManifest", "RetentionContract",

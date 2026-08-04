@@ -84,6 +84,13 @@ from .llm_contracts import (
     run_two_llm_production,
 )
 from .memory_modes import MemoryRestoreMode, MemoryRestoreRequest
+from .optimizer_attestation import (
+    BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED,
+    OPTIMIZER_ATTESTATION_VERSION,
+    attestation_fields,
+    mint_optimizer_update_attestation,
+    verify_optimizer_update_attestation,
+)
 from .provenance import DataSource
 from .search_statistics import (
     BranchOutcome,
@@ -357,6 +364,17 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     gates["ORIGINAL_TRAINING_RUNTIME_BOUND"] = bool(runtime_ok)
     if not runtime_ok:
         blockers.append(BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME)
+    # CC4 follow-up (P0-13): the optimizer-step attestation needs a
+    # mechanically measurable step baseline (loaded_state["global_step"]);
+    # without it the step increment would be self-reportable.
+    loaded = config.loaded_state
+    step_baseline = loaded.get("global_step", None) if isinstance(loaded, Mapping) else None
+    step_baseline_ok = (not isinstance(step_baseline, bool)
+                        and isinstance(step_baseline, int)
+                        and step_baseline >= 0)
+    gates["OPTIMIZER_STEP_BASELINE_MEASURABLE"] = bool(step_baseline_ok)
+    if not step_baseline_ok:
+        blockers.append(BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED)
     # CC4 follow-up (P0-11): every compiled distribution carries non-empty
     # taskparam_ranges (the compiler enforces it), so the mixed-start step
     # ALWAYS needs the injected TaskParams application surface — an unbound
@@ -419,6 +437,23 @@ def _measure_entry_facts(state: Any, terminal: bool) -> dict[str, Any]:
 def _params_sha256(params: Any) -> str:
     from dicode.student_adapters.checkpoint_codec import cc2_params_sha256
     return cc2_params_sha256(params)
+
+
+def _optimizer_step_before(config: E3WindowConfig) -> int:
+    """The mechanically measurable optimizer step baseline (P0-13).
+
+    Comes from the loaded full state (``loaded_state["global_step"]``) —
+    never from the update callable, so the attested increment
+    (before -> before+1) cannot be self-reported.
+    """
+    loaded = config.loaded_state
+    step = loaded.get("global_step", None) if isinstance(loaded, Mapping) else None
+    if isinstance(step, bool) or not isinstance(step, int) or step < 0:
+        raise ProductionBlockedError(
+            f"{BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED}: loaded_state.global_step "
+            f"must be a non-negative int to attest the optimizer step increment, "
+            f"got {step!r} (fail closed)")
+    return int(step)
 
 
 def _verify_window_memory_source(config: E3WindowConfig, student: Any,
@@ -1153,28 +1188,30 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     }
 
     # STEP 10 — EXACTLY ONE optimizer update from the SAME bound runtime.
+    # CC4 follow-up (P0-13): self-reported update_count / grad_norm values
+    # are NEVER read — only the "params" key is consumed.  The evidence of
+    # the single real update is the minted OptimizerUpdateAttestation,
+    # derived from pipeline-measured facts: before/after params hashes, the
+    # loaded-state step baseline (increment before -> before+1), structural
+    # finiteness and the digest of the exact batch that was updated.
     update_out = training_runtime.optimizer_update_fn(config.student_params, batch)
     if not isinstance(update_out, Mapping) or "params" not in update_out:
         raise ProductionBlockedError(
             "optimizer_update_fn must return a mapping containing 'params'")
-    if int(update_out.get("update_count", -1)) != 1:
-        raise ProductionBlockedError(
-            f"exactly one optimizer update is required, got "
-            f"update_count={update_out.get('update_count')!r}")
     new_params = update_out["params"]
     new_sha = _params_sha256(new_params)
-    if new_sha == params_sha:
-        raise ProductionBlockedError(
-            "optimizer update left params bit-identical (no real update happened)")
-    grad_norm = float(update_out.get("grad_norm", float("nan")))
-    if not math.isfinite(grad_norm):
-        raise ProductionBlockedError(f"grad_norm is not finite: {grad_norm}")
+    attestation = mint_optimizer_update_attestation(
+        params_sha256_before=params_sha,
+        params_sha256_after=new_sha,
+        params_after=new_params,
+        optimizer_step_before=_optimizer_step_before(config),
+        batch=batch,
+    )
+    verify_optimizer_update_attestation(attestation)
     report["real_one_update_executed"] = True
     steps["STEP10_EXACTLY_ONE_OPTIMIZER_UPDATE"] = {
-        "update_count": 1,
-        "params_sha256_before": params_sha,
-        "params_sha256_after": new_sha,
-        "grad_norm": grad_norm,
+        "attestation": attestation_fields(attestation),
+        "attestation_version": OPTIMIZER_ATTESTATION_VERSION,
         "runtime_hash": training_runtime.runtime_hash,
     }
 
@@ -1185,7 +1222,9 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     ckpt_path = student.save_full_state(
         str(os.path.join(ckpt_dir, "e3_window_checkpoint")),
         {"params": new_params,
-         "global_step": int(update_out.get("global_step", 1))},
+         # CC4 follow-up (P0-13): the saved step is the ATTESTED increment,
+         # never a value reported by the update callable.
+         "global_step": int(attestation.optimizer_step_after)},
         {"schema": E3_WINDOW_SCHEMA, "run_id": config.run_id,
          "memory_mode": str(config.memory_mode)})
     reloaded = student.restore_full_state(str(ckpt_path))
@@ -1221,7 +1260,9 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     finite = all(bool(np.isfinite(np.asarray(leaf, dtype=np.float64)).all())
                  for leaf in leaves if np.asarray(leaf).size > 0
                  and np.issubdtype(np.asarray(leaf).dtype, np.number))
-    scalar_ok = math.isfinite(loss_float) and math.isfinite(grad_norm)
+    # CC4 follow-up (P0-13): grad_norm is never self-reported; finiteness of
+    # the updated params is attested structurally in STEP10.
+    scalar_ok = math.isfinite(loss_float)
     steps["STEP13_FINITE_CHECK"] = {
         "params_finite": bool(finite),
         "scalars_finite": bool(scalar_ok),
