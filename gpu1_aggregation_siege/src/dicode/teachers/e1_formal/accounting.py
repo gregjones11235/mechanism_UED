@@ -11,9 +11,11 @@ Counting rules (supervisor gate G5):
 * K1 — EnvCoder calls counted per ACTUAL UNIQUE artifact
   (artifact_id = spec x variant); duplicate productions of the same
   artifact are never double-counted;
-* F1 — repair calls (re-invocations after a gate failure), counted
-  SEPARATELY from K1. This round is single-pass (F1 == 0) but the
-  counter slot exists and never mixes with K1.
+* F1 — repair calls (re-invocations after a validation failure),
+  counted SEPARATELY from K1 and never mixed with it. Round-3: F1 is
+  the REAL bounded count — ``envcoder.run_envcoder_with_repair``
+  records every repair call through ``record_repair_call``, bounded by
+  ``teacher.envcoder.max_repairs`` (hard ceiling 2) per template.
 
 No fixed per-window total is claimed anywhere: board calls belong to
 windows, EnvCoder calls belong to artifacts.

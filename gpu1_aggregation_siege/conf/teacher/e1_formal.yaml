@@ -84,11 +84,15 @@ teacher:
 
   # Selection knobs (mechanical determinism, explicitly pinned — not
   # scientific defaults). k must equal the 12 dynamic slots; seed is the
-  # audit-date determinism pin for this branch.
+  # audit-date determinism pin for this branch. family_cap (round-3
+  # P0-5) bounds how many of the k slots one intervention family may
+  # take in the criterion-wise selector (1..k; the formal selector
+  # itself REQUIRES it).
   selection:
     critic_policy: hard_veto
     k: 12
     seed: 20260803
+    family_cap: 3
 
   # 12 dynamic + 4 standard-reset anchors (original_craftax ALWAYS last;
   # beta=1/4, s=2/5 are pinned rationals inside layout.py).
@@ -103,7 +107,19 @@ teacher:
   # EnvCoder prompt whitelist input. The EnvCoder is template-keyed
   # (one call per unique family template), so seeds enter in FIXED
   # order — the envelope is variant-independent by construction.
+  #
+  # Round-3 P0-4 bounded repair scope: max_repairs is the per-template
+  # repair-call bound (F1), hard-capped at 2 (values outside [0, 2]
+  # fail closed). backend selects the staged validation surface:
+  # `replay` = SYNTAX + GUARDS + STRUCTURE (stdlib-AST entry-surface
+  # check; craftax import/reset/step honestly NOT executed — craftax is
+  # absent from the audit venv); `mock` = SYNTAX + GUARDS only and is
+  # an explicitly-authorized ablation opt-in, never the production
+  # default; `real` fails closed as unauthorized this round (it never
+  # degrades silently).
   envcoder:
+    max_repairs: 2
+    backend: replay
     seed_examples:
       - task_id: task_1
         description: "collect coal near spawn"

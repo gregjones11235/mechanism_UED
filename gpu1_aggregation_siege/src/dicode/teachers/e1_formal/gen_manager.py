@@ -68,10 +68,15 @@ stored snapshot invalidates REUSE fail-closed.
 
 This module imports NO jax/craftax, performs NO network I/O and NO
 file I/O (the anchor manifest and frozen manifest are injected as
-mappings by the caller). ``check_compilation`` is a stdlib syntax-only
-compile plus deterministic output guards this round — craftax is not
-installed in the audit venv, so import/reset/step semantics are NOT
-validated; ``status_report`` says so explicitly.
+mappings by the caller). The LEGACY duck ``check_compilation`` stays a
+stdlib syntax-only compile plus deterministic output guards. The
+round-3 evolve path validates EnvCoder artifacts through the staged
+``envcoder_backends`` surface (ReplayBackend: SYNTAX + GUARDS +
+STRUCTURE, a stdlib-AST entry-surface check) with a BOUNDED repair
+loop (``envcoder.run_envcoder_with_repair``; F1 counts the repair
+calls) — craftax is still NOT installed in the audit venv, so
+import/reset/step semantics are NOT validated; ``status_report`` says
+so explicitly.
 """
 from __future__ import annotations
 
@@ -81,16 +86,23 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..static_llm.guards import raise_if_forbidden, scan_text
 from . import anchor_manifest as AM
+from . import envcoder_backends as EB
 from . import eval_adapter as EA
 from . import layout
 from . import metrics as MT
 from . import selector
+from . import shared_runtime_seam as SRS
 from .accounting import LLMCallLedger
 from .archive_view import ArchiveView, consume_archive_snapshot, empty_archive_view
 from .board import WINDOW_STATUS_COMPLETE
 from .canonical import canonical_sha256
 from .controller import run_review_cycle
-from .envcoder import EnvCoderError, run_envcoder
+from .envcoder import (
+    ENVCODER_REPAIR_PROMPT_VERSION,
+    MAX_ENVCODER_REPAIRS,
+    EnvCoderError,
+    run_envcoder_with_repair,
+)
 from .evidence import build_evidence_snapshot
 from .flags import parse_flags
 from .gate_signals import (
@@ -239,12 +251,17 @@ def _validate_dual_probe(raw: Any, ctx: str) -> Dict[str, str]:
             )
     return {name: raw[name] for name in _DUAL_PROBE_FIELDS}
 
-#: honest environment-compilation note for this round
+#: honest environment-compilation note for the LEGACY duck surface
 ENVCODER_CHECK_NOTE = (
     "stdlib-syntax-only compile + deterministic guards; craftax "
     "import/reset/step semantics NOT validated this round (craftax "
     "absent from the audit venv)"
 )
+
+#: round-3 P0-4: bounded EnvCoder repair — ``teacher.envcoder.max_repairs``
+#: absent => 2 (the supervisor-sanctioned <= 2 hard validations per
+#: template); present values are validated within [0, MAX_ENVCODER_REPAIRS]
+DEFAULT_MAX_REPAIRS = 2
 
 
 class GenManagerError(E1SchemaError):
@@ -443,6 +460,22 @@ class E1FormalGenManager:
                 GEN_MANAGER_BAD_TYPE,
                 f"{ctx}.selection: seed must be an int, got {seed!r}",
             )
+        # round-3 P0-5: per-family cap for the criterion-wise selector.
+        # Optional at teacher init (the formal selector itself REQUIRES
+        # it); when present it must be an int within [1, k].
+        family_cap = selection.get("family_cap")
+        if family_cap is not None and (
+            isinstance(family_cap, bool)
+            or not isinstance(family_cap, int)
+            or family_cap < 1
+            or family_cap > k
+        ):
+            raise GenManagerError(
+                GEN_MANAGER_OUT_OF_RANGE,
+                f"{ctx}.selection: family_cap must be an int within "
+                f"[1, k={k}], got {family_cap!r}",
+            )
+        self._family_cap = family_cap
         self._critic_policy = critic_policy
         self._selection_k = k
         self._selection_seed = seed
@@ -463,6 +496,57 @@ class E1FormalGenManager:
         envcoder_block = _require_block(teacher, "envcoder", ctx)
         self._seed_examples = _consume_seed_examples(
             envcoder_block.get("seed_examples"), f"{ctx}.envcoder"
+        )
+
+        # ---- round-3 P0-4: bounded repair scope + validation backend ----
+        # max_repairs absent => 2 (<= 2 hard validations per template);
+        # present values must be ints within [0, MAX_ENVCODER_REPAIRS]
+        # (bools rejected). The F1 ledger counter is bounded by this.
+        max_repairs = envcoder_block.get("max_repairs")
+        if max_repairs is None:
+            max_repairs = DEFAULT_MAX_REPAIRS
+        if (
+            isinstance(max_repairs, bool)
+            or not isinstance(max_repairs, int)
+            or max_repairs < 0
+            or max_repairs > MAX_ENVCODER_REPAIRS
+        ):
+            raise GenManagerError(
+                GEN_MANAGER_OUT_OF_RANGE,
+                f"{ctx}.envcoder: max_repairs must be an int within "
+                f"[0, {MAX_ENVCODER_REPAIRS}], got {max_repairs!r}",
+            )
+        self._max_repairs = max_repairs
+        # backend: replay (SYNTAX+GUARDS+STRUCTURE) is the honest
+        # production default; mock is an explicitly-authorized
+        # ablation opt-in; real stays unauthorized this round
+        # (fail-closed, never a silent downgrade)
+        backend_name = envcoder_block.get("backend")
+        if backend_name is None:
+            backend_name = EB.BACKEND_REPLAY
+        if not isinstance(backend_name, str) or backend_name not in (
+            EB.BACKEND_MOCK,
+            EB.BACKEND_REPLAY,
+            EB.BACKEND_REAL,
+        ):
+            raise GenManagerError(
+                GEN_MANAGER_OUT_OF_RANGE,
+                f"{ctx}.envcoder: backend must be one of "
+                f"{[EB.BACKEND_MOCK, EB.BACKEND_REPLAY, EB.BACKEND_REAL]}, "
+                f"got {backend_name!r}",
+            )
+        if backend_name == EB.BACKEND_REAL:
+            raise GenManagerError(
+                GEN_MANAGER_OUT_OF_RANGE,
+                f"{ctx}.envcoder: backend {EB.BACKEND_REAL!r} is "
+                "unauthorized this round (craftax runtime absent); the "
+                "real backend never degrades silently",
+            )
+        self._envcoder_backend_name = backend_name
+        self._envcoder_backend = (
+            EB.MockBackend()
+            if backend_name == EB.BACKEND_MOCK
+            else EB.ReplayBackend()
         )
 
         # ---- replay identity --------------------------------------------
@@ -726,8 +810,14 @@ class E1FormalGenManager:
 
         # P0-2: ONE EnvCoder call per UNIQUE template (K1 counts
         # templates); every variant of a template shares its artifact.
+        # Round-3 P0-4: the primary call plus a BOUNDED repair loop run
+        # through the staged validation backend (ReplayBackend:
+        # SYNTAX + GUARDS + STRUCTURE); F1 counts the repair calls per
+        # template. Exhaustion or input violations fail the whole
+        # template closed (every variant becomes a failed worker).
         template_artifacts: Dict[str, Any] = {}
         template_outcomes: Dict[str, Tuple[bool, str]] = {}
+        template_repairs: Dict[str, Tuple[Any, ...]] = {}
         for template in compile_result.templates:
             representative = next(
                 spec
@@ -735,28 +825,46 @@ class E1FormalGenManager:
                 if spec.template_hash == template.template_hash
             )
             try:
-                artifact = run_envcoder(
+                artifact, repairs = run_envcoder_with_repair(
                     self._llm,
                     spec=representative,
                     seed_examples=self._seed_examples,
+                    backend=self._envcoder_backend,
+                    max_repairs=self._max_repairs,
                     ledger=self._ledger,
                     window_id=window_id,
                 )
             except EnvCoderError as e:
-                # parse/guard failure: the whole template (all its
-                # variants) is non-compiled; honest per-template record
+                # parse/guard/repair-exhaustion failure: the whole
+                # template (all its variants) is non-compiled; honest
+                # per-template record. The bounded repair records ride
+                # on the exhaustion exception (``e.records``) when any
+                # repair attempt was made.
                 template_outcomes[template.template_hash] = (False, e.code)
+                template_repairs[template.template_hash] = getattr(
+                    e, "records", ()
+                )
                 continue
-            ok, note = self._env_generator.check_compilation(artifact.env_code)
+            # the staged backend already validated the artifact
+            # (passed => every capability stage ran clean); the success
+            # record carries the honest stages_run/stages_blocked scope
             template_artifacts[template.template_hash] = artifact
-            template_outcomes[template.template_hash] = (ok, note)
+            template_outcomes[template.template_hash] = (True, "")
+            template_repairs[template.template_hash] = repairs
 
         workers: List[Dict[str, Any]] = []
         for spec in compile_result.specs:
             if spec.template_hash not in template_artifacts:
                 _ok, failure_note = template_outcomes[spec.template_hash]
                 workers.append(
-                    self._failed_worker(window_id, spec, failure_note)
+                    self._failed_worker(
+                        window_id,
+                        spec,
+                        failure_note,
+                        repairs_count=len(
+                            template_repairs.get(spec.template_hash, ())
+                        ),
+                    )
                 )
                 continue
             artifact = template_artifacts[spec.template_hash]
@@ -783,6 +891,27 @@ class E1FormalGenManager:
                         "compiled": ok,
                         "compile_note": note,
                         "envcoder_check": ENVCODER_CHECK_NOTE,
+                        # round-3 P0-4: the bounded repair record (F1)
+                        # and the staged validation scope that actually
+                        # ran (honest about the blocked stages)
+                        "repairs": [
+                            asdict(record)
+                            for record in template_repairs[
+                                spec.template_hash
+                            ]
+                        ],
+                        "validation": {
+                            "backend": self._envcoder_backend.name,
+                            "stages_run": list(
+                                self._envcoder_backend.capabilities
+                            ),
+                            "stages_blocked": [
+                                list(pair)
+                                for pair in (
+                                    self._envcoder_backend.stages_blocked
+                                )
+                            ],
+                        },
                     },
                 }
             )
@@ -1869,6 +1998,33 @@ class E1FormalGenManager:
             "llm_accounting": counts,
             "blocked_codes": self.current_blocked_codes(),
             "envcoder_check_scope": ENVCODER_CHECK_NOTE,
+            # round-3 P0-4: the bounded EnvCoder repair scope in force
+            # on the evolve path (legacy duck scope stays above)
+            "envcoder_repair_scope": {
+                "backend": self._envcoder_backend_name,
+                "max_repairs": self._max_repairs,
+                "max_repairs_bound": MAX_ENVCODER_REPAIRS,
+                "repair_prompt_version": ENVCODER_REPAIR_PROMPT_VERSION,
+                "stages_run": list(self._envcoder_backend.capabilities),
+                "stages_blocked": [
+                    list(pair)
+                    for pair in self._envcoder_backend.stages_blocked
+                ],
+            },
+            # round-3 P0-5: the shared runtime seam's honest
+            # per-contract resolution state (this round: every contract
+            # unbound — the seam only resolves; it never constructs,
+            # mints or disguises any shared identity)
+            "shared_runtime": {
+                contract: {
+                    "bound": resolution.bound,
+                    "code": resolution.code,
+                    "detail": resolution.detail,
+                }
+                for contract, resolution in (
+                    SRS.resolve_all_shared_runtime().items()
+                )
+            },
             "disclaimers": [
                 "E1_FORMAL_PLAN_ALIGNED means engineering alignment only, "
                 "not a real closed loop",
@@ -1896,7 +2052,19 @@ class E1FormalGenManager:
     # _process_worker_results: task_id / compiled / code / reasoning,
     # plus the legacy aliases generated_task_id / code_string since C11)
     # ------------------------------------------------------------------
-    def _failed_worker(self, window_id: str, spec: Any, code: str) -> Dict[str, Any]:
+    def _failed_worker(
+        self,
+        window_id: str,
+        spec: Any,
+        code: str,
+        repairs_count: int = 0,
+    ) -> Dict[str, Any]:
+        # round-3 P0-4: the note states the BOUNDED repair outcome
+        # honestly (F1 = the actual repair-call count for the template)
+        if repairs_count > 0:
+            note = f"EnvCoder failed after bounded repair (F1={repairs_count})"
+        else:
+            note = "EnvCoder failed before any repair attempt (F1=0)"
         return {
             "task_id": spec.spec_id,
             "generated_task_id": spec.spec_id,
@@ -1908,10 +2076,13 @@ class E1FormalGenManager:
                 "reuse": False,
                 "artifact_id": spec.artifact_id,
                 "spec_hash": spec.spec_hash,
+                "template_hash": spec.template_hash,
+                "template_artifact_id": spec.template_artifact_id,
                 "window_id": window_id,
                 "compiled": False,
                 "envcoder_failed_code": code,
-                "note": "single-pass EnvCoder failure; NO repair (F1=0)",
+                "repairs_count": repairs_count,
+                "note": note,
             },
         }
 

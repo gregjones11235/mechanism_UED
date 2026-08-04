@@ -17,13 +17,25 @@ Nothing in the blocked/skipped path ever stamps the
 evaluations that actually ran. This module performs NO file I/O, NO
 network I/O and NO rollout of any kind this round; it is pure gate
 logic plus an honest unimplemented-real-probe marker.
+
+Round-3 P0-5 adds the UNIFIED entry ``evaluate_candidate``: it
+validates its arguments fail-closed, then resolves the shared runtime
+contracts through ``e1_formal.shared_runtime_seam`` and blocks honestly
+while ANY contract is unbound (this round: all of them — the seam only
+RESOLVES, it never constructs, mints or disguises shared identities).
+The legacy ``evaluate_candidates_with_reference`` gate order is
+unchanged.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from dicode.teachers.e1_formal.reference_contract import (
     ReferenceIdentityContract,
+)
+from dicode.teachers.e1_formal.shared_runtime_seam import (
+    BLOCKED_WAITING_SHARED_RUNTIME,
+    resolve_all_shared_runtime,
 )
 
 # fail-closed seam codes (greppable)
@@ -36,6 +48,8 @@ EVAL_BLOCKED_REFERENCE_CONTRACT_BAD_TYPE = (
 EVAL_SEAM_SKIPPED_NO_STUDENT_ADAPTER = "EVAL_SEAM_SKIPPED_NO_STUDENT_ADAPTER"
 EVAL_DISABLED_BY_CONFIG = "EVAL_DISABLED_BY_CONFIG"
 EVAL_BAD_CANDIDATE_SET = "EVAL_BAD_CANDIDATE_SET"
+#: round-3 unified entry: fail-closed argument violation
+EVAL_BAD_ARGUMENT = "EVAL_BAD_ARGUMENT"
 
 #: provenance stamp for evaluations that ACTUALLY ran (never stamped
 #: on blocked/skipped results)
@@ -185,4 +199,105 @@ def evaluate_candidates_with_reference(
         "exists this round and no substitute is provided: this "
         "branch is reached only when G1 is frozen, adapter states "
         "exist and the seam is enabled — all false this round."
+    )
+
+
+def evaluate_candidate(
+    executable_candidate: Any,
+    student_adapter: Any,
+    reference_adapter: Any,
+    frozen_seed_bank: Any,
+    reset_protocol: Any,
+    episode_budget: Any,
+) -> Dict[str, Any]:
+    """UNIFIED candidate-evaluation entry (round-3 P0-5).
+
+    Fail-closed argument validation FIRST, then shared-runtime
+    contract resolution via ``e1_formal.shared_runtime_seam``:
+
+    * while ANY shared contract (Student/Reference identities and
+      adapters, anchor manifest, formal asset registry, candidate
+      probe result, full-state checkpoint) is UNBOUND — this round:
+      every one of them, since ``dicode.shared_runtime`` does not
+      exist yet — the result is an honest blocked record
+      (``evaluated=False``, NO ``CANDIDATE_EVALUATION`` stamp, no
+      I/O, no rollouts, nothing minted or disguised); the reason
+      lists EVERY unbound contract;
+    * the after-bound path (real immutable probe results produced
+      ONLY through the shared adapters) raises NotImplementedError —
+      deliberately NOT stubbed, because a stub could be mistaken for
+      real evidence.
+
+    ``student_adapter`` / ``reference_adapter`` are consumed only by
+    that future path; they are never read while any contract is
+    unbound.
+    """
+    del student_adapter, reference_adapter  # consumed only after binding
+    ctx = "evaluation.evaluate_candidate"
+
+    # ---- fail-closed argument validation --------------------------------
+    if not isinstance(executable_candidate, Mapping):
+        raise CandidateEvaluationError(
+            EVAL_BAD_ARGUMENT,
+            f"{ctx}: executable_candidate must be a mapping, got "
+            f"{type(executable_candidate).__name__}",
+        )
+    for field in ("task_id", "code"):
+        value = executable_candidate.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise CandidateEvaluationError(
+                EVAL_BAD_ARGUMENT,
+                f"{ctx}: executable_candidate needs a non-empty "
+                f"{field!r}",
+            )
+    task_id = executable_candidate["task_id"].strip()
+    if not isinstance(reset_protocol, str) or not reset_protocol.strip():
+        raise CandidateEvaluationError(
+            EVAL_BAD_ARGUMENT,
+            f"{ctx}: reset_protocol must be a non-empty str, got "
+            f"{reset_protocol!r}",
+        )
+    if (
+        isinstance(episode_budget, bool)
+        or not isinstance(episode_budget, int)
+        or episode_budget < 1
+    ):
+        raise CandidateEvaluationError(
+            EVAL_BAD_ARGUMENT,
+            f"{ctx}: episode_budget must be an int >= 1 (no bools), "
+            f"got {episode_budget!r}",
+        )
+    if not isinstance(frozen_seed_bank, Mapping):
+        raise CandidateEvaluationError(
+            EVAL_BAD_ARGUMENT,
+            f"{ctx}: frozen_seed_bank must be a mapping, got "
+            f"{type(frozen_seed_bank).__name__}",
+        )
+
+    # ---- shared runtime contract resolution (resolve only; NEVER
+    # construct, mint or disguise any shared identity here) -------------
+    resolutions = resolve_all_shared_runtime()
+    unbound = sorted(
+        contract
+        for contract, resolution in resolutions.items()
+        if not resolution.bound
+    )
+    if unbound:
+        return _blocked(
+            BLOCKED_WAITING_SHARED_RUNTIME,
+            f"{ctx}: shared runtime contracts unbound: {unbound}; the "
+            "unified entry only RESOLVES shared contracts — it never "
+            "constructs or fabricates them. Each unbound contract "
+            "carries its own BLOCKED_WAITING_SHARED_RUNTIME_<CONTRACT> "
+            "code in the seam resolution.",
+            (task_id,),
+            ["shared_runtime_resolution"],
+        )
+
+    # ---- after-bound path (unreachable this round; NEVER stubbed) -----
+    raise NotImplementedError(
+        f"{ctx}: every shared runtime contract is bound, but the real "
+        "dual-probe rollout through the shared adapters is a future "
+        "round's surface; it is deliberately not stubbed (no "
+        "fabricated probe results)."
     )

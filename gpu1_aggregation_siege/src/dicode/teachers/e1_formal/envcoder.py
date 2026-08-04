@@ -23,14 +23,18 @@ verdicts, evidence) can enter the prompt: the builder's signature
 accepts no board/window objects at all, and sentinel tests pin this.
 
 Discipline:
-* compilation outcomes are never fed back into any LLM;
-* the call is accounted per UNIQUE template artifact (K1) via the
-  ledger.
+* validation outcomes are never fed back into any LLM EXCEPT through
+  the BOUNDED whitelist-safe repair prompt
+  (``run_envcoder_with_repair``): contract text + template rendering +
+  the reported validation error, nothing else;
+* the primary call is accounted per UNIQUE template artifact (K1) via
+  the ledger; repair calls are accounted separately (F1) and bounded
+  by ``max_repairs`` (never unbounded, never silent acceptance).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from ..static_llm.guards import raise_if_forbidden
 from .canonical import canonical_sha256
@@ -41,7 +45,7 @@ from .manifest import (
     ENVCODER_PROMPT_VERSION,
     ENVCODER_ROLE,
 )
-from .schemas import E1SchemaError
+from .schemas import E1SchemaError, SchemaError
 from .task_specs import TaskSpec
 
 ENV_CONTRACT_TEXT = (
@@ -51,6 +55,19 @@ ENV_CONTRACT_TEXT = (
     "and never modify Student or Reference state. Output exactly one "
     "JSON object with fields 'artifact_id' and 'env_code'."
 )
+
+#: round-3 P0-4: bounded repair protocol (replay-key identity)
+ENVCODER_REPAIR_PROMPT_VERSION = "e1-envcoder-repair-prompt-v1"
+
+#: hard upper bound for ``max_repairs`` (supervisor-sanctioned range
+#: 0..2; the teacher config ``teacher.envcoder.max_repairs`` selects
+#: within it, absent => 2, i.e. <= 2 hard validations per template)
+MAX_ENVCODER_REPAIRS = 2
+
+# fail-closed repair codes (greppable)
+ENVCODER_REPAIR_EXHAUSTED = "ENVCODER_REPAIR_EXHAUSTED"
+ENVCODER_REPAIR_BAD_TYPE = "ENVCODER_REPAIR_BAD_TYPE"
+ENVCODER_REPAIR_OUT_OF_RANGE = "ENVCODER_REPAIR_OUT_OF_RANGE"
 
 
 class EnvCoderError(E1SchemaError):
@@ -74,6 +91,22 @@ class EnvCoderArtifact:
     artifact_id: str  # == template_artifact_id of the template
     env_code: str
     prompt_envelope_hash: str
+
+
+@dataclass(frozen=True)
+class RepairRecord:
+    """Audit record of ONE bounded repair attempt (round-3 P0-4).
+
+    ``repaired_artifact_hash`` is "" when the repair reply itself
+    failed to parse (no artifact was produced by that attempt).
+    """
+
+    retry_index: int
+    previous_artifact_hash: str
+    validation_error: str
+    reflection_prompt_hash: str
+    response_hash: str
+    repaired_artifact_hash: str
 
 
 # ---------------------------------------------------------------------------
@@ -308,3 +341,293 @@ def run_envcoder(
         env_code=artifact.env_code,
         prompt_envelope_hash=envelope_hash,
     )
+
+
+# ---------------------------------------------------------------------------
+# Bounded repair protocol (round-3 P0-4; F1 gets its runtime caller)
+# ---------------------------------------------------------------------------
+def previous_artifact_hash_for_code(env_code: str) -> str:
+    """Content identity of a PARSED artifact (validation-failure chain)."""
+    return canonical_sha256({"env_code": env_code})
+
+
+def previous_artifact_hash_for_failure(spec: TaskSpec, error: SchemaError) -> str:
+    """Deterministic identity of a failed ATTEMPT that produced no
+    parseable artifact (parse/guard failure chain)."""
+    return canonical_sha256(
+        {
+            "template_hash": spec.template_hash,
+            "envcoder_error_code": getattr(error, "code", ""),
+            "envcoder_error": str(error),
+        }
+    )
+
+
+def build_repair_prompt(
+    spec: TaskSpec,
+    *,
+    previous_artifact_hash: str,
+    validation_error: str,
+    retry_index: int,
+) -> Tuple[str, str]:
+    """WHITELIST-SAFE repair prompt; returns (system_prompt, user_prompt).
+
+    Admissible inputs are EXACTLY: the fixed environment contract text,
+    the canonical template rendering, the previous artifact hash, the
+    reported validation error and the retry index. Board content,
+    evidence facts, seeds and any other role output NEVER enter a
+    repair prompt.
+    """
+    if not isinstance(spec, TaskSpec):
+        raise EnvCoderError(
+            ENVCODER_REPAIR_BAD_TYPE,
+            f"repair prompt requires a TaskSpec, got {type(spec).__name__}",
+        )
+    if not isinstance(previous_artifact_hash, str) or not previous_artifact_hash:
+        raise EnvCoderError(
+            ENVCODER_REPAIR_BAD_TYPE,
+            "repair prompt requires a non-empty previous_artifact_hash",
+        )
+    if not isinstance(validation_error, str) or not validation_error.strip():
+        raise EnvCoderError(
+            ENVCODER_REPAIR_BAD_TYPE,
+            "repair prompt requires a non-empty validation_error",
+        )
+    if (
+        isinstance(retry_index, bool)
+        or not isinstance(retry_index, int)
+        or retry_index < 1
+    ):
+        raise EnvCoderError(
+            ENVCODER_REPAIR_BAD_TYPE,
+            f"repair prompt retry_index must be an int >= 1, got {retry_index!r}",
+        )
+    ctx = f"envcoder repair {spec.template_artifact_id} retry {retry_index}"
+    # guard-scan the reflected error text BEFORE it re-enters any prompt
+    raise_if_forbidden(validation_error, ctx)
+    user_prompt = (
+        f"{ENV_CONTRACT_TEXT}\n"
+        f"{render_template_for_prompt(spec)}\n"
+        f"REPAIR_ATTEMPT retry_index={retry_index}\n"
+        f"previous_artifact_hash={previous_artifact_hash}\n"
+        f"VALIDATION_ERROR: {validation_error}\n"
+        f"Produce the env-code artifact {spec.template_artifact_id}."
+    )
+    system_prompt = (
+        "You are the independent EnvCoder of the E1 teacher, repair "
+        "pass. You repair the previously produced environment task "
+        "code using ONLY the environment contract, the canonical task "
+        "template and the reported validation error. You never see "
+        "review-board content."
+    )
+    return system_prompt, user_prompt
+
+
+def build_repair_envelope_hash(
+    spec: TaskSpec,
+    *,
+    previous_artifact_hash: str,
+    validation_error: str,
+    retry_index: int,
+) -> str:
+    """Canonical hash of the full repair prompt envelope (replay identity)."""
+    system_prompt, user_prompt = build_repair_prompt(
+        spec,
+        previous_artifact_hash=previous_artifact_hash,
+        validation_error=validation_error,
+        retry_index=retry_index,
+    )
+    return canonical_sha256(
+        {
+            "role": ENVCODER_ROLE,
+            "prompt_version": ENVCODER_REPAIR_PROMPT_VERSION,
+            "schema_version": ENVCODER_OUTPUT_SCHEMA_VERSION,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "template_hash": spec.template_hash,
+            "previous_artifact_hash": previous_artifact_hash,
+            "validation_error": validation_error,
+            "retry_index": retry_index,
+        }
+    )
+
+
+def build_repair_evidence_hash(
+    spec: TaskSpec,
+    *,
+    previous_artifact_hash: str,
+    validation_error: str,
+    retry_index: int,
+) -> str:
+    """Replay key evidence hash of a repair call (template-keyed chain)."""
+    return canonical_sha256(
+        {
+            "template_hash": spec.template_hash,
+            "previous_artifact_hash": previous_artifact_hash,
+            "validation_error": validation_error,
+            "retry_index": retry_index,
+        }
+    )
+
+
+def run_envcoder_with_repair(
+    llm: Any,
+    *,
+    spec: TaskSpec,
+    seed_examples: Sequence[Mapping[str, Any]],
+    backend: Any,
+    max_repairs: int,
+    ledger: Any,
+    window_id: str,
+) -> Tuple[EnvCoderArtifact, Tuple[RepairRecord, ...]]:
+    """EnvCoder call for ONE unique template with BOUNDED repair.
+
+    Flow: one primary call via ``run_envcoder`` (K1) -> backend
+    validation. Passed => done. Failed => up to ``max_repairs`` repair
+    attempts, each accounted via ``ledger.record_repair_call`` (F1) and
+    keyed by the repair envelope (previous artifact hash + validation
+    error + retry index). A replay miss on ANY call (primary or
+    repair) is a HARD FAIL and propagates. Exhaustion raises
+    ``EnvCoderError(ENVCODER_REPAIR_EXHAUSTED)`` with the
+    ``RepairRecord`` chain attached as ``records``.
+
+    Returns ``(artifact, repair_records)`` — ``repair_records`` is
+    empty when the primary artifact validated on the first pass.
+    """
+    ctx = f"envcoder {spec.template_artifact_id}"
+    if not isinstance(spec, TaskSpec):
+        raise EnvCoderError(
+            _ECCode.BAD_TYPE,
+            f"{ctx}: repair loop requires a TaskSpec, got "
+            f"{type(spec).__name__}",
+        )
+    if isinstance(max_repairs, bool) or not isinstance(max_repairs, int):
+        raise EnvCoderError(
+            ENVCODER_REPAIR_BAD_TYPE,
+            f"{ctx}: max_repairs must be an int, got {max_repairs!r}",
+        )
+    if max_repairs < 0 or max_repairs > MAX_ENVCODER_REPAIRS:
+        raise EnvCoderError(
+            ENVCODER_REPAIR_OUT_OF_RANGE,
+            f"{ctx}: max_repairs must be within [0, {MAX_ENVCODER_REPAIRS}] "
+            f"(<= 2 hard validations per template), got {max_repairs}",
+        )
+
+    records: List[RepairRecord] = []
+    # ---- primary call (K1) + first validation --------------------------
+    artifact: EnvCoderArtifact = None
+    try:
+        artifact = run_envcoder(
+            llm,
+            spec=spec,
+            seed_examples=seed_examples,
+            ledger=ledger,
+            window_id=window_id,
+        )
+    except SchemaError as e:  # parse/guard failures (incl. bare guard errors)
+        current_error = f"{getattr(e, 'code', '')}: {e}"
+        previous = previous_artifact_hash_for_failure(spec, e)
+    else:
+        report = backend.validate(artifact.env_code)
+        if report.passed:
+            return artifact, ()
+        current_error = report.error or "validation failed"
+        previous = previous_artifact_hash_for_code(artifact.env_code)
+
+    # ---- bounded repair attempts (F1) -----------------------------------
+    for retry_index in range(1, max_repairs + 1):
+        ledger.record_repair_call(window_id, spec.template_artifact_id)
+        system_prompt, user_prompt = build_repair_prompt(
+            spec,
+            previous_artifact_hash=previous,
+            validation_error=current_error,
+            retry_index=retry_index,
+        )
+        envelope_hash = build_repair_envelope_hash(
+            spec,
+            previous_artifact_hash=previous,
+            validation_error=current_error,
+            retry_index=retry_index,
+        )
+        evidence_hash = build_repair_evidence_hash(
+            spec,
+            previous_artifact_hash=previous,
+            validation_error=current_error,
+            retry_index=retry_index,
+        )
+        cache_key = make_replay_key(
+            role=ENVCODER_ROLE,
+            evidence_hash=evidence_hash,
+            prompt_envelope_hash=envelope_hash,
+            prompt_version=ENVCODER_REPAIR_PROMPT_VERSION,
+            schema_version=ENVCODER_OUTPUT_SCHEMA_VERSION,
+        )
+        reply = llm.query(
+            system_prompt,
+            [user_prompt],
+            cache_key=cache_key,
+            role=ENVCODER_ROLE,
+        )  # replay miss = HARD FAIL, exactly like the primary call
+        content = _require_reply_content(
+            reply, f"{ctx} repair {retry_index}"
+        )
+        response_hash = canonical_sha256(content)
+        try:
+            repaired = parse_envcoder_output(
+                content, spec, f"{ctx} repair {retry_index}"
+            )
+        except SchemaError as e:  # parse/guard failures of the repair reply
+            records.append(
+                RepairRecord(
+                    retry_index=retry_index,
+                    previous_artifact_hash=previous,
+                    validation_error=current_error,
+                    reflection_prompt_hash=envelope_hash,
+                    response_hash=response_hash,
+                    repaired_artifact_hash="",
+                )
+            )
+            current_error = f"{getattr(e, 'code', '')}: {e}"
+            previous = previous_artifact_hash_for_failure(spec, e)
+            continue
+        repaired_hash = previous_artifact_hash_for_code(repaired.env_code)
+        report = backend.validate(repaired.env_code)
+        if report.passed:
+            records.append(
+                RepairRecord(
+                    retry_index=retry_index,
+                    previous_artifact_hash=previous,
+                    validation_error=current_error,
+                    reflection_prompt_hash=envelope_hash,
+                    response_hash=response_hash,
+                    repaired_artifact_hash=repaired_hash,
+                )
+            )
+            final = EnvCoderArtifact(
+                template_hash=spec.template_hash,
+                artifact_id=spec.template_artifact_id,
+                env_code=repaired.env_code,
+                prompt_envelope_hash=envelope_hash,
+            )
+            return final, tuple(records)
+        records.append(
+            RepairRecord(
+                retry_index=retry_index,
+                previous_artifact_hash=previous,
+                validation_error=current_error,
+                reflection_prompt_hash=envelope_hash,
+                response_hash=response_hash,
+                repaired_artifact_hash=repaired_hash,
+            )
+        )
+        current_error = report.error or "validation failed"
+        previous = repaired_hash
+
+    exhausted = EnvCoderError(
+        ENVCODER_REPAIR_EXHAUSTED,
+        f"{ctx}: env-code still fails validation after {max_repairs} "
+        "bounded repair(s); the template is refused (no unbounded "
+        "retries, no silent acceptance)",
+    )
+    exhausted.records = tuple(records)
+    raise exhausted

@@ -235,6 +235,49 @@ def _add_template_entries(store, specs, seeds, env_code_by_template=None):
         store.update(_envcoder_entry(spec, seeds, env_code=code))
 
 
+def _repair_entry(
+    spec, previous_artifact_hash, validation_error, retry_index, content
+):
+    """One BOUNDED-REPAIR replay entry (round-3 P0-4).
+
+    The repair replay identity is computed with the SAME helpers the
+    runtime uses: envelope = repair prompt envelope hash, evidence =
+    (template_hash, previous_artifact_hash, validation_error,
+    retry_index), prompt version = the repair prompt version.
+    """
+    envelope = EC.build_repair_envelope_hash(
+        spec,
+        previous_artifact_hash=previous_artifact_hash,
+        validation_error=validation_error,
+        retry_index=retry_index,
+    )
+    evidence = EC.build_repair_evidence_hash(
+        spec,
+        previous_artifact_hash=previous_artifact_hash,
+        validation_error=validation_error,
+        retry_index=retry_index,
+    )
+    key = LC.make_replay_key(
+        role=M.ENVCODER_ROLE,
+        evidence_hash=evidence,
+        prompt_envelope_hash=envelope,
+        prompt_version=EC.ENVCODER_REPAIR_PROMPT_VERSION,
+        schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
+    )
+    return {key: content}
+
+
+def _parse_error(spec, content, ctx_suffix):
+    """The exact EnvCoderError the runtime's parse raises for this
+    content under its deterministic ctx string (mirror for building
+    repair-chain replay keys; the chain re-enters the failed parse as
+    (failure hash, "code: message"))."""
+    ctx = f"envcoder {spec.template_artifact_id}{ctx_suffix}"
+    with pytest.raises(EC.EnvCoderError) as excinfo:
+        EC.parse_envcoder_output(content, spec, ctx)
+    return excinfo.value
+
+
 def _specs_via_board(evidence, store):
     """Run the SAME deterministic board the manager will run."""
     window = B.run_review_board(
@@ -521,20 +564,46 @@ class TestEvolveDuck:
         assert first == second
 
     def test_one_broken_template_among_six_refuses_the_window(self):
-        # round-3 P0-2: one template's env-code has a syntax error =>
-        # 10 compiled < 12 => the WHOLE window is refused (the broken
-        # template's 2 variants are never padded with stubs)
+        # round-3 P0-2/P0-4: one template's env-code has a syntax
+        # error; the BOUNDED repair loop (F1) receives two repair
+        # replies that reproduce the same broken code =>
+        # ENVCODER_REPAIR_EXHAUSTED => 10 compiled < 12 => the WHOLE
+        # window is refused (the broken template's 2 variants are
+        # never padded with stubs)
         families = [_family(f"fam_{i}") for i in range(6)]
         evidence = _evidence_from_archive()
         store = _board_store(evidence, families=families)
         specs = _specs_via_board(evidence, dict(store))
 
+        broken_code = "def broken(:"
+
         def code_for(spec):
             if spec.family_id == "fam_0":
-                return "def broken(:"
+                return broken_code
             return "def make_env():\n    return 'env'"
 
         _add_template_entries(store, specs, SEEDS, env_code_by_template=code_for)
+        # the two bounded repair replies keep returning the same broken
+        # code (identical previous-artifact hash / validation error on
+        # both retries; only retry_index changes)
+        broken_spec = next(s for s in specs if s.family_id == "fam_0")
+        previous = EC.previous_artifact_hash_for_code(broken_code)
+        validation_error = "SYNTAX_ERROR: invalid syntax (line 1)"
+        for retry_index in (1, 2):
+            store.update(
+                _repair_entry(
+                    broken_spec,
+                    previous_artifact_hash=previous,
+                    validation_error=validation_error,
+                    retry_index=retry_index,
+                    content=json.dumps(
+                        {
+                            "artifact_id": broken_spec.template_artifact_id,
+                            "env_code": broken_code,
+                        }
+                    ),
+                )
+            )
         manager = _manager(
             replay_store=store, archive_snapshot=ARCHIVE_SNAPSHOT
         )
@@ -544,18 +613,26 @@ class TestEvolveDuck:
         blocked = workers[0]["e1_status"]["blocked_codes"]
         assert "INSUFFICIENT_DYNAMIC_ARTIFACTS" in blocked
         assert "produced 10 compiled" in workers[0]["e1_status"]["note"]
+        counts = manager.ledger.reconcile()
+        assert counts["K1"] == 6  # one primary EnvCoder call per template
+        assert counts["F1"] == 2  # the bounded repair attempts are counted
 
-    def test_envcoder_parse_failure_yields_failed_worker_no_repair(self):
-        # round-3 P0-2: with 8 families (the board contract maximum)
-        # one template's artifact_id mismatch kills only its 2
+    def test_envcoder_parse_failure_yields_failed_worker_after_bounded_repair(self):
+        # round-3 P0-2/P0-4: with 8 families (the board contract
+        # maximum) one template's artifact_id mismatch survives two
+        # BOUNDED repair replies (each reproducing the wrong
+        # artifact_id) => ENVCODER_REPAIR_EXHAUSTED kills only its 2
         # variants; 14 compiled >= 12, so the pool is returned with
-        # honest failed workers and still NO repair call (F1=0)
+        # honest failed workers and F1 == 2 (the bounded repair count)
         families = [_family(f"fam_{i}") for i in range(8)]
         evidence = _evidence_from_archive()
         store = _board_store(evidence, families=families)
         specs = _specs_via_board(evidence, dict(store))
         assert len(specs) == 16
         broken = next(s for s in specs if s.family_id == "fam_0")
+        wrong_content = json.dumps(
+            {"artifact_id": "WRONG::id", "env_code": "x = 1"}
+        )
         envelope = EC.build_envcoder_envelope_hash(
             broken, seed_examples=SEEDS
         )
@@ -566,9 +643,30 @@ class TestEvolveDuck:
             prompt_version=M.ENVCODER_PROMPT_VERSION,
             schema_version=M.ENVCODER_OUTPUT_SCHEMA_VERSION,
         )
-        store[key] = json.dumps(
-            {"artifact_id": "WRONG::id", "env_code": "x = 1"}
-        )
+        store[key] = wrong_content
+        # the repair chain mirrors the runtime deterministically: each
+        # failed parse re-enters the next repair prompt as
+        # (failure hash, "code: message")
+        previous_error = _parse_error(broken, wrong_content, "")
+        for retry_index in (1, 2):
+            store.update(
+                _repair_entry(
+                    broken,
+                    previous_artifact_hash=(
+                        EC.previous_artifact_hash_for_failure(
+                            broken, previous_error
+                        )
+                    ),
+                    validation_error=(
+                        f"{previous_error.code}: {previous_error}"
+                    ),
+                    retry_index=retry_index,
+                    content=wrong_content,
+                )
+            )
+            previous_error = _parse_error(
+                broken, wrong_content, f" repair {retry_index}"
+            )
         _add_template_entries(
             store,
             [s for s in specs if s.template_hash != broken.template_hash],
@@ -583,10 +681,13 @@ class TestEvolveDuck:
         assert len(failed) == 2  # both variants of the broken template
         for worker in failed:
             assert worker["e1_status"]["reuse"] is False
-            assert worker["e1_status"]["envcoder_failed_code"] != ""
+            assert worker["e1_status"]["envcoder_failed_code"] == (
+                EC.ENVCODER_REPAIR_EXHAUSTED
+            )
+            assert worker["e1_status"]["repairs_count"] == 2
         counts = manager.ledger.reconcile()
         assert counts["K1"] == 8
-        assert counts["F1"] == 0  # NO repair loop this round
+        assert counts["F1"] == 2  # bounded repair loop, both attempts made
 
     def test_replay_miss_is_a_hard_fail(self):
         manager = _manager(archive_snapshot=ARCHIVE_SNAPSHOT)  # empty store
@@ -761,6 +862,42 @@ class TestStatusReport:
         assert "SELECTION_BLOCKED_NO_REAL_EVIDENCE" in report["blocked_codes"]
         assert len(report["disclaimers"]) == 4
         assert "craftax" in report["envcoder_check_scope"]
+        # round-3 P0-4: the bounded repair scope in force on the evolve
+        # path — replay backend (SYNTAX+GUARDS+STRUCTURE), max_repairs
+        # at the <= 2 hard bound, honest blocked-stage suffix
+        repair_scope = report["envcoder_repair_scope"]
+        assert repair_scope["backend"] == "replay"
+        assert repair_scope["max_repairs"] == 2
+        assert repair_scope["max_repairs_bound"] == 2
+        assert repair_scope["repair_prompt_version"] == (
+            EC.ENVCODER_REPAIR_PROMPT_VERSION
+        )
+        assert repair_scope["stages_run"] == [
+            "SYNTAX",
+            "GUARDS",
+            "STRUCTURE",
+        ]
+        assert len(repair_scope["stages_blocked"]) == 5
+        # round-3 P0-5: the shared runtime seam reports all eight
+        # contracts UNBOUND this round (dicode.shared_runtime does not
+        # exist yet); the seam only resolves — never mints/disguises
+        shared = report["shared_runtime"]
+        assert sorted(shared) == [
+            "AnchorManifest",
+            "CandidateProbeResult",
+            "FormalAssetRegistry",
+            "FullStateCheckpoint",
+            "ReferenceAdapter",
+            "ReferenceIdentity",
+            "StudentAdapter",
+            "StudentIdentity",
+        ]
+        for state in shared.values():
+            assert state["bound"] is False
+            assert state["code"].startswith(
+                "BLOCKED_WAITING_SHARED_RUNTIME_"
+            )
+            assert state["detail"] != ""
 
 
 class TestDuckSurface:

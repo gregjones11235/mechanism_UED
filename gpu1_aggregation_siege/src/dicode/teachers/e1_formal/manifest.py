@@ -12,8 +12,10 @@ NOT describe any fixed per-window call count:
 * K1 — EnvCoder calls counted per ACTUAL UNIQUE artifact produced
   (invocation_unit="artifact"); the EnvCoder is an independent
   artifact producer OUTSIDE the board, not a window member;
-* F1 — repair calls, counted separately (this round: single-pass
-  generation, no repair loop, F1 == 0; the counter slot still exists).
+* F1 — repair calls, counted separately; round-3 wires the bounded
+  EnvCoder repair loop into this counter (F1 = the real per-template
+  repair-call count, bounded by ``teacher.envcoder.max_repairs`` <= 2;
+  it never mixes with K1).
 
 Every entry is pinned to the replay provider this round; a real LLM
 provider would change REAL_ENVCODER_USED, which must stay false.

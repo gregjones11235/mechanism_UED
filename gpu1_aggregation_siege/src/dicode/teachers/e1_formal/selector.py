@@ -1,5 +1,15 @@
 """Stage 8: deterministic Soft Copeland selector (G4 gate).
 
+ROUND-3 LABEL (documentation only; zero functional change): this
+role-score selector — ``select_soft_copeland`` /
+``select_dynamic_batch`` — is the **E1-S ablation path** preserved
+from the static ablation branch. The FORMAL round-3 path is the
+criterion-wise selector in ``criterion_selector.py``
+(``select_criterion_batch``): per-criterion normalization + Copeland
+INSIDE each of the eight criteria, weighted aggregation, family cap.
+The averaged-strength shape below remains exactly as pinned for the
+E1-S ablation and its parity gate.
+
 Self-contained stdlib replica of the canonical Soft Copeland semantics
 of this branch (``d052/selectors/copeland.py`` + ``base.py``), pinned
 to the canonical protocol version and the supervisor-frozen source
