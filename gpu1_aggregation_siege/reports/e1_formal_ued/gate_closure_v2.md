@@ -91,15 +91,22 @@
   （`LLMCallLedger`，JSONL 持久化 `e1_state/llm_accounting.jsonl`；
   kind∈{BOARD,ENVCODER,REPAIR}）。
 - 公式：**N1 = 6·G1 + T1 + K1 + F1**（G1=实际触发的 review window
-  数；**T1≡0**，E1 无 TaskGenerator，显式常量；K1=按唯一 artifact
-  逐条计，spec_hash+variant 去重；F1=repair 独立计数，本轮单程出码
-  ⇒F1≡0，槽位存在且永不与 K1 混合）。
+  数；**T1≡0**，E1 无 TaskGenerator，显式常量；K1=按**唯一模板**
+  计（round-3 模板键控：每唯一 family 模板恰 1 次 EnvCoder 调用，
+  变体共享模板调用，template_hash 去重）；F1=repair 独立计数，
+  round-3 起为**真实有界修复调用计数**——
+  `envcoder.run_envcoder_with_repair` 每次修复调用经
+  `record_repair_call` 入账，受 `teacher.envcoder.max_repairs`
+  （硬上限 `MAX_ENVCODER_REPAIRS=2`）约束；F1 永不与 K1 混合。
+  round-2 的"F1≡0/单程出码"表述已作废）。
 - "每窗 7 次/第 7 次"表述已从全部源码删除（grep 审计 +
   `test_llm_accounting.py` 模块文档断言）。
 - 证据：`tests/e1_formal/test_llm_accounting.py`：REUSE 窗⇒0 调用；
-  1 窗+10 spec×2 变体⇒board=6、K1=20、T1=0、F1=0；重复
-  spec_hash+variant 不重复计数；`LLM_ACCOUNTING_MISMATCH`
-  核对失败码。
+  1 窗+10 唯一模板×2 变体⇒board=6、K1=10（变体共享模板调用，
+  绝不为 20）、T1=0、F1=0；重复模板不重复计数；
+  `LLM_ACCOUNTING_MISMATCH` 核对失败码。修复耗尽正负 pin：
+  `test_gen_manager_duck.py`（坏模板重试 2 次仍失败⇒K1 照计、
+  F1=2、`ENVCODER_REPAIR_EXHAUSTED`、整窗诚实拒绝）。
 - 无待办。
 
 ## 降级链（D5）总览——五门禁未全开时的诚实行为
@@ -336,4 +343,96 @@ checkpoint/window/protocol 证据；即便字段全合法也拒绝调用方形�
 1. **Reference 身份**（G1 身份值 + manifest hash）；
 2. **跨方向共享 anchor manifest 冻结**（G3：4 anchor 身份/
    TaskParams/seed/hash + 签署 hash）；
-3. **（可选）CC3 bagr_ued copeland 源/SHA**（G4 扩展比对）。
+3. **（可选）CC3 bagr_ued copeland 源/SHA**（G4 扩展比对）；
+4. **round-3 新增**：真实 LLM provider 授权白名单（本轮为空；
+   六角色 board 仅在显式授权下可用真实 provider，envcoder/probe
+   永不回退）；共享运行时 `dicode.shared_runtime`（CC4：八合同
+   StudentIdentity/StudentAdapter/ReferenceIdentity/ReferenceAdapter/
+   AnchorManifest/FormalAssetRegistry/CandidateProbeResult/
+   FullStateCheckpoint）；本机 craftax 运行时（真实 EnvCoder
+   后端 IMPORT/INSTANTIATE/RESET/STEP/TERMINAL_AUTORESET 全阶段）。
+
+## round-3 章节：PRODUCTION_PATH_READY_FOR_AUDIT
+
+> 推翻 round-2 表述的四处更正已在对应段落就地完成：
+> "≤10 spec/窗"→ **≤10 唯一模板/窗**（`MAX_WINDOW_TEMPLATES=10`；
+> 6 模板×2 变体=12 specs，spec 池上限 20）；"F1≡0"→ **F1=真实
+> 有界修复计数（≤2/模板）**；"stub 补槽"→ **整窗拒绝
+> （`INSUFFICIENT_DYNAMIC_ARTIFACTS`，无跨窗拼接、无 stub、
+> `_reuse_stub` 仅存于不可训练 REUSE 批次标记）**；
+> "10 spec×2 变体⇒K1=20"→ **K1=10（唯一模板）**。
+
+**C1 `fix(e1): close sequential-board and 12-slot blockers`**
+（`62eb560`）：
+- P0-1：`BoardContext`/`UpstreamOutput`；`build_role_prompt` /
+  `build_prompt_envelope_hash` 绑定 window 身份四元组 + pinned
+  Student 身份 + 上游角色输出（prompt 渲染 + role_output_hash 哈希
+  双轨）；`BOARD_PROMPT_VERSION=e1-board-prompt-v2`。
+- P0-2：模板键控 EnvCoder（`TaskTemplate`，每唯一模板恰 1 次调用，
+  K1 按唯一模板）；`derive_variant_params` 确定性无 LLM；删除 stub
+  补槽——编译 artifact ≥12 ⇒ 全池；1–11 ⇒ 整窗拒绝
+  （`INSUFFICIENT_DYNAMIC_ARTIFACTS`⇒REUSE 批次，ledger 保留诚实
+  调用，无跨窗拼接，不训练）。
+- P0-3：`gate_signals.py` 八信号从真实 TRAINING_WINDOW 证据计算
+  （prev_window_hash/context_hash/evidence_ids/threshold_version
+  绑定；无数据生产者⇒计算为 False+SIGNAL_NO_PRODUCER；阈值未冻结
+  ⇒False+INVOCATION_THRESHOLD_MISSING，仅窗级降级，不阻塞 C13
+  训练门）；`GateState.signals_binding_hash` 必填。
+
+**C2 `feat(e1): wire real envcoder and candidate probe`**
+（`9aeb489`）：
+- P0-4：`envcoder_backends.py` 八阶段
+  SYNTAX→GUARDS→STRUCTURE→IMPORT→INSTANTIATE→RESET→STEP→
+  TERMINAL_AUTORESET；`replay`=前三阶段（stdlib-AST 入口面检查，
+  诚实标注不执行 craftax）、`mock` 仅显式授权消融、`real` 未授权
+  恒 fail-closed（`ENVCODER_BACKEND_BLOCKED`，绝不静默降级）；
+  修复环 `run_envcoder_with_repair`（RepairRecord 哈希链、修复
+  replay miss=HARD FAIL、耗尽⇒`ENVCODER_REPAIR_EXHAUSTED`）。
+- P0-5：`criterion_selector.py` 八准则 criterion-wise Soft Copeland
+  （准则内 pairwise，结构上不存在"先均值后 Copeland"；
+  `rank_percentile_v1`；权重缺省等权 1/8 且 Fraction 和=1 校验；
+  family_cap 必需；不足无回填；无真实 probe 证据⇒
+  `SELECTION_BLOCKED_NO_REAL_EVIDENCE`）；`shared_runtime_seam.py`
+  八合同只解析、不构造、不铸造、不伪装；统一入口
+  `evaluate_candidate`（fail-closed 参数校验⇒共享合同解析⇒未绑定
+  即 `BLOCKED_WAITING_SHARED_RUNTIME`，绑定后真实路径为未来轮次、
+  绝不 stub）。
+
+**C3 `feat(e1): add one-update and longrun entrypoints`**
+（`9931ecd`）：
+- `scripts/e1_production_runtime.py`：共用生产运行时解析（八接缝
+  合同、真实 EnvCoder 后端授权、G1 冻结、G3 冻结、实时 git SHA、
+  诚实 JSON 汇报）；不 import tests/fixtures、不默认 mock/replay、
+  不付费调用、门禁未过不训练。
+- `scripts/run_e1_real_one_update.py`：唯一单更新真实门——
+  real reset/step（RealBackendAdapter 全阶段）→ real 六角色
+  （真实 LLM；仅显式授权标志下 board 步可用真实 Replay，
+  envcoder/probe 永不）→ real candidate probe（统一
+  `evaluate_candidate`）→ criterion-wise 选 12 → 12+4 batch →
+  `run_session_training`（`max_updates_per_session=1`，恰一次
+  optimizer update）→ checkpoint save/load 回验（仅经共享
+  FullStateCheckpoint 合同，鸭型 fail-closed，绝不第二套 loader）
+  → NaN/Inf 全 params 叶检查。任一资产/合同缺失⇒对应 BLOCKED 码、
+  exit≠0、`REAL_ONE_UPDATE_EXECUTED=false`。
+- `scripts/run_e1_longrun.py`：只准备、不启动——冻结清单
+  （total_env_steps=98304、pinned Student 身份、冻结 Reference
+  身份、seed、冻结 anchor manifest、实时 git SHA、config hash、
+  checkpoint hash、输出目录）；任一字段未冻结⇒拒绝（exit≠0）；
+  `--launch` 额外要求全部生产门禁，本轮恒拒绝。
+
+**C4 `docs(e1): record production readiness and blockers`**
+（本提交）：
+- `scripts/e1_formal_readiness.py` 从实际代码/配置/接缝状态计算
+  `reports/e1_formal_ued/real_smoke_readiness.json`（布尔绝不
+  手写）；`reports/e1_formal_ued/current_blockers.md` 逐项阻断证据；
+  本章节就地更正 round-2 被推翻表述。
+
+**本机诚实状态（C3/C4 实跑，JAX_PLATFORMS=cpu，审计 venv）**：
+- 单更新入口：BLOCKED，exit 2，12 条阻断（8 接缝合同 +
+  ENVCODER_BACKEND_BLOCKED + REFERENCE_CONTRACT_UNFROZEN +
+  BLOCKED_SHARED_ANCHOR_MANIFEST + E1_REAL_LLM_NOT_AUTHORIZED）；
+  `REAL_ONE_UPDATE_EXECUTED=false`。
+- 长跑入口：prepare-only REFUSED，exit 2（Reference 未冻结、
+  anchor manifest DRAFT、checkpoint 合同未绑定）；`--launch`
+  亦 REFUSED；从未进入训练循环。
+- 套件基线保持：993 passed / 5 skipped / 0 failed。

@@ -33,6 +33,11 @@ SIEGE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC_PATH = os.path.join(SIEGE_ROOT, "src")
 if SRC_PATH not in sys.path:
     sys.path.insert(0, SRC_PATH)
+# siege root: required ONLY for the sanctioned d052.achievements
+# REGISTRY import in task_specs (pure stdlib; same convention as
+# tests/e1_formal/conftest.py) — nothing else is imported from d052
+if SIEGE_ROOT not in sys.path:
+    sys.path.insert(0, SIEGE_ROOT)
 
 from dicode.teachers.e1_formal import anchor_manifest as AM  # noqa: E402
 from dicode.teachers.e1_formal import envcoder_backends as EB  # noqa: E402

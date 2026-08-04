@@ -20,9 +20,18 @@
   `2a6122f` C15 REUSE 认证绑定与全量复核（adapter 铸造 dual-probe
   attestation；调用方串单独永不充分；_snapshot_still_valid 每次复用前
   重验全部绑定；总控 CC2/E1）→
-  （本提交）C15-RC 铸造绑定内部 adapter registry + 不可变结果对象
-  （总控 REQUEST_CHANGES：删除 mapping 铸造缝；假 adapter/直接铸造/
-  未知结果/越域证据一律 fail-closed；1 条 adapter 签发正路径）。
+  `1f2598d`（C15-RC 铸造绑定内部 adapter registry + 不可变结果对象；
+  总控 REQUEST_CHANGES：删除 mapping 铸造缝；假 adapter/直接铸造/
+  未知结果/越域证据一律 fail-closed；1 条 adapter 签发正路径）→
+  **round-3**（目标 PRODUCTION_PATH_READY_FOR_AUDIT；停止测试扩张，
+  不新增任何测试文件）：
+  `62eb560` C1 fix(e1) 顺序 board+12 槽真实可达+真实 InvocationGate
+  （P0-1/2/3）→
+  `9aeb489` C2 feat(e1) 真实 EnvCoder 执行+有限修复+统一 candidate
+  probe+criterion-wise selector+共享接缝（P0-4/5）→
+  `9931ecd` C3 feat(e1) 单更新真实门+长跑只准备入口（P0-6）→
+  （本提交）C4 docs(e1) 生产就绪与阻断记录（readiness 由脚本从
+  实际状态计算，布尔绝不手写）。
 
 ## 一、九阶段管线 → 代码位置
 
@@ -30,8 +39,8 @@
 |---|---|---|---|
 | 1 | Student 行为失败证据 | `teachers/e1_formal/evidence.py` + `archive_view.py`（仅 TRAINING / NORMAL_TRAINING_FEEDBACK；FORMAL_* 构建期拒；tier 永不入 prompt） | 实现+测试 |
 | 2 | 完整六角色 Review Board | `board.py`：固定顺序 student_modeler→behavior_auditor→causal_failure_analyst→intervention_tutor→explorer→critic；缺一即 INCOMPLETE_REVIEW_WINDOW→REUSE；无 2 角色/条件路径 | 实现+测试 |
-| 3 | 因果假设+干预+Canonical TaskSpec | `task_specs.py`（spec_hash、window_hash 绑定、REGISTRY 校验、≤10/窗） | 实现+测试 |
-| 4 | 独立 LLM EnvCoder | `envcoder.py`（prompt 白名单、变体轮换、按唯一 artifact 计 K1、无 repair：F1≡0） | 实现+测试（replay） |
+| 3 | 因果假设+干预+Canonical TaskSpec | `task_specs.py`（spec_hash、window_hash 绑定、REGISTRY 校验；**round-3**：≤10 唯一模板/窗 `MAX_WINDOW_TEMPLATES=10`，6 模板×2 变体=12 specs，spec 池上限 20；`derive_variant_params` 确定性无 LLM） | 实现+测试 |
+| 4 | 独立 LLM EnvCoder | `envcoder.py`（prompt 白名单、**round-3 模板键控：每唯一模板恰 1 次调用、K1 按唯一模板计**；有限修复环 `run_envcoder_with_repair`：F1=真实有界修复计数 ≤2/模板，耗尽⇒`ENVCODER_REPAIR_EXHAUSTED`；round-2"F1≡0"表述作废） | 实现+测试（replay；real 后端未授权恒 fail-closed） |
 | 5 | 编译门禁 | `gen_manager._E1EnvGenerator.check_compilation`（guards + stdlib syntax；**绝不回灌 LLM**） | 复用+测试 |
 | 6 | Student/Reference 真实评价 | `evaluation/candidate_evaluation.py`（G1 门优先；本轮诚实阻断） | seam 实现+测试 |
 | 7 | Regret/Gap/Learnability/Retention | `metrics.py`（G2 三态+Wilson CI；LP 仅先验字段；retention 仅 G3 冻结后可用） | 公式+fixture 测试；真实证据诚实缺省 |
@@ -123,5 +132,63 @@ reset、clean；正式评测数据永不进入教师/选择器/archive 优先级
    `REAL_TRAINING_UPDATE_EXECUTED=false` 一致。
 2. `check_compilation` 本轮仅 stdlib 语法 + guards（craftax 不在审计
    venv）；import/reset/step 语义未验证 —— `status_report` 明示。
+   （round-3 起 EnvCoder 验证面升级为分层后端：replay=SYNTAX+
+   GUARDS+STRUCTURE，real 全阶段未授权恒 fail-closed，见 §六。）
 3. replay store 为空：任何真实开窗尝试都会 HARD FAIL（设计如此，
    防止静默编造 LLM 应答）。
+
+## 六、round-3：PRODUCTION_PATH_READY_FOR_AUDIT（本轮）
+
+总控指令：目标=生产路径可审核；完成代码并推送，然后停止；审核通过
+前不启动完整长跑；**停止测试扩张**（本轮不新增任何测试文件，现有
+pin 仅在被有意改变行为处做等价或更强的最小更新）。
+
+1. **P0-1 顺序协作**：`BoardContext`/`UpstreamOutput`；角色 k 的
+   prompt/envelope 绑定 window 身份四元组 + pinned Student 身份 +
+   前序解析成功角色的 `role_output_hash`（渲染+哈希双轨）；
+   `BOARD_PROMPT_VERSION=e1-board-prompt-v2`。
+2. **P0-2 12 槽真实可达**：`MAX_WINDOW_TEMPLATES=10`（只数唯一
+   family 模板）；`TaskTemplate` + `derive_variant_params`（确定性、
+   无 LLM）；6 模板×2 变体=12 specs；EnvCoder 每唯一模板恰 1 次
+   调用（K1 按唯一模板）；**stub 补槽删除**——编译 artifact ≥12⇒
+   全池，1–11⇒整窗拒绝（`INSUFFICIENT_DYNAMIC_ARTIFACTS`⇒REUSE
+   批次；`_reuse_stub` 仅存为不可训练 REUSE 标记，永不入训练批次）。
+3. **P0-3 真实 InvocationGate**：`gate_signals.py` 从真实
+   TRAINING_WINDOW 证据计算八信号（含 prev_window_hash/
+   threshold_version 绑定；无生产者⇒计算为 False+原因码）；
+   `GateState.signals_binding_hash` 必填。
+4. **P0-4 真实 EnvCoder + 有限修复**：`envcoder_backends.py` 八阶段；
+   修复环 `run_envcoder_with_repair`（RepairRecord 哈希链；F1=真实
+   有界修复计数，`teacher.envcoder.max_repairs` 硬上限 2；耗尽⇒
+   `ENVCODER_REPAIR_EXHAUSTED`）；backend 键：replay（生产默认，
+   SYNTAX+GUARDS+STRUCTURE）/mock（显式授权消融专用）/real（未授权
+   恒 `ENVCODER_BACKEND_BLOCKED`，绝不静默降级）。
+5. **P0-5 真实双 Probe + criterion-wise Selector**：
+   `criterion_selector.py`（八准则准则内 pairwise Copeland + 权重
+   聚合 + family_cap + 取 12 不足无回填；"先均值后 Copeland"结构上
+   不存在）；`shared_runtime_seam.py` 八共享合同（只解析、不构造、
+   不铸造、不伪装）；统一入口 `evaluate_candidate`（fail-closed
+   参数校验⇒共享合同解析⇒未绑定即 BLOCKED_WAITING_SHARED_RUNTIME；
+   绑定后真实路径留给未来轮次，绝不 stub）。
+6. **P0-6 两个唯一入口**（`scripts/`）：
+   - `run_e1_real_one_update.py`：唯一单更新真实门（real reset/step
+     → real 六角色 → real candidate probe → criterion-wise 选 12 →
+     12+4 batch → `run_session_training` 恰一次 optimizer update →
+     checkpoint save/load 回验（仅共享 FullStateCheckpoint 合同）→
+     NaN/Inf 全叶检查）。任一缺失⇒BLOCKED+exit≠0，
+     `REAL_ONE_UPDATE_EXECUTED=false`。
+   - `run_e1_longrun.py`：只准备、不启动（冻结清单：
+     total_env_steps=98304、Student/Reference 身份、seed、anchor
+     manifest、实时 git SHA、config/checkpoint hash、输出目录；
+     任一未冻结⇒拒绝）。
+   - 共用 `e1_production_runtime.py`：资产/门禁解析 + 诚实 JSON
+     汇报；生产入口不 import tests、不依赖 fixture、不默认
+     mock/replay；共享资产缺失⇒明确阻断码退出。
+7. **就绪态记录**：`scripts/e1_formal_readiness.py` 从实际状态计算
+   `reports/e1_formal_ued/real_smoke_readiness.json`；阻断清单见
+   `reports/e1_formal_ued/current_blockers.md`。
+
+**本轮实跑（审计 venv，JAX_PLATFORMS=cpu）**：单更新入口 BLOCKED
+（12 条阻断码，exit 2）；长跑入口 REFUSED（exit 2）；套件
+993 passed / 5 skipped / 0 failed（基线保持，零回归）。
+三个 REAL_* 标志保持 false；审核通过前不启动长跑。
