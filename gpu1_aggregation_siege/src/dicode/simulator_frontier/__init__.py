@@ -236,6 +236,12 @@ from .frontier_distributions import (
     compose_12_plus_4,
     validate_frontier_distribution_plan,
 )
+from .distribution_runtime import (
+    DISTRIBUTION_RUNTIME_VERSION,
+    DistributionRuntimeBinding,
+    resolve_distribution_binding,
+    verify_distribution_binding,
+)
 from .anchor_manifest import (
     ANCHOR_SLOT_COUNT,
     BLOCKED_SHARED_ANCHOR_MANIFEST,
@@ -354,6 +360,8 @@ __all__ = [
     "FrontierDistribution", "FrontierDistributionPlan", "PlannerCompilation",
     "compile_planner_to_frontier_distributions",
     "compose_12_plus_4", "validate_frontier_distribution_plan",
+    "DISTRIBUTION_RUNTIME_VERSION", "DistributionRuntimeBinding",
+    "resolve_distribution_binding", "verify_distribution_binding",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
     "AnchorDefinition", "AnchorManifest", "RetentionContract",

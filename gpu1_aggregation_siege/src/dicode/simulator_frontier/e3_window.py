@@ -27,6 +27,7 @@ Honesty rules enforced structurally:
 from __future__ import annotations
 
 import base64
+import hashlib
 import math
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
@@ -44,6 +45,11 @@ from .discovery_provenance import (
     BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY,
     DiscoveryProvenance,
     production_registry_bound,
+)
+from .distribution_runtime import (
+    DISTRIBUTION_RUNTIME_VERSION,
+    resolve_distribution_binding,
+    verify_distribution_binding,
 )
 from .env_restore import build_template, encode_env_state
 from .errors import InvalidEvidenceError, ProductionBlockedError
@@ -108,6 +114,7 @@ BLOCKED_TRAINING_SURFACE_PENDING_R9 = "BLOCKED_TRAINING_SURFACE_PENDING_R9"
 BLOCKED_NO_CAPTURE_PROVENANCE = "BLOCKED_NO_CAPTURE_PROVENANCE"
 BLOCKED_NO_INJECTED_ORIGINAL_LOSS = "BLOCKED_NO_INJECTED_ORIGINAL_LOSS"
 BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE = "BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE"
+BLOCKED_NO_INJECTED_TASKPARAM_APPLY_FN = "BLOCKED_NO_INJECTED_TASKPARAM_APPLY_FN"
 BLOCKED_NO_INJECTED_PREDICATES = "BLOCKED_NO_INJECTED_PREDICATES"
 BLOCKED_NO_OBSERVE_FN = "BLOCKED_NO_OBSERVE_FN"
 ZERO_MEMORY_NOT_A_PRODUCTION_MODE = "ZERO_MEMORY_NOT_A_PRODUCTION_MODE"
@@ -201,6 +208,14 @@ class E3WindowConfig:
     episode_horizon: int = 0
     loss_fn: Callable[..., Any] | None = None            # ORIGINAL loss, injected
     optimizer_update_fn: Callable[..., Any] | None = None  # exactly one update
+    # CC4 follow-up (P0-11): the compiled distributions' TaskParams must
+    # EXECUTE: every frontier episode applies its binding's taskparams to the
+    # base env params through this injected surface
+    # (taskparam_apply_fn(params_env, taskparams) -> episode env params).
+    # TaskParam application is environment/training-runtime specific, so it is
+    # injected and audited exactly like the original loss / optimizer update;
+    # an unbound surface is a named preflight blocker (fail closed).
+    taskparam_apply_fn: Callable[..., Any] | None = None
     archive_path: str = ""
     checkpoint_dir: str = ""
 
@@ -326,6 +341,13 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     gates["ORIGINAL_OPTIMIZER_UPDATE_INJECTED"] = bool(callable(config.optimizer_update_fn))
     if not callable(config.optimizer_update_fn):
         blockers.append(BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE)
+    # CC4 follow-up (P0-11): every compiled distribution carries non-empty
+    # taskparam_ranges (the compiler enforces it), so the mixed-start step
+    # ALWAYS needs the injected TaskParams application surface — an unbound
+    # surface means the taskparam distribution could never execute.
+    gates["TASKPARAM_APPLY_FN_INJECTED"] = bool(callable(config.taskparam_apply_fn))
+    if not callable(config.taskparam_apply_fn):
+        blockers.append(BLOCKED_NO_INJECTED_TASKPARAM_APPLY_FN)
 
     return E3PreflightResult(ready=not blockers, gates=gates, blockers=tuple(blockers))
 
@@ -383,10 +405,15 @@ def _params_sha256(params: Any) -> str:
     return cc2_params_sha256(params)
 
 
-def _load_production_memory(config: E3WindowConfig, student: Any,
-                            bundle: Any) -> tuple[Any, str]:
-    """Memory for mixed-start rollouts, fail-closed with the runner semantics."""
-    mode = MemoryRestoreMode(str(config.memory_mode))
+def _verify_window_memory_source(config: E3WindowConfig, student: Any,
+                                 mode: MemoryRestoreMode) -> str:
+    """Verify the mixed-start memory source ONCE (fail closed per mode).
+
+    CC4 follow-up (P0-11): the mode-conditional hash/spec/identity checks run
+    here, before any episode executes.  Per-episode memory instances are then
+    produced FRESH by ``_fresh_window_memory`` — the window never shares one
+    memory object across episodes.
+    """
     if mode is MemoryRestoreMode.ZERO_MEMORY:
         raise ProductionBlockedError(
             f"{ZERO_MEMORY_NOT_A_PRODUCTION_MODE}: mixed-start rollouts never run "
@@ -396,7 +423,6 @@ def _load_production_memory(config: E3WindowConfig, student: Any,
         if artifact is None or config.memory_loader is None:
             raise ProductionBlockedError(
                 f"{SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT} (mixed-start)")
-        import hashlib
         hasher = hashlib.sha256()
         with open(artifact.path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -410,32 +436,101 @@ def _load_production_memory(config: E3WindowConfig, student: Any,
         if artifact.student_identity_hash != student.identity().identity_hash():
             raise ProductionBlockedError(
                 "memory artifact identity hash != search Student identity hash")
-        memory = config.memory_loader(artifact)
-        check = student.validate_memory(memory, 1)
-        if not bool(check.get("ok")):
-            raise ProductionBlockedError(
-                f"mixed-start policy memory failed validate_memory: "
-                f"{tuple(check.get('reasons', ()))}")
-        return memory, "SAVED_POLICY_MEMORY_VERIFIED"
+        return "SAVED_POLICY_MEMORY_VERIFIED"
     if mode is MemoryRestoreMode.HISTORY_BURN_IN:
         if config.burn_in_executor is None:
             raise ProductionBlockedError(
                 f"{HISTORY_BURN_IN_BLOCKED_NO_BURN_IN_EXECUTOR} (mixed-start)")
+        return "HISTORY_BURN_IN_VERIFIED"
+    raise ProductionBlockedError(f"unhandled memory mode: {mode!r} (fail closed)")
+
+
+def _fresh_window_memory(config: E3WindowConfig, student: Any, bundle: Any,
+                         mode: MemoryRestoreMode) -> Any:
+    """A FRESH memory instance for ONE mixed-start episode.
+
+    CC4 follow-up (P0-11): per-state memory restore.  SAVED_POLICY_MEMORY
+    re-reads the artifact through the injected loader on every call;
+    HISTORY_BURN_IN re-executes burn-in on the RESTORED bundle's own history
+    reference (the history that belongs to that very state).  Every instance
+    is validated before use; no memory object is ever shared across episodes.
+    """
+    if mode is MemoryRestoreMode.SAVED_POLICY_MEMORY:
+        memory = config.memory_loader(config.memory_artifact)
+    elif mode is MemoryRestoreMode.HISTORY_BURN_IN:
         reference = getattr(bundle, "history_reference", None) \
             if bundle is not None else None
         if reference is None:
             reference = config.history_artifact_ref
         if not reference:
             raise ProductionBlockedError(
-                "HISTORY_BURN_IN mixed-start blocked: no history reference")
+                "HISTORY_BURN_IN mixed-start blocked: the restored bundle carries "
+                "no history reference (per-state memory is never faked)")
         memory = config.burn_in_executor(reference)
-        check = student.validate_memory(memory, 1)
-        if not bool(check.get("ok")):
+    else:
+        raise ProductionBlockedError(f"unhandled memory mode: {mode!r} (fail closed)")
+    check = student.validate_memory(memory, 1)
+    if not bool(check.get("ok")):
+        raise ProductionBlockedError(
+            f"mixed-start episode memory failed validate_memory: "
+            f"{tuple(check.get('reasons', ()))}")
+    return memory
+
+
+def _load_production_memory(config: E3WindowConfig, student: Any,
+                            bundle: Any) -> tuple[Any, str]:
+    """One-shot convenience wrapper: verify source once + one fresh memory."""
+    mode = MemoryRestoreMode(str(config.memory_mode))
+    status = _verify_window_memory_source(config, student, mode)
+    memory = _fresh_window_memory(config, student, bundle, mode)
+    return memory, status
+
+
+def _binding_action_seed(binding: Any) -> int:
+    """Deterministic numpy seed for the episode's action-level RNG stream."""
+    digest = hashlib.sha256(
+        f"mixed-start-action-stream:{binding.binding_hash}".encode("utf-8")
+    ).hexdigest()
+    return int(digest[:12], 16)
+
+
+def _select_mixed_action(*, student: Any, params: Any, obs: Any, memory: Any,
+                         prev_action: Any, prev_reward: Any, step_rng: Any,
+                         binding: Any, gen: Any, action_count: int) -> tuple[int, Any]:
+    """One mixed-start step with the distribution's stochasticity EXECUTING.
+
+    Mirrors the branch runner's action semantics exactly: epsilon-greedy
+    override plus optional temperature re-sampling; temperature without
+    adapter logits fails closed rather than silently sampling at T=1.  The
+    Student network is never modified.
+    """
+    import numpy as np
+    deterministic = float(binding.epsilon) == 0.0 and float(binding.temperature) == 1.0
+    out = student.policy_step(params, obs, memory, prev_action, prev_reward,
+                              step_rng, deterministic)
+    new_memory = out.get("new_memory", out.get("memory"))
+    action = int(np.asarray(out["action"]).reshape(-1)[0])
+    if deterministic:
+        return action, new_memory
+    if float(gen.random()) < float(binding.epsilon):
+        action = int(gen.integers(0, action_count))
+        return action, new_memory
+    if float(binding.temperature) != 1.0:
+        if "logits" not in out:
             raise ProductionBlockedError(
-                f"mixed-start burn-in memory failed validate_memory: "
-                f"{tuple(check.get('reasons', ()))}")
-        return memory, "HISTORY_BURN_IN_VERIFIED"
-    raise ProductionBlockedError(f"unhandled memory mode: {mode!r} (fail closed)")
+                "distribution temperature != 1.0 requires logits from the adapter; "
+                "none returned (fail closed rather than silently sample at T=1)")
+        logits = np.asarray(out["logits"], dtype=np.float64).reshape(-1)
+        if logits.shape[0] != action_count:
+            raise ProductionBlockedError(
+                f"logits length {logits.shape[0]} != action count {action_count} "
+                "(fail closed)")
+        scaled = logits / float(binding.temperature)
+        scaled = scaled - float(np.max(scaled))
+        weights = np.exp(scaled)
+        probs = weights / float(np.sum(weights))
+        action = int(gen.choice(action_count, p=probs))
+    return action, new_memory
 
 
 # ---------------------------------------------------------------------------
@@ -878,52 +973,116 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     }
 
     # STEP 8 — mixed-start rollouts (restored-frontier + standard-reset).
-    window_memory, memory_status = _load_production_memory(config, student, bundle)
+    # CC4 follow-up (P0-11): the compiled distribution fields EXECUTE here.
+    # Every frontier episode samples ONE distribution uniformly, then a start
+    # state within it by weight, and resolves an immutable runtime binding
+    # whose episode_seed / epsilon / temperature / taskparams mechanically
+    # drive the rollout (seeded env continuation, applied action-level
+    # stochasticity, per-episode env params).  Memory is prepared FRESH per
+    # episode from the restored state's own surface — never one shared
+    # window_memory object.
+    memory_mode = MemoryRestoreMode(str(config.memory_mode))
+    memory_status = _verify_window_memory_source(config, student, memory_mode)
     start_rng = np.random.default_rng(config.seed_base + 2)
-    eligible: list[str] = []
-    weights: list[float] = []
-    for distribution in frontier_plan.distributions:
-        for sid in distribution.eligible_states:
-            eligible.append(sid)
-            weights.append(float(distribution.start_state_weights[sid]))
-    total_weight = float(sum(weights))
-    probs = [w / total_weight for w in weights]
+    distributions = tuple(frontier_plan.distributions)
+    if not distributions:
+        raise ProductionBlockedError(
+            "no frontier distributions to execute in mixed-start (fail closed)")
     frontier_weight = float(selection.frontier_start_weight)
+    action_count = int(student.action_spec().count)
     obs_dim = int(np.asarray(obs).reshape(-1).shape[0])
     observations = np.zeros((0, obs_dim), dtype=np.float32)
     actions: list[int] = []
     rewards: list[float] = []
     dones: list[bool] = []
     start_kinds: list[str] = []
+    binding_hashes: list[str] = []
+    executed_distribution_ids: list[str] = []
     frontier_starts = standard_starts = 0
+    stochastic_episodes = 0
+    taskparams_episodes = 0
+    frontier_episode_index = 0
     for episode in range(int(config.mixed_episodes)):
         kind = "FRONTIER" if float(start_rng.random()) < frontier_weight \
             else "STANDARD_RESET"
         if kind == "FRONTIER":
-            sid = str(start_rng.choice(np.asarray(eligible), p=np.asarray(probs)))
+            distribution = distributions[
+                int(start_rng.integers(0, len(distributions)))]
+            states = tuple(distribution.eligible_states)
+            state_probs = np.asarray(
+                [float(distribution.start_state_weights[s]) for s in states],
+                dtype=np.float64)
+            state_probs = state_probs / float(state_probs.sum())
+            sid = str(start_rng.choice(np.asarray(states), p=state_probs))
             _entry, ep_bundle = runner.restore_entry(archive, sid)
             ep_state = ep_bundle.env_state
-            ep_memory = window_memory
+            binding = resolve_distribution_binding(
+                distribution,
+                episode_index=frontier_episode_index,
+                seed_base=int(config.seed_base),
+            )
+            verify_distribution_binding(binding)
+            binding_hashes.append(binding.binding_hash)
+            executed_distribution_ids.append(binding.distribution_id)
+            # Per-state memory restore: a FRESH memory instance for this very
+            # episode (artifact re-read / burn-in of the restored bundle's own
+            # history reference).
+            ep_memory = _fresh_window_memory(config, student, ep_bundle, memory_mode)
             ep_prev_action = ep_bundle.previous_action
             ep_prev_reward = ep_bundle.previous_reward
+            # Seed distribution executes: the env continuation RNG is derived
+            # from the binding's episode seed (never unseeded, never shared).
+            ep_key = jax.random.PRNGKey(int(binding.episode_seed))
+            # TaskParams distribution executes: per-episode env params via the
+            # injected application surface (fail closed if unbound).
+            if binding.taskparams:
+                if config.taskparam_apply_fn is None:
+                    raise ProductionBlockedError(
+                        f"{BLOCKED_NO_INJECTED_TASKPARAM_APPLY_FN}: mixed-start "
+                        "cannot apply the distribution taskparams without the "
+                        "injected surface (fail closed)")
+                ep_params = config.taskparam_apply_fn(
+                    params_env, dict(binding.taskparams))
+                if ep_params is None:
+                    raise ProductionBlockedError(
+                        "taskparam_apply_fn returned None (fail closed)")
+                taskparams_episodes += 1
+            else:
+                ep_params = params_env
+            if float(binding.epsilon) > 0.0 or float(binding.temperature) != 1.0:
+                stochastic_episodes += 1
+            gen = np.random.default_rng(_binding_action_seed(binding))
             frontier_starts += 1
+            frontier_episode_index += 1
         else:
             ep_key = jax.random.PRNGKey(int(start_rng.integers(0, 2 ** 31)))
             _ep_obs, ep_state = env.reset_env(ep_key, params_env)
             ep_memory = student.initial_memory(1)
             ep_prev_action, ep_prev_reward = 0, 0.0
+            ep_params = params_env
+            binding = None
+            gen = None
             standard_starts += 1
         ep_obs_now = observe_fn(ep_state)
-        ep_key = jax.random.PRNGKey(int(start_rng.integers(0, 2 ** 31)))
         for _t in range(int(config.episode_horizon)):
             obs_batch = np.asarray(ep_obs_now).reshape(1, -1)
-            out = student.policy_step(config.student_params, obs_batch, ep_memory,
-                                      ep_prev_action, ep_prev_reward, None, True)
-            ep_memory = out.get("new_memory", out.get("memory"))
-            action = int(np.asarray(out["action"]).reshape(-1)[0])
+            if binding is None:
+                out = student.policy_step(config.student_params, obs_batch,
+                                          ep_memory, ep_prev_action,
+                                          ep_prev_reward, None, True)
+                ep_memory = out.get("new_memory", out.get("memory"))
+                action = int(np.asarray(out["action"]).reshape(-1)[0])
+            else:
+                policy_seed_step = int(gen.integers(0, 2 ** 31))
+                step_rng = jax.random.PRNGKey(policy_seed_step)
+                action, ep_memory = _select_mixed_action(
+                    student=student, params=config.student_params, obs=obs_batch,
+                    memory=ep_memory, prev_action=ep_prev_action,
+                    prev_reward=ep_prev_reward, step_rng=step_rng,
+                    binding=binding, gen=gen, action_count=action_count)
             ep_key, step_key = jax.random.split(ep_key)
             ep_obs_now, ep_state, reward, ep_done, _info = setup["step_fn"](
-                step_key, ep_state, action, params_env)
+                step_key, ep_state, action, ep_params)
             observations = np.concatenate(
                 [observations, obs_batch.astype(np.float32)], axis=0)
             actions.append(action)
@@ -947,6 +1106,14 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         "frontier_start_weight": frontier_weight,
         "transitions": len(actions),
         "memory_status": memory_status,
+        "memory_scope": "PER_EPISODE_FRESH",
+        "distribution_sampling": "PER_DISTRIBUTION_UNIFORM_THEN_STATE_WEIGHTED",
+        "distribution_runtime_version": DISTRIBUTION_RUNTIME_VERSION,
+        "distribution_fields_executed": ("seed", "stochasticity", "taskparams"),
+        "stochastic_episodes": stochastic_episodes,
+        "taskparams_episodes": taskparams_episodes,
+        "binding_hashes": tuple(binding_hashes),
+        "executed_distribution_ids": tuple(executed_distribution_ids),
     }
 
     # STEP 9 — injected ORIGINAL loss (never redefined here).
