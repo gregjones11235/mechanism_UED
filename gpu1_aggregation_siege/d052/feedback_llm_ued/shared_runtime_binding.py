@@ -15,10 +15,21 @@ asset registry and the signed full-state checkpoint are ALL ABSENT. Every
 slot therefore stays EMPTY with status ``BLOCKED_WAITING_SHARED_RUNTIME``
 and :func:`resolve_shared_runtime` fails closed — which is exactly the
 honest posture the two-window real entrypoint must report.
+
+P0-7 (CC3 follow-up audit): ``bindings_hash`` folds the REAL ASSET
+IDENTITIES — the registry-issued Student / Reference / ProbeRunner /
+AnchorManifest / Training identities plus the formal asset registry's own
+identity — NOT status strings. Two bundles bound to different real assets
+can therefore never collide on the same bindings hash, and a missing asset
+folds the explicit ``ABSENT_NOT_REGISTRY_ISSUED`` sentinel (never a silent
+stand-in). The ProbeRunner and Training slots additionally refuse assets
+that do not expose a registry-issued sha256 identity; absence still keeps
+every slot EMPTY and ``resolve_shared_runtime`` fail-closed on
+``BLOCKED_WAITING_SHARED_RUNTIME``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, List, Mapping, Optional, Protocol, Tuple, \
     runtime_checkable
 
@@ -41,6 +52,12 @@ from d052.schemas.common import is_sha256_hex
 #: slot statuses
 STATUS_BOUND = "BOUND"
 STATUS_EMPTY = C.BLOCKED_WAITING_SHARED_RUNTIME
+
+#: P0-7: folded into ``bindings_hash`` for every asset that is NOT bound.
+#: The sentinel is explicit and unmistakable — an absent asset can never
+#: hash-collide with a bound one, and its absence is auditable in the
+#: identity map itself.
+SLOT_ABSENT_IDENTITY = "ABSENT_NOT_REGISTRY_ISSUED"
 
 
 class SharedRuntimeBlocked(RuntimeError):
@@ -169,6 +186,21 @@ class SharedStudentSlot:
                                  detail=binding.provenance_label,
                                  binding=binding)
 
+    def slot_identity(self) -> str:
+        """P0-7: the REAL asset identity folded into ``bindings_hash`` —
+        the resolved Student binding's content identity hash (registry-
+        issued candidate identity), never a status string."""
+        if self.status != STATUS_BOUND:
+            return SLOT_ABSENT_IDENTITY
+        identity = self.binding.identity_hash if self.binding else ""
+        if not identity:
+            raise SharedBindingRejected(
+                "SLOT_BOUND_WITHOUT_REGISTRY_IDENTITY: the student slot is "
+                "BOUND but carries no resolved binding identity — a bound "
+                "slot without an identity is a smuggled stand-in and is "
+                "refused fail-closed")
+        return identity
+
 
 @dataclass(frozen=True)
 class SharedReferenceSlot:
@@ -182,12 +214,30 @@ class SharedReferenceSlot:
                                    detail=binding.provenance_label,
                                    binding=binding)
 
+    def slot_identity(self) -> str:
+        """P0-7: the REAL asset identity folded into ``bindings_hash`` —
+        the resolved Reference binding's content identity hash (registry-
+        issued candidate identity), never a status string."""
+        if self.status != STATUS_BOUND:
+            return SLOT_ABSENT_IDENTITY
+        identity = self.binding.identity_hash if self.binding else ""
+        if not identity:
+            raise SharedBindingRejected(
+                "SLOT_BOUND_WITHOUT_REGISTRY_IDENTITY: the reference slot "
+                "is BOUND but carries no resolved binding identity — a "
+                "bound slot without an identity is a smuggled stand-in and "
+                "is refused fail-closed")
+        return identity
+
 
 @dataclass(frozen=True)
 class SharedProbeRunnerSlot:
     status: str = STATUS_EMPTY
     detail: str = "shared CandidateProbeRunner absent from this worktree"
     runner: Optional[object] = None
+    #: P0-7: the registry-issued identity of the bound runner (sha256 hex,
+    #: issued by the formal asset registry — never derived locally)
+    registry_identity: str = ""
 
     def bind(self, runner: object) -> "SharedProbeRunnerSlot":
         if getattr(runner, "real_simulator", None) is not True:
@@ -200,9 +250,34 @@ class SharedProbeRunnerSlot:
             raise SharedBindingRejected(
                 "PROBE_RUNNER_ID_MISSING: the shared runner must expose a "
                 "non-empty runner_id")
+        #: P0-7: registry-issued identity only — a runner that does not
+        #: declare the sha256 identity the formal asset registry issued
+        #: for it cannot be bound (direction two never derives one)
+        registry_identity = getattr(runner, "registry_identity", "")
+        if (not isinstance(registry_identity, str)
+                or not is_sha256_hex(registry_identity)):
+            raise SharedBindingRejected(
+                "PROBE_RUNNER_REGISTRY_IDENTITY_MISSING: the shared runner "
+                "must expose ``registry_identity`` — the sha256 hex "
+                "identity issued for it by the formal asset registry, got "
+                f"{registry_identity!r}")
         return SharedProbeRunnerSlot(status=STATUS_BOUND,
                                      detail=runner_id,
-                                     runner=runner)
+                                     runner=runner,
+                                     registry_identity=registry_identity)
+
+    def slot_identity(self) -> str:
+        """P0-7: the REAL asset identity folded into ``bindings_hash`` —
+        the runner's registry-issued identity, never a status string."""
+        if self.status != STATUS_BOUND:
+            return SLOT_ABSENT_IDENTITY
+        if not self.registry_identity:
+            raise SharedBindingRejected(
+                "SLOT_BOUND_WITHOUT_REGISTRY_IDENTITY: the probe-runner "
+                "slot is BOUND but carries no registry identity — a bound "
+                "slot without an identity is a smuggled stand-in and is "
+                "refused fail-closed")
+        return self.registry_identity
 
 
 @dataclass(frozen=True)
@@ -220,22 +295,45 @@ class SharedAnchorManifestSlot:
 
     def bind(self, manifest: object) -> "SharedAnchorManifestSlot":
         #: wraps the EXISTING AnchorManifestSource seam (manifest_hash
-        #: recomputed and compared; anything unfrozen fails closed)
+        #: recomputed and compared; anything unfrozen fails closed). Both
+        #: refusal shapes — AnchorManifestBlocked (absent/unfrozen) and
+        #: ValueError (ANCHOR_MANIFEST_HASH_MISMATCH tamper) — are wrapped
+        #: into the typed SharedBindingRejected ladder.
         if isinstance(manifest, Mapping):
             manifest = SharedAnchorManifest(**manifest)
         source = AnchorManifestSource(manifest=manifest)
         try:
             anchor_ids = source.resolve()
-        except AnchorManifestBlocked as exc:
+        except (AnchorManifestBlocked, ValueError) as exc:
             raise SharedBindingRejected(
                 f"ANCHOR_MANIFEST_BINDING_REJECTED: {exc}") from exc
+        manifest_hash = str(getattr(manifest, "manifest_hash", ""))
+        if not is_sha256_hex(manifest_hash):
+            raise SharedBindingRejected(
+                "ANCHOR_MANIFEST_REGISTRY_IDENTITY_MISSING: the bound "
+                "manifest carries no legal sha256 manifest_hash identity "
+                f"({manifest_hash!r}) — refused fail-closed")
         return SharedAnchorManifestSlot(
             status=STATUS_BOUND,
             detail="shared frozen anchor manifest bound",
             anchor_ids=tuple(anchor_ids),
-            manifest_hash=str(getattr(manifest, "manifest_hash", "")),
+            manifest_hash=manifest_hash,
             binding_label=SHARED_MANIFEST_BOUND_LABEL,
             manifest=manifest)
+
+    def slot_identity(self) -> str:
+        """P0-7: the REAL asset identity folded into ``bindings_hash`` —
+        the recomputed-and-verified frozen manifest hash (the registry
+        identity of the anchor set), never a status string."""
+        if self.status != STATUS_BOUND:
+            return SLOT_ABSENT_IDENTITY
+        if not self.manifest_hash:
+            raise SharedBindingRejected(
+                "SLOT_BOUND_WITHOUT_REGISTRY_IDENTITY: the anchor-manifest "
+                "slot is BOUND but carries no manifest identity — a bound "
+                "slot without an identity is a smuggled stand-in and is "
+                "refused fail-closed")
+        return self.manifest_hash
 
 
 @dataclass(frozen=True)
@@ -244,6 +342,9 @@ class SharedTrainingSlot:
     detail: str = ("shared full-state checkpoint + optimizer surface absent "
                    "from this worktree")
     contract: Optional[SharedTrainingContract] = None
+    #: P0-7: the registry-issued identity of the bound training/checkpoint
+    #: surface (sha256 hex, issued by the formal asset registry)
+    registry_identity: str = ""
 
     def bind(self, contract: SharedTrainingContract) -> "SharedTrainingSlot":
         for method in ("run_one_optimizer_update", "save_checkpoint",
@@ -252,9 +353,35 @@ class SharedTrainingSlot:
                 raise SharedBindingRejected(
                     f"SHARED_TRAINING_CONTRACT_INCOMPLETE: missing callable "
                     f"{method!r}")
+        #: P0-7: registry-issued identity only — a training surface that
+        #: does not declare the sha256 identity the formal asset registry
+        #: issued for it cannot be bound (direction two never derives one)
+        registry_identity = getattr(contract, "registry_identity", "")
+        if (not isinstance(registry_identity, str)
+                or not is_sha256_hex(registry_identity)):
+            raise SharedBindingRejected(
+                "SHARED_TRAINING_REGISTRY_IDENTITY_MISSING: the shared "
+                "training contract must expose ``registry_identity`` — the "
+                "sha256 hex identity issued for it by the formal asset "
+                f"registry, got {registry_identity!r}")
         return SharedTrainingSlot(status=STATUS_BOUND,
                                   detail="shared training contract bound",
-                                  contract=contract)
+                                  contract=contract,
+                                  registry_identity=registry_identity)
+
+    def slot_identity(self) -> str:
+        """P0-7: the REAL asset identity folded into ``bindings_hash`` —
+        the training surface's registry-issued identity, never a status
+        string."""
+        if self.status != STATUS_BOUND:
+            return SLOT_ABSENT_IDENTITY
+        if not self.registry_identity:
+            raise SharedBindingRejected(
+                "SLOT_BOUND_WITHOUT_REGISTRY_IDENTITY: the training slot "
+                "is BOUND but carries no registry identity — a bound slot "
+                "without an identity is a smuggled stand-in and is refused "
+                "fail-closed")
+        return self.registry_identity
 
 
 # ---------------------------------------------------------------------------
@@ -273,13 +400,26 @@ SLOT_ASSET_DESCRIPTIONS = {
 
 @dataclass(frozen=True)
 class SharedRuntimeBundle:
-    """All five consume-only slots; every slot EMPTY by default."""
+    """All five consume-only slots; every slot EMPTY by default.
+
+    P0-7: ``bindings_hash`` folds ``asset_identities()`` — the REAL
+    registry-issued asset identities — NOT the status strings of
+    ``status_report()``. The formal asset registry's own identity
+    (``formal_registry_identity``) is folded too; in this worktree the
+    registry is absent, so it stays empty and folds the explicit ABSENT
+    sentinel.
+    """
 
     student: SharedStudentSlot = SharedStudentSlot()
     reference: SharedReferenceSlot = SharedReferenceSlot()
     probe_runner: SharedProbeRunnerSlot = SharedProbeRunnerSlot()
     anchor_manifest: SharedAnchorManifestSlot = SharedAnchorManifestSlot()
     training: SharedTrainingSlot = SharedTrainingSlot()
+    #: P0-7: the formal asset registry's own registry-issued identity
+    #: (sha256 hex). Empty while the registry is absent from this worktree
+    #: — absence is folded into the bindings hash as the explicit ABSENT
+    #: sentinel, never silently omitted.
+    formal_registry_identity: str = ""
 
     def status_report(self) -> Dict[str, Dict[str, str]]:
         report: Dict[str, Dict[str, str]] = {}
@@ -301,8 +441,45 @@ class SharedRuntimeBundle:
                                    ("training", self.training))
                 if slot.status != STATUS_BOUND]
 
+    def asset_identities(self) -> Dict[str, str]:
+        """P0-7: the REAL asset identity map folded into ``bindings_hash``.
+
+        Every entry is a REGISTRY-ISSUED asset identity (or the resolved
+        content identity hash of one), never a status string: two bundles
+        bound to DIFFERENT real assets can never collide, and an absent
+        asset is folded as the explicit ``SLOT_ABSENT_IDENTITY`` sentinel
+        — absence is auditable in the map itself. The six entries: the
+        five consume-only slots plus the formal asset registry's own
+        identity (empty here — the registry is absent from this worktree).
+        """
+        return dict(
+            student=self.student.slot_identity(),
+            reference=self.reference.slot_identity(),
+            probe_runner=self.probe_runner.slot_identity(),
+            anchor_manifest=self.anchor_manifest.slot_identity(),
+            training=self.training.slot_identity(),
+            formal_registry=(self.formal_registry_identity
+                             or SLOT_ABSENT_IDENTITY))
+
+    def with_formal_registry_identity(self, identity: str
+                                      ) -> "SharedRuntimeBundle":
+        """Bind the formal asset registry's own registry-issued identity
+        (P0-7). Fail closed: only a sha256 hex identity is accepted — the
+        registry identity is issued by the registry itself and is never
+        derived locally."""
+        if not isinstance(identity, str) or not is_sha256_hex(identity):
+            raise SharedBindingRejected(
+                "FORMAL_REGISTRY_IDENTITY_INVALID: the formal asset "
+                "registry identity must be a registry-issued sha256 hex "
+                f"string, got {identity!r}")
+        return replace(self, formal_registry_identity=identity)
+
     def bindings_hash(self) -> str:
-        return canonical_sha256(self.status_report())
+        """P0-7: folds the REAL ASSET IDENTITIES (``asset_identities()``),
+        NOT the status strings of ``status_report()`` — a hash over
+        statuses could not distinguish bundles bound to different real
+        assets."""
+        return canonical_sha256(self.asset_identities())
 
 
 def resolve_shared_runtime(bundle: Optional[SharedRuntimeBundle] = None
@@ -323,8 +500,8 @@ def resolve_shared_runtime(bundle: Optional[SharedRuntimeBundle] = None
 
 
 __all__ = [
-    "STATUS_BOUND", "STATUS_EMPTY", "SharedRuntimeBlocked",
-    "SharedBindingRejected", "ReferenceInitContract",
+    "STATUS_BOUND", "STATUS_EMPTY", "SLOT_ABSENT_IDENTITY",
+    "SharedRuntimeBlocked", "SharedBindingRejected", "ReferenceInitContract",
     "ReferenceBindingIdentity", "resolve_reference_binding",
     "TrainingUpdateResult", "SharedTrainingContract", "SharedStudentSlot",
     "SharedReferenceSlot", "SharedProbeRunnerSlot",
