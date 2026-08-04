@@ -40,7 +40,14 @@ from .errors import (
     SchemaMismatchError,
     SimulatorFrontierError,
 )
-from .search_statistics import BranchOutcome, FeasibilityEstimate, estimate_feasibility
+from .search_statistics import (
+    BranchOutcome,
+    FeasibilityEstimate,
+    SOURCE_ESTIMATE_VERSION,
+    SourceFeasibilityEstimate,
+    estimate_feasibility,
+    estimate_feasibility_by_source,
+)
 from .memory_modes import (
     MemoryCompatibilityReport,
     MemoryRestoreMode,
@@ -262,7 +269,9 @@ __all__ = [
     "SEARCH_SOURCE_STUDENT_STOCHASTIC",
     "BranchSearchRunConfig", "BranchSearchRunner", "MemoryArtifactRef",
     "actual_n_summary", "derive_branch_seeds", "require_production_restore_context",
-    "FeasibilityEstimate", "estimate_feasibility", "MemoryCompatibilityReport",
+    "FeasibilityEstimate", "SOURCE_ESTIMATE_VERSION", "SourceFeasibilityEstimate",
+    "estimate_feasibility", "estimate_feasibility_by_source",
+    "MemoryCompatibilityReport",
     "MemoryRestoreMode", "MemoryRestoreRequest", "MemoryRestoreResult", "validate_memory_request", "DataSource",
     "FormalDataLeakageGuard", "SearchActionLeakageGuard",
     "BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY",

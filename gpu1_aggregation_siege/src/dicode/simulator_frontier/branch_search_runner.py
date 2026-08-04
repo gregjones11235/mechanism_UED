@@ -175,8 +175,14 @@ class BranchSearchRunConfig:
             raise BranchSearchBlockedError("BranchSearchRunConfig.state_id is empty (fail closed)")
         if int(self.horizon) <= 0:
             raise BranchSearchBlockedError("BranchSearchRunConfig.horizon must be > 0")
-        if int(self.requested_n) <= 0:
-            raise BranchSearchBlockedError("BranchSearchRunConfig.requested_n must be > 0")
+        # CC4 follow-up (P0-6): source-specific feasibility needs at least one
+        # measured branch per search source — a run smaller than that cannot
+        # produce per-source Wilson evidence, so it is refused up front.
+        if int(self.requested_n) < 3:
+            raise BranchSearchBlockedError(
+                "BranchSearchRunConfig.requested_n must be >= 3: source-specific "
+                "feasibility requires at least one attested branch per search "
+                "source (per-source quotas; fail closed)")
         try:
             mode = MemoryRestoreMode(str(self.memory_mode))
         except ValueError as exc:
@@ -734,6 +740,19 @@ class BranchSearchRunner:
                     "fail closed)")
             outcomes.append(outcome)
             branch_index += 1
+        # CC4 follow-up (P0-6): per-source quota — EVERY requested source must
+        # have contributed at least one completed, attested branch.  A run
+        # that skipped a source cannot back source-specific feasibility.
+        per_source_counts: dict[str, int] = {}
+        for outcome in outcomes:
+            per_source_counts[outcome.search_source] = \
+                per_source_counts.get(outcome.search_source, 0) + 1
+        for source in source_tuple:
+            if per_source_counts.get(source, 0) < 1:
+                raise BranchSearchBlockedError(
+                    f"per-source quota violated: source {source!r} contributed no "
+                    "attested branches (source-specific feasibility requires at "
+                    "least one branch per requested source; fail closed)")
         return tuple(outcomes)
 
 

@@ -62,6 +62,66 @@ class FeasibilityEstimate:
     budget_curve: tuple[Mapping[str, Any], ...] = ()
 
 
+SOURCE_ESTIMATE_VERSION = "source-feasibility-wilson-v1"
+
+
+@dataclass(frozen=True)
+class SourceFeasibilityEstimate:
+    """Feasibility for ONE search source (CC4 follow-up, P0-6).
+
+    Student and Reference evidence is NEVER mixed into one success rate:
+    each source carries its own Wilson estimate, so the selector can use the
+    Student rate for the training frontier and the Student↔Reference gap as
+    separate evidence.
+    """
+
+    source: str
+    state_id: str
+    actual_branches: int
+    successes: int
+    success_rate: float
+    confidence_interval: tuple[float, float]
+    mean_progress: float
+    max_progress: float
+    transition_cost: int
+    uncertainty: float
+    estimate_version: str = SOURCE_ESTIMATE_VERSION
+
+
+def estimate_feasibility_by_source(outcomes: Sequence[BranchOutcome], *,
+                                   state_id: str | None = None
+                                   ) -> dict[str, SourceFeasibilityEstimate]:
+    """Per-source feasibility estimates (Wilson CI per source, fail closed).
+
+    Groups the outcomes by ``search_source`` and runs the frozen
+    ``estimate_feasibility`` on each group, so duplicate-branch and
+    mixed-state violations raise exactly as they do for the aggregate.
+    """
+    rows = list(outcomes)
+    if state_id is not None:
+        rows = [r for r in rows if r.state_id == state_id]
+    grouped: dict[str, list[BranchOutcome]] = {}
+    for row in rows:
+        grouped.setdefault(row.search_source, []).append(row)
+    out: dict[str, SourceFeasibilityEstimate] = {}
+    for source, group in sorted(grouped.items()):
+        est = estimate_feasibility(group)
+        out[source] = SourceFeasibilityEstimate(
+            source=source,
+            state_id=est.state_id,
+            actual_branches=int(est.total_actual_branches),
+            successes=int(est.successes),
+            success_rate=float(est.success_rate),
+            confidence_interval=(float(est.confidence_interval[0]),
+                                 float(est.confidence_interval[1])),
+            mean_progress=float(est.mean_progress),
+            max_progress=float(est.max_progress),
+            transition_cost=int(est.transition_cost),
+            uncertainty=float(est.uncertainty),
+        )
+    return out
+
+
 def _wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
     if n == 0:
         return (0.0, 1.0)

@@ -71,7 +71,11 @@ from .llm_contracts import (
 )
 from .memory_modes import MemoryRestoreMode, MemoryRestoreRequest
 from .provenance import DataSource
-from .search_statistics import BranchOutcome, estimate_feasibility
+from .search_statistics import (
+    BranchOutcome,
+    estimate_feasibility,
+    estimate_feasibility_by_source,
+)
 from .anchor_manifest import (
     BLOCKED_SHARED_ANCHOR_MANIFEST,
     AnchorManifest,
@@ -702,15 +706,45 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         raise ProductionBlockedError(
             f"actual_N {len(outcomes)} != requested_N {config.requested_n} "
             "(never report a partial run as complete)")
-    estimate = estimate_feasibility(outcomes)
-    classification = classify_frontier(estimate, outcomes=outcomes)
+    # CC4 follow-up (P0-6): source-specific feasibility.  Student and
+    # Reference evidence is NEVER mixed into one success rate: each source
+    # keeps its own Wilson estimate, and the frontier classification consumes
+    # ONLY the Student branches (the training policy's own evidence).
+    by_source = estimate_feasibility_by_source(outcomes)
+    student_outcomes = tuple(
+        o for o in outcomes
+        if o.search_source in (SEARCH_SOURCE_STUDENT_DETERMINISTIC,
+                               SEARCH_SOURCE_STUDENT_STOCHASTIC))
+    if not student_outcomes:
+        raise ProductionBlockedError(
+            "source-specific feasibility: no attested Student branches "
+            "(a training frontier classification cannot be backed by "
+            "Reference-only evidence; fail closed)")
+    estimate = estimate_feasibility(student_outcomes)
+    classification = classify_frontier(estimate, outcomes=student_outcomes)
     report["real_actual_n_executed"] = True
     steps["STEP04_REAL_ACTUAL_N_BRANCH_SEARCH"] = {
         "actual_n": len(outcomes),
         "requested_n": int(config.requested_n),
-        "successes": int(estimate.successes),
+        "successes": int(sum(bool(o.success) for o in outcomes)),
+        "student_branches": len(student_outcomes),
+        "student_successes": int(estimate.successes),
+        "classification_source": "STUDENT_ONLY",
         "frontier_class": classification.frontier_class.value,
         "reason_codes": list(classification.reason_codes),
+        "source_estimates": {
+            source: {
+                "actual_branches": est.actual_branches,
+                "successes": est.successes,
+                "success_rate": est.success_rate,
+                "confidence_interval": list(est.confidence_interval),
+                "mean_progress": est.mean_progress,
+                "max_progress": est.max_progress,
+                "transition_cost": est.transition_cost,
+                "uncertainty": est.uncertainty,
+            }
+            for source, est in sorted(by_source.items())
+        },
     }
 
     # STEP 5 — 0-or-2 typed LLM calls (production path, never faked).
