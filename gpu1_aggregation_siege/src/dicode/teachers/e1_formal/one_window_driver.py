@@ -35,6 +35,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields as dataclass_fields
 from typing import Any, Tuple
 
+from . import probe_result_binding as PRB
 from . import shared_runtime_seam as SRS
 from . import variant_binding as VB
 from .board import ReviewWindow, WINDOW_STATUS_COMPLETE
@@ -475,4 +476,95 @@ def execute_real_candidate_binding(
         execution_surfaces=surfaces,
         backend_name=backend.name,
         stages_passed=tuple(backend.capabilities),
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage 4: registry-signed probe results (consumption ONLY — E1 never mints)
+# ---------------------------------------------------------------------------
+def execute_real_candidate_probes(
+    teacher: Any,
+    candidates: Any,
+    runtime: Any,
+    *,
+    probe_results: Any,
+    student_checkpoint_identity: str,
+    reference_checkpoint_identity: str,
+    allow_test_only: bool = False,
+) -> Tuple[Any, ...]:
+    """Consume the window's REGISTRY-SIGNED probe pool fail-closed.
+
+    E1 never mints probe results: the pool arrives signed by the
+    shared probe runner registry and is consumed through
+    ``probe_result_binding`` with the window's identities — Student /
+    Reference identity hashes from the signed bundle, checkpoint
+    identities supplied by the caller (they must equal the probe
+    input checkpoints — P0-10), and the seed bank / reset protocol /
+    runner registry identities from the bundle-bound probe runner
+    object. ANY violation refuses the whole pool.
+    """
+    ctx = "e1_driver.candidate_probes"
+    validate_runtime_surface(runtime, ctx)
+    _require_gen_manager(teacher, ctx)
+    require_real_object(candidates, "executable_candidate_pool", ctx)
+    if not isinstance(candidates, tuple) or len(candidates) == 0:
+        raise DriverError(
+            E1_DRIVER_MISSING_OBJECT,
+            f"{ctx}: the executable candidate pool must be a non-empty "
+            "tuple of ExecutableCandidate objects",
+        )
+    for index, candidate in enumerate(candidates):
+        if not isinstance(candidate, ExecutableCandidate):
+            raise DriverError(
+                E1_DRIVER_BAD_TYPE,
+                f"{ctx}: executable_candidate_pool[{index}] must be an "
+                f"ExecutableCandidate, got {type(candidate).__name__}",
+            )
+    for name, value in (
+        ("student_checkpoint_identity", student_checkpoint_identity),
+        ("reference_checkpoint_identity", reference_checkpoint_identity),
+    ):
+        if not isinstance(value, str) or len(value) != 64:
+            raise DriverError(
+                E1_DRIVER_BAD_TYPE,
+                f"{ctx}: {name} must be a 64-hex checkpoint identity, "
+                f"got {value!r}",
+            )
+    # the probe runner object supplies the frozen seed bank + reset
+    # protocol identities (absent shared object => fail closed)
+    resolutions = SRS.resolve_all_from_bundle(
+        runtime, ctx, allow_test_only=allow_test_only
+    )
+    probe_runner_obj = resolutions["probe_runner"].object_ref
+    seed_bank_hash = getattr(probe_runner_obj, "seed_bank_hash", None)
+    reset_protocol_hash = getattr(
+        probe_runner_obj, "reset_protocol_hash", None
+    )
+    for name, value in (
+        ("seed_bank_hash", seed_bank_hash),
+        ("reset_protocol_hash", reset_protocol_hash),
+    ):
+        if not isinstance(value, str) or len(value) != 64:
+            raise DriverError(
+                E1_DRIVER_RUNTIME_UNBOUND,
+                f"{ctx}: the bundle-bound probe runner exposes no "
+                f"64-hex {name!r} (got {value!r}); refusing a guessed "
+                "seed/reset identity",
+            )
+    return PRB.consume_registry_signed_probe_results(
+        probe_results,
+        candidates=candidates,
+        student_identity_hash=runtime.object_identity_hash(
+            "student_identity"
+        ),
+        student_checkpoint_hash=student_checkpoint_identity,
+        reference_identity_hash=runtime.object_identity_hash(
+            "reference_identity"
+        ),
+        reference_checkpoint_hash=reference_checkpoint_identity,
+        seed_bank_hash=seed_bank_hash,
+        reset_protocol_hash=reset_protocol_hash,
+        runner_registry_hash=runtime.object_identity_hash("probe_runner"),
+        ctx=ctx,
+        allow_test_only=allow_test_only,
     )
