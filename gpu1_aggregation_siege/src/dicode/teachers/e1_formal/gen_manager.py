@@ -47,6 +47,17 @@ hash and the candidate-set hash — and every entry's artifact_id must
 equal the teacher's internal registry. A provenance string alone (even
 the exact CANDIDATE_EVALUATION value) NEVER certifies REUSE.
 
+C15 attestation binding: caller-supplied probe strings alone NEVER
+suffice either — the dual-probe block must match an ADAPTER-MINTED
+attestation (``record_dual_probe_attestation``), bound to the pinned
+strong Student and the CURRENT frozen Reference candidate, and every
+stored binding (registry artifact/spec/code hashes, window id/hash,
+candidate-set hash, Reference identity hash, manifest sha, probes) is
+RE-VALIDATED against the current internal state on EVERY reuse
+(``_snapshot_still_valid``): a stale window, a re-frozen Reference or
+protocol, a changed manifest, a reordered candidate set or a tampered
+stored snapshot invalidates REUSE fail-closed.
+
 This module imports NO jax/craftax, performs NO network I/O and NO
 file I/O (the anchor manifest and frozen manifest are injected as
 mappings by the caller). ``check_compilation`` is a stdlib syntax-only
@@ -146,6 +157,22 @@ _DUAL_PROBE_FIELDS = (
     "student_candidate_id",
     "student_probe_id",
     "student_probe_hash",
+    "reference_probe_id",
+    "reference_probe_hash",
+)
+
+#: C15: fields of an ADAPTER-MINTED dual-probe attestation. The probe
+#: ids/hashes a snapshot carries are only accepted if they were minted
+#: through ``record_dual_probe_attestation`` — caller-supplied strings
+#: alone never suffice. The attestation binds the probes to the minting
+#: adapter, the pinned strong Student and the frozen Reference candidate
+#: that was current at mint time.
+_PROBE_ATTESTATION_FIELDS = (
+    "adapter_id",
+    "student_candidate_id",
+    "student_probe_id",
+    "student_probe_hash",
+    "reference_candidate_id",
     "reference_probe_id",
     "reference_probe_hash",
 )
@@ -442,6 +469,10 @@ class E1FormalGenManager:
         # selection is certified via record_verified_batch; while None,
         # every batch trains nothing.
         self._verified_batch_snapshot: Optional[Dict[str, Any]] = None
+        # C15: adapter-minted dual-probe attestations — the ONLY source
+        # of admissible probe ids/hashes. Caller-supplied probe strings
+        # that match no minted attestation never certify REUSE.
+        self._probe_attestations: List[Dict[str, str]] = []
 
     # ------------------------------------------------------------------
     # init-time manifest verification (fail-closed, greppable)
@@ -820,6 +851,9 @@ class E1FormalGenManager:
         structured Student/Reference dual-probe evidence block (probe
         ids + sha256 hashes on the pinned strong Student). Ids plus a
         provenance string alone NEVER certify a trainable batch.
+
+        C15: the probe block must match an ADAPTER-MINTED attestation;
+        caller-supplied probe strings alone never certify promotion.
         """
         ids = list(promoted_dynamic_ids or ())
         blocked = self.current_blocked_codes()
@@ -923,13 +957,13 @@ class E1FormalGenManager:
                 "(probe ids + sha256 hashes); ids and a provenance "
                 "string alone never certify a trainable batch",
             )
-        probe = _validate_dual_probe(
-            dual_probe, "e1_formal.batch.promotion.dual_probe"
-        )
         # certified: this window becomes the REUSE source for the next
+        # session. C15: _certify_dynamic_window itself validates the
+        # probe block AND requires an adapter-minted attestation, so the
+        # choke point stays fail-closed even for direct callers.
         self._certify_dynamic_window(
             window_ids.pop(), ids, _VERIFIED_SNAPSHOT_PROVENANCE,
-            "e1_formal.batch.promotion", dual_probe=probe,
+            "e1_formal.batch.promotion", dual_probe=dual_probe,
         )
         layout_map = layout.build_training_layout(ids)
         return {
@@ -959,6 +993,160 @@ class E1FormalGenManager:
         copy["dual_probe"] = dict(snapshot["dual_probe"])
         return copy
 
+    # ------------------------------------------------------------------
+    # C15: adapter-minted dual-probe attestations (caller-supplied
+    # probe strings alone never certify REUSE)
+    # ------------------------------------------------------------------
+    @property
+    def probe_attestations(self) -> List[Dict[str, str]]:
+        """Read-only copy of the minted dual-probe attestations (audit)."""
+        return [dict(att) for att in self._probe_attestations]
+
+    def record_dual_probe_attestation(
+        self, attestation: Any
+    ) -> Dict[str, str]:
+        """Mint ONE adapter dual-probe attestation (C15).
+
+        The CC4 evaluation seam (StudentAdapter + frozen Reference) is
+        the only producer of real probe evidence; this consumer mints
+        its record so that later REUSE certification can refuse any
+        probe ids/hashes that were never minted. Fail-closed:
+
+        * the Reference identity contract must be frozen RIGHT NOW —
+          probes run against the frozen Reference or not at all;
+        * exact field set (unknown fields refused); ``adapter_id`` is
+          the minting adapter's identity and must be non-empty;
+        * ``student_candidate_id`` must be exactly the pinned strong
+          Student; ``reference_candidate_id`` must equal the CURRENT
+          frozen contract's candidate id (an attestation minted under a
+          re-frozen Reference never certifies again);
+        * Student and Reference probe ids must be non-empty and
+          DISTINCT, and both probe hashes must be lowercase sha256 hex;
+          identical ids or hashes (a swapped/degenerate probe pair) are
+          refused.
+
+        Returns the cleaned attestation; an exact duplicate is minted
+        only once. Raises GenManagerError with a greppable code on ANY
+        violation. No file/network I/O, no training.
+        """
+        ctx = "e1_formal.record_dual_probe_attestation"
+        if self._reference_contract is None:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BLOCKED,
+                f"{ctx}: cannot mint a dual-probe attestation while the "
+                "Reference identity is unfrozen "
+                "(REFERENCE_CONTRACT_UNFROZEN)",
+            )
+        if not isinstance(attestation, Mapping):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: attestation must be a mapping, got "
+                f"{type(attestation).__name__}",
+            )
+        unknown = sorted(
+            k for k in attestation if k not in _PROBE_ATTESTATION_FIELDS
+        )
+        if unknown:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: unknown attestation field(s) {unknown}",
+            )
+        for name in _PROBE_ATTESTATION_FIELDS:
+            if name not in attestation:
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                    f"{ctx}: attestation missing field {name!r}",
+                )
+        adapter_id = attestation["adapter_id"]
+        if not isinstance(adapter_id, str) or not adapter_id.strip():
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                f"{ctx}: attestation needs a non-empty adapter_id",
+            )
+        student_candidate_id = attestation["student_candidate_id"]
+        if student_candidate_id != PINNED_STUDENT_CANDIDATE_ID:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: dual probes must run on the pinned strong "
+                f"Student {PINNED_STUDENT_CANDIDATE_ID!r}, got "
+                f"{student_candidate_id!r}",
+            )
+        reference_candidate_id = attestation["reference_candidate_id"]
+        contracted = self._reference_contract.candidate_id
+        if reference_candidate_id != contracted:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: reference_candidate_id "
+                f"{reference_candidate_id!r} != the CURRENT frozen "
+                f"Reference candidate {contracted!r}",
+            )
+        for name in ("student_probe_id", "reference_probe_id"):
+            value = attestation[name]
+            if not isinstance(value, str) or not value.strip():
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
+                    f"{ctx}: attestation needs non-empty {name!r}",
+                )
+        if (
+            attestation["student_probe_id"]
+            == attestation["reference_probe_id"]
+        ):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: Student and Reference probes must be DISTINCT "
+                "(both probe ids are identical — a swapped or "
+                "degenerate probe pair)",
+            )
+        for name in ("student_probe_hash", "reference_probe_hash"):
+            value = attestation[name]
+            if not _is_sha256_hex(value):
+                raise GenManagerError(
+                    GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                    f"{ctx}: attestation field {name!r} must be "
+                    f"lowercase sha256 hex (64 chars), got {value!r}",
+                )
+        if (
+            attestation["student_probe_hash"]
+            == attestation["reference_probe_hash"]
+        ):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: Student and Reference probes must be DISTINCT "
+                "(both probe hashes are identical — a swapped or "
+                "degenerate probe pair)",
+            )
+        cleaned = {
+            name: attestation[name] for name in _PROBE_ATTESTATION_FIELDS
+        }
+        if cleaned not in self._probe_attestations:
+            self._probe_attestations.append(cleaned)
+        return dict(cleaned)
+
+    def _dual_probe_attested(self, probe: Mapping[str, str]) -> bool:
+        """True iff ``probe`` matches a minted attestation bound to the
+        CURRENT frozen Reference candidate (C15)."""
+        if self._reference_contract is None:
+            return False
+        contracted = self._reference_contract.candidate_id
+        for att in self._probe_attestations:
+            if att["reference_candidate_id"] != contracted:
+                continue
+            if all(att[name] == probe[name] for name in _DUAL_PROBE_FIELDS):
+                return True
+        return False
+
+    def _require_attested_dual_probe(
+        self, probe: Mapping[str, str], ctx: str
+    ) -> None:
+        """Fail closed unless ``probe`` matches a minted attestation."""
+        if not self._dual_probe_attested(probe):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: dual_probe matches no adapter-minted "
+                "attestation — caller-supplied probe ids/hashes alone "
+                "never certify REUSE",
+            )
+
     def record_verified_batch(self, snapshot: Any) -> Dict[str, Any]:
         """Certify the previous window's FULLY VERIFIED 12+4 batch (C13).
 
@@ -980,6 +1168,10 @@ class E1FormalGenManager:
           identity, the ``window_hash`` recorded in the registry for
           every one of the 12 tasks, and the ``candidate_set_hash``
           over the ordered certified candidate set;
+        * C15 attestation binding: the ``dual_probe`` block must match
+          an ADAPTER-MINTED attestation (``record_dual_probe_attestation``)
+          bound to the CURRENT frozen Reference candidate — caller-
+          supplied probe ids/hashes alone never suffice;
         * EXACTLY 12 unique dynamic entries, each bound to a
           compiled artifact in this teacher's own registry with
           matching artifact_id, spec_hash and code sha256 (no entry
@@ -1078,6 +1270,10 @@ class E1FormalGenManager:
         probe = _validate_dual_probe(
             snapshot["dual_probe"], f"{ctx}.dual_probe"
         )
+        # C15: well-formed probe strings alone never suffice — they must
+        # match an adapter-minted attestation bound to the CURRENT
+        # frozen Reference candidate
+        self._require_attested_dual_probe(probe, f"{ctx}.dual_probe")
         anchor_ids = snapshot["anchor_task_ids"]
         if not isinstance(anchor_ids, (list, tuple)) or tuple(
             anchor_ids
@@ -1263,26 +1459,113 @@ class E1FormalGenManager:
             blocked.append(MT.LEARNABILITY_THRESHOLD_MISSING)
         return blocked
 
-    def _snapshot_still_valid(self, snapshot: Mapping[str, Any]) -> bool:
-        """Re-check a stored snapshot against the CURRENT gate state."""
+    def _snapshot_still_valid(self, snapshot: Any) -> bool:
+        """Re-validate EVERY binding of a stored snapshot before REUSE.
+
+        C15: caller-supplied strings alone never suffice — before any
+        reuse the WHOLE snapshot is re-checked against the CURRENT
+        internal state: gate blockers, provenance, canonical anchors,
+        the current frozen anchor manifest sha, the current frozen
+        Reference candidate and identity hash, the adapter-minted
+        dual-probe attestations, and — for every one of the 12 dynamic
+        tasks — the registry's artifact_id, spec_hash, code sha256,
+        window id and window hash, plus the candidate-set hash over the
+        ORDERED certified ids. ANY inconsistency (a stale window, a
+        re-frozen Reference or reset protocol, a changed manifest, a
+        reordered candidate set, a tampered stored snapshot, an
+        unattested probe) invalidates REUSE: the batch trains nothing.
+        Never raises — any surprise is False (fail-closed).
+        """
+        if not isinstance(snapshot, Mapping):
+            return False
         if self.current_gate_blockers_for_certification("e1_formal.reuse"):
+            return False
+        for name in _VERIFIED_SNAPSHOT_FIELDS:
+            if name not in snapshot:
+                return False
+        if snapshot["provenance"] != _VERIFIED_SNAPSHOT_PROVENANCE:
+            return False
+        anchor_ids = snapshot["anchor_task_ids"]
+        if not isinstance(anchor_ids, (list, tuple)) or tuple(
+            anchor_ids
+        ) != layout.ANCHOR_TASK_IDS:
             return False
         if (
             snapshot["anchor_manifest_sha256"]
             != self._anchor_manifest.manifest_sha256
         ):
             return False
+        # the snapshot stays bound to the CURRENT frozen Reference
+        # identity as a whole — a re-frozen identity (ANY contracted
+        # field, including the episode reset protocol) invalidates it
         if (
             snapshot["reference_candidate_id"]
             != self._reference_contract.candidate_id
         ):
             return False
-        # C14: the snapshot stays bound to the CURRENT frozen Reference
-        # identity as a whole — a re-frozen identity invalidates REUSE
-        if (
-            snapshot.get("reference_identity_hash")
-            != reference_identity_sha256(self._reference_contract)
+        identity_hash = snapshot["reference_identity_hash"]
+        if not _is_sha256_hex(identity_hash):
+            return False
+        if identity_hash != reference_identity_sha256(
+            self._reference_contract
         ):
+            return False
+        # C15: dual probes must still be structurally valid AND match a
+        # minted attestation bound to the CURRENT Reference candidate
+        try:
+            probe = _validate_dual_probe(
+                snapshot["dual_probe"], "e1_formal.reuse.dual_probe"
+            )
+        except GenManagerError:
+            return False
+        if not self._dual_probe_attested(probe):
+            return False
+        window_id = snapshot["window_id"]
+        if not isinstance(window_id, str) or not window_id.strip():
+            return False
+        window_hash = snapshot["window_hash"]
+        if not _is_sha256_hex(window_hash):
+            return False
+        if not _is_sha256_hex(snapshot["candidate_set_hash"]):
+            return False
+        raw_tasks = snapshot["dynamic_tasks"]
+        if not isinstance(raw_tasks, (list, tuple)):
+            return False
+        if len(raw_tasks) != layout.NUM_DYNAMIC_SLOTS:
+            return False
+        seen = set()
+        task_ids: List[str] = []
+        for raw in raw_tasks:
+            if not isinstance(raw, Mapping):
+                return False
+            task_id = raw.get("task_id")
+            if not isinstance(task_id, str) or not task_id.strip():
+                return False
+            if task_id in seen or task_id in layout.ANCHOR_TASK_IDS:
+                return False
+            seen.add(task_id)
+            record = self._artifact_registry.get(task_id)
+            if record is None:
+                return False
+            if raw.get("artifact_id") != record["artifact_id"]:
+                return False
+            if raw.get("spec_hash") != record["spec_hash"]:
+                return False
+            code_sha = hashlib.sha256(
+                record["code"].encode("utf-8")
+            ).hexdigest()
+            if raw.get("code_sha256") != code_sha:
+                return False
+            # stale-window guard: the registry record must still carry
+            # the SAME window id and window hash as the snapshot
+            if record.get("window_id", "") != window_id.strip():
+                return False
+            record_window_hash = record.get("window_hash", "")
+            if not record_window_hash or record_window_hash != window_hash:
+                return False
+            task_ids.append(task_id)
+        # candidate-set hash over the ORDERED certified candidate set
+        if snapshot["candidate_set_hash"] != canonical_sha256(task_ids):
             return False
         return True
 
@@ -1293,7 +1576,7 @@ class E1FormalGenManager:
         provenance: str,
         ctx: str,
         *,
-        dual_probe: Mapping[str, str],
+        dual_probe: Any,
     ) -> None:
         """Store registry-bound evidence as the verified snapshot.
 
@@ -1304,7 +1587,14 @@ class E1FormalGenManager:
         ordered certified ids) and the validated dual-probe block. A
         window whose registry records carry no window hash can never
         be certified (fail-closed).
+
+        C15: the dual-probe block is validated HERE and must match an
+        adapter-minted attestation — this method is the certification
+        choke point, so even a direct call can never store unattested
+        probe strings.
         """
+        probe = _validate_dual_probe(dual_probe, f"{ctx}.dual_probe")
+        self._require_attested_dual_probe(probe, f"{ctx}.dual_probe")
         entries = []
         window_hashes = set()
         for task_id in dynamic_ids:
@@ -1342,7 +1632,7 @@ class E1FormalGenManager:
                 self._anchor_manifest.manifest_sha256
             ),
             "candidate_set_hash": canonical_sha256(list(dynamic_ids)),
-            "dual_probe": dict(dual_probe),
+            "dual_probe": dict(probe),
             "dynamic_tasks": entries,
         }
         self._real_selection_completed = True
@@ -1410,10 +1700,12 @@ class E1FormalGenManager:
                 "no dynamic task is ever promoted without real probes; "
                 "while hard gates block, the batch trains NOTHING (zero "
                 "updates, no anchors-only sneak); REUSE is only the "
-                "previous window's verified 12+4 with structured "
-                "dual-probe IDs/hashes, Reference identity, window and "
-                "candidate-set hash evidence — a provenance string "
-                "alone never certifies it",
+                "previous window's verified 12+4 with ADAPTER-MINTED "
+                "dual-probe attestations, Reference identity, window "
+                "and candidate-set hash evidence, re-validated against "
+                "the current internal state on every reuse — a "
+                "provenance string or caller-supplied probe strings "
+                "alone never certify it",
             ],
         }
 

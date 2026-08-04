@@ -206,6 +206,62 @@ REUSE**，必须携带全部结构化证据，逐字段 fail-closed。
   CC4 双 probe 记录到位前，生产路径永远落在阻断侧。
   `b5536d3` 的阻断零训练行为保持不变；REAL_* 标志保持 false。
 
+## C15 REUSE 认证绑定与全量复核——关闭
+
+**指令（总控 CC2/E1）**：调用方自带的 probe 串/哈希单独永不充分
+——dual-probe 证据必须由 adapter 铸造（attestation），且每次 REUSE
+前 `_snapshot_still_valid` 必须重验全部绑定。
+
+新增/收紧（违反即 fail-closed，码仍为
+`GEN_MANAGER_SNAPSHOT_{BAD_TYPE,MISSING_FIELD,MISMATCH,BLOCKED}`）：
+
+1. **adapter 铸造缝** `record_dual_probe_attestation`：真实 probe
+   证据只可能来自 CC4 评价 seam（共享 StudentAdapter + 冻结
+   Reference），本消费端铸造其记录——Reference 契约必须已冻结
+   （未冻结 ⇒ SNAPSHOT_BLOCKED）；字段集固定（未知字段拒）；
+   `adapter_id`（铸造 adapter 身份）非空；`student_candidate_id`
+   必为 pinned 强 Student；`reference_candidate_id` 必等于**当前**
+   冻结契约的候选 id（在旧 Reference 下铸造的 attestation 于重新
+   冻结后永不再认证）；Student/Reference probe id 非空且互异、
+   probe 哈希为 sha256-hex 且互异（同 id/同哈希=调换或退化 probe
+   对 ⇒ MISMATCH）；完全重复的 attestation 只铸造一次；
+   `probe_attestations` 属性只读供审计。
+2. **调用方串单独永不充分**：`record_verified_batch` 与晋升路径
+   （`_certify_dynamic_window` 为认证咽喉点——直接私有调用同样
+   fail-closed）现要求 `dual_probe` 块与一条已铸造 attestation
+   匹配且绑定当前 Reference 候选（`_require_attested_dual_probe`）；
+   格式合法但未铸造、或 Student/Reference 角色互换的 probe ⇒
+   MISMATCH。
+3. **REUSE 全量复核**：`_snapshot_still_valid` 在每次复用前重验
+   全部绑定——门禁 blocker、provenance 恰等、canonical anchors、
+   当前 manifest sha、当前 Reference 候选 id 与身份哈希（重冻结
+   任一契约字段含 episode reset 协议即失效）、dual-probe 结构与
+   attestation 绑定、12 个动态任务逐条对**当前** registry 复核
+   （artifact_id/spec_hash/code sha256/window_id/window_hash；
+   registry 记录被新窗口覆盖=窗口过期 ⇒ 失效）、候选集哈希按序
+   重算；从不抛异常，任何不一致 ⇒ False ⇒ 零训练
+   （`TRAINING_BLOCKED_NO_VERIFIED_BATCH`）。
+
+- 证据：`tests/e1_formal/test_training_gate.py` 新增 66 条 C15 测试
+  （4 类）：铸造缝 fail-closed 矩阵（阻断教师不可铸造/非映射/未知
+  字段/逐字段缺失/空 adapter_id/错 Student/错 Reference/空 probe
+  id/同 id/坏哈希/同哈希）；认证期调用方串不足（未铸造串、
+  Student↔Reference probe id+哈希互换、Reference 重冻结后旧
+  attestation 失效、晋升路径未铸造 probe）；逐次 REUSE 复核
+  （整窗/单条记录重消费⇒窗口过期、registry 记录删除⇒未知 id、
+  artifact 变更、Reference 身份变更、reset 协议变更、manifest
+  变更、候选集换序、存储快照伪造哈希×3、存储快照 probe 互换、
+  存储快照 Student 变更）；直接私有旁路（直接翻转
+  `_real_selection_completed`、直接安放伪造快照——含与 registry
+  完全一致但 probe 未铸造的"完美伪造"、篡改已存副本、直接调用
+  `_certify_dynamic_window` 传未铸造/畸形 probe）；以及 1 条
+  adapter 铸造正路径（铸造⇒认证⇒REUSE 恰训练一次，且下一次复用
+  仍过全量复核）。全套 1069 passed / 5 skipped。
+- 诚实声明：正路径的 attestation/probe id/哈希为明示 FIXTURE
+  （adapter id `cc4-student-adapter-fixture-v1` 为测试占位）；真实
+  CC4 双 probe 记录到位前，生产路径永远落在阻断侧。`b5536d3` 的
+  阻断零训练行为保持不变；REAL_* 标志保持 false。
+
 ## 待总控冻结项清单
 
 1. **Reference 身份**（G1 身份值 + manifest hash）；

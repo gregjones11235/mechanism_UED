@@ -15,8 +15,11 @@
   `4f3e333` C9 metrics/anchors/selector/parity → `8e65663` C10 GenManager+配置 →
   `1fa41ab` C11 集成布线+评价 seam → `0c8f2af` C12 报告 →
   `b5536d3` C13 fail-closed 训练门禁修复（总控 REQUEST_CHANGES）→
-  （本提交）C14 REUSE 证据收紧（record_verified_batch 结构化 dual-probe
-  绑定；总控 CC2/E1）。
+  `e623130` C14 REUSE 证据收紧（record_verified_batch 结构化 dual-probe
+  绑定；总控 CC2/E1）→
+  （本提交）C15 REUSE 认证绑定与全量复核（adapter 铸造 dual-probe
+  attestation；调用方串单独永不充分；_snapshot_still_valid 每次复用前
+  重验全部绑定；总控 CC2/E1）。
 
 ## 一、九阶段管线 → 代码位置
 
@@ -65,6 +68,13 @@ REFERENCE_CONTRACT_UNFROZEN
    哈希、窗口哈希（与 registry 逐条相等）、候选集哈希；晋升路径
    （`build_training_batch` 携带 `dual_probe`）同构收紧。详见
    gate_closure_v2.md「C14 REUSE 证据收紧」。
+   **C15 认证绑定**：dual-probe 串/哈希还须匹配 adapter 铸造的
+   attestation（`record_dual_probe_attestation`；调用方串单独永不
+   充分），且 `_snapshot_still_valid` 在每次 REUSE 前重验全部绑定
+   （registry 逐条、窗口/候选集/身份/manifest 哈希、attestation、
+   门禁态）——窗口过期、身份/协议/manifest 变更、候选集换序、
+   篡改存储快照、直接私有旁路一律失效⇒零训练。详见
+   gate_closure_v2.md「C15 REUSE 认证绑定与全量复核」。
 
 集成 smoke（`tests/e1_formal/test_integration_smoke.py`）断言链上每个码
 **如实出现**，且 batch 中没有任何伪造动态任务或伪造数值；
