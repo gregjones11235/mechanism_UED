@@ -43,7 +43,6 @@ from .branch_search_runner import (
 from .discovery_provenance import (
     BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY,
     DiscoveryProvenance,
-    production_registry,
     production_registry_bound,
 )
 from .env_restore import build_template, encode_env_state
@@ -517,10 +516,11 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         discovery_provenance=DiscoveryProvenance.TRAINING_DISCOVERY.value,
     )
     archive = FrontierArchive()
+    # The production registry comes ONLY from the controller injection slot,
+    # resolved inside the guard chain (P0-1: no caller-supplied registry).
     added, finalized = archive.add_production_entry(
         entry, encoded,
         capture_provenance=config.capture_provenance,
-        registry=production_registry(),
         student_identity=identity,
         expected_parameter_hash=params_sha,
         memory_request=config.memory_request,

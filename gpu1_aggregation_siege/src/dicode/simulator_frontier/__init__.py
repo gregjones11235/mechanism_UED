@@ -25,9 +25,11 @@ from .frontier_archive import PRODUCTION_SCHEMA_VERSION, FrontierArchive
 from .archive_guards import (
     ARCHIVE_PRODUCTION_WRITE_READY,
     ENTRY_PROVENANCE_SCHEMA,
+    TEST_FIXTURE_CAPTURE_REASON_PREFIX,
     compute_entry_provenance_hash,
     finalize_entry_provenance,
     verify_production_entry,
+    verify_test_fixture_entry,
 )
 from .errors import (
     ArchiveWriteGuardError,
@@ -231,8 +233,9 @@ __all__ = [
     "StateCodec", "FrontierArchiveEntry", "FrontierArchive",
     "PRODUCTION_SCHEMA_VERSION",
     "ARCHIVE_PRODUCTION_WRITE_READY", "ENTRY_PROVENANCE_SCHEMA",
+    "TEST_FIXTURE_CAPTURE_REASON_PREFIX",
     "compute_entry_provenance_hash", "finalize_entry_provenance",
-    "verify_production_entry",
+    "verify_production_entry", "verify_test_fixture_entry",
     "ArchiveWriteGuardError", "BranchSearchBlockedError", "InvalidEvidenceError",
     "ProductionBlockedError", "ProvenanceViolationError", "SchemaMismatchError",
     "SimulatorFrontierError",

@@ -11,14 +11,22 @@ Production surface (P0-1, additive only):
   compatibility, codec payload re-hash, entry provenance recompute) before
   delegating dup/capacity/quota to the frozen ``add()``.  Never relies on the
   caller having run any guard first; any violation raises and nothing is
-  written.
+  written.  CC4 audit closure: this signature carries NO caller-supplied
+  ``registry=`` and NO ``allow_synthetic_fixture=`` — the registry is read
+  inside the guard chain from the controller injection slot only.
+- ``add_test_fixture_entry`` — strictly separated TEST-ONLY write surface for
+  contract tests: TEST_ONLY registry + SYNTHETIC_FIXTURE provenance +
+  ``TEST_ONLY_``-prefixed capture reason; never returns a production
+  attestation and never loadable by ``load_production``.
 - ``save_production`` — v2 layout (entry_order + counts + archive_hash over
   everything except the hash itself), written atomically
-  tmp → flush → fsync → ``os.replace``.
+  tmp → flush → fsync → ``os.replace``.  Refuses any entry whose discovery
+  provenance is not TRAINING_DISCOVERY (fixture entries can never be
+  persisted in the production layout).
 - ``load_production`` — recomputes the archive hash, enforces 1:1
   entry ↔ encoded-state pairing, re-decodes every payload (hash recomputation),
-  rechecks binding + entry provenance hashes, and re-validates the capacity /
-  quota invariants.  Any mismatch raises.
+  rechecks binding + entry provenance hashes + TRAINING_DISCOVERY provenance,
+  and re-validates the capacity / quota invariants.  Any mismatch raises.
 """
 
 from __future__ import annotations
@@ -33,8 +41,10 @@ from typing import Any
 from .archive_guards import (
     compute_entry_provenance_hash,
     verify_production_entry,
+    verify_test_fixture_entry,
 )
 from .archive_schema import FrontierArchiveEntry
+from .discovery_provenance import DiscoveryProvenance
 from .errors import ArchiveWriteGuardError, SchemaMismatchError
 from .memory_modes import MemoryRestoreMode
 from .state_codec import EncodedState, StateCodec
@@ -136,20 +146,23 @@ class FrontierArchive:
     def add_production_entry(self, entry: FrontierArchiveEntry,
                              encoded_state: EncodedState, *,
                              capture_provenance: Any,
-                             registry: Any,
                              student_identity: Any,
                              expected_parameter_hash: str,
                              memory_request: Any,
-                             allow_synthetic_fixture: bool = False,
                              expected_checkpoint_id: str | None = None
                              ) -> tuple[bool, FrontierArchiveEntry]:
         """The ONE production write entry (fail closed).
 
         Runs the complete ``archive_guards.verify_production_entry`` chain
         internally — binding, identity cross-binding, checkpoint/params hash,
-        discovery provenance (controller registry), formal-leakage sweep,
-        memory compatibility, codec payload re-hash and entry provenance
-        recompute — then delegates dup/capacity/quota to the frozen ``add()``.
+        discovery provenance (registry resolved ONLY from the controller
+        injection slot inside the guard chain), formal-leakage sweep, memory
+        compatibility, codec payload re-hash and entry provenance recompute —
+        then delegates dup/capacity/quota to the frozen ``add()``.
+
+        CC4 audit closure (P0-1): this signature carries NO caller-supplied
+        ``registry=`` and NO ``allow_synthetic_fixture=`` surface — those
+        parameters were the registry-injection bypass and are removed.
 
         Any guard violation raises and nothing is written.  Returns
         ``(added, finalized_entry)`` where ``added`` is False only for the
@@ -158,12 +171,44 @@ class FrontierArchive:
         finalized = verify_production_entry(
             entry, encoded_state,
             capture_provenance=capture_provenance,
+            student_identity=student_identity,
+            expected_parameter_hash=expected_parameter_hash,
+            memory_request=memory_request,
+            codec=self.codec,
+            expected_checkpoint_id=expected_checkpoint_id)
+        return self.add(finalized, encoded_state), finalized
+
+    def add_test_fixture_entry(self, entry: FrontierArchiveEntry,
+                               encoded_state: EncodedState, *,
+                               capture_provenance: Any,
+                               registry: Any,
+                               student_identity: Any,
+                               expected_parameter_hash: str,
+                               memory_request: Any,
+                               expected_checkpoint_id: str | None = None
+                               ) -> tuple[bool, FrontierArchiveEntry]:
+        """Strictly separated TEST-ONLY write entry (contract tests only).
+
+        Requirements enforced by ``archive_guards.verify_test_fixture_entry``:
+        the registry must be ``usage=TEST_ONLY`` (a caller-supplied PRODUCTION
+        registry is rejected, as is the injected production registry object);
+        entry + capture provenance must be SYNTHETIC_FIXTURE; the entry
+        ``capture_reason`` must carry the ``TEST_ONLY_`` prefix.
+
+        This path NEVER returns a production attestation: entries added here
+        carry SYNTHETIC_FIXTURE discovery provenance, which ``save_production``
+        refuses to persist and ``load_production`` refuses to load — so
+        fixture entries can never enter the production persistence layout nor
+        be imported by ``one_window_pipeline``.
+        """
+        finalized = verify_test_fixture_entry(
+            entry, encoded_state,
+            capture_provenance=capture_provenance,
             registry=registry,
             student_identity=student_identity,
             expected_parameter_hash=expected_parameter_hash,
             memory_request=memory_request,
             codec=self.codec,
-            allow_synthetic_fixture=allow_synthetic_fixture,
             expected_checkpoint_id=expected_checkpoint_id)
         return self.add(finalized, encoded_state), finalized
 
@@ -171,9 +216,11 @@ class FrontierArchive:
         """Persist the archive atomically in the v2 production layout.
 
         Refuses (raises ``ArchiveWriteGuardError``) to write unless every
-        entry is fully bound, carries a self-consistent recomputed provenance
-        hash, and its encoded state payload hash matches — the production
-        layout never persists partially-bound content.
+        entry is fully bound, carries TRAINING_DISCOVERY discovery provenance
+        (test fixture entries can never be persisted in the production
+        layout), carries a self-consistent recomputed provenance hash, and
+        its encoded state payload hash matches — the production layout never
+        persists partially-bound or fixture-labelled content.
 
         Layout: schema_version=frontier-archive/v2, capacity, per_bucket_quota,
         entry_order, entry_count, state_count, entries, states, and an
@@ -182,6 +229,12 @@ class FrontierArchive:
         """
         for state_id, entry in self._entries.items():
             assert_entry_bound(entry)
+            if entry.discovery_provenance != DiscoveryProvenance.TRAINING_DISCOVERY.value:
+                raise ArchiveWriteGuardError(
+                    f"production save refused: entry {state_id} discovery_provenance is "
+                    f"{entry.discovery_provenance!r}; the production persistence layout "
+                    f"accepts ONLY {DiscoveryProvenance.TRAINING_DISCOVERY.value} entries "
+                    "(test fixture entries are never production content; fail closed)")
             expected = compute_entry_provenance_hash(entry)
             if entry.provenance_hash != expected:
                 raise ArchiveWriteGuardError(
@@ -252,6 +305,12 @@ class FrontierArchive:
                 raise SchemaMismatchError(
                     f"production load: state payload hash != entry.state_hash ({entry.state_id})")
             assert_entry_bound(entry)
+            if entry.discovery_provenance != DiscoveryProvenance.TRAINING_DISCOVERY.value:
+                raise SchemaMismatchError(
+                    f"production load: entry {entry.state_id} discovery_provenance is "
+                    f"{entry.discovery_provenance!r}; only "
+                    f"{DiscoveryProvenance.TRAINING_DISCOVERY.value} entries may exist in "
+                    "the production persistence layout (fixture entries rejected)")
             expected_prov = compute_entry_provenance_hash(entry)
             if entry.provenance_hash != expected_prov:
                 raise SchemaMismatchError(
