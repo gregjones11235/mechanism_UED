@@ -77,6 +77,43 @@ REAL_SIMULATOR_PROBE = False
 SHARED_ANCHOR_MANIFEST_BOUND = False
 BLOCKED_SHARED_ANCHOR_MANIFEST = "BLOCKED_SHARED_ANCHOR_MANIFEST"
 
+# ---------------------------------------------------------------------------
+# Production-readiness state (TWO_REAL_WINDOWS_READY_FOR_AUDIT round).
+# These are STATE flags describing whether a real capability has actually
+# executed — they are not authorization grants: real authorization flows
+# exclusively through ``runtime_authorization.RealRuntimeAuthorization``
+# plus the physical presence of the shared runtime assets, and every path
+# below fails closed while those are absent.
+# ---------------------------------------------------------------------------
+#: the direction-two REAL minimal two-window loop actually executed end to
+#: end (false: the entrypoints hard-block locally — shared runtime assets
+#: and a real LLM transport are absent from this worktree).
+E2_REAL_MINIMAL_LOOP = False
+#: short-pilot authorization (master-directive gate). Stays false until the
+#: shared Student/Reference/anchor/checkpoint assets, the real minimal loop
+#: and the compute-matched controls all pass external audit.
+E2_PILOT_AUTHORIZED = False
+
+#: unified long-run environment-step budget, compute-matched across the
+#: three comparison configurations (normal / no-feedback / shuffled).
+TOTAL_ENV_STEPS_LONG_RUN = 98304
+
+#: real EnvCoder: bounded repair budget per directive batch. Once exhausted
+#: the execution blocks (REAL_ENVCODER_REPAIR_BUDGET_EXHAUSTED) — there is
+#: deliberately NO fallback to the symbolic coder on the production path.
+ENVCODER_MAX_REPAIR_ATTEMPTS = 2
+#: the single prompt template the real EnvCoder may ever be called under
+#: (one call per window directive batch, never per candidate).
+ENVCODER_UNIQUE_TEMPLATE_ID = "ENVCODER_UNIQUE_TEMPLATE_V1"
+
+#: production blocker status codes (fail-closed, greppable)
+REAL_MODE_BLOCKED_NO_LLM_BACKEND = "REAL_MODE_BLOCKED_NO_LLM_BACKEND"
+BLOCKED_WAITING_SHARED_RUNTIME = "BLOCKED_WAITING_SHARED_RUNTIME"
+#: the legacy Arm-C replay tie-break issue does NOT enter the production
+#: path; it is recorded (reports/feedback_llm_ued/production_readiness.md)
+#: without modifying any frozen historical evidence.
+LEGACY_REPLAY_BLOCKED_NON_PRODUCTION = "LEGACY_REPLAY_BLOCKED_NON_PRODUCTION"
+
 #: engineering-progress flags (may flip True as scaffold pieces land):
 #: C16 earned: the direction-two formal plan (six-role Review Board +
 #: independent EnvCoder + double-window state machine + three-mode

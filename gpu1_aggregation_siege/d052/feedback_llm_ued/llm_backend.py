@@ -21,11 +21,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Dict, Mapping, Protocol, Tuple, runtime_checkable
+from typing import Callable, Dict, Mapping, Optional, Protocol, Tuple, \
+    runtime_checkable
 
 from d052.bagr_ued.hashing import text_sha256
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.feedback_contracts import extract_context
+from d052.feedback_llm_ued.real_call_journal import (
+    RealCallJournal,
+    default_logical_call_id,
+    normalize_transport_result,
+)
 
 
 class BackendBlocked(RuntimeError):
@@ -193,23 +199,31 @@ class RealBackendAdapter:
     """Seam for a real LLM API (kind="real").
 
     * Construction FAILS CLOSED unless ``authorized`` is True; call sites are
-      expected to pass the round flag (``C.REAL_LLM_CALLS_AUTHORIZED``).
+      expected to pass the round flag (``C.REAL_LLM_CALLS_AUTHORIZED``) or an
+      explicit runtime grant from the production entrypoint.
     * Credentials/API keys live ONLY inside the injected ``transport``
       closure — this class never sees, stores or logs them.
     * Failed attempts (exception or empty response) increment
       ``usage.failed_calls`` and are retried up to ``max_retries`` extra
       attempts; exhausting the budget raises ``BackendCallFailed``.
+    * Optional audit ``journal`` (a ``real_call_journal.RealCallJournal``):
+      when present, every served call is journaled (role / model / backend /
+      logical call id / API request id / prompt+response hashes / token
+      usage / retry count), duplicate successful calls are refused before
+      the transport is ever invoked, and the retry count cannot exceed the
+      journal's cap — the master-directive LLM call rules, enforced in code.
     """
 
     kind = C.BACKEND_KIND_REAL
 
     def __init__(self,
-                 transport: Callable[[str, str], str],
+                 transport: Callable[[str, str], object],
                  *,
                  backend_id: str,
                  model_id: str,
                  authorized: bool,
-                 max_retries: int = 2) -> None:
+                 max_retries: int = 2,
+                 journal: Optional[RealCallJournal] = None) -> None:
         if not authorized:
             raise BackendBlocked(
                 "REAL_LLM_BACKEND_BLOCKED: REAL_LLM_CALLS_AUTHORIZED="
@@ -217,10 +231,15 @@ class RealBackendAdapter:
                 "may not be constructed")
         if max_retries < 0:
             raise ValueError(f"NEGATIVE_MAX_RETRIES: {max_retries}")
+        if journal is not None and max_retries > journal.retry_cap:
+            raise ValueError(
+                f"RETRY_CAP_MISMATCH: max_retries={max_retries} exceeds the "
+                f"journal retry cap {journal.retry_cap}")
         self.backend_id = backend_id
         self.model_id = model_id
         self._transport = transport
         self._max_retries = max_retries
+        self._journal = journal
         self._usage = UsageStats()
 
     @property
@@ -228,20 +247,39 @@ class RealBackendAdapter:
         return self._usage
 
     def complete(self, role: str, prompt: str) -> str:
+        prompt_sha = text_sha256(prompt)
+        logical_call_id = default_logical_call_id(role, prompt,
+                                                  self.backend_id)
+        if self._journal is not None:
+            #: refuse a repeat of an already-successful call BEFORE spending
+            #: any transport attempt (forbidden duplicate successful call)
+            self._journal.assert_open(logical_call_id)
         attempts = self._max_retries + 1
         last_error: object = None
-        for _ in range(attempts):
+        for attempt in range(attempts):
             try:
-                raw = self._transport(role, prompt)
+                result = self._transport(role, prompt)
             except Exception as exc:          # transport failure -> retry
                 self._usage.failed_calls += 1
                 last_error = exc
                 continue
-            if not isinstance(raw, str) or not raw:
+            try:
+                raw, request_id, token_usage, usage_status = \
+                    normalize_transport_result(result)
+            except ValueError as exc:         # empty / malformed -> retry
                 self._usage.failed_calls += 1
-                last_error = ValueError("EMPTY_REAL_LLM_RESPONSE")
+                last_error = exc
                 continue
             self._usage.real_calls += 1
+            if self._journal is not None:
+                self._journal.record_transport(
+                    logical_call_id=logical_call_id, role=role,
+                    backend_id=self.backend_id, model_id=self.model_id,
+                    request_id=request_id, prompt_sha256=prompt_sha,
+                    response_sha256=text_sha256(raw),
+                    token_usage=token_usage,
+                    token_usage_status=usage_status,
+                    retry_count=attempt)
             return raw
         raise BackendCallFailed(
             f"REAL_LLM_CALL_FAILED: role={role} after {attempts} attempts; "

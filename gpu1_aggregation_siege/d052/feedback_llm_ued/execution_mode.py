@@ -6,16 +6,26 @@ controller no longer reaches into mock-only attributes (``mock_calls`` /
 LLM calls, real simulator probes, training steps or formal runs are allowed.
 
 Every decision derives from the round-constant flags in
-``d052.feedback_llm_ued.constants`` (all False this round) and the declared
-:class:`ExecutionMode`. Anything not explicitly allowed is refused with
+``d052.feedback_llm_ued.constants`` (all False this round), the declared
+:class:`ExecutionMode`, and — on the production path only — an explicit
+runtime grant set (:class:`~d052.feedback_llm_ued.runtime_authorization.
+RealRuntimeAuthorization`). The round constants are NEVER hand-flipped;
+runtime grants are the sole channel through which a REAL run may be
+authorized, and they take effect ONLY in ``EXECUTION_MODE_REAL``. With no
+grants injected (the default) the gate's behavior is byte-identical to the
+constants-only evaluation. Anything not explicitly allowed is refused with
 ``LaunchGateBlocked`` — never silently downgraded.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.runtime_authorization import (
+    RealRuntimeAuthorization,
+    empty_authorization,
+)
 
 # ---------------------------------------------------------------------------
 # Execution modes for the loop driver
@@ -72,32 +82,44 @@ class FeedbackLaunchGate:
     """
 
     def __init__(self,
-                 execution_mode: str = EXECUTION_MODE_MOCK_DRY_RUN) -> None:
+                 execution_mode: str = EXECUTION_MODE_MOCK_DRY_RUN,
+                 runtime_grants: Optional[RealRuntimeAuthorization] = None
+                 ) -> None:
         if execution_mode not in EXECUTION_MODES:
             raise ValueError(f"UNKNOWN_EXECUTION_MODE: {execution_mode!r}")
         self.execution_mode = execution_mode
+        #: production-path grants; default = no grants (constants-only
+        #: evaluation, byte-identical to the pre-grant gate)
+        self.runtime_grants = runtime_grants or empty_authorization()
 
     # ------------------------------------------------------------- evaluate
     def evaluate(self) -> LaunchDecision:
-        real_llm = (self.execution_mode == EXECUTION_MODE_REAL
-                    and C.REAL_LLM_CALLS_AUTHORIZED)
+        g = self.runtime_grants
+        real_mode = self.execution_mode == EXECUTION_MODE_REAL
+        #: the round constants stay False and are never hand-flipped; on the
+        #: production path an explicit runtime grant is the ONLY way a real
+        #: capability becomes allowed (and only in EXECUTION_MODE_REAL)
+        real_llm = real_mode and (C.REAL_LLM_CALLS_AUTHORIZED
+                                  or g.real_llm_backend)
         allowed = (C.BACKEND_KIND_MOCK, C.BACKEND_KIND_REPLAY)
         if real_llm:
             allowed = allowed + (C.BACKEND_KIND_REAL,)
+        reason = ("fail-closed evaluation of "
+                  "d052.feedback_llm_ued.constants authorization flags")
+        if g.any_grant():
+            reason += f" + runtime grants: {g.describe()}"
         return LaunchDecision(
             execution_mode=self.execution_mode,
             backend_kinds_allowed=allowed,
             real_llm_calls_allowed=real_llm,
             real_simulator_probe_allowed=(
-                self.execution_mode == EXECUTION_MODE_REAL
-                and C.REAL_SIMULATOR_PROBE_AUTHORIZED),
-            training_allowed=(self.execution_mode == EXECUTION_MODE_REAL
-                              and C.TRAINING_AUTHORIZED),
+                real_mode and (C.REAL_SIMULATOR_PROBE_AUTHORIZED
+                               or g.real_probe)),
+            training_allowed=(real_mode and (C.TRAINING_AUTHORIZED
+                                             or g.real_training)),
             final_formal_run_allowed=(
-                self.execution_mode == EXECUTION_MODE_REAL
-                and C.FORMAL_EVALUATION_AUTHORIZED),
-            reason=("fail-closed evaluation of "
-                    "d052.feedback_llm_ued.constants authorization flags"))
+                real_mode and C.FORMAL_EVALUATION_AUTHORIZED),
+            reason=reason)
 
     # ------------------------------------------------------- C11 final batch
     def evaluate_final_batch(self, *, loop_completed: bool,
