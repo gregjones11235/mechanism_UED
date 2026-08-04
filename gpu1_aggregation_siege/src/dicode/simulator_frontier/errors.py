@@ -15,3 +15,15 @@ class SchemaMismatchError(SimulatorFrontierError, ValueError):
 
 class ProvenanceViolationError(SimulatorFrontierError, ValueError):
     """A data object crosses a forbidden provenance boundary."""
+
+
+class ArchiveWriteGuardError(SimulatorFrontierError, ValueError):
+    """A production archive write failed the internal guard chain (fail closed)."""
+
+
+class BranchSearchBlockedError(SimulatorFrontierError):
+    """A real actual-N branch search cannot honestly proceed (missing artifact/executor)."""
+
+
+class ProductionBlockedError(SimulatorFrontierError):
+    """A production path is blocked waiting on a controller-supplied input (never faked)."""

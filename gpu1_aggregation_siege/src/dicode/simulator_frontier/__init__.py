@@ -21,7 +21,19 @@ from .goals import (
 from .terminal_events import TerminalEventAdapter, TerminalTransition
 from .state_codec import EncodedState, StateBundle, StateCodec
 from .archive_schema import FrontierArchiveEntry
-from .frontier_archive import FrontierArchive
+from .frontier_archive import PRODUCTION_SCHEMA_VERSION, FrontierArchive
+from .archive_guards import (
+    ARCHIVE_PRODUCTION_WRITE_READY,
+    ENTRY_PROVENANCE_SCHEMA,
+    compute_entry_provenance_hash,
+    finalize_entry_provenance,
+    verify_production_entry,
+)
+from .errors import (
+    ArchiveWriteGuardError,
+    BranchSearchBlockedError,
+    ProductionBlockedError,
+)
 from .search_statistics import BranchOutcome, FeasibilityEstimate, estimate_feasibility
 from .memory_modes import (
     MemoryCompatibilityReport,
@@ -145,7 +157,13 @@ __all__ = [
     "GoalSpec", "StateFact", "StateFactsGoal", "TerminalEventGoal", "Comparison", "GoalStatus",
     "goal_hash", "evaluate_goal",
     "TerminalEventAdapter", "TerminalTransition", "EncodedState", "StateBundle",
-    "StateCodec", "FrontierArchiveEntry", "FrontierArchive", "BranchOutcome",
+    "StateCodec", "FrontierArchiveEntry", "FrontierArchive",
+    "PRODUCTION_SCHEMA_VERSION",
+    "ARCHIVE_PRODUCTION_WRITE_READY", "ENTRY_PROVENANCE_SCHEMA",
+    "compute_entry_provenance_hash", "finalize_entry_provenance",
+    "verify_production_entry",
+    "ArchiveWriteGuardError", "BranchSearchBlockedError", "ProductionBlockedError",
+    "BranchOutcome",
     "FeasibilityEstimate", "estimate_feasibility", "MemoryCompatibilityReport",
     "MemoryRestoreMode", "MemoryRestoreRequest", "MemoryRestoreResult", "validate_memory_request", "DataSource",
     "FormalDataLeakageGuard", "SearchActionLeakageGuard",
