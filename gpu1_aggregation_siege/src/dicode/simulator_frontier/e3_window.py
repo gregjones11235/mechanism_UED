@@ -140,6 +140,14 @@ class E3WindowConfig:
     loaded_state: Mapping[str, Any] | None = None  # adapter.load_full_state output
     reference_student: Any = None
     reference_params: Any = None
+    # CC4 follow-up (P0-5): the Reference identity/checkpoint/memory binding.
+    # A mounted Reference without these stays blocked — Student identity or
+    # Student memory is never substituted for the Reference's own binding.
+    reference_checkpoint_id: str = ""
+    reference_memory_artifact: Any = None         # MemoryArtifactRef
+    reference_memory_loader: Callable[[Any], Any] | None = None
+    reference_history_artifact_ref: str = ""
+    reference_burn_in_executor: Callable[[Any], Any] | None = None
     # --- capture rollout ---------------------------------------------------
     max_timesteps: int = 0
     reset_seed: int = 0
@@ -666,6 +674,7 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         train_student_id=capture_student_id,
         reference_student=config.reference_student,
         reference_params=config.reference_params,
+        reference_checkpoint_id=config.reference_checkpoint_id,
     )
     search_config = BranchSearchRunConfig(
         state_id=state_id,
@@ -679,6 +688,12 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         memory_loader=config.memory_loader,
         history_artifact_ref=config.history_artifact_ref,
         burn_in_executor=config.burn_in_executor,
+        # CC4 follow-up (P0-4/P0-5): Reference branches consume ONLY the
+        # Reference memory surface — Student memory is never substituted.
+        reference_memory_artifact=config.reference_memory_artifact,
+        reference_memory_loader=config.reference_memory_loader,
+        reference_history_artifact_ref=config.reference_history_artifact_ref,
+        reference_burn_in_executor=config.reference_burn_in_executor,
     )
     outcomes: tuple[BranchOutcome, ...] = runner.run_actual_n(
         archive, search_config, seed_base=config.seed_base,

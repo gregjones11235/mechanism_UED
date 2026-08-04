@@ -82,6 +82,7 @@ from .verified_restore_context import (
     verify_verified_restore_context,
 )
 from .student_binding import (
+    UNBOUND_STUDENT,
     assert_entry_bound,
     assert_outcome_bound,
     bind_branch_outcome,
@@ -249,13 +250,23 @@ class BranchSearchRunner:
                  env_params: Any, template: Any, observe_fn: Any,
                  capture_student_id: str, search_student_id: str,
                  train_student_id: str, codec: StateCodec | None = None,
-                 reference_student: Any = None, reference_params: Any = None):
+                 reference_student: Any = None, reference_params: Any = None,
+                 reference_checkpoint_id: str = ""):
         if not isinstance(student, StudentAdapter):
             raise BranchSearchBlockedError(
                 "search student does not satisfy the StudentAdapter protocol (fail closed)")
         if reference_student is not None and not isinstance(reference_student, StudentAdapter):
             raise BranchSearchBlockedError(
                 "reference student does not satisfy the StudentAdapter protocol (fail closed)")
+        # CC4 follow-up (P0-5): a mounted Reference must carry its checkpoint
+        # identity from construction time — an anonymous Reference can never
+        # produce production branch evidence.
+        if reference_student is not None and not str(reference_checkpoint_id).strip():
+            raise BranchSearchBlockedError(
+                "reference_checkpoint_id is unbound while a reference student is "
+                "mounted: the Reference identity/checkpoint/memory binding must be "
+                "complete before any branch can run (fail closed)")
+        self._reference_checkpoint_id = str(reference_checkpoint_id)
         for label, value in (("capture_student_id", capture_student_id),
                              ("search_student_id", search_student_id),
                              ("train_student_id", train_student_id)):
@@ -466,6 +477,32 @@ class BranchSearchRunner:
         if self._observe_fn is None:
             raise BranchSearchBlockedError("runner has no observe_fn; cannot derive observations")
 
+        # CC4 follow-up (P0-5): Reference identity/checkpoint/memory binding.
+        # The executing policy identity must mechanically equal the bound
+        # identity of the adapter this source runs on — any substitution
+        # fails the branch closed BEFORE a single step executes.
+        reference_identity_hash = UNBOUND_STUDENT
+        reference_checkpoint_id = ""
+        reference_memory_spec_hash = ""
+        if self._reference_student is not None:
+            reference_identity_hash = self._reference_student.identity().identity_hash()
+            reference_memory_spec_hash = self._reference_student.memory_spec().spec_hash()
+            reference_checkpoint_id = self._reference_checkpoint_id
+        if source == SEARCH_SOURCE_REFERENCE_POLICY:
+            if reference_identity_hash == UNBOUND_STUDENT:
+                raise BranchSearchBlockedError(
+                    "REFERENCE_POLICY branch blocked: no bound reference identity "
+                    "(a Reference without identity binding is never production evidence)")
+            if policy_identity_hash != reference_identity_hash:
+                raise BranchSearchBlockedError(
+                    "REFERENCE_POLICY branch executing policy identity does not equal "
+                    "the bound reference identity (identity substitution rejected, "
+                    "fail closed)")
+        elif policy_identity_hash != self._student.identity().identity_hash():
+            raise BranchSearchBlockedError(
+                f"{source} branch executing policy identity does not equal the mounted "
+                "search Student identity (identity substitution rejected, fail closed)")
+
         gen = np.random.default_rng(policy_seed)
         runner_key = jax.random.PRNGKey(env_seed)
         state = restored.env_state
@@ -569,6 +606,16 @@ class BranchSearchRunner:
             search_student_id=self._search_student_id,
             train_student_id=self._train_student_id,
             memory_compatibility_status=memory_status,
+            executing_policy_identity_hash=policy_identity_hash,
+            reference_identity_hash=(
+                reference_identity_hash
+                if reference_identity_hash != UNBOUND_STUDENT else None),
+            reference_checkpoint_id=(
+                reference_checkpoint_id
+                if reference_identity_hash != UNBOUND_STUDENT else None),
+            reference_memory_spec_hash=(
+                reference_memory_spec_hash
+                if reference_identity_hash != UNBOUND_STUDENT else None),
         )
         assert_outcome_bound(outcome)
         return outcome

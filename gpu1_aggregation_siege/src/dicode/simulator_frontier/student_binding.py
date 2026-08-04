@@ -63,24 +63,44 @@ def bind_branch_outcome(outcome: BranchOutcome, *,
                         capture_student_id: str,
                         search_student_id: str,
                         train_student_id: str,
-                        memory_compatibility_status: str) -> BranchOutcome:
+                        memory_compatibility_status: str,
+                        executing_policy_identity_hash: str | None = None,
+                        reference_identity_hash: str | None = None,
+                        reference_checkpoint_id: str | None = None,
+                        reference_memory_spec_hash: str | None = None) -> BranchOutcome:
     """Bind R9 same-Student tracking fields; cross-policy search stays explicit.
 
     ``cross_policy_search`` is derived, never taken on faith: it is True iff
     the three Student ids are not all identical.
+
+    CC4 follow-up (P0-5): the optional policy-identity bindings attach the
+    EXECUTING policy's identity hash and (when a Reference is mounted) the
+    Reference identity/checkpoint/memory-spec triple.  The reference triple is
+    all-or-nothing: binding the reference identity REQUIRES the checkpoint id
+    and the memory spec hash at the same time.
     """
     cap = _require("capture_student_id", capture_student_id)
     sea = _require("search_student_id", search_student_id)
     trn = _require("train_student_id", train_student_id)
     status = _require("memory_compatibility_status", memory_compatibility_status)
-    return dataclasses.replace(
-        outcome,
-        capture_student_id=cap,
-        search_student_id=sea,
-        train_student_id=trn,
-        cross_policy_search=not (cap == sea == trn),
-        memory_compatibility_status=status,
-    )
+    updates: dict[str, Any] = {
+        "capture_student_id": cap,
+        "search_student_id": sea,
+        "train_student_id": trn,
+        "cross_policy_search": not (cap == sea == trn),
+        "memory_compatibility_status": status,
+    }
+    if executing_policy_identity_hash is not None:
+        updates["executing_policy_identity_hash"] = _require(
+            "executing_policy_identity_hash", executing_policy_identity_hash)
+    if reference_identity_hash is not None:
+        updates["reference_identity_hash"] = _require(
+            "reference_identity_hash", reference_identity_hash)
+        updates["reference_checkpoint_id"] = _require(
+            "reference_checkpoint_id", reference_checkpoint_id)
+        updates["reference_memory_spec_hash"] = _require(
+            "reference_memory_spec_hash", reference_memory_spec_hash)
+    return dataclasses.replace(outcome, **updates)
 
 
 def assert_outcome_bound(outcome: BranchOutcome) -> None:
@@ -92,6 +112,28 @@ def assert_outcome_bound(outcome: BranchOutcome) -> None:
     _require("memory_compatibility_status", outcome.memory_compatibility_status)
     if outcome.memory_compatibility_status == "UNSPECIFIED":
         raise SimulatorFrontierError("memory_compatibility_status must be resolved before use")
+    # CC4 follow-up (P0-5): policy identity binding.  A bound executing-policy
+    # identity hash must never be a placeholder, and a REFERENCE_POLICY outcome
+    # must bind the executing identity to the FULL reference triple.
+    if str(outcome.executing_policy_identity_hash).strip() \
+            and str(outcome.executing_policy_identity_hash) != UNBOUND_STUDENT:
+        _require("executing_policy_identity_hash", outcome.executing_policy_identity_hash)
+    if outcome.search_source == "REFERENCE_POLICY":
+        if str(outcome.executing_policy_identity_hash) == UNBOUND_STUDENT \
+                or not str(outcome.executing_policy_identity_hash).strip():
+            raise SimulatorFrontierError(
+                "REFERENCE_POLICY outcome must bind executing_policy_identity_hash")
+        if str(outcome.reference_identity_hash) == UNBOUND_STUDENT \
+                or not str(outcome.reference_checkpoint_id).strip() \
+                or not str(outcome.reference_memory_spec_hash).strip():
+            raise SimulatorFrontierError(
+                "REFERENCE_POLICY outcome must bind the reference identity, "
+                "checkpoint id and memory spec hash (a Reference without identity "
+                "binding is never production evidence)")
+        if outcome.executing_policy_identity_hash != outcome.reference_identity_hash:
+            raise SimulatorFrontierError(
+                "REFERENCE_POLICY outcome executing policy identity does not equal "
+                "the bound reference identity (identity substitution rejected)")
 
 
 def check_bound_entry_memory_request(entry: FrontierArchiveEntry,

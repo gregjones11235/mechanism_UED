@@ -29,6 +29,15 @@ class BranchOutcome:
     train_student_id: str = "NONE"
     cross_policy_search: bool = False
     memory_compatibility_status: str = "UNSPECIFIED"
+    # CC4 follow-up (P0-5): policy identity + Reference binding.  The
+    # executing policy identity hash names WHICH adapter ran this branch;
+    # the reference triple binds the Reference policy's identity/checkpoint/
+    # memory spec whenever a Reference is mounted.  REFERENCE_POLICY outcomes
+    # must carry all of them (enforced by student_binding.assert_outcome_bound).
+    executing_policy_identity_hash: str = "NONE"
+    reference_identity_hash: str = "NONE"
+    reference_checkpoint_id: str = ""
+    reference_memory_spec_hash: str = ""
 
     def __post_init__(self) -> None:
         if not self.branch_id or not self.state_id or self.horizon < 0 or self.transitions_used < 0:
