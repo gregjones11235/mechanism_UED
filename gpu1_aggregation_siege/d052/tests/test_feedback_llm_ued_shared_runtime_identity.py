@@ -101,6 +101,7 @@ def training_contract(registry_identity=TRAINING_REGISTRY_ID_A):
         run_one_optimizer_update=lambda **kw: None,
         save_checkpoint=lambda **kw: "TEST_ONLY_CHECKPOINT_HASH",
         load_checkpoint=lambda **kw: None,
+        verify_full_state_round_trip=lambda **kw: None,
         registry_identity=registry_identity)
 
 

@@ -46,6 +46,7 @@ from d052.feedback_llm_ued.shared_runtime_binding import (
 from d052.feedback_llm_ued.student_binding import (
     EXECUTED_ONE_UPDATE_STATUS,
     RealTwoWindowSmokePolicy,
+    sign_full_state_round_trip,
 )
 
 from test_feedback_llm_ued_envcoder_sequence import (
@@ -61,14 +62,18 @@ SKIPPED_STATUS = "SKIPPED_SMOKE_POLICY_UPDATE_WINDOW"
 class ScriptedTrainingContract:
     """TEST_ONLY / SYNTHETIC shared training surface: records every
     save/load/update call; the optimizer step changes the checkpoint
-    hash exactly when an update runs (NO real optimizer involved)."""
+    hash exactly when an update runs (NO real optimizer involved).
+    P0-11: it also plays the director-verifier and signs a PASSING
+    full-state round-trip attestation for every reloaded checkpoint."""
 
     registry_identity = text_sha256("TEST_ONLY_TRAINING_CONTRACT")
+    verifier_id = text_sha256("TEST_ONLY_DIRECTOR_VERIFIER_IDENTITY")
 
     def __init__(self) -> None:
         self.update_calls = []
         self.save_calls = []
         self.load_calls = []
+        self.round_trip_verifications = []
         self._version = 0
         self._last_hash = text_sha256("TEST_ONLY_GENESIS_STATE")
 
@@ -92,6 +97,17 @@ class ScriptedTrainingContract:
 
     def load_checkpoint(self, *, checkpoint_hash: str) -> None:
         self.load_calls.append(checkpoint_hash)
+
+    def verify_full_state_round_trip(self, *, window: int,
+                                     checkpoint_hash: str):
+        self.round_trip_verifications.append((window, checkpoint_hash))
+        state_hash = text_sha256(
+            f"TEST_ONLY_FULL_STATE_{checkpoint_hash}")
+        return sign_full_state_round_trip(dict(
+            window=window, checkpoint_hash=checkpoint_hash,
+            state_hash_before_save=state_hash,
+            state_hash_after_reload=state_hash,
+            verifier_id=self.verifier_id, verified=True))
 
 
 class ScriptedRealProbeRunner:

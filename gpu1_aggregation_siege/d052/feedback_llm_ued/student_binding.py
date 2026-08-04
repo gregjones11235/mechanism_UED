@@ -18,15 +18,17 @@ contains NO loader, NO registry and NO checkpoint codec:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, runtime_checkable
+from typing import Mapping, Optional, Protocol, runtime_checkable
 
-from d052.bagr_ued.hashing import canonical_sha256
+from pydantic import ConfigDict, Field, model_validator
+
+from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.execution_mode import (
     FeedbackLaunchGate,
     LaunchGateBlocked,
 )
-from d052.schemas.common import is_sha256_hex
+from d052.schemas.common import CanonicalModel, is_sha256_hex
 
 WEIGHTS_NOT_LOADED_LOCAL = "NOT_LOADED_LOCAL"
 WEIGHTS_REAL_CHECKPOINT = "REAL_CHECKPOINT"
@@ -137,11 +139,18 @@ def local_symbolic_binding() -> StudentBindingIdentity:
 
 @dataclass(frozen=True)
 class TrainingStepRecord:
-    """Per-window training-seam bookkeeping (honest no-op this round)."""
+    """Per-window training-seam bookkeeping (honest no-op this round).
+
+    P0-11: ``checkpoint_round_trip_pass`` is True ONLY for the record of
+    an update whose checkpoint save/load round-trip was ATTESTED by the
+    director-verifier's FullStateRoundTripResult — every skipped /
+    deferred / unverified record carries False (never implied).
+    """
 
     status: str
     student_training_transitions: int
     reason: str
+    checkpoint_round_trip_pass: bool = False
 
 
 #: status a seam record carries when exactly one update + checkpoint
@@ -185,6 +194,134 @@ class RealTwoWindowSmokePolicy:
             raise ValueError(
                 "ILLEGAL_SMOKE_POLICY_UPDATE_WINDOW: "
                 f"update_window_index={self.update_window_index!r}")
+
+
+# ---------------------------------------------------------------------------
+# P0-11: the director-verifier's full-state round-trip attestation
+# ---------------------------------------------------------------------------
+class FullStateRoundTripResult(CanonicalModel):
+    """P0-11: the ONLY proof that a checkpoint save/load round-trip
+    actually reproduced the COMPLETE training state.
+
+    "The save hash differs and load_checkpoint was called" is NOT a
+    round-trip — an independent director-verifier must attest that the
+    RELOADED full state (parameters AND optimizer state) reproduces the
+    pre-save full-state identity:
+
+    * frozen: post-construction mutation is refused;
+    * signed: ``round_trip_hash`` is mandatory and recomputed-and-
+      compared (unsigned / tampered attestations fail closed);
+    * passing only: ``verified`` must be True and
+      ``state_hash_before_save == state_hash_after_reload`` — anything
+      else is refused at construction;
+    * registry-issued verifier identity: ``verifier_id`` must be a sha256
+      hex identity (the director-verifier is registered in the formal
+      asset registry; direction two never derives one).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    window: int = Field(ge=0)
+    #: the checkpoint that was reloaded for the round-trip
+    checkpoint_hash: str = Field(min_length=1)
+    state_hash_before_save: str = Field(min_length=1)
+    state_hash_after_reload: str = Field(min_length=1)
+    verifier_id: str = Field(min_length=1)
+    verified: bool = False
+    round_trip_hash: str = ""
+
+    @model_validator(mode="after")
+    def _validate_and_hash(self) -> "FullStateRoundTripResult":
+        for field_name in ("checkpoint_hash", "state_hash_before_save",
+                           "state_hash_after_reload"):
+            value = getattr(self, field_name)
+            if not is_sha256_hex(value):
+                raise ValueError(
+                    "FULL_STATE_ROUND_TRIP_HASH_NOT_SHA256: "
+                    f"{field_name}={value!r}")
+        if not is_sha256_hex(self.verifier_id):
+            raise ValueError(
+                "FULL_STATE_ROUND_TRIP_VERIFIER_IDENTITY_INVALID: "
+                f"verifier_id={self.verifier_id!r} — the director-verifier "
+                "identity is registry-issued sha256")
+        if not self.verified:
+            raise ValueError(
+                "FULL_STATE_ROUND_TRIP_NOT_VERIFIED: only a PASSING "
+                "director-verifier attestation may be consumed")
+        if self.state_hash_before_save != self.state_hash_after_reload:
+            raise ValueError(
+                "FULL_STATE_ROUND_TRIP_STATE_MISMATCH: reloaded full-state "
+                f"hash {self.state_hash_after_reload!r} does not reproduce "
+                f"the pre-save full-state hash "
+                f"{self.state_hash_before_save!r} — the round-trip did NOT "
+                "reproduce the training state")
+        if not self.round_trip_hash:
+            raise ValueError(
+                "FULL_STATE_ROUND_TRIP_UNSIGNED: the attestation must carry "
+                "the registry-issued round_trip_hash computed over its "
+                "content")
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="round_trip_hash",
+                                       carried=self.round_trip_hash,
+                                       kind="FullStateRoundTripResult")
+        object.__setattr__(self, "round_trip_hash", computed)
+        return self
+
+
+def sign_full_state_round_trip(payload: Mapping[str, object]
+                               ) -> FullStateRoundTripResult:
+    """Director-verifier-side helper: build and SIGN one immutable
+    attestation (TEST_ONLY in this worktree — in production the shared
+    runtime's director-verifier signs)."""
+    body = dict(payload)
+    body.pop("round_trip_hash", None)
+    body.setdefault(
+        "protocol_version",
+        FullStateRoundTripResult.model_fields["protocol_version"].default)
+    signature = canonical_sha256(body)
+    return FullStateRoundTripResult(**body, round_trip_hash=signature)
+
+
+def consume_full_state_round_trip(raw: object, *, window: int,
+                                  checkpoint_hash: str
+                                  ) -> FullStateRoundTripResult:
+    """P0-11 consume-only gate: accept ONLY the immutable signed
+    attestation, bound to THIS window and THIS checkpoint. Fail-closed:
+
+      * not a FullStateRoundTripResult / mapping ->
+            REAL_TRAINING_ROUND_TRIP_NOT_SIGNED
+      * mapping failing the attestation contract ->
+            REAL_TRAINING_ROUND_TRIP_ILLEGAL
+      * attestation for another window / checkpoint ->
+            REAL_TRAINING_ROUND_TRIP_WINDOW_MISMATCH /
+            REAL_TRAINING_ROUND_TRIP_CHECKPOINT_MISMATCH
+    """
+    if isinstance(raw, FullStateRoundTripResult):
+        attestation = raw
+    elif isinstance(raw, Mapping):
+        try:
+            attestation = FullStateRoundTripResult(**dict(raw))
+        except Exception as exc:
+            raise StudentBindingBlocked(
+                f"REAL_TRAINING_ROUND_TRIP_ILLEGAL: mapping payload failed "
+                f"the attestation contract: {type(exc).__name__}: {exc}"
+            ) from exc
+    else:
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_NOT_SIGNED: the training seam "
+            "consumes ONLY the immutable director-verifier "
+            f"FullStateRoundTripResult, got {type(raw).__name__} — 'save "
+            "hash differs + load called' is NOT a round-trip")
+    if attestation.window != window:
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_WINDOW_MISMATCH: attestation window="
+            f"{attestation.window} but this update ran in window={window}")
+    if attestation.checkpoint_hash != checkpoint_hash:
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_CHECKPOINT_MISMATCH: attestation "
+            f"binds checkpoint {attestation.checkpoint_hash!r} but this "
+            f"update reloaded {checkpoint_hash!r}")
+    return attestation
 
 
 class StudentTrainingSeam:
@@ -302,6 +439,22 @@ class StudentTrainingSeam:
                 "update must change the full-state checkpoint hash")
         #: round-trip: the post-update checkpoint must reload cleanly
         contract.load_checkpoint(checkpoint_hash=hash_after)
+        #: P0-11: "the save hash differs and load_checkpoint was called"
+        #: is NOT a round-trip. The ONLY acceptable proof is the
+        #: director-verifier's immutable FullStateRoundTripResult
+        #: attestation (the reloaded full state reproduces the pre-save
+        #: full-state identity); without it the update fails closed —
+        #: CHECKPOINT_ROUND_TRIP_PASS can never be claimed.
+        verify = getattr(contract, "verify_full_state_round_trip", None)
+        if not callable(verify):
+            raise StudentBindingBlocked(
+                "REAL_TRAINING_ROUND_TRIP_NOT_ATTESTED: the shared training "
+                "contract must expose verify_full_state_round_trip (the "
+                "director-verifier attestation); 'save hash differs + load "
+                "called' is NOT a round-trip")
+        attestation = consume_full_state_round_trip(
+            verify(window=window, checkpoint_hash=hash_after),
+            window=window, checkpoint_hash=hash_after)
         return TrainingStepRecord(
             status=EXECUTED_ONE_UPDATE_STATUS,
             student_training_transitions=int(
@@ -309,4 +462,7 @@ class StudentTrainingSeam:
             reason=(f"window={window}: exactly one optimizer update over "
                     f"{len(batch_candidate_ids)} final-batch candidates; "
                     f"checkpoint {hash_before[:16]} -> {hash_after[:16]}; "
-                    "reload round-trip completed"))
+                    "full-state round-trip VERIFIED by director-verifier "
+                    f"{attestation.verifier_id[:16]} (full-state hash "
+                    f"{attestation.state_hash_before_save[:16]})"),
+            checkpoint_round_trip_pass=True)

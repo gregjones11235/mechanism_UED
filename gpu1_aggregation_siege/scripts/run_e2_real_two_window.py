@@ -46,6 +46,13 @@ chain head, retry cap, exact counts, token totals and the journal file
 hash) is persisted atomically to ``--journal-path`` on EVERY terminal path
 (including REQUEST_CONTROL stops) and surfaced in the report.
 
+P0-11 (full-state round-trip attestation): the training seam accepts the
+director-verifier's immutable ``FullStateRoundTripResult`` as the ONLY
+proof of the checkpoint round-trip — "the save hash differs and
+load_checkpoint was called" is NOT a round-trip. Without a verified
+attestation the update fails closed and ``checkpoint_round_trip_pass``
+stays False in every record and in the report.
+
 P0-10 (exactly one update): this entrypoint IS the two-window smoke —
 the injected ``RealTwoWindowSmokePolicy`` allows EXACTLY ONE optimizer
 update for the whole run, executed in window k+1 (the window that
@@ -426,12 +433,19 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         total_simulator_transitions=summary.total_simulator_transitions,
         training=[dict(status=t.status,
                        transitions=t.student_training_transitions,
-                       reason=t.reason) for t in controller.training_log],
+                       reason=t.reason,
+                       checkpoint_round_trip_pass=(
+                           t.checkpoint_round_trip_pass))
+                  for t in controller.training_log],
         #: P0-10 audit surface: the exact number of optimizer updates
         #: executed (the smoke policy requires exactly one, in window 1)
         optimizer_updates_executed=sum(
             1 for t in controller.training_log
             if t.status == EXECUTED_ONE_UPDATE_STATUS),
+        #: P0-11 audit surface: True ONLY if the director-verifier
+        #: attested the full-state round-trip of an executed update
+        checkpoint_round_trip_pass=any(
+            t.checkpoint_round_trip_pass for t in controller.training_log),
         journal_entries=len(journal.entries),
         #: P0-5 persisted journal audit surface
         journal_path=journal_path,

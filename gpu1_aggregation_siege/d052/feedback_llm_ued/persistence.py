@@ -115,7 +115,13 @@ def snapshot_controller(ctl: FeedbackUEDController) -> dict:
         training_log=[dict(status=t.status,
                            student_training_transitions=(
                                t.student_training_transitions),
-                           reason=t.reason) for t in ctl.training_log],
+                           reason=t.reason,
+                           #: P0-11: the round-trip pass flag rides in the
+                           #: snapshot; pre-P0-11 snapshots lack the key and
+                           #: restore as False (never attested)
+                           checkpoint_round_trip_pass=(
+                               t.checkpoint_round_trip_pass))
+                      for t in ctl.training_log],
         envelopes=[dict(role=e.role, window=e.window, sequence=e.sequence,
                         request_hash=e.request_hash,
                         response_hash=e.response_hash,

@@ -43,6 +43,7 @@ from d052.feedback_llm_ued.anchor_manifest import (
     SharedAnchorManifest,
 )
 from d052.feedback_llm_ued.student_binding import (
+    FullStateRoundTripResult,
     StudentBindingIdentity,
     StudentInitContract,
     resolve_student_binding,
@@ -154,8 +155,11 @@ class SharedTrainingContract(Protocol):
     """The shared runtime's training/checkpoint surface this loop consumes.
 
     Exactly ONE optimizer update per revision window; checkpoint save/load
-    round-trip around it. The owner guarantees full-state semantics; this
-    direction never re-implements an optimizer or a checkpoint codec.
+    round-trip around it, PROVEN by the director-verifier's immutable
+    :class:`FullStateRoundTripResult` attestation (P0-11: "save hash
+    differs + load called" is NOT a round-trip). The owner guarantees
+    full-state semantics; this direction never re-implements an optimizer
+    or a checkpoint codec.
     """
 
     def run_one_optimizer_update(self, *, window: int,
@@ -165,6 +169,10 @@ class SharedTrainingContract(Protocol):
     def save_checkpoint(self, *, tag: str) -> str: ...
 
     def load_checkpoint(self, *, checkpoint_hash: str) -> None: ...
+
+    def verify_full_state_round_trip(self, *, window: int,
+                                     checkpoint_hash: str
+                                     ) -> FullStateRoundTripResult: ...
 
 
 # ---------------------------------------------------------------------------
@@ -347,8 +355,11 @@ class SharedTrainingSlot:
     registry_identity: str = ""
 
     def bind(self, contract: SharedTrainingContract) -> "SharedTrainingSlot":
+        #: P0-11: the director-verifier attestation surface is part of the
+        #: contract — a training surface without it cannot prove a
+        #: checkpoint round-trip and is refused
         for method in ("run_one_optimizer_update", "save_checkpoint",
-                       "load_checkpoint"):
+                       "load_checkpoint", "verify_full_state_round_trip"):
             if not callable(getattr(contract, method, None)):
                 raise SharedBindingRejected(
                     f"SHARED_TRAINING_CONTRACT_INCOMPLETE: missing callable "
