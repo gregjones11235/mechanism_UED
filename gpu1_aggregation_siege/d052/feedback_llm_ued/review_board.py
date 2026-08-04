@@ -21,8 +21,21 @@ modes. The board reads ONLY:
 The assembled ``BoardOutput`` carries the four board deliverables — verdicts
 (with explicit feedback_id / prediction-signature citations), new hypotheses,
 AxisDirectives, per-family proposals — and fails closed on any citation or
-consistency violation. Honesty: mock backends only this round; the output is
-stamped ENGINEERING_SCAFFOLD and real LLM usage is asserted to be zero.
+consistency violation. The output is stamped ENGINEERING_SCAFFOLD.
+
+P0-0 (CC3 follow-up audit): the board's honesty check is a MODE-AWARE USAGE
+DELTA verification, not the old unconditional ``assert_no_real`` (which
+hard-blocked the legitimate real path): a usage snapshot is taken before the
+first role call, and after the six roles the delta must equal EXACTLY
+
+* mock backend   : real Δ=0, replay Δ=0, mock Δ=6
+* replay backend : real Δ=0, mock Δ=0, replay Δ=6
+* real backend   : real Δ=6, mock Δ=0, replay Δ=0
+
+Any role failure propagates (the window is never marked board-complete), and
+any mixed / short / long delta raises ``BoardUsageDeltaMismatch``. The
+end-of-run honesty check in the controller does NOT replace this role-local
+check — both stay in force.
 """
 from __future__ import annotations
 
@@ -75,6 +88,63 @@ BOARD_ROLE_MODULES = {
 _HYPOTHESIS_PROMPT_KEYS = ("hypothesis_id", "target_behavior",
                            "environment_family", "confidence",
                            "predicted_signature", "status", "source_window")
+
+
+class BoardUsageDeltaMismatch(RuntimeError):
+    """The six-role board's usage delta did not match the backend kind's
+    contract exactly — the window is NOT board-complete (fail closed)."""
+
+
+#: one legitimate six-role board run adds EXACTLY
+#: ``BOARD_CALLS_PER_WINDOW`` completions, ALL of the backend's own kind and
+#: zero of the other two kinds — the same contract in every execution mode.
+BOARD_USAGE_DELTA_BY_KIND = {
+    C.BACKEND_KIND_MOCK: dict(real_calls=0, replay_calls=0,
+                              mock_calls=C.BOARD_CALLS_PER_WINDOW),
+    C.BACKEND_KIND_REPLAY: dict(real_calls=0,
+                                replay_calls=C.BOARD_CALLS_PER_WINDOW,
+                                mock_calls=0),
+    C.BACKEND_KIND_REAL: dict(real_calls=C.BOARD_CALLS_PER_WINDOW,
+                              replay_calls=0, mock_calls=0),
+}
+
+
+def expected_board_usage_delta(backend_kind: str) -> Dict[str, int]:
+    """The required (real_calls, replay_calls, mock_calls) delta of one
+    complete board run for the given backend kind. Unknown kinds fail
+    closed."""
+    try:
+        return dict(BOARD_USAGE_DELTA_BY_KIND[backend_kind])
+    except KeyError:
+        raise ValueError(
+            f"UNKNOWN_BACKEND_KIND: {backend_kind!r}") from None
+
+
+def verify_board_usage_delta(backend, *, before) -> Dict[str, int]:
+    """Role-local, mode-aware usage reconciliation (P0-0, CC3 follow-up
+    audit).
+
+    Replaces the old unconditional ``backend.usage.assert_no_real()``: that
+    check (a) hard-blocked a legitimate REAL six-role board on window 1 and
+    (b) only inspected cumulative state, never the window's own delta. One
+    board run must add exactly ``BOARD_USAGE_DELTA_BY_KIND[backend.kind]`` —
+    a silently mixed-in call of another kind (NO_SILENT_FALLBACK), a missing
+    call or an extra call all refuse the board. Returns the observed delta.
+    """
+    expected = expected_board_usage_delta(backend.kind)
+    usage = backend.usage
+    observed = dict(real_calls=usage.real_calls - before.real_calls,
+                    replay_calls=usage.replay_calls - before.replay_calls,
+                    mock_calls=usage.mock_calls - before.mock_calls)
+    if observed != expected:
+        raise BoardUsageDeltaMismatch(
+            f"BOARD_USAGE_DELTA_MISMATCH: backend kind {backend.kind!r} "
+            f"observed board usage delta {observed} != required {expected} "
+            f"— a six-role board must add exactly "
+            f"{C.BOARD_CALLS_PER_WINDOW} completions, all of the backend's "
+            "own kind; mixed / missing / extra calls fail closed and the "
+            "window is NOT board-complete")
+    return observed
 
 
 def normalize_hypothesis_inputs(hypotheses: Sequence[object]) -> List[dict]:
@@ -287,8 +357,15 @@ def run_review_board(*, window: int, mode: str, board_context: BoardContext,
         window=window, mode=mode, board_context=board_context, view=view,
         hypotheses=hyp_dicts)
 
+    #: P0-0: usage snapshot BEFORE the first role call — the delta taken
+    #: below is this board's own, never cumulative state
+    usage_before = backend.usage.snapshot()
+
     envelopes: List[FeedbackRoleEnvelope] = []
     for i, role in enumerate(C.BOARD_ROLES):
+        #: a role failure (backend refusal, transport exhaustion, parse or
+        #: schema violation) propagates immediately: the window is never
+        #: marked board-complete (no board output exists to freeze)
         module = BOARD_ROLE_MODULES[role]
         envelopes.append(module.run(context, backend, window,
                                     sequence_start + i))
@@ -296,6 +373,14 @@ def run_review_board(*, window: int, mode: str, board_context: BoardContext,
         raise RuntimeError(
             f"BOARD_CALL_COUNT_MISMATCH: {len(envelopes)} != "
             f"{C.BOARD_CALLS_PER_WINDOW}")
+
+    #: P0-0: role-local, mode-aware usage reconciliation — the old
+    #: unconditional ``assert_no_real()`` is abolished; a real six-role board
+    #: adds exactly 6 real calls (and zero mock/replay), a mock board exactly
+    #: 6 mock calls, a replay board exactly 6 replay calls. Any deviation
+    #: refuses the board here (the controller's end-of-run honesty check
+    #: remains in force and does NOT replace this role-local check).
+    verify_board_usage_delta(backend, before=usage_before)
 
     parsed = {e.role: e.parsed_json for e in envelopes}
     student_model = student_modeler.OUTPUT_MODEL(
@@ -333,7 +418,4 @@ def run_review_board(*, window: int, mode: str, board_context: BoardContext,
         directives=list(explorer_out.directives),
         family_proposals=list(intervention.family_proposals),
         request_control=request_control)
-
-    # honesty: this round's board never makes a real LLM call
-    backend.usage.assert_no_real()
     return output

@@ -196,6 +196,9 @@ class TestWindowZeroAndNullView:
                 self.prompts = []
                 self.backend_id = inner.backend_id
                 self.model_id = inner.model_id
+                #: P0-0: every backend surface must expose its kind — the
+                #: board's mode-aware usage delta dispatches on it
+                self.kind = inner.kind
                 self.usage = inner.usage
 
             def complete(self, role, prompt):
