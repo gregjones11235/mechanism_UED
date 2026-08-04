@@ -164,12 +164,90 @@ def normalize_hypothesis_inputs(hypotheses: Sequence[object]) -> List[dict]:
     return sorted(out, key=lambda h: h["hypothesis_id"])
 
 
+#: P0-1 (CC3 follow-up audit): prompt schema version of the SEQUENTIAL
+#: six-role chain — the base context every role starts from, plus the
+#: structured outputs of every upstream role, bound by canonical hashes.
+SEQUENTIAL_PROMPT_SCHEMA_VERSION = "feedback_llm_ued.sequential_board.v1"
+
+
+class SequentialChainBroken(RuntimeError):
+    """The sequential six-role context chain failed closed: a role was asked
+    to run without the exact structured outputs of ALL its upstream roles."""
+
+
+def make_upstream_entry(role: str, parsed_dump: Mapping[str, object]
+                        ) -> Dict[str, object]:
+    """One upstream role's STRUCTURED chain entry: name + parsed output +
+    canonical output hash. Natural-language-only concatenation is forbidden
+    — downstream prompts bind exactly this entry."""
+    if role not in C.BOARD_ROLES:
+        raise ValueError(f"UNKNOWN_BOARD_ROLE: {role!r}")
+    if not isinstance(parsed_dump, Mapping) or not parsed_dump:
+        raise SequentialChainBroken(
+            f"UPSTREAM_OUTPUT_MISSING: role {role!r} produced an empty "
+            "parsed output; the sequential chain cannot continue")
+    dump = dict(parsed_dump)
+    return dict(role=role, output=dump,
+                output_hash=canonical_sha256(dump))
+
+
+def sequential_role_context(base_context: Dict[str, object], *, role: str,
+                            upstream_entries: Sequence[Mapping[str, object]]
+                            ) -> Dict[str, object]:
+    """One board role's CHAINED context (P0-1): the shared base context plus
+    the structured outputs of every upstream role in the fixed board order —
+
+        base                                -> StudentModeler
+        base + StudentModeler               -> BehaviorAuditor
+        base + SM + BA                      -> CausalFailureAnalyst
+        base + first three                  -> InterventionTutor
+        base + first four                   -> Explorer
+        base + all five                     -> Critic/Skeptic
+
+    Fail closed: UPSTREAM_CHAIN_MISMATCH (wrong count — e.g. the critic
+    missing ANY of the five upstream outputs), UPSTREAM_ROLE_MISMATCH (wrong
+    role name / order), UPSTREAM_OUTPUT_MISSING (an entry without a parsed
+    output and hash). The chain is STRUCTURED — every upstream entry keeps
+    its role name, parsed output and canonical output hash; nothing is
+    flattened into prose.
+    """
+    if role not in C.BOARD_ROLES:
+        raise ValueError(f"UNKNOWN_BOARD_ROLE: {role!r}")
+    position = C.BOARD_ROLES.index(role)
+    required = list(C.BOARD_ROLES[:position])
+    if len(upstream_entries) != len(required):
+        raise SequentialChainBroken(
+            f"UPSTREAM_CHAIN_MISMATCH: role {role!r} requires EXACTLY the "
+            f"{len(required)} upstream output(s) {required}; got "
+            f"{len(upstream_entries)} — every role reads ALL its upstream "
+            "roles and the critic must truly read all five")
+    for expected_role, entry in zip(required, upstream_entries):
+        entry_role = (entry.get("role")
+                      if isinstance(entry, Mapping) else None)
+        if entry_role != expected_role:
+            raise SequentialChainBroken(
+                f"UPSTREAM_ROLE_MISMATCH: role {role!r} expected upstream "
+                f"{expected_role!r} at this chain position, got "
+                f"{entry_role!r}")
+        if not entry.get("output") or not entry.get("output_hash"):
+            raise SequentialChainBroken(
+                f"UPSTREAM_OUTPUT_MISSING: upstream role {expected_role!r} "
+                "carries no parsed output / output hash — the chain is "
+                "broken and no downstream prompt may be built")
+    return dict(base_context,
+                prompt_schema_version=SEQUENTIAL_PROMPT_SCHEMA_VERSION,
+                upstream_roles=list(required),
+                upstream_outputs=[dict(e) for e in upstream_entries])
+
+
 def build_board_prompt_context(*, window: int, mode: str,
                                board_context: BoardContext,
                                view,
                                hypotheses: Sequence[dict]) -> Dict[str, object]:
-    """The ONE context every board role reads (shared, role outputs never
-    feed back into it — the critic stays independent)."""
+    """The shared BASE context of the board (P0-1): window / mode /
+    behavior evidence / feedback view / hypotheses. Each role's chained
+    context adds the structured outputs of its upstream roles — see
+    :func:`sequential_role_context`."""
     if mode not in C.FEEDBACK_MODES:
         raise ValueError(f"UNKNOWN_MODE: {mode!r}")
     # double-window discipline at the evidence layer (CC3 C9 gate): every
@@ -343,32 +421,74 @@ class BoardOutput(CanonicalModel):
 
 def run_review_board(*, window: int, mode: str, board_context: BoardContext,
                      view, hypotheses: Sequence[object], backend,
-                     sequence_start: int) -> BoardOutput:
+                     sequence_start: int,
+                     student_identity_hash: str = "",
+                     reference_identity_hash: str = "",
+                     previous_plan_hash: str = "") -> BoardOutput:
     """Run the complete six-role board and assemble the audited output.
 
     Exactly ``C.BOARD_CALLS_PER_WINDOW`` backend calls are made, one per
-    role, in the fixed order. Citation discipline and honesty are enforced
-    here, fail closed.
+    role, in the fixed order — and since P0-1 (CC3 follow-up audit) with a
+    truly SEQUENTIAL context: each role's prompt embeds the structured
+    outputs of ALL its upstream roles (bound by canonical hashes, never
+    prose concatenation), with the critic reading all five. Citation
+    discipline and the mode-aware usage delta are enforced here, fail
+    closed.
+
+    The three trailing identity hashes are bound into every role's
+    ``context_binding`` when the caller holds them (production path); they
+    default to empty strings (= unbound, never derived silently).
     """
     if mode not in C.FEEDBACK_MODES:
         raise ValueError(f"UNKNOWN_MODE: {mode!r}")
     hyp_dicts = normalize_hypothesis_inputs(hypotheses)
-    context = build_board_prompt_context(
+    base_context = build_board_prompt_context(
         window=window, mode=mode, board_context=board_context, view=view,
         hypotheses=hyp_dicts)
+
+    #: P0-1: the structured hashes every role envelope binds (window /
+    #: sequence / backend / model / prompt schema version ride on the
+    #: envelope's own fields)
+    view_payload = view.to_prompt_payload()
+    binding_base = dict(
+        window=window,
+        feedback_view_hash=canonical_sha256(view_payload),
+        behavior_evidence_hash=canonical_sha256(
+            [item.model_dump() for item in board_context.behavior_evidence]),
+        student_identity_hash=student_identity_hash,
+        reference_identity_hash=reference_identity_hash,
+        hypothesis_ledger_hash=canonical_sha256(hyp_dicts),
+        previous_plan_hash=previous_plan_hash,
+        prompt_schema_version=SEQUENTIAL_PROMPT_SCHEMA_VERSION,
+        backend_id=backend.backend_id,
+        model_id=backend.model_id)
 
     #: P0-0: usage snapshot BEFORE the first role call — the delta taken
     #: below is this board's own, never cumulative state
     usage_before = backend.usage.snapshot()
 
     envelopes: List[FeedbackRoleEnvelope] = []
+    upstream: List[Dict[str, object]] = []
     for i, role in enumerate(C.BOARD_ROLES):
         #: a role failure (backend refusal, transport exhaustion, parse or
         #: schema violation) propagates immediately: the window is never
-        #: marked board-complete (no board output exists to freeze)
+        #: marked board-complete (no board output exists to freeze). The
+        #: sequential chain fails closed just as hard: a role never runs
+        #: without the exact structured outputs of ALL its upstream roles.
+        role_context = sequential_role_context(
+            base_context, role=role, upstream_entries=upstream)
+        context_binding = dict(
+            binding_base,
+            sequence=sequence_start + i,
+            upstream_roles=[str(e["role"]) for e in upstream],
+            upstream_output_hashes={str(e["role"]): str(e["output_hash"])
+                                    for e in upstream})
         module = BOARD_ROLE_MODULES[role]
-        envelopes.append(module.run(context, backend, window,
-                                    sequence_start + i))
+        envelope = module.run(role_context, backend, window,
+                              sequence_start + i,
+                              context_binding=context_binding)
+        envelopes.append(envelope)
+        upstream.append(make_upstream_entry(role, envelope.parsed_json))
     if len(envelopes) != C.BOARD_CALLS_PER_WINDOW:
         raise RuntimeError(
             f"BOARD_CALL_COUNT_MISMATCH: {len(envelopes)} != "
@@ -395,7 +515,7 @@ def run_review_board(*, window: int, mode: str, board_context: BoardContext,
     critic = critic_skeptic.OUTPUT_MODEL(**parsed[C.ROLE_CRITIC_SKEPTIC])
 
     # double-window citation discipline — BEFORE anything is assembled
-    visible = {p["feedback_id"]: p for p in view.to_prompt_payload()}
+    visible = {p["feedback_id"]: p for p in view_payload}
     known_ids = frozenset(h["hypothesis_id"] for h in hyp_dicts)
     validate_citations(causal.hypothesis_verdicts, visible, window, known_ids)
 

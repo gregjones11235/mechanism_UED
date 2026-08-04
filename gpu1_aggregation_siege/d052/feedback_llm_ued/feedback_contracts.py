@@ -12,7 +12,7 @@ future real backend parse an identical block.
 from __future__ import annotations
 
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from pydantic import Field, model_validator
 
@@ -219,6 +219,14 @@ class FeedbackRoleEnvelope(CanonicalModel):
     response_hash: str
     raw_response: str
     parsed_json: Dict[str, object] = Field(default_factory=dict)
+    #: P0-1 (CC3 follow-up audit): the STRUCTURED context binding of the
+    #: call — canonical hashes of every prompt-context input (feedback view,
+    #: behavior evidence, hypothesis ledger, Student identity, Reference
+    #: identity when bound, previous plan) plus the sequential upstream
+    #: chain (role names + per-role output hashes). Structured fields and
+    #: canonical hashes ONLY — never natural-language concatenation. Empty
+    #: for calls outside the sequential board chain.
+    context_binding: Dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _hashes(self) -> "FeedbackRoleEnvelope":
@@ -251,7 +259,8 @@ class FeedbackRoleEnvelope(CanonicalModel):
     @staticmethod
     def make(*, role: str, prompt_version: str, backend_id: str, model_id: str,
              window: int, sequence: int, prompt: str, raw_response: str,
-             parsed_dump: dict) -> "FeedbackRoleEnvelope":
+             parsed_dump: dict,
+             context_binding: Optional[dict] = None) -> "FeedbackRoleEnvelope":
         return FeedbackRoleEnvelope(
             role=role, prompt_version=prompt_version, backend_id=backend_id,
             model_id=model_id, window=window, sequence=sequence,
@@ -261,7 +270,8 @@ class FeedbackRoleEnvelope(CanonicalModel):
                 {"role": role, "prompt_version": prompt_version,
                  "prompt": prompt}),
             response_hash=text_sha256(raw_response),
-            raw_response=raw_response, parsed_json=parsed_dump)
+            raw_response=raw_response, parsed_json=parsed_dump,
+            context_binding=dict(context_binding or {}))
 
 
 __all__ = [

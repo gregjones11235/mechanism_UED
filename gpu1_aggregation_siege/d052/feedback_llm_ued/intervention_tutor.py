@@ -21,7 +21,7 @@ ENGINEERING_SCAFFOLD: deterministic mock rule; no real LLM call this round.
 from __future__ import annotations
 
 import json
-from typing import List
+from typing import List, Optional
 
 from pydantic import Field, model_validator
 
@@ -231,12 +231,13 @@ def mock_rule(context: dict) -> dict:
                 rationale=rationale)
 
 
-def run(context: dict, backend, window: int, sequence: int
-        ) -> FeedbackRoleEnvelope:
+def run(context: dict, backend, window: int, sequence: int,
+        context_binding: Optional[dict] = None) -> FeedbackRoleEnvelope:
     prompt = build_prompt(context)
     raw = backend.complete(ROLE, prompt)
     parsed = parse(raw)
     return FeedbackRoleEnvelope.make(
         role=ROLE, prompt_version=PROMPT_VERSION, backend_id=backend.backend_id,
         model_id=backend.model_id, window=window, sequence=sequence,
-        prompt=prompt, raw_response=raw, parsed_dump=parsed.model_dump())
+        prompt=prompt, raw_response=raw, parsed_dump=parsed.model_dump(),
+        context_binding=context_binding)

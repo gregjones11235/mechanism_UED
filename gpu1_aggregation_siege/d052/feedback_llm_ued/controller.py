@@ -283,7 +283,8 @@ class FeedbackUEDController:
                  human_reopen_families=(), anchor_manifest=None,
                  runtime_authorization=None, student_init_contract=None,
                  training_contract=None, real_env_coder_callable=None,
-                 probe_feedback_builder=None) -> None:
+                 probe_feedback_builder=None,
+                 reference_identity_hash: str = "") -> None:
         """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
         All default to None, which reproduces the historical mock/symbolic
         behavior byte for byte. With any real capability granted through
@@ -375,6 +376,12 @@ class FeedbackUEDController:
                 "feedback builder was injected but real simulator probes "
                 "are not authorized")
         self._probe_feedback_builder = probe_feedback_builder
+        #: P0-1 (CC3 follow-up audit): the Reference identity hash bound
+        #: into every board envelope's context binding — populated by the
+        #: production entrypoint ONLY when the shared ReferenceAdapter slot
+        #: is actually bound; empty string = unbound (never derived
+        #: silently). Default reproduces the historical behavior.
+        self.reference_identity_hash = reference_identity_hash
         self.revisions: List[PlanRevisionRecord] = []
         self.envelopes: List[object] = []
         self.plans: Dict[str, CurriculumPlan] = {}
@@ -507,10 +514,19 @@ class FeedbackUEDController:
 
         # -- B. six-role Review Board (always all six calls) ----------------
         self._set_phase(window, PHASE_BOARD)
+        #: P0-1: bind the canonical context identities into every role
+        #: envelope — Student identity (always held), Reference identity
+        #: (only when the shared slot is bound) and the PREVIOUS window's
+        #: plan hash (window 0 has no predecessor -> unbound)
+        previous_plan = self._plans_by_window.get(window - 1)
         board = run_review_board(
             window=window, mode=self.mode, board_context=board_context,
             view=view, hypotheses=self.ledger.all(), backend=self.backend,
-            sequence_start=self._sequence)
+            sequence_start=self._sequence,
+            student_identity_hash=self.student_binding.identity_hash,
+            reference_identity_hash=self.reference_identity_hash,
+            previous_plan_hash=(previous_plan.plan_hash
+                                if previous_plan is not None else ""))
         self._sequence += C.BOARD_CALLS_PER_WINDOW
         self.envelopes.extend(board.envelopes)
         self.boards[window] = board

@@ -271,7 +271,12 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         student_init_contract=student_init_contract,
         training_contract=bundle.training.contract,
         real_env_coder_callable=real_env_coder,
-        probe_feedback_builder=probe_feedback_builder)
+        probe_feedback_builder=probe_feedback_builder,
+        #: P0-1 (CC3 follow-up audit): the shared reference slot is BOUND
+        #: on this path (resolve_shared_runtime above refused every empty
+        #: slot) — bind its canonical identity hash into every board role
+        #: envelope's structured context binding
+        reference_identity_hash=bundle.reference.binding.identity_hash)
 
     summary = controller.run(max_windows=TWO_WINDOW_HORIZON)
 
