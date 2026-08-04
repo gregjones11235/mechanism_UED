@@ -35,11 +35,14 @@ from __future__ import annotations
 from dataclasses import dataclass, fields as dataclass_fields
 from typing import Any, Tuple
 
+from . import shared_runtime_seam as SRS
+from . import variant_binding as VB
 from .board import ReviewWindow, WINDOW_STATUS_COMPLETE
 from .canonical import canonical_sha256
 from .controller import CycleOutcome, run_review_cycle
 from .envcoder import EnvCoderArtifact, RepairRecord, run_envcoder_with_repair
 from .evidence import EvidenceSnapshot, build_evidence_snapshot
+from .executable_candidates import ExecutableCandidate
 from .gate_signals import GateSignalReport, compute_gate_signals
 from .invocation_gate import build_gate_state
 from .runtime_bundle import (
@@ -56,6 +59,7 @@ _NUM_DYNAMIC_SLOTS = 12
 # fail-closed driver codes (greppable)
 E1_DRIVER_BAD_TYPE = "E1_DRIVER_BAD_TYPE"
 E1_DRIVER_MISSING_OBJECT = "E1_DRIVER_MISSING_OBJECT"
+E1_DRIVER_MATERIALS_MISMATCH = "E1_DRIVER_MATERIALS_MISMATCH"
 E1_DRIVER_SUMMARY_REJECTED = "E1_DRIVER_SUMMARY_DICT_REJECTED"
 E1_DRIVER_RUNTIME_UNBOUND = "E1_DRIVER_RUNTIME_UNBOUND"
 E1_DRIVER_NO_EVIDENCE = "E1_DRIVER_NO_ADMISSIBLE_EVIDENCE"
@@ -401,4 +405,74 @@ def execute_real_envcoder_and_compile(
         compile_result=compile_result,
         template_artifacts=tuple(template_artifacts),
         materials_hash=materials_hash,
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage 3: executable candidate pool (Mode A binding, fail-closed surfaces)
+# ---------------------------------------------------------------------------
+def execute_real_candidate_binding(
+    teacher: Any,
+    window_result: Any,
+    materials: Any,
+    runtime: Any,
+    *,
+    allow_test_only: bool = False,
+) -> Tuple[ExecutableCandidate, ...]:
+    """Bind the window's executable candidate pool (Mode A).
+
+    The four execution-surface hashes (observation/action ABI, reward
+    contract, reset protocol, seed policy) come ONLY from the
+    bundle-bound shared objects through the seam — no defaults, no
+    guesses. While the shared runtime is absent (this whole round on
+    the production path) this stage fails closed honestly. Every
+    candidate returned carries the conspicuous
+    VARIANT_PARAMETER_NOT_EXECUTED marker: binding never executes.
+
+    ``allow_test_only`` is the conspicuously-marked gate the TEST_ONLY
+    closed loop uses; the default production surface refuses TEST_ONLY
+    bundles fail-closed.
+    """
+    ctx = "e1_driver.candidate_binding"
+    validate_runtime_surface(runtime, ctx)
+    _require_gen_manager(teacher, ctx)
+    require_real_object(window_result, "window_result", ctx)
+    require_real_object(materials, "candidate_materials", ctx)
+    if not isinstance(window_result, E1WindowResult):
+        raise DriverError(
+            E1_DRIVER_BAD_TYPE,
+            f"{ctx}: window_result must be the E1WindowResult object, "
+            f"got {type(window_result).__name__}",
+        )
+    if not isinstance(materials, E1CandidateMaterials):
+        raise DriverError(
+            E1_DRIVER_BAD_TYPE,
+            f"{ctx}: materials must be the E1CandidateMaterials object "
+            f"the EnvCoder stage produced, got "
+            f"{type(materials).__name__}",
+        )
+    if materials.window_result_hash != window_result.window_result_hash:
+        raise DriverError(
+            E1_DRIVER_MATERIALS_MISMATCH,
+            f"{ctx}: materials bind window_result_hash "
+            f"{materials.window_result_hash!r} but the window stage "
+            f"produced {window_result.window_result_hash!r}",
+        )
+    # the seam binds every capability object and re-checks its
+    # identity hash; TEST_ONLY bundles are refused unless the explicit
+    # gate is opened (never by default)
+    resolutions = SRS.resolve_all_from_bundle(
+        runtime, ctx, allow_test_only=allow_test_only
+    )
+    surfaces = VB.execution_surfaces_from_bundle_resolutions(
+        resolutions, ctx
+    )
+    backend = teacher.envcoder_backend
+    return VB.bind_executable_pool_from_materials(
+        window=window_result.window,
+        compile_result=materials.compile_result,
+        template_artifacts=materials.template_artifacts,
+        execution_surfaces=surfaces,
+        backend_name=backend.name,
+        stages_passed=tuple(backend.capabilities),
     )

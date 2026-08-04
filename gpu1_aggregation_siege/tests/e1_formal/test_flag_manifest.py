@@ -250,10 +250,20 @@ class TestTeacherFromCommittedFiles:
 
 
 def _structural_pass() -> dict:
-    """Every structural capability gate true, zero blockers."""
+    """Every structural capability gate true, zero blockers.
+
+    CC2 follow-up P0-6: the single dynamic_12 gate is split into the
+    three-way reachability/verification split. The unit-level
+    conjunction tests pass all three mechanically; the PRODUCTION
+    computed value of dynamic_12_behaviorally_distinct_verified stays
+    FALSE this round (no signed probe evidence exists — see
+    scripts/e1_formal_readiness.py).
+    """
     return dict(
         sequential=True,
-        dynamic_12=True,
+        dynamic_12_logical_specs_reachable=True,
+        dynamic_12_executable_candidates_reachable=True,
+        dynamic_12_behaviorally_distinct_verified=True,
         criterionwise=True,
         bounded_repair=True,
         student_adapter_bound=True,

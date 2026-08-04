@@ -8,9 +8,17 @@ hand-written and no value is ever guessed:
 * ``sequential_six_role_context`` — the board module actually carries
   the round-3 sequential context (prompt version v2 + the
   context/upstream keyword parameters on both prompt builders);
-* ``dynamic_12_reachable`` — the template-keyed spec surface exists
-  (MAX_WINDOW_TEMPLATES + derive_variant_params) and NO stub-backfill
-  symbol remains anywhere in the teacher source;
+* ``dynamic_12_logical_specs_reachable`` — the template-keyed spec
+  surface exists (MAX_WINDOW_TEMPLATES + derive_variant_params) and
+  NO stub-backfill symbol remains anywhere in the teacher source;
+* ``dynamic_12_executable_candidates_reachable`` — the executable
+  candidate binding chain (Mode A) exists: immutable
+  ExecutableCandidate + pool binder + chain verifier + the
+  VARIANT_PARAMETER_NOT_EXECUTED marker surface;
+* ``dynamic_12_behaviorally_distinct_verified`` — true ONLY when the
+  12 executable variants are verified behaviorally distinct by real
+  signed probe evidence; this round: structurally FALSE (no shared
+  probe runtime exists) — never hand-flipped;
 * ``criterionwise_selector`` — the criterion-wise Soft Copeland
   selector module is live (name pin, the eight criteria, the
   family_cap parameter, and NO mean-then-Copeland aggregate);
@@ -74,7 +82,7 @@ def _compute_sequential_six_role_context() -> bool:
     )
 
 
-def _compute_dynamic_12_reachable() -> bool:
+def _compute_dynamic_12_logical_specs_reachable() -> bool:
     """Template-keyed specs + 12-slot path; NO stub backfill remains.
 
     Round-3 semantics: ``_reuse_stub`` survives ONLY as the marker of
@@ -121,6 +129,50 @@ def _compute_dynamic_12_reachable() -> bool:
             ):
                 return False  # stub backfill outside the REUSE batch
     return True
+
+
+def _compute_dynamic_12_executable_candidates_reachable() -> bool:
+    """The executable candidate binding chain (Mode A) is live.
+
+    Structural check: the immutable ExecutableCandidate record, the
+    pool binder, the chain verifier and the conspicuous
+    VARIANT_PARAMETER_NOT_EXECUTED marker surface all exist, and the
+    variant-execution gate (the ONLY surface that may clear the
+    marker) is wired.
+    """
+    from dicode.teachers.e1_formal import executable_candidates as EX
+    from dicode.teachers.e1_formal import variant_binding as VB
+
+    if not hasattr(EX, "ExecutableCandidate"):
+        return False
+    if not hasattr(EX, "ExecutableEnvironmentArtifact"):
+        return False
+    if not hasattr(EX, "bind_executable_candidate_pool"):
+        return False
+    if not hasattr(EX, "verify_candidate_chain"):
+        return False
+    if EX.VARIANT_PARAMETER_NOT_EXECUTED != (
+        "VARIANT_PARAMETER_NOT_EXECUTED"
+    ):
+        return False
+    if not hasattr(VB, "execute_variant_parameters"):
+        return False
+    if not hasattr(VB, "bind_executable_pool_from_materials"):
+        return False
+    return True
+
+
+def _compute_dynamic_12_behaviorally_distinct_verified() -> bool:
+    """Behavioral distinctness of the 12 executable variants.
+
+    Fail-closed CONSTANT this round: proving the 12 variants
+    behaviorally distinct requires real signed probe evidence under
+    the shared probe registry — which does not exist yet (the shared
+    runtime is absent). No structural check may ever flip this flag;
+    only signed real probe evidence may, through a future consumer
+    here. NEVER hand-set true.
+    """
+    return False
 
 
 def _compute_criterionwise_selector() -> bool:
@@ -186,7 +238,9 @@ def _compute_real_execution_flags(report_path: str = None) -> tuple:
 def decide_real_smoke_ready(
     *,
     sequential: bool,
-    dynamic_12: bool,
+    dynamic_12_logical_specs_reachable: bool,
+    dynamic_12_executable_candidates_reachable: bool,
+    dynamic_12_behaviorally_distinct_verified: bool,
     criterionwise: bool,
     bounded_repair: bool,
     student_adapter_bound: bool,
@@ -205,10 +259,18 @@ def decide_real_smoke_ready(
     zero live production-gate blockers. (fix(e1): the probe/update
     execution evidence was missing from this conjunction; structural
     gates alone could have granted the E1 Pilot prematurely.)
+
+    CC2 follow-up P0-6: the single ``dynamic_12`` gate is split into
+    three — logical specs reachable, executable candidates reachable,
+    and behaviorally-distinct VERIFIED. The third is false until real
+    signed probe evidence exists, so readiness stays fail-closed even
+    when both reachability gates pass.
     """
     return bool(
         sequential
-        and dynamic_12
+        and dynamic_12_logical_specs_reachable
+        and dynamic_12_executable_candidates_reachable
+        and dynamic_12_behaviorally_distinct_verified
         and criterionwise
         and bounded_repair
         and student_adapter_bound
@@ -240,7 +302,13 @@ def main(argv=None) -> int:
 
     shared = gates["shared_runtime"]
     sequential = _compute_sequential_six_role_context()
-    dynamic_12 = _compute_dynamic_12_reachable()
+    dynamic_12_logical = _compute_dynamic_12_logical_specs_reachable()
+    dynamic_12_executable = (
+        _compute_dynamic_12_executable_candidates_reachable()
+    )
+    dynamic_12_distinct = (
+        _compute_dynamic_12_behaviorally_distinct_verified()
+    )
     criterionwise = _compute_criterionwise_selector()
     bounded_repair = _compute_bounded_envcoder_repair()
     student_adapter_bound = bool(
@@ -257,7 +325,9 @@ def main(argv=None) -> int:
     blockers = list(gates["blockers"])
     e1_real_smoke_ready = decide_real_smoke_ready(
         sequential=sequential,
-        dynamic_12=dynamic_12,
+        dynamic_12_logical_specs_reachable=dynamic_12_logical,
+        dynamic_12_executable_candidates_reachable=dynamic_12_executable,
+        dynamic_12_behaviorally_distinct_verified=dynamic_12_distinct,
         criterionwise=criterionwise,
         bounded_repair=bounded_repair,
         student_adapter_bound=student_adapter_bound,
@@ -278,7 +348,14 @@ def main(argv=None) -> int:
             "hand-edited"
         ),
         "sequential_six_role_context": sequential,
-        "dynamic_12_reachable": dynamic_12,
+        "dynamic_12_logical_specs_reachable": dynamic_12_logical,
+        "dynamic_12_executable_candidates_reachable": (
+            dynamic_12_executable
+        ),
+        # CC2 follow-up P0-6: false until real signed probe evidence
+        # verifies the 12 variants behaviorally distinct (never
+        # hand-flipped; this round structurally false)
+        "dynamic_12_behaviorally_distinct_verified": dynamic_12_distinct,
         "criterionwise_selector": criterionwise,
         "bounded_envcoder_repair": bounded_repair,
         "shared_student_adapter_bound": student_adapter_bound,
@@ -302,7 +379,9 @@ def main(argv=None) -> int:
     print(f"E1 REAL SMOKE READINESS -> {path}")
     for key in (
         "sequential_six_role_context",
-        "dynamic_12_reachable",
+        "dynamic_12_logical_specs_reachable",
+        "dynamic_12_executable_candidates_reachable",
+        "dynamic_12_behaviorally_distinct_verified",
         "criterionwise_selector",
         "bounded_envcoder_repair",
         "shared_student_adapter_bound",
