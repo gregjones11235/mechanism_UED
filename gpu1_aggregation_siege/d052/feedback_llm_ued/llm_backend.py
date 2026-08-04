@@ -246,6 +246,28 @@ class RealBackendAdapter:
     def usage(self) -> UsageStats:
         return self._usage
 
+    @property
+    def journal(self) -> Optional[RealCallJournal]:
+        return self._journal
+
+    def record_schema_outcome(self, role: str, prompt: str, *, status: str,
+                              window: int = -1, sequence: int = -1,
+                              artifact_binding: str = ""):
+        """P0-5: the caller-side parse verdict of one transported call.
+
+        Every real call must end in a PARSED or SCHEMA_FAILED outcome
+        entry; PARSED closes the logical_call_id (any later activity under
+        it is refused as a duplicate successful call). No-op without a
+        journal.
+        """
+        if self._journal is None:
+            return None
+        logical_call_id = default_logical_call_id(role, prompt,
+                                                  self.backend_id)
+        return self._journal.record_schema_outcome(
+            logical_call_id, status=status, window=window,
+            sequence=sequence, artifact_binding=artifact_binding)
+
     def complete(self, role: str, prompt: str) -> str:
         prompt_sha = text_sha256(prompt)
         logical_call_id = default_logical_call_id(role, prompt,

@@ -26,6 +26,8 @@ inside the transport closure).
 """
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -331,8 +333,194 @@ class RealCallJournal:
             self._completed[logical_call_id] = True
         return self._append(entry)
 
+    @property
+    def completed_logical_call_ids(self) -> Tuple[str, ...]:
+        """Every logical call id closed by a PARSED outcome (audit)."""
+        return tuple(sorted(self._completed))
+
     def dump(self) -> List[dict]:
         return [e.model_dump() for e in self._entries]
+
+
+# ---------------------------------------------------------------------------
+# P0-5: end-of-two-windows journal persistence (audit-grade)
+# ---------------------------------------------------------------------------
+JOURNAL_PERSIST_VERSION = "real_call_journal_persist.v1"
+
+
+def journal_counts(journal: RealCallJournal) -> Dict[str, int]:
+    """Exact entry/outcome counts of the journal (nothing derived twice)."""
+    counts = dict(total_entries=0, transport_entries=0,
+                  schema_outcome_entries=0, parsed_outcomes=0,
+                  schema_failed_outcomes=0,
+                  completed_logical_calls=len(
+                      journal.completed_logical_call_ids))
+    for entry in journal.entries:
+        counts["total_entries"] += 1
+        if entry.entry_kind == ENTRY_KIND_TRANSPORT:
+            counts["transport_entries"] += 1
+        else:
+            counts["schema_outcome_entries"] += 1
+            if entry.output_schema_status == OUTPUT_SCHEMA_PARSED:
+                counts["parsed_outcomes"] += 1
+            elif entry.output_schema_status == OUTPUT_SCHEMA_FAILED:
+                counts["schema_failed_outcomes"] += 1
+    return counts
+
+
+def journal_token_totals(journal: RealCallJournal) -> Dict[str, int]:
+    """Provider-reported token totals over TRANSPORT entries only (outcome
+    entries repeat their transport's usage and must not double-count)."""
+    totals: Dict[str, int] = {}
+    for entry in journal.entries:
+        if entry.entry_kind != ENTRY_KIND_TRANSPORT:
+            continue
+        for key, value in entry.token_usage.items():
+            totals[key] = totals.get(key, 0) + value
+    return totals
+
+
+def persist_real_call_journal(journal: RealCallJournal, path: str) -> str:
+    """Atomically persist the COMPLETE journal: full entries, chain head,
+    retry cap, exact counts, token totals and the journal file hash.
+
+    Returns the journal_file_hash (canonical sha256 of the body). The body
+    never contains prompt/response TEXT — hashes only.
+    """
+    body = dict(
+        journal_version=JOURNAL_PERSIST_VERSION,
+        chain_head=journal.chain_head,
+        retry_cap=journal.retry_cap,
+        entries=journal.dump(),
+        counts=journal_counts(journal),
+        token_totals=journal_token_totals(journal),
+        completed_logical_call_ids=list(
+            journal.completed_logical_call_ids))
+    file_hash = canonical_sha256(body)
+    document = dict(body, journal_file_hash=file_hash)
+    text = json.dumps(document, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, default=str)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+    return file_hash
+
+
+def verify_persisted_journal(document: dict) -> dict:
+    """Fail-closed verification of a persisted journal document.
+
+    Checks (in order): file hash recompute, entry hash recompute, chain
+    linkage (genesis -> previous_entry_hash -> chain head), counts and
+    token totals consistency. Returns a small verification report; any
+    violation raises JournalBlocked with its code.
+    """
+    if not isinstance(document, dict):
+        raise JournalBlocked(
+            "JOURNAL_PERSIST_NOT_A_DOCUMENT: expected a dict document")
+    carried_hash = document.get("journal_file_hash", "")
+    body = {k: v for k, v in document.items() if k != "journal_file_hash"}
+    recomputed = canonical_sha256(body)
+    if not carried_hash or carried_hash != recomputed:
+        raise JournalBlocked(
+            "JOURNAL_PERSIST_HASH_MISMATCH: carried journal_file_hash="
+            f"{carried_hash!r} but the document body recomputes to "
+            f"{recomputed!r}")
+    entries = body.get("entries")
+    if not isinstance(entries, list):
+        raise JournalBlocked(
+            "JOURNAL_PERSIST_ENTRIES_MISSING: no entries list")
+    previous = GENESIS_ENTRY_HASH
+    last_hash = GENESIS_ENTRY_HASH
+    for index, dump in enumerate(entries):
+        try:
+            entry = RealCallJournalEntry(**dump)  # recompute entry_hash
+        except Exception as exc:
+            raise JournalBlocked(
+                f"JOURNAL_ENTRY_TAMPERED: entry {index} does not rebuild: "
+                f"{exc}") from exc
+        if entry.previous_entry_hash != previous:
+            raise JournalBlocked(
+                f"JOURNAL_CHAIN_BROKEN: entry {index} carries "
+                f"previous_entry_hash={entry.previous_entry_hash!r}, the "
+                f"chain expects {previous!r}")
+        previous = entry.entry_hash
+        last_hash = entry.entry_hash
+    if body.get("chain_head") != last_hash:
+        raise JournalBlocked(
+            f"JOURNAL_CHAIN_HEAD_MISMATCH: document chain_head="
+            f"{body.get('chain_head')!r} but the entries end at "
+            f"{last_hash!r}")
+    #: counts / token totals are recomputed from the REBUILT entries
+    view = _EntriesView(tuple(RealCallJournalEntry(**d) for d in entries))
+    recomputed_counts = view.counts()
+    if body.get("counts") != recomputed_counts:
+        raise JournalBlocked(
+            f"JOURNAL_COUNTS_MISMATCH: document counts {body.get('counts')!r} "
+            f"vs recomputed {recomputed_counts!r}")
+    recomputed_totals = view.token_totals()
+    if body.get("token_totals") != recomputed_totals:
+        raise JournalBlocked(
+            "JOURNAL_TOKEN_TOTALS_MISMATCH: document token_totals "
+            f"{body.get('token_totals')!r} vs recomputed "
+            f"{recomputed_totals!r}")
+    return dict(verified=True, journal_file_hash=carried_hash,
+                chain_head=body.get("chain_head"),
+                n_entries=len(entries), counts=recomputed_counts,
+                token_totals=recomputed_totals)
+
+
+class _EntriesView:
+    """Read-only recomputation helper over persisted entries."""
+
+    def __init__(self, entries: Tuple[RealCallJournalEntry, ...]):
+        self._entries = entries
+
+    def counts(self) -> Dict[str, int]:
+        counts = dict(total_entries=0, transport_entries=0,
+                      schema_outcome_entries=0, parsed_outcomes=0,
+                      schema_failed_outcomes=0,
+                      completed_logical_calls=len(set(
+                          e.logical_call_id for e in self._entries
+                          if e.entry_kind == ENTRY_KIND_SCHEMA_OUTCOME
+                          and e.output_schema_status
+                          == OUTPUT_SCHEMA_PARSED)))
+        for entry in self._entries:
+            counts["total_entries"] += 1
+            if entry.entry_kind == ENTRY_KIND_TRANSPORT:
+                counts["transport_entries"] += 1
+            else:
+                counts["schema_outcome_entries"] += 1
+                if entry.output_schema_status == OUTPUT_SCHEMA_PARSED:
+                    counts["parsed_outcomes"] += 1
+                elif entry.output_schema_status == OUTPUT_SCHEMA_FAILED:
+                    counts["schema_failed_outcomes"] += 1
+        return counts
+
+    def token_totals(self) -> Dict[str, int]:
+        totals: Dict[str, int] = {}
+        for entry in self._entries:
+            if entry.entry_kind != ENTRY_KIND_TRANSPORT:
+                continue
+            for key, value in entry.token_usage.items():
+                totals[key] = totals.get(key, 0) + value
+        return totals
+
+
+def journal_role_schema_outcome(backend, *, role: str, prompt: str,
+                                status: str, window: int = -1,
+                                sequence: int = -1,
+                                artifact_binding: str = ""):
+    """P0-5: record a role call's parse verdict through the backend's
+    journal seam (duck-typed; mock/replay backends expose no recorder and
+    are silently skipped — journaling is a property of real paid calls)."""
+    recorder = getattr(backend, "record_schema_outcome", None)
+    if recorder is None:
+        return None
+    return recorder(role, prompt, status=status, window=window,
+                    sequence=sequence, artifact_binding=artifact_binding)
 
 
 __all__ = [
@@ -340,7 +528,10 @@ __all__ = [
     "OUTPUT_SCHEMA_PENDING", "OUTPUT_SCHEMA_PARSED", "OUTPUT_SCHEMA_FAILED",
     "OUTPUT_SCHEMA_STATUSES", "TOKEN_USAGE_PROVIDED",
     "TOKEN_USAGE_NOT_PROVIDED", "TOKEN_USAGE_STATUSES", "DEFAULT_RETRY_CAP",
-    "GENESIS_ENTRY_HASH", "JournalBlocked", "DuplicateSuccessfulCall",
-    "RealTransportResult", "normalize_transport_result",
-    "default_logical_call_id", "RealCallJournalEntry", "RealCallJournal",
+    "GENESIS_ENTRY_HASH", "JOURNAL_PERSIST_VERSION", "JournalBlocked",
+    "DuplicateSuccessfulCall", "RealTransportResult",
+    "normalize_transport_result", "default_logical_call_id",
+    "RealCallJournalEntry", "RealCallJournal", "journal_counts",
+    "journal_token_totals", "persist_real_call_journal",
+    "verify_persisted_journal", "journal_role_schema_outcome",
 ]

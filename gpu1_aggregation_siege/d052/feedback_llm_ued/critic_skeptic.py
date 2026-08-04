@@ -29,6 +29,11 @@ from typing import List, Optional
 from pydantic import Field, model_validator
 
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.real_call_journal import (
+    OUTPUT_SCHEMA_FAILED,
+    OUTPUT_SCHEMA_PARSED,
+    journal_role_schema_outcome,
+)
 from d052.feedback_llm_ued.behavior_failure import SEVERITY_HIGH
 from d052.feedback_llm_ued.feedback_contracts import (
     CONTEXT_CLOSE,
@@ -155,7 +160,16 @@ def run(context: dict, backend, window: int, sequence: int,
         context_binding: Optional[dict] = None) -> FeedbackRoleEnvelope:
     prompt = build_prompt(context)
     raw = backend.complete(ROLE, prompt)
-    parsed = parse(raw)
+    try:
+        parsed = parse(raw)
+    except Exception:
+        journal_role_schema_outcome(
+            backend, role=ROLE, prompt=prompt, status=OUTPUT_SCHEMA_FAILED,
+            window=window, sequence=sequence)
+        raise
+    journal_role_schema_outcome(
+        backend, role=ROLE, prompt=prompt, status=OUTPUT_SCHEMA_PARSED,
+        window=window, sequence=sequence)
     return FeedbackRoleEnvelope.make(
         role=ROLE, prompt_version=PROMPT_VERSION, backend_id=backend.backend_id,
         model_id=backend.model_id, window=window, sequence=sequence,

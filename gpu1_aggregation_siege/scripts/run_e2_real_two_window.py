@@ -39,6 +39,13 @@ summary surface of that halt (``request_control_stopped`` /
 ``human_decision_artifact``) and reports it; there is no continuation path
 around it.
 
+P0-5 (call journal): every real six-role call writes a TRANSPORT entry plus
+a PARSED / SCHEMA_FAILED outcome entry into the hash-chained
+RealCallJournal; at the end of the run the COMPLETE journal (full entries,
+chain head, retry cap, exact counts, token totals and the journal file
+hash) is persisted atomically to ``--journal-path`` on EVERY terminal path
+(including REQUEST_CONTROL stops) and surfaced in the report.
+
 Honesty note on the L1 static legality labels: ``CandidateEnvironment``
 defaults carry ``legality_hint='MOCK_ONLY ...'`` and ``real_adapter_status=
 'BLOCKED_NO_LOCAL_CRAFTAX'`` — the frozen scaffold labels required by the
@@ -67,7 +74,12 @@ from d052.feedback_llm_ued.execution_mode import (
 )
 from d052.feedback_llm_ued.feedback_contracts import ProbeMetrics
 from d052.feedback_llm_ued.llm_backend import RealBackendAdapter
-from d052.feedback_llm_ued.real_call_journal import RealCallJournal
+from d052.feedback_llm_ued.real_call_journal import (
+    RealCallJournal,
+    journal_counts,
+    journal_token_totals,
+    persist_real_call_journal,
+)
 from d052.feedback_llm_ued.real_env_coder import execute_real_env_coder
 from d052.feedback_llm_ued.real_probe_feedback import (
     RealProbeFeedbackRunner,
@@ -226,7 +238,7 @@ def build_window_real_feedback(*, window: int, plan, candidates, batch,
 # ---------------------------------------------------------------------------
 def run_two_real_windows(*, bundle: SharedRuntimeBundle,
                          llm_transport, backend_id: str, model_id: str,
-                         state_path: str,
+                         state_path: str, journal_path: str,
                          student_init_contract=None) -> dict:
     """Execute windows k and k+1 against the real shared runtime.
 
@@ -323,6 +335,13 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
 
     summary = controller.run(max_windows=TWO_WINDOW_HORIZON)
 
+    #: P0-5: persist the COMPLETE real-call journal — full entries, chain
+    #: head, retry cap, exact counts, token totals and the journal file
+    #: hash. The journal is evidence of every real call actually made, so
+    #: it is persisted on EVERY terminal path, including REQUEST_CONTROL
+    #: stops, before any reporting.
+    journal_file_hash = persist_real_call_journal(journal, journal_path)
+
     # P0-6 re-verification (read-only): a REQUEST_CONTROL stop produces the
     # HumanDecisionArtifact and NOTHING else — this entrypoint reports it
     # and stops; there is no continuation path around the artifact.
@@ -341,6 +360,12 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
                        transitions=t.student_training_transitions,
                        reason=t.reason) for t in controller.training_log],
         journal_entries=len(journal.entries),
+        #: P0-5 persisted journal audit surface
+        journal_path=journal_path,
+        journal_file_hash=journal_file_hash,
+        journal_chain_head=journal.chain_head,
+        journal_counts=journal_counts(journal),
+        journal_token_totals=journal_token_totals(journal),
         windows=summary.windows)
     if summary.request_control_stopped:
         report["outcome"] = ("REQUEST_CONTROL_STOPPED: the board requested "
@@ -379,6 +404,12 @@ def parse_args(argv=None) -> argparse.Namespace:
                                 "real_two_window_state.json",
                         help="where to persist the two-window controller "
                              "state on success")
+    parser.add_argument("--journal-path",
+                        default="reports/feedback_llm_ued/"
+                                "real_two_window_journal.json",
+                        help="where to persist the COMPLETE real-call "
+                             "journal (entries, chain head, counts, token "
+                             "totals, file hash) at the end of the run")
     return parser.parse_args(argv)
 
 
@@ -439,6 +470,7 @@ def main(argv=None) -> int:
             bundle=bundle, llm_transport=transport,
             backend_id=args.backend_id, model_id=args.model_id,
             state_path=args.state_path,
+            journal_path=args.journal_path,
             student_init_contract=student_init_contract)
     except (RuntimeAuthorizationBlocked, RealTwoWindowBlocked) as exc:
         print(f"\nREAL TWO-WINDOW RUN BLOCKED: {exc}", file=sys.stderr)
