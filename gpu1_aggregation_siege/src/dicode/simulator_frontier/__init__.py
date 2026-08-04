@@ -227,8 +227,12 @@ from .evidence_selector import (
 )
 from .frontier_distributions import (
     DISTRIBUTION_SCHEMA,
+    DISTRIBUTION_SLOT_IDS,
+    PLANNER_COMPILER_VERSION,
     FrontierDistribution,
     FrontierDistributionPlan,
+    PlannerCompilation,
+    compile_planner_to_frontier_distributions,
     compose_12_plus_4,
     validate_frontier_distribution_plan,
 )
@@ -346,7 +350,9 @@ __all__ = [
     "SELECTION_EVIDENCE_SCHEMA", "SELECTOR_VERSION", "STUDENT_DOMINANCE_GAP_THRESHOLD",
     "EvidenceSelectionResult", "SelectionEvidence", "evidence_based_select",
     "mint_selection_evidence_from_outcomes", "verify_selection_evidence",
-    "DISTRIBUTION_SCHEMA", "FrontierDistribution", "FrontierDistributionPlan",
+    "DISTRIBUTION_SCHEMA", "DISTRIBUTION_SLOT_IDS", "PLANNER_COMPILER_VERSION",
+    "FrontierDistribution", "FrontierDistributionPlan", "PlannerCompilation",
+    "compile_planner_to_frontier_distributions",
     "compose_12_plus_4", "validate_frontier_distribution_plan",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",

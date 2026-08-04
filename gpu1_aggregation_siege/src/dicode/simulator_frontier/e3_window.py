@@ -53,7 +53,10 @@ from .evidence_selector import (
 )
 from .feasibility_classifier import classify_frontier
 from .frontier_archive import FrontierArchive
-from .frontier_distributions import compose_12_plus_4
+from .frontier_distributions import (
+    compile_planner_to_frontier_distributions,
+    compose_12_plus_4,
+)
 from .fresh_process_restore import (
     BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE,
     SYNTHETIC_SIGNATURE_PREFIX,
@@ -106,7 +109,6 @@ BLOCKED_NO_CAPTURE_PROVENANCE = "BLOCKED_NO_CAPTURE_PROVENANCE"
 BLOCKED_NO_INJECTED_ORIGINAL_LOSS = "BLOCKED_NO_INJECTED_ORIGINAL_LOSS"
 BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE = "BLOCKED_NO_INJECTED_OPTIMIZER_UPDATE"
 BLOCKED_NO_INJECTED_PREDICATES = "BLOCKED_NO_INJECTED_PREDICATES"
-BLOCKED_FRONTIER_DISTRIBUTIONS_UNPROVIDED = "BLOCKED_FRONTIER_DISTRIBUTIONS_UNPROVIDED"
 BLOCKED_NO_OBSERVE_FN = "BLOCKED_NO_OBSERVE_FN"
 ZERO_MEMORY_NOT_A_PRODUCTION_MODE = "ZERO_MEMORY_NOT_A_PRODUCTION_MODE"
 SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT = (
@@ -187,9 +189,13 @@ class E3WindowConfig:
     reuse_plan: PlannerOutput | None = None
     previous_evidence_hash: str = ""
     # --- selector / distributions ----------------------------------------------
+    # CC4 follow-up (P0-10): the 12 dynamic frontier distributions are no
+    # longer a caller-supplied field.  They are COMPILED deterministically
+    # from the typed planner output in STEP07
+    # (``compile_planner_to_frontier_distributions``), so the planner — not an
+    # arbitrary hand-built list — actually drives what gets executed.
     anchor_manifest: AnchorManifest | None = None
     retention: RetentionContract | None = None
-    frontier_distributions: tuple[Any, ...] = ()
     # --- mixed-start update -----------------------------------------------------
     mixed_episodes: int = 0
     episode_horizon: int = 0
@@ -843,18 +849,29 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         return report
 
     # STEP 7 — 12 dynamic frontier distributions + 4 shared anchors.
-    if len(config.frontier_distributions) == 0:
-        raise ProductionBlockedError(
-            f"{BLOCKED_FRONTIER_DISTRIBUTIONS_UNPROVIDED}: the caller must supply "
-            "the measured 12 distributions (never self-invented)")
+    # CC4 follow-up (P0-10): the 12 dynamic distributions are COMPILED from
+    # the typed planner output — never a caller-supplied list.  The compiler
+    # re-binds the plan to the measured aggregate evidence hash, verifies the
+    # minted selection evidence it stamps onto every distribution, and checks
+    # every eligible state against the archive (fail closed).
+    compilation = compile_planner_to_frontier_distributions(
+        plan,
+        plan_evidence_hash=llm_result["evidence_hash"],
+        selection_evidence=selection_evidence,
+        archive=archive,
+    )
     frontier_plan = compose_12_plus_4(
-        config.frontier_distributions,
+        compilation.distributions,
         manifest=config.anchor_manifest,
         retention=config.retention,
         archive=archive,
         evidence_hashes=(selection_evidence.evidence_hash,),
     )
     steps["STEP07_FRONTIER_12_PLUS_4_COMPOSITION"] = {
+        "distribution_source": "COMPILED_FROM_TYPED_PLANNER_OUTPUT",
+        "compiler_version": compilation.compiler_version,
+        "compilation_hash": compilation.compilation_hash,
+        "plan_id": plan.plan_id,
         "distributions": len(frontier_plan.distributions),
         "anchors_bound": len(frontier_plan.anchor_binding.get("anchor_ids", ())),
         "plan_hash": frontier_plan.plan_hash,
