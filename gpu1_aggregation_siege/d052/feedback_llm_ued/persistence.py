@@ -10,7 +10,8 @@ machine at a window boundary:
 * revisions, plans (by id AND by window), the per-window feedback index,
   the retirement registry (``_retired_at``) and the human-reopen
   authorization;
-* the anchor binding (ids + label), the envelope/sequence counters, the
+* the anchor binding (ids + label), the runtime grants (P0-6: a restored
+  REAL run keeps its authorization), the envelope/sequence counters, the
   probe-runner and backend usage counters, the training log, the human
   decision artifacts and the board hashes.
 
@@ -49,6 +50,9 @@ from d052.feedback_llm_ued.hypothesis_ledger import (
     HypothesisRecord,
 )
 from d052.feedback_llm_ued.plan_revision import PlanRevisionRecord
+from d052.feedback_llm_ued.runtime_authorization import (
+    RealRuntimeAuthorization,
+)
 from d052.feedback_llm_ued.simulator_feedback_store import (
     SimulatorFeedbackRecord,
     SimulatorFeedbackStore,
@@ -78,6 +82,15 @@ def snapshot_controller(ctl: FeedbackUEDController) -> dict:
     payload: Dict[str, object] = dict(
         snapshot_version=SNAPSHOT_VERSION,
         mode=ctl.mode,
+        #: P0-6: the runtime grants are persisted so a restored REAL run
+        #: resumes with its authorization intact (an all-false grant set
+        #: restores as the historical constants-only gate)
+        runtime_authorization=dict(
+            real_llm_backend=(
+                ctl.runtime_authorization.real_llm_backend),
+            real_envcoder=ctl.runtime_authorization.real_envcoder,
+            real_probe=ctl.runtime_authorization.real_probe,
+            real_training=ctl.runtime_authorization.real_training),
         human_reopen_families=sorted(ctl.human_reopen_families),
         anchor_ids=list(ctl.anchor_ids),
         anchor_binding=ctl.anchor_binding,
@@ -223,9 +236,20 @@ def restore_controller(payload: dict, *, backend=None,
     accounting is byte-identical to the uninterrupted run.
     """
     verify_snapshot_integrity(payload)
+    #: P0-6: rebuild the persisted runtime grants. Absent (pre-P0-6
+    #: snapshots) or all-false restores the historical constants-only
+    #: gate; any real grant restores EXECUTION_MODE_REAL so a REAL run
+    #: resumes with the SAME authorization — never silently downgraded.
+    #: The grant set itself is hash-covered by snapshot_hash, and
+    #: RealRuntimeAuthorization re-checks grant consistency fail-closed.
+    grants = payload.get("runtime_authorization")
+    authorization = None
+    if isinstance(grants, dict) and any(bool(v) for v in grants.values()):
+        authorization = RealRuntimeAuthorization(**grants)
     ctl = FeedbackUEDController(
         payload["mode"], backend=backend, probe_runner=probe_runner,
-        human_reopen_families=tuple(payload.get("human_reopen_families", ())))
+        human_reopen_families=tuple(payload.get("human_reopen_families", ())),
+        runtime_authorization=authorization)
     # anchor binding: the observable state rides in the snapshot (the
     # manifest object itself is never serialized)
     ctl.anchor_ids = tuple(payload["anchor_ids"])

@@ -586,7 +586,23 @@ class FeedbackUEDController:
                 window=window, plan_id=plan.plan_id,
                 directives=list(board.directives),
                 sequence=self._sequence)
-            self._sequence += 1
+            #: P0-6: a real EnvCoder window consumes EXACTLY n_calls
+            #: sequence slots — the unique-template call PLUS every bounded
+            #: repair re-call. The global call sequence must stay strictly
+            #: monotonic: under-counting a repair sequence would silently
+            #: re-use sequence numbers, so a missing/zero count fails
+            #: closed BEFORE anything else consumes the sequence. The calls
+            #: were made even if the artifact later fails the PASSED check,
+            #: so the consumption precedes that check.
+            env_n_calls = int(getattr(env_artifact, "n_calls", 0))
+            if env_n_calls < 1:
+                raise RuntimeError(
+                    "REAL_ENVCODER_CALL_COUNT_MISSING: window="
+                    f"{window} — the real EnvCoder artifact must declare "
+                    "n_calls >= 1 (the exact number of LLM-family calls "
+                    f"consumed), got {env_n_calls!r}")
+            self._sequence += env_n_calls
+            env_coder_call_count = env_n_calls
             if getattr(env_artifact, "overall_status", "") != "PASSED":
                 raise RuntimeError(
                     "REAL_ENVCODER_NOT_PASSED: window="
@@ -601,6 +617,7 @@ class FeedbackUEDController:
                 window=window, directives=list(board.directives),
                 backend=self.backend, sequence=self._sequence)
             self._sequence += 1
+            env_coder_call_count = 1      # symbolic coder: one call/window
             self.envelopes.append(env_envelope)
             gate_report = self.env_coder_gate.evaluate(
                 window=window, directives=list(board.directives),
@@ -626,7 +643,7 @@ class FeedbackUEDController:
             evidence_window=evidence_window,
             feedback_view_label=view.label,
             board_call_count=C.BOARD_CALLS_PER_WINDOW,
-            env_coder_call_count=1,
+            env_coder_call_count=env_coder_call_count,
             n_llm_calls=self.backend.usage.total_calls - n_calls_before,
             request_control=board.request_control,
             global_risk=board.critic.global_risk,
