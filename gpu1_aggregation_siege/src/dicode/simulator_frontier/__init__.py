@@ -258,6 +258,14 @@ from .optimizer_attestation import (
     mint_optimizer_update_attestation,
     verify_optimizer_update_attestation,
 )
+from .round_trip_evidence import (
+    RESTORE_DRIVER_IN_PROCESS_ADAPTER,
+    ROUND_TRIP_EVIDENCE_VERSION,
+    CheckpointRoundTripEvidence,
+    measure_replay_equivalence,
+    mint_checkpoint_round_trip_evidence,
+    verify_checkpoint_round_trip_evidence,
+)
 from .anchor_manifest import (
     ANCHOR_SLOT_COUNT,
     BLOCKED_SHARED_ANCHOR_MANIFEST,
@@ -384,6 +392,9 @@ __all__ = [
     "BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED", "OPTIMIZER_ATTESTATION_VERSION",
     "OptimizerUpdateAttestation", "attestation_fields",
     "mint_optimizer_update_attestation", "verify_optimizer_update_attestation",
+    "RESTORE_DRIVER_IN_PROCESS_ADAPTER", "ROUND_TRIP_EVIDENCE_VERSION",
+    "CheckpointRoundTripEvidence", "measure_replay_equivalence",
+    "mint_checkpoint_round_trip_evidence", "verify_checkpoint_round_trip_evidence",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",
     "DYNAMIC_DISTRIBUTION_COUNT", "SHARED_ANCHOR_MANIFEST_BOUND",
     "AnchorDefinition", "AnchorManifest", "RetentionContract",

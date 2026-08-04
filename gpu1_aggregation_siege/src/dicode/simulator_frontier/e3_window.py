@@ -92,6 +92,12 @@ from .optimizer_attestation import (
     verify_optimizer_update_attestation,
 )
 from .provenance import DataSource
+from .round_trip_evidence import (
+    RESTORE_DRIVER_IN_PROCESS_ADAPTER,
+    measure_replay_equivalence,
+    mint_checkpoint_round_trip_evidence,
+    verify_checkpoint_round_trip_evidence,
+)
 from .search_statistics import (
     BranchOutcome,
     estimate_feasibility,
@@ -1228,31 +1234,80 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         {"schema": E3_WINDOW_SCHEMA, "run_id": config.run_id,
          "memory_mode": str(config.memory_mode)})
     reloaded = student.restore_full_state(str(ckpt_path))
+    if not isinstance(reloaded, Mapping) or "params" not in reloaded:
+        raise ProductionBlockedError(
+            "restore_full_state must return a mapping containing 'params' "
+            "(a reload without params is never accepted; fail closed)")
     reloaded_sha = _params_sha256(reloaded["params"])
+    # CC4 follow-up (P0-14): a FULL-state round trip must preserve more than
+    # the params — the reloaded global step must equal the attested step.
+    reloaded_step = reloaded.get("global_step", None)
+    if isinstance(reloaded_step, bool) or not isinstance(reloaded_step, int) \
+            or reloaded_step < 0:
+        raise ProductionBlockedError(
+            f"restored full state carries no valid global_step: "
+            f"{reloaded_step!r} (a params-only reload is never accepted as a "
+            "full-state round trip; fail closed)")
     if reloaded_sha != new_sha:
         raise ProductionBlockedError(
             "checkpoint round trip changed params: saved "
             f"{new_sha[:16]}… != reloaded {reloaded_sha[:16]}…")
+    if int(reloaded_step) != int(attestation.optimizer_step_after):
+        raise ProductionBlockedError(
+            f"checkpoint round trip changed the global step: saved "
+            f"{int(attestation.optimizer_step_after)} != reloaded "
+            f"{int(reloaded_step)} (fail closed)")
     report["checkpoint_reload"] = True
     steps["STEP11_CHECKPOINT_SAVE_LOAD_ROUND_TRIP"] = {
         "checkpoint_path": str(ckpt_path),
         "params_sha256_round_trip": reloaded_sha,
+        "global_step_round_trip": int(reloaded_step),
+        "restore_driver": RESTORE_DRIVER_IN_PROCESS_ADAPTER,
     }
 
-    # STEP 12 — next-policy-step replay with the reloaded params.
-    replay_out = student.policy_step(reloaded["params"], observations[:1],
-                                     student.initial_memory(1), None, None, None, True)
-    replay_action = int(np.asarray(replay_out["action"]).reshape(-1)[0])
-    action_count = student.action_spec().count
-    if not (0 <= replay_action < action_count):
+    # STEP 12 — TRUE replay equivalence (CC4 follow-up P0-14): one identical
+    # deterministic next-policy step through the UPDATED and the RELOADED
+    # parameters must agree exactly on action/logits/value/new-memory.  The
+    # measured equivalences are minted into immutable
+    # CheckpointRoundTripEvidence together with the round-trip facts; a
+    # params-only comparison is never accepted again.
+    equivalence = measure_replay_equivalence(
+        student,
+        params_saved=new_params,
+        params_reloaded=reloaded["params"],
+        observation=observations[:1],
+        memory=student.initial_memory(1),
+    )
+    replay_range_ok = (
+        0 <= int(equivalence["action_saved"]) < action_count
+        and 0 <= int(equivalence["action_reloaded"]) < action_count)
+    if not replay_range_ok:
         raise ProductionBlockedError(
-            f"replay action {replay_action} out of range [0, {action_count})")
-    replay_ok = True
-    if "logits" in replay_out:
-        replay_ok = bool(np.isfinite(np.asarray(replay_out["logits"])).all())
+            f"replay action out of range [0, {action_count}): "
+            f"saved={equivalence['action_saved']} "
+            f"reloaded={equivalence['action_reloaded']}")
+    round_trip_evidence = mint_checkpoint_round_trip_evidence(
+        checkpoint_path=str(ckpt_path),
+        restore_driver=RESTORE_DRIVER_IN_PROCESS_ADAPTER,
+        params_sha256_saved=new_sha,
+        params_sha256_reloaded=reloaded_sha,
+        global_step_saved=int(attestation.optimizer_step_after),
+        global_step_reloaded=int(reloaded_step),
+        replay_action_equal=bool(equivalence["action_equal"]),
+        replay_logits_equal=bool(equivalence["logits_equal"]),
+        replay_value_equal=bool(equivalence["value_equal"]),
+        replay_memory_equal=bool(equivalence["memory_equal"]),
+    )
+    verify_checkpoint_round_trip_evidence(round_trip_evidence)
     steps["STEP12_NEXT_POLICY_STEP_REPLAY"] = {
-        "replay_action_in_range": True,
-        "replay_logits_finite": replay_ok,
+        "replay_equivalence": {
+            "action_equal": bool(equivalence["action_equal"]),
+            "logits_equal": bool(equivalence["logits_equal"]),
+            "value_equal": bool(equivalence["value_equal"]),
+            "memory_equal": bool(equivalence["memory_equal"]),
+        },
+        "round_trip_evidence_hash": round_trip_evidence.evidence_hash,
+        "round_trip_evidence_version": round_trip_evidence.evidence_version,
     }
 
     # STEP 13 — NaN/Inf sweep over the updated parameter tree and scalars.
