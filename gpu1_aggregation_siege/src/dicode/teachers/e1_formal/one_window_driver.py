@@ -36,6 +36,7 @@ from dataclasses import dataclass, fields as dataclass_fields
 from typing import Any, Tuple
 
 from . import probe_result_binding as PRB
+from . import selection_attestation as SA
 from . import shared_runtime_seam as SRS
 from . import variant_binding as VB
 from .board import ReviewWindow, WINDOW_STATUS_COMPLETE
@@ -566,5 +567,56 @@ def execute_real_candidate_probes(
         reset_protocol_hash=reset_protocol_hash,
         runner_registry_hash=runtime.object_identity_hash("probe_runner"),
         ctx=ctx,
+        allow_test_only=allow_test_only,
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage 5: attested criterion-wise selection (signed signals ONLY)
+# ---------------------------------------------------------------------------
+def execute_real_criterion_selection(
+    teacher: Any,
+    window_result: Any,
+    candidates: Any,
+    probe_results: Any,
+    signed_signals: Any,
+    runtime: Any,
+    *,
+    k: int,
+    seed: int,
+    critic_policy: str,
+    family_cap: int,
+    weights: Any = None,
+    allow_test_only: bool = False,
+) -> Tuple[Any, Any]:
+    """Run the criterion-wise selection under FULL pool binding.
+
+    Returns ``(SelectionOutcome, SelectionAttestation)`` — the
+    attestation is what the GenManager certification consumes (never
+    the bare outcome). Caller-shaped signal mappings have no path in:
+    only ``SignedCriterionSignals`` verified against their candidate +
+    probe result enter scoring.
+    """
+    ctx = "e1_driver.criterion_selection"
+    validate_runtime_surface(runtime, ctx)
+    _require_gen_manager(teacher, ctx)
+    require_real_object(window_result, "window_result", ctx)
+    if not isinstance(window_result, E1WindowResult):
+        raise DriverError(
+            E1_DRIVER_BAD_TYPE,
+            f"{ctx}: window_result must be the E1WindowResult object, "
+            f"got {type(window_result).__name__}",
+        )
+    return SA.execute_criterion_selection(
+        window_id=window_result.window.window_id,
+        window_hash=window_result.window.window_hash,
+        candidates=candidates,
+        probe_results=probe_results,
+        signed_signals=signed_signals,
+        k=k,
+        seed=seed,
+        critic_policy=critic_policy,
+        family_cap=family_cap,
+        weights=weights,
         allow_test_only=allow_test_only,
     )

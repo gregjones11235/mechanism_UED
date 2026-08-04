@@ -1503,6 +1503,144 @@ class E1FormalGenManager:
                 "ids/hashes alone never certify REUSE",
             )
 
+    def certify_and_build_training_batch(
+        self,
+        *,
+        selection_attestation: Any,
+        candidate_pool: Any,
+        probe_pool: Any,
+        signals_pool: Any,
+        window_hash: str,
+        student_checkpoint_hash: str,
+        reference_checkpoint_hash: str,
+        dual_probe: Any = None,
+    ) -> Dict[str, Any]:
+        """Certify ONE window's attested selection, then build the batch.
+
+        CC2 follow-up P0-9: the certification is MECHANICAL — the
+        attestation is re-derived against the CURRENT window / pools,
+        the selected set must be exactly the 12 dynamic slots with no
+        duplicates, no anchors, the family cap honored, every selected
+        id present in the candidate registry pool, and every probe in
+        the pool bound to the SAME Student/Reference checkpoints. Only
+        then does the request reach the existing C13-C15
+        ``build_training_batch`` gates (which stay authoritative for
+        ``training_permitted``).
+        """
+        from . import selection_attestation as SA
+
+        ctx = "e1_formal.certify_and_build_training_batch"
+        if not isinstance(candidate_pool, (tuple, list)):
+            raise GenManagerError(
+                SA.SELECTION_BAD_TYPE,
+                f"{ctx}: candidate_pool must be a tuple/list, got "
+                f"{type(candidate_pool).__name__}",
+            )
+        if not isinstance(probe_pool, (tuple, list)):
+            raise GenManagerError(
+                SA.SELECTION_BAD_TYPE,
+                f"{ctx}: probe_pool must be a tuple/list, got "
+                f"{type(probe_pool).__name__}",
+            )
+        if not isinstance(signals_pool, (tuple, list)):
+            raise GenManagerError(
+                SA.SELECTION_BAD_TYPE,
+                f"{ctx}: signals_pool must be a tuple/list, got "
+                f"{type(signals_pool).__name__}",
+            )
+        # 1) attestation re-derivation against the CURRENT pools -----
+        try:
+            SA.verify_selection_attestation(
+                selection_attestation,
+                candidates=candidate_pool,
+                probe_results=probe_pool,
+                signed_signals=signals_pool,
+                window_hash=window_hash,
+                ctx=ctx,
+            )
+        except SA.SelectionAttestationError as e:
+            raise GenManagerError(e.code, f"{ctx}: {e}") from e
+        selected = tuple(selection_attestation.selected_ids)
+        # 2) exactly the 12 dynamic slots, no duplicates ---------------
+        if len(selected) != layout.NUM_DYNAMIC_SLOTS:
+            raise GenManagerError(
+                SA.SELECTION_BAD_COUNT,
+                f"{ctx}: selection carries {len(selected)} id(s); "
+                f"exactly {layout.NUM_DYNAMIC_SLOTS} dynamic slots are "
+                "required (no more, no backfill)",
+            )
+        if len(set(selected)) != len(selected):
+            raise GenManagerError(
+                SA.SELECTION_BAD_COUNT,
+                f"{ctx}: duplicate ids in the selected set {selected}",
+            )
+        # 3) no anchor task may ever be selected -----------------------
+        anchors = set(selected) & set(layout.ANCHOR_TASK_IDS)
+        if anchors:
+            raise GenManagerError(
+                SA.SELECTION_ANCHOR_SELECTED,
+                f"{ctx}: anchor task(s) {sorted(anchors)} in the "
+                "selected set — anchors enter the batch ONLY via the "
+                "frozen shared manifest, never via selection",
+            )
+        # 4) registry binding: selected ids exist in the pool ----------
+        family_by_candidate_id = {
+            candidate.candidate_id: candidate.family_id
+            for candidate in candidate_pool
+        }
+        unknown = sorted(
+            cid
+            for cid in selected
+            if cid not in family_by_candidate_id
+        )
+        if unknown:
+            raise GenManagerError(
+                SA.SELECTION_UNKNOWN_CANDIDATE,
+                f"{ctx}: selected id(s) {unknown} are not in the "
+                "window's candidate pool",
+            )
+        # 5) family cap honored -----------------------------------------
+        family_counts: Dict[str, int] = {}
+        for cid in selected:
+            family = family_by_candidate_id[cid]
+            family_counts[family] = family_counts.get(family, 0) + 1
+        violated = sorted(
+            family
+            for family, count in family_counts.items()
+            if count > selection_attestation.family_cap
+        )
+        if violated:
+            raise GenManagerError(
+                SA.SELECTION_FAMILY_CAP_VIOLATED,
+                f"{ctx}: families {violated} exceed the cap "
+                f"{selection_attestation.family_cap}",
+            )
+        # 6) Student/Reference checkpoint binding on EVERY probe --------
+        for probe in probe_pool:
+            if getattr(probe, "student_checkpoint_hash", "") != (
+                student_checkpoint_hash
+            ):
+                raise GenManagerError(
+                    SA.SELECTION_PROBE_BINDING_MISMATCH,
+                    f"{ctx}: probe {getattr(probe, 'result_id', '?')!r} "
+                    "ran against a different Student checkpoint than "
+                    "the window's",
+                )
+            if getattr(probe, "reference_checkpoint_hash", "") != (
+                reference_checkpoint_hash
+            ):
+                raise GenManagerError(
+                    SA.SELECTION_PROBE_BINDING_MISMATCH,
+                    f"{ctx}: probe {getattr(probe, 'result_id', '?')!r} "
+                    "ran against a different Reference checkpoint than "
+                    "the window's",
+                )
+        # 7) delegate to the authoritative C13-C15 gates ----------------
+        return self.build_training_batch(
+            promoted_dynamic_ids=list(selected),
+            dual_probe=dual_probe,
+        )
+
     def record_verified_batch(self, snapshot: Any) -> Dict[str, Any]:
         """Certify the previous window's FULLY VERIFIED 12+4 batch (C13).
 
