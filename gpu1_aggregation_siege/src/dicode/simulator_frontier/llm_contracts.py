@@ -31,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping, Sequence
 
 from .errors import ProductionBlockedError
@@ -379,43 +379,293 @@ def run_typed_two_llm_gate(decision: InvocationDecision, evidence: Mapping[str, 
             "role_order": LLM_ROLE_SEQUENCE, "evidence_hash": evidence_hash}
 
 
-def run_two_llm_production(decision: InvocationDecision, evidence: Mapping[str, Any], *,
-                           client_factory: Any, expected_state_id: str) -> dict[str, Any]:
-    """PRODUCTION two-LLM path: real authorized clients only (never faked).
+TWO_LLM_AUTHORIZATION_SCHEMA = "simulator_frontier.two-llm.authorization/v1"
+TWO_LLM_CALL_CEILING = 2  # exactly two LOGICAL calls; never more, never fewer
 
-    ``client_factory`` is injected by the controller-authorized wiring and must
-    return a mapping {role: client} covering ``LLM_ROLE_SEQUENCE`` with live
-    ``.complete`` clients.  When it is absent/unbound this path raises
-    ``ProductionBlockedError(REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT)`` —
-    it NEVER falls back to ``FakeLLMClient`` and never reports a fake run as
-    real.  For a 0-call decision no client is needed (no LLM call happens).
+# Fixed chain seed for the call journal (deterministic, version-labelled).
+JOURNAL_CHAIN_SEED = hashlib.sha256(
+    b"simulator_frontier.two-llm.journal/v1|chain-seed").hexdigest()
+
+
+def _require_sha256(name: str, value: Any) -> str:
+    if not isinstance(value, str) or len(value) != 64 \
+            or any(c not in "0123456789abcdef" for c in value):
+        raise LLMContractError(f"INVALID_HASH {name}: expected a 64-hex sha256, got {value!r}")
+    return value
+
+
+@dataclass(frozen=True)
+class TwoLLMAuthorization:
+    """MINT-ONLY authorization for the exact two logical LLM calls.
+
+    CC4 follow-up (P0-8): the roles, the call ceiling and the hash are all
+    derived inside the minter — a caller can never authorize more calls,
+    different roles, or itself.  Only the controller-side authorizer issues
+    these, and the production runtime verifies the hash before any call.
     """
-    if not isinstance(decision, InvocationDecision):
-        raise LLMContractError("run_two_llm_production requires an InvocationDecision")
-    if decision.llm_calls == 0:
-        _walk_forbidden(evidence, "evidence")
-        return {"llm_calls": 0, "reuse_plan_ref": decision.reuse_plan_ref,
-                "diagnostician": None, "planner": None, "role_order": (),
-                "evidence_hash": evidence_hash_of(dict(evidence))}
 
-    if client_factory is None or not callable(client_factory):
-        raise ProductionBlockedError(
-            f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: no controller-authorized LLM "
-            "client factory is bound; the production two-LLM path never falls back to a "
-            "fake client and never claims a real run")
-    clients = client_factory(LLM_ROLE_SEQUENCE)
-    if not isinstance(clients, Mapping):
-        raise ProductionBlockedError(
-            f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: client factory must return a "
-            f"role->client mapping, got {type(clients).__name__}")
-    for role in LLM_ROLE_SEQUENCE:
-        client = clients.get(role)
-        if client is None or not callable(getattr(client, "complete", None)):
+    authorization_id: str
+    authorizer_id: str
+    authorization_schema: str = TWO_LLM_AUTHORIZATION_SCHEMA
+    roles: tuple[str, ...] = field(init=False)
+    max_logical_calls: int = field(init=False)
+    authorization_hash: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not str(self.authorization_id).strip():
+            raise LLMContractError("TwoLLMAuthorization.authorization_id is empty")
+        if not str(self.authorizer_id).strip():
+            raise LLMContractError(
+                "TwoLLMAuthorization.authorizer_id is empty (an anonymous "
+                "authorization can never be accepted)")
+        if self.authorization_schema != TWO_LLM_AUTHORIZATION_SCHEMA:
+            raise LLMContractError("TwoLLMAuthorization schema mismatch")
+        object.__setattr__(self, "roles", tuple(LLM_ROLE_SEQUENCE))
+        object.__setattr__(self, "max_logical_calls", TWO_LLM_CALL_CEILING)
+        payload = {
+            "schema": TWO_LLM_AUTHORIZATION_SCHEMA,
+            "authorization_id": self.authorization_id,
+            "authorizer_id": self.authorizer_id,
+            "roles": list(LLM_ROLE_SEQUENCE),
+            "max_logical_calls": TWO_LLM_CALL_CEILING,
+        }
+        object.__setattr__(self, "authorization_hash", _canonical_sha256(payload))
+
+
+def mint_two_llm_authorization(*, authorization_id: str,
+                               authorizer_id: str) -> TwoLLMAuthorization:
+    """The ONLY way to obtain a production two-LLM authorization (mint-only)."""
+    return TwoLLMAuthorization(authorization_id=authorization_id,
+                               authorizer_id=authorizer_id)
+
+
+def verify_two_llm_authorization(authorization: Any) -> None:
+    """Reject mappings, foreign types, tampering and self-issued authorizations."""
+    if isinstance(authorization, Mapping):
+        raise LLMContractError(
+            "plain mappings are not a TwoLLMAuthorization (authorization is "
+            "mint-only; a hand-built mapping can never authorize LLM calls)")
+    if not isinstance(authorization, TwoLLMAuthorization):
+        raise LLMContractError(
+            f"authorization must be a minted TwoLLMAuthorization, got "
+            f"{type(authorization).__name__}")
+    if authorization.authorization_schema != TWO_LLM_AUTHORIZATION_SCHEMA:
+        raise LLMContractError("TwoLLMAuthorization schema mismatch")
+    if tuple(authorization.roles) != tuple(LLM_ROLE_SEQUENCE):
+        raise LLMContractError(
+            "TwoLLMAuthorization roles do not equal the fixed LLM role sequence")
+    if int(authorization.max_logical_calls) != TWO_LLM_CALL_CEILING:
+        raise LLMContractError(
+            "TwoLLMAuthorization call ceiling is not exactly the two logical calls")
+    payload = {
+        "schema": TWO_LLM_AUTHORIZATION_SCHEMA,
+        "authorization_id": authorization.authorization_id,
+        "authorizer_id": authorization.authorizer_id,
+        "roles": list(LLM_ROLE_SEQUENCE),
+        "max_logical_calls": TWO_LLM_CALL_CEILING,
+    }
+    if _canonical_sha256(payload) != authorization.authorization_hash:
+        raise LLMContractError(
+            "TwoLLMAuthorization hash mismatch (authorization was modified "
+            "after minting; tampering is rejected fail-closed)")
+
+
+@dataclass(frozen=True)
+class CallJournalEntry:
+    """One journaled logical LLM call (hash-chained to its predecessor)."""
+
+    sequence: int
+    role: str
+    input_hash: str
+    output_hash: str
+    prev_hash: str
+    entry_hash: str
+
+
+class CallJournal:
+    """Tamper-evident journal of the exact two logical LLM calls.
+
+    Entries are hash-chained (each entry binds its predecessor), the role
+    order is enforced against ``LLM_ROLE_SEQUENCE``, and the ceiling of
+    ``TWO_LLM_CALL_CEILING`` calls is absolute: a third call raises.
+    """
+
+    def __init__(self) -> None:
+        self._entries: list[CallJournalEntry] = []
+        self._prev_hash: str = JOURNAL_CHAIN_SEED
+
+    @property
+    def entries(self) -> tuple[CallJournalEntry, ...]:
+        return tuple(self._entries)
+
+    @property
+    def journal_hash(self) -> str:
+        """The current chain head (the seed for an empty journal)."""
+        return self._prev_hash
+
+    def record(self, role: str, *, input_hash: str, output_hash: str) -> CallJournalEntry:
+        if len(self._entries) >= TWO_LLM_CALL_CEILING:
+            raise LLMContractError(
+                "TWO_LLM_CALL_CEILING_EXCEEDED: the production window allows "
+                f"exactly {TWO_LLM_CALL_CEILING} logical LLM calls; a further "
+                "call is refused")
+        expected_role = LLM_ROLE_SEQUENCE[len(self._entries)]
+        if role != expected_role:
+            raise LLMContractError(
+                f"TWO_LLM_ROLE_ORDER_VIOLATED: call {len(self._entries)} must be "
+                f"role {expected_role!r}, got {role!r} (fixed role order is binding)")
+        input_hash = _require_sha256("input_hash", input_hash)
+        output_hash = _require_sha256("output_hash", output_hash)
+        payload = {
+            "schema": "simulator_frontier.two-llm.journal-entry/v1",
+            "sequence": len(self._entries),
+            "role": role,
+            "input_hash": input_hash,
+            "output_hash": output_hash,
+            "prev_hash": self._prev_hash,
+        }
+        entry_hash = _canonical_sha256(payload)
+        entry = CallJournalEntry(
+            sequence=len(self._entries), role=role, input_hash=input_hash,
+            output_hash=output_hash, prev_hash=self._prev_hash,
+            entry_hash=entry_hash)
+        self._entries.append(entry)
+        self._prev_hash = entry_hash
+        return entry
+
+    def verify(self) -> None:
+        """Recompute the whole chain from the seed; any tampering raises."""
+        prev = JOURNAL_CHAIN_SEED
+        for index, entry in enumerate(self._entries):
+            if entry.sequence != index or entry.prev_hash != prev \
+                    or entry.role != LLM_ROLE_SEQUENCE[index]:
+                raise LLMContractError(
+                    f"TWO_LLM_JOURNAL_CHAIN_BROKEN at entry {index} "
+                    "(sequence, role order or prev-hash mismatch)")
+            payload = {
+                "schema": "simulator_frontier.two-llm.journal-entry/v1",
+                "sequence": entry.sequence,
+                "role": entry.role,
+                "input_hash": entry.input_hash,
+                "output_hash": entry.output_hash,
+                "prev_hash": entry.prev_hash,
+            }
+            recomputed = _canonical_sha256(payload)
+            if recomputed != entry.entry_hash:
+                raise LLMContractError(
+                    f"TWO_LLM_JOURNAL_CHAIN_BROKEN at entry {index} "
+                    "(entry hash does not recompute)")
+            prev = entry.entry_hash
+
+
+class _JournaledClient:
+    """Wraps a real authorized client so every call is journaled."""
+
+    def __init__(self, inner: Any, role: str, journal: CallJournal) -> None:
+        self._inner = inner
+        self._role = role
+        self._journal = journal
+
+    def complete(self, payload: Mapping[str, Any]) -> Any:
+        input_hash = _canonical_sha256({"payload": dict(payload)})
+        output = self._inner.complete(payload)
+        if not isinstance(output, Mapping):
+            raise LLMContractError(
+                f"TWO_LLM_OUTPUT_NOT_A_MAPPING: role {self._role!r} returned "
+                f"{type(output).__name__}; only typed mapping outputs are journaled")
+        output_hash = _canonical_sha256(dict(output))
+        self._journal.record(self._role, input_hash=input_hash,
+                             output_hash=output_hash)
+        return output
+
+
+@dataclass(frozen=True)
+class AuthorizedTwoLLMRuntime:
+    """The ONLY production surface for the 0-or-2 LLM decision (CC4 P0-8).
+
+    Combines a mint-only ``TwoLLMAuthorization`` with the injected client
+    factory and a tamper-evident ``CallJournal``: exactly two logical calls,
+    fixed role order, every call hash-journaled.  Plain client factories are
+    no longer accepted by the production path.
+    """
+
+    authorization: TwoLLMAuthorization
+    client_factory: Any
+
+    def __post_init__(self) -> None:
+        verify_two_llm_authorization(self.authorization)
+        if self.client_factory is None or not callable(self.client_factory):
             raise ProductionBlockedError(
-                f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: no authorized client for "
-                f"role {role!r} (fail closed; never substitute a fake)")
-    return run_typed_two_llm_gate(
-        decision, evidence,
-        diagnostician_client=clients[LLM_ROLE_SEQUENCE[0]],
-        planner_client=clients[LLM_ROLE_SEQUENCE[1]],
-        expected_state_id=expected_state_id)
+                f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: an authorized two-LLM "
+                "runtime requires a controller-injected client factory (never a fake, "
+                "never self-built)")
+
+    def execute(self, decision: InvocationDecision, evidence: Mapping[str, Any], *,
+                expected_state_id: str) -> dict[str, Any]:
+        if not isinstance(decision, InvocationDecision):
+            raise LLMContractError(
+                "AuthorizedTwoLLMRuntime.execute requires an InvocationDecision")
+        _walk_forbidden(evidence, "evidence")
+        evidence_hash = evidence_hash_of(dict(evidence))
+        journal = CallJournal()
+        if decision.llm_calls == 0:
+            # No client is touched: the journal stays empty but its chain
+            # seed is still bound into the returned audit record.
+            return {"llm_calls": 0, "reuse_plan_ref": decision.reuse_plan_ref,
+                    "diagnostician": None, "planner": None, "role_order": (),
+                    "evidence_hash": evidence_hash,
+                    "authorization_id": self.authorization.authorization_id,
+                    "journal": {"entries": (), "journal_hash": journal.journal_hash}}
+
+        clients = self.client_factory(LLM_ROLE_SEQUENCE)
+        if not isinstance(clients, Mapping):
+            raise ProductionBlockedError(
+                f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: client factory must "
+                f"return a role->client mapping, got {type(clients).__name__}")
+        for role in LLM_ROLE_SEQUENCE:
+            client = clients.get(role)
+            if client is None or not callable(getattr(client, "complete", None)):
+                raise ProductionBlockedError(
+                    f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: no authorized "
+                    f"client for role {role!r} (fail closed; never substitute a fake)")
+        diagnostician = _JournaledClient(clients[LLM_ROLE_SEQUENCE[0]],
+                                         LLM_ROLE_SEQUENCE[0], journal)
+        planner = _JournaledClient(clients[LLM_ROLE_SEQUENCE[1]],
+                                   LLM_ROLE_SEQUENCE[1], journal)
+        result = run_typed_two_llm_gate(
+            decision, evidence,
+            diagnostician_client=diagnostician,
+            planner_client=planner,
+            expected_state_id=expected_state_id)
+        # Defense in depth: the gate makes exactly two logical calls, and the
+        # journal must have recorded both, in order, with an intact chain.
+        journal.verify()
+        if len(journal.entries) != TWO_LLM_CALL_CEILING:
+            raise LLMContractError(
+                f"TWO_LLM_JOURNAL_INCOMPLETE: expected exactly "
+                f"{TWO_LLM_CALL_CEILING} journaled calls, got {len(journal.entries)}")
+        result["authorization_id"] = self.authorization.authorization_id
+        result["journal"] = {
+            "entries": tuple(asdict(entry) for entry in journal.entries),
+            "journal_hash": journal.journal_hash,
+        }
+        return result
+
+
+def run_two_llm_production(decision: InvocationDecision, evidence: Mapping[str, Any], *,
+                           runtime: Any, expected_state_id: str) -> dict[str, Any]:
+    """PRODUCTION two-LLM path: an AuthorizedTwoLLMRuntime only (never faked).
+
+    CC4 follow-up (P0-8): a bare client factory is no longer accepted — the
+    production path requires a runtime carrying a mint-only authorization
+    and a tamper-evident call journal.  When the runtime is absent this path
+    raises ``ProductionBlockedError(REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT)``;
+    it NEVER falls back to ``FakeLLMClient`` and never reports a fake run as
+    real.
+    """
+    if not isinstance(runtime, AuthorizedTwoLLMRuntime):
+        raise ProductionBlockedError(
+            f"{REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT}: the production two-LLM "
+            "path requires an AuthorizedTwoLLMRuntime (mint-only authorization + "
+            "call journal); plain client factories and fakes are refused")
+    return runtime.execute(decision, evidence, expected_state_id=expected_state_id)

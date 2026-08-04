@@ -68,6 +68,7 @@ from .invocation_gate import (
 )
 from .llm_contracts import (
     REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT,
+    AuthorizedTwoLLMRuntime,
     PlannerOutput,
     run_two_llm_production,
 )
@@ -175,7 +176,10 @@ class E3WindowConfig:
     restore_request: Any = None               # FreshProcessRestoreRequest
     scratch_dir: str = ""
     # --- two LLM --------------------------------------------------------------
-    llm_client_factory: Callable[[Any], Mapping[str, Any]] | None = None
+    # CC4 follow-up (P0-8): production requires an AuthorizedTwoLLMRuntime
+    # (mint-only authorization + call journal); a bare client factory is no
+    # longer accepted on the official path.
+    two_llm_runtime: AuthorizedTwoLLMRuntime | None = None
     previous_plan_ref: str | None = None      # None -> REVISION_REQUIRED (2 calls)
     reuse_plan: PlannerOutput | None = None   # required when 0 calls reuse it
     # --- selector / distributions ----------------------------------------------
@@ -301,8 +305,9 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     if not predicates_ok:
         blockers.append(BLOCKED_NO_INJECTED_PREDICATES)
 
-    gates["TWO_LLM_AUTHORIZED_CLIENT"] = bool(callable(config.llm_client_factory))
-    if not callable(config.llm_client_factory):
+    gates["TWO_LLM_AUTHORIZED_RUNTIME"] = isinstance(
+        config.two_llm_runtime, AuthorizedTwoLLMRuntime)
+    if not isinstance(config.two_llm_runtime, AuthorizedTwoLLMRuntime):
         blockers.append(REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT)
 
     gates["ORIGINAL_LOSS_INJECTED"] = bool(callable(config.loss_fn))
@@ -763,7 +768,7 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     else:
         decision = decide_invocation(InvocationReason.REVISION_REQUIRED)
     llm_result = run_two_llm_production(
-        decision, evidence, client_factory=config.llm_client_factory,
+        decision, evidence, runtime=config.two_llm_runtime,
         expected_state_id=state_id)
     if llm_result["llm_calls"] == 2:
         plan = llm_result["planner"]
@@ -780,6 +785,10 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         "role_order": list(llm_result["role_order"]),
         "evidence_hash": llm_result["evidence_hash"],
         "plan_id": plan.plan_id,
+        # CC4 follow-up (P0-8): authorization + call journal audit trail.
+        "authorization_id": llm_result["authorization_id"],
+        "journal_entries": len(llm_result["journal"]["entries"]),
+        "journal_hash": llm_result["journal"]["journal_hash"],
     }
 
     # STEP 6 — deterministic evidence selector: the OFFICIAL final authority.
