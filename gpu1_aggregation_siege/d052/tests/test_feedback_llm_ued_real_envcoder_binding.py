@@ -71,6 +71,7 @@ from d052.feedback_llm_ued.real_probe_feedback import (
     FORBIDDEN_PRODUCTION_RUNNER_IDS,
     RealProbeFeedbackRunner,
     build_real_feedback_record,
+    sign_probe_result,
 )
 from d052.feedback_llm_ued.real_simulator_probe import RealProbeBlocked
 from d052.feedback_llm_ued.runtime_authorization import (
@@ -251,11 +252,21 @@ class FakeSharedProbeRunner:
             global_retention=1.0, regret=0.4, learnability=0.4,
             simulator_transitions=self._transitions,
             too_hard=False, too_easy=False)
-        return SimpleNamespace(
-            metrics=metrics, simulator_transitions=self._transitions,
-            episode_count=student_episodes + reference_episodes,
+        #: P0-8: the production seam consumes ONLY the immutable
+        #: registry-signed CandidateProbeResult — the fixture signs it
+        #: exactly like the shared runtime owner would (TEST_ONLY)
+        return sign_probe_result(dict(
+            stage=stage, metrics=metrics,
+            simulator_transitions=self._transitions,
+            student_episodes_requested=student_episodes,
+            student_episodes_completed=student_episodes,
+            student_episodes_failed_or_rejected=0,
+            reference_episodes_requested=reference_episodes,
+            reference_episodes_completed=reference_episodes,
+            reference_episodes_failed_or_rejected=0,
             student_checkpoint_hash="c1" * 32,
-            reference_checkpoint_hash="d1" * 32)
+            reference_checkpoint_hash="d1" * 32,
+            issuer_runner_id=self.runner_id))
 
 
 @pytest.fixture
@@ -299,6 +310,9 @@ def record_kwargs(candidate, artifact_hash, *, window=1,
             parameter_tree_hash="e1" * 32, checkpoint_global_step=0,
             provenance_label="TEST_ONLY SYNTHETIC NOT_REAL_EXECUTION"),
         runner_id=ADAPTER_ID, seed_bank=[1, 2, 3], ci_sample_count=3,
+        #: P0-8: the runner-signed checkpoint hashes are mandatory
+        student_checkpoint_hash="c1" * 32,
+        reference_checkpoint_hash="d1" * 32,
         expected_observed_match=MATCH_UNGRADED,
         executable_artifact_hash=artifact_hash)
     base.update(over)

@@ -14,6 +14,20 @@ Production-path hard rules (master directive):
 * unknown, wrong-window, wrong-plan, wrong-family or wrong-identity
   inputs ALL fail closed — never coerced, never dropped.
 
+P0-8 (CC3 follow-up audit): the production path consumes ONLY the
+immutable, registry-signed :class:`CandidateProbeResult` — duck-typed
+stand-ins are refused (``REAL_PROBE_RESULT_NOT_SIGNED``), a missing
+signature is refused (``REAL_PROBE_RESULT_UNSIGNED``), and the carried
+``result_hash`` is recomputed and compared (tamper fails closed). The
+result's episode accounting must balance per role
+(requested == completed + failed/rejected), the requested counts must
+match what this seam asked for, the CI-sample count is the number of
+actually COMPLETED (valid) episodes — never the requested count — and
+both checkpoint hashes are mandatory valid sha256. Feedback provenance
+additionally binds ``changed_axes`` only inside the candidate's declared
+``mutation_axes`` (P0-8) and fails closed on duplicate/stale/missing
+evidence (P0-9).
+
 This module consumes (never re-implements): the ``SimulatorProbeRunner``
 Protocol surface, ``ProbeMetrics`` / ``CandidateEnvironment`` contracts,
 ``assert_episode_budget``, the Reference output guard, and the existing
@@ -22,12 +36,12 @@ source; the runner ids below are a REJECTION list, not a dependency.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Protocol, Sequence, Tuple, \
-    runtime_checkable
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, \
+    Tuple, runtime_checkable
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
-from d052.bagr_ued.hashing import verify_content_hash
+from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.executable_env_artifact import (
     ExecutableEnvironmentArtifact,
@@ -89,13 +103,27 @@ def assert_real_runner(runner: object) -> None:
 # ---------------------------------------------------------------------------
 @runtime_checkable
 class SharedProbeResult(Protocol):
-    """One stage's real episode results, signed by the shared runner."""
+    """P0-8: one stage's real episode results.
 
+    The shared runner MUST return the immutable registry-signed
+    :class:`CandidateProbeResult`; this protocol only documents the
+    minimum surface of that contract — duck-typed stand-ins are refused
+    by :func:`consume_signed_probe_result` (REAL_PROBE_RESULT_NOT_SIGNED).
+    """
+
+    stage: str
     metrics: Dict[str, object]
     simulator_transitions: int
-    episode_count: int
+    student_episodes_requested: int
+    student_episodes_completed: int
+    student_episodes_failed_or_rejected: int
+    reference_episodes_requested: int
+    reference_episodes_completed: int
+    reference_episodes_failed_or_rejected: int
     student_checkpoint_hash: str
     reference_checkpoint_hash: str
+    issuer_runner_id: str
+    result_hash: str
 
 
 @runtime_checkable
@@ -117,6 +145,169 @@ class SharedCandidateProbeRunner(Protocol):
                         stage: str, student_episodes: int,
                         reference_episodes: int,
                         seed_bank: Tuple[int, ...]) -> SharedProbeResult: ...
+
+
+# ---------------------------------------------------------------------------
+# P0-8: the immutable, registry-signed probe result (the ONLY shape the
+# production path consumes)
+# ---------------------------------------------------------------------------
+class CandidateProbeResult(CanonicalModel):
+    """One stage's real episode results — immutable and registry-signed.
+
+    * frozen: any post-construction mutation is refused by pydantic;
+    * signed: ``result_hash`` MUST be carried (the registry/owner computes
+      it over the content) and is recomputed-and-compared at construction
+      — unsigned (``REAL_PROBE_RESULT_UNSIGNED``) and tampered
+      (``CONTENT_HASH_MISMATCH``) results fail closed;
+    * balanced: per role, requested == completed + failed/rejected;
+    * honest checkpoints: both checkpoint hashes are mandatory valid
+      sha256 (the runner signs which Student/Reference weights actually
+      rolled out).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    stage: str = Field(min_length=1)
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    simulator_transitions: int = Field(gt=0)
+    #: P0-8 episode accounting (per role):
+    #: requested == completed + failed_or_rejected, always
+    student_episodes_requested: int = Field(ge=0)
+    student_episodes_completed: int = Field(ge=0)
+    student_episodes_failed_or_rejected: int = Field(ge=0)
+    reference_episodes_requested: int = Field(ge=0)
+    reference_episodes_completed: int = Field(ge=0)
+    reference_episodes_failed_or_rejected: int = Field(ge=0)
+    #: P0-8: mandatory valid sha256 checkpoint hashes
+    student_checkpoint_hash: str = Field(min_length=1)
+    reference_checkpoint_hash: str = Field(min_length=1)
+    #: the shared runner that executed and signed this result
+    issuer_runner_id: str = Field(min_length=1)
+    result_hash: str = ""
+
+    @model_validator(mode="after")
+    def _validate_and_hash(self) -> "CandidateProbeResult":
+        for role, requested, completed, failed in (
+                ("student", self.student_episodes_requested,
+                 self.student_episodes_completed,
+                 self.student_episodes_failed_or_rejected),
+                ("reference", self.reference_episodes_requested,
+                 self.reference_episodes_completed,
+                 self.reference_episodes_failed_or_rejected)):
+            if requested != completed + failed:
+                raise ValueError(
+                    f"REAL_PROBE_EPISODE_ACCOUNTING_MISMATCH: {role} "
+                    f"requested={requested} != completed={completed} + "
+                    f"failed_or_rejected={failed}")
+            if requested <= 0:
+                raise ValueError(
+                    f"REAL_PROBE_EPISODES_NOT_REQUESTED: {role} episodes "
+                    f"requested={requested} — a real probe must request "
+                    "positive episodes for both roles")
+        for field_name in ("student_checkpoint_hash",
+                           "reference_checkpoint_hash"):
+            value = getattr(self, field_name)
+            if not is_sha256_hex(value):
+                raise ValueError(
+                    f"REAL_PROBE_CHECKPOINT_HASH_NOT_SHA256: {field_name}="
+                    f"{value!r} — a real probe result must carry the valid "
+                    "sha256 checkpoint hashes the runner signed")
+        if self.issuer_runner_id in FORBIDDEN_PRODUCTION_RUNNER_IDS:
+            raise ValueError(
+                f"PRODUCTION_PATH_FORBIDDEN_RUNNER: issuer_runner_id="
+                f"{self.issuer_runner_id!r} is on the symbolic/blocked-seam "
+                "rejection list")
+        if not self.result_hash:
+            raise ValueError(
+                "REAL_PROBE_RESULT_UNSIGNED: a CandidateProbeResult must "
+                "carry the registry-issued result_hash computed over its "
+                "content — unsigned results are never consumed")
+        computed = verify_content_hash(self.model_dump(),
+                                       hash_field="result_hash",
+                                       carried=self.result_hash,
+                                       kind="CandidateProbeResult")
+        object.__setattr__(self, "result_hash", computed)
+        return self
+
+    @property
+    def valid_episode_count(self) -> int:
+        """P0-8: the CI-sample count source — actually COMPLETED (valid)
+        episodes only; failed/rejected episodes never count."""
+        return (self.student_episodes_completed
+                + self.reference_episodes_completed)
+
+
+def sign_probe_result(payload: Mapping[str, Any]) -> CandidateProbeResult:
+    """Owner/registry-side helper: build and SIGN one immutable result.
+
+    The signature is the canonical sha256 over the complete content
+    (exactly what ``model_dump()`` will reproduce, including the
+    canonical_v2 protocol field); consumption then recomputes and
+    compares. Direction two calls this ONLY inside tests / fixtures — in
+    production the shared runtime owner signs.
+    """
+    body = dict(payload)
+    body.pop("result_hash", None)
+    body.setdefault(
+        "protocol_version",
+        CandidateProbeResult.model_fields["protocol_version"].default)
+    signature = canonical_sha256(body)
+    return CandidateProbeResult(**body, result_hash=signature)
+
+
+def consume_signed_probe_result(raw: object, *, expected_issuer: str,
+                                stage: str, requested_student: int,
+                                requested_reference: int
+                                ) -> CandidateProbeResult:
+    """P0-8 consume-only gate: accept ONLY the immutable registry-signed
+    result, bound to THIS probe call. Fail-closed ladder:
+
+      * not a CandidateProbeResult / mapping  -> REAL_PROBE_RESULT_NOT_SIGNED
+      * mapping that fails the schema/signature -> REAL_PROBE_RESULT_ILLEGAL
+      * wrong stage                           -> REAL_PROBE_STAGE_MISMATCH
+      * signed by a different issuer          -> REAL_PROBE_RESULT_ISSUER_MISMATCH
+      * requested != what the seam asked for  -> REAL_PROBE_EPISODE_REQUEST_MISMATCH
+      * zero completed (valid) episodes       -> REAL_PROBE_NO_VALID_EPISODES
+    """
+    if isinstance(raw, CandidateProbeResult):
+        result = raw
+    elif isinstance(raw, Mapping):
+        try:
+            result = CandidateProbeResult(**dict(raw))
+        except Exception as exc:
+            raise RealProbeBlocked(
+                f"REAL_PROBE_RESULT_ILLEGAL: mapping payload failed the "
+                f"signed-result contract: {type(exc).__name__}: {exc}"
+            ) from exc
+    else:
+        raise RealProbeBlocked(
+            "REAL_PROBE_RESULT_NOT_SIGNED: the production path consumes "
+            "ONLY the immutable registry-signed CandidateProbeResult, got "
+            f"{type(raw).__name__} — duck-typed stand-ins are refused")
+    if result.stage != stage:
+        raise RealProbeBlocked(
+            f"REAL_PROBE_STAGE_MISMATCH: result stage={result.stage!r} "
+            f"but this probe call requested stage={stage!r}")
+    if result.issuer_runner_id != expected_issuer:
+        raise RealProbeBlocked(
+            "REAL_PROBE_RESULT_ISSUER_MISMATCH: result is signed by "
+            f"{result.issuer_runner_id!r} but the bound shared runner is "
+            f"{expected_issuer!r} — a result signed by anyone else is "
+            "refused")
+    if (result.student_episodes_requested != requested_student
+            or result.reference_episodes_requested != requested_reference):
+        raise RealProbeBlocked(
+            "REAL_PROBE_EPISODE_REQUEST_MISMATCH: result reports "
+            f"requested student={result.student_episodes_requested} / "
+            f"reference={result.reference_episodes_requested} but this "
+            f"probe call requested student={requested_student} / "
+            f"reference={requested_reference}")
+    if result.valid_episode_count <= 0:
+        raise RealProbeBlocked(
+            "REAL_PROBE_NO_VALID_EPISODES: every requested episode failed "
+            "or was rejected — zero valid episodes can support no "
+            "feedback (NO_SILENT_FALLBACK)")
+    return result
 
 
 #: the ProbeMetrics fields a real probe result MUST provide (missing keys
@@ -294,7 +485,7 @@ class RealProbeFeedbackRunner:
         seed_bank = self._seed_bank_source(
             candidate.candidate_hash, stage=stage,
             n=max(student_episodes, reference_episodes))
-        result = self._runner.probe_candidate(
+        raw = self._runner.probe_candidate(
             candidate_hash=candidate.candidate_hash,
             environment_family=candidate.environment_family,
             axis_values=dict(candidate.axis_values),
@@ -302,7 +493,14 @@ class RealProbeFeedbackRunner:
             stage=stage, student_episodes=student_episodes,
             reference_episodes=reference_episodes,
             seed_bank=tuple(seed_bank))
-        transitions = int(getattr(result, "simulator_transitions", 0))
+        #: P0-8: consume ONLY the immutable registry-signed result, bound
+        #: to this exact probe call (stage / issuer / requested counts);
+        #: anything else fails closed before any metric is read
+        result = consume_signed_probe_result(
+            raw, expected_issuer=self._runner.runner_id, stage=stage,
+            requested_student=student_episodes,
+            requested_reference=reference_episodes)
+        transitions = int(result.simulator_transitions)
         if transitions <= 0:
             raise RealProbeBlocked(
                 "REAL_PROBE_NO_TRANSITIONS: a real probe must account "
@@ -318,14 +516,30 @@ class RealProbeFeedbackRunner:
         self.probe_evidence.setdefault(candidate.candidate_id, []).append(
             dict(stage=stage,
                  seed_bank=[int(s) for s in seed_bank],
-                 student_episodes=student_episodes,
-                 reference_episodes=reference_episodes,
-                 ci_sample_count=student_episodes + reference_episodes,
+                 #: P0-8: the balanced episode accounting the signed
+                 #: result reported (requested == completed +
+                 #: failed/rejected, per role)
+                 student_episodes_requested=(
+                     result.student_episodes_requested),
+                 student_episodes_completed=(
+                     result.student_episodes_completed),
+                 student_episodes_failed_or_rejected=(
+                     result.student_episodes_failed_or_rejected),
+                 reference_episodes_requested=(
+                     result.reference_episodes_requested),
+                 reference_episodes_completed=(
+                     result.reference_episodes_completed),
+                 reference_episodes_failed_or_rejected=(
+                     result.reference_episodes_failed_or_rejected),
+                 #: P0-8: the CI-sample count counts ONLY actually
+                 #: completed (valid) episodes — never requested ones
+                 ci_sample_count=result.valid_episode_count,
                  simulator_transitions=transitions,
-                 student_checkpoint_hash=str(
-                     getattr(result, "student_checkpoint_hash", "")),
-                 reference_checkpoint_hash=str(
-                     getattr(result, "reference_checkpoint_hash", "")),
+                 student_checkpoint_hash=result.student_checkpoint_hash,
+                 reference_checkpoint_hash=(
+                     result.reference_checkpoint_hash),
+                 #: P0-8: the registry signature of the consumed result
+                 result_hash=result.result_hash,
                  #: P0-2: the exact executable artifact these episodes ran
                  #: against — feedback provenance binds the SAME hash
                  executable_artifact_id=artifact.artifact_id,
@@ -354,12 +568,14 @@ class RealProbeProvenance(CanonicalModel):
     held_constant_axes: Dict[str, str] = Field(default_factory=dict)
     predicted_metrics: Dict[str, float] = Field(default_factory=dict)
     observed_residual: Dict[str, float] = Field(default_factory=dict)
-    #: CI-sample count = real episodes executed (Student + Reference)
+    #: CI-sample count = actually COMPLETED (valid) real episodes
+    #: (Student + Reference) — failed/rejected episodes never count (P0-8)
     ci_sample_count: int = Field(default=0, ge=0)
     student_identity_hash: str = Field(min_length=1)
     reference_identity_hash: str = Field(min_length=1)
-    student_checkpoint_hash: str = ""
-    reference_checkpoint_hash: str = ""
+    #: P0-8: mandatory — the signed probe result's checkpoint hashes
+    student_checkpoint_hash: str = Field(min_length=1)
+    reference_checkpoint_hash: str = Field(min_length=1)
     seed_bank: List[int] = Field(default_factory=list)
     simulator_transitions: int = Field(default=0, ge=0)
     runner_id: str = Field(min_length=1)
@@ -377,12 +593,14 @@ class RealProbeProvenance(CanonicalModel):
             raise ValueError(
                 "EXECUTABLE_ARTIFACT_HASH_NOT_SHA256: "
                 f"{self.executable_artifact_hash!r}")
+        #: P0-8: all four hashes are MANDATORY valid sha256 — no empty
+        #: escape hatch for the checkpoint hashes
         for field_name in ("student_identity_hash",
                            "reference_identity_hash",
                            "student_checkpoint_hash",
                            "reference_checkpoint_hash"):
             value = getattr(self, field_name)
-            if value and not is_sha256_hex(value):
+            if not is_sha256_hex(value):
                 raise ValueError(
                     f"PROVENANCE_HASH_NOT_SHA256: {field_name}={value!r}")
         if self.runner_id in FORBIDDEN_PRODUCTION_RUNNER_IDS:
@@ -396,6 +614,16 @@ class RealProbeProvenance(CanonicalModel):
             raise ValueError(
                 "PROVENANCE_WITHOUT_EPISODES: ci_sample_count must count "
                 "the real episodes executed")
+        #: P0-9: a provenance without its seed bank or with zero
+        #: transitions is stale/incomplete — refused
+        if not self.seed_bank:
+            raise ValueError(
+                "PROVENANCE_WITHOUT_SEED_BANK: the complete seed bank the "
+                "episodes ran under is part of the provenance")
+        if self.simulator_transitions <= 0:
+            raise ValueError(
+                "PROVENANCE_WITHOUT_TRANSITIONS: a real probe provenance "
+                "must account positive simulator transitions")
         for key, value in self.predicted_metrics.items():
             if not isinstance(value, (int, float)):
                 raise ValueError(
@@ -436,8 +664,8 @@ def build_real_feedback_record(*, feedback_id: str,
                                runner_id: str,
                                seed_bank: Sequence[int],
                                ci_sample_count: int,
-                               student_checkpoint_hash: str = "",
-                               reference_checkpoint_hash: str = "",
+                               student_checkpoint_hash: str,
+                               reference_checkpoint_hash: str,
                                expected_observed_match: str,
                                executable_artifact_hash: str,
                                match_detail: Optional[dict] = None
@@ -454,10 +682,38 @@ def build_real_feedback_record(*, feedback_id: str,
       * unknown hypothesis    -> UNKNOWN_HYPOTHESIS_ID
       * missing/illegal artifact hash -> EXECUTABLE_ARTIFACT_HASH_MISSING /
                                         EXECUTABLE_ARTIFACT_HASH_NOT_SHA256
+      * missing/non-sha256 checkpoint hashes ->
+                                REAL_PROBE_CHECKPOINT_HASH_MISSING /
+                                REAL_PROBE_CHECKPOINT_HASH_NOT_SHA256 (P0-8)
+      * changed_axes not inside mutation_axes ->
+                                CHANGED_AXES_NOT_IN_MUTATION_AXES (P0-8)
     """
     if source_window < 0:
         raise RealProbeBlocked(
             f"FEEDBACK_WINDOW_MISMATCH: source_window={source_window}")
+    #: P0-8: the checkpoint hashes the shared runner signed are MANDATORY
+    #: valid sha256 — a production feedback record without them cannot
+    #: attest which Student/Reference weights rolled out the episodes
+    for role, value in (("student", student_checkpoint_hash),
+                        ("reference", reference_checkpoint_hash)):
+        if not value:
+            raise RealProbeBlocked(
+                f"REAL_PROBE_CHECKPOINT_HASH_MISSING: {role}_checkpoint_"
+                "hash is mandatory for a production feedback record")
+        if not is_sha256_hex(value):
+            raise RealProbeBlocked(
+                f"REAL_PROBE_CHECKPOINT_HASH_NOT_SHA256: {role}_checkpoint"
+                f"_hash={value!r}")
+    #: P0-8: every changed axis must be a DECLARED mutation axis of the
+    #: candidate — an undeclared changed axis is a silent protocol drift
+    undeclared = sorted(set(candidate.axis_values)
+                        - set(candidate.mutation_axes))
+    if undeclared:
+        raise RealProbeBlocked(
+            f"CHANGED_AXES_NOT_IN_MUTATION_AXES: candidate "
+            f"{candidate.candidate_id!r} changed axes {undeclared} that "
+            f"are not among its declared mutation axes "
+            f"{sorted(candidate.mutation_axes)}")
     #: P0-2: the feedback record must bind the SAME executable artifact
     #: hash the candidate carried into the probe — never empty, never hex-
     #: shaped garbage
@@ -567,6 +823,8 @@ def build_real_feedback_record(*, feedback_id: str,
 __all__ = [
     "FORBIDDEN_PRODUCTION_RUNNER_IDS", "assert_real_runner",
     "SharedProbeResult", "SharedCandidateProbeRunner",
+    "CandidateProbeResult", "sign_probe_result",
+    "consume_signed_probe_result",
     "REQUIRED_METRIC_KEYS", "metrics_from_shared_result",
     "RealProbeFeedbackRunner", "RealProbeProvenance", "compute_residual",
     "build_real_feedback_record",

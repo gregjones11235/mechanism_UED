@@ -46,6 +46,15 @@ chain head, retry cap, exact counts, token totals and the journal file
 hash) is persisted atomically to ``--journal-path`` on EVERY terminal path
 (including REQUEST_CONTROL stops) and surfaced in the report.
 
+P0-8 / P0-9 (signed probe results + provenance binding): the probe seam
+consumes ONLY the immutable registry-signed ``CandidateProbeResult``
+(balanced episode accounting, requested-vs-completed verification,
+mandatory sha256 checkpoint hashes, CI-sample count = actually completed
+valid episodes); feedback records bind changed axes only inside the
+candidate's declared mutation axes, and unknown hypotheses, duplicate
+stage-1 candidates, missing probe evidence trails and already-stored
+feedback ids all fail closed — nothing is silently skipped or rebuilt.
+
 Honesty note on the L1 static legality labels: ``CandidateEnvironment``
 defaults carry ``legality_hint='MOCK_ONLY ...'`` and ``real_adapter_status=
 'BLOCKED_NO_LOCAL_CRAFTAX'`` — the frozen scaffold labels required by the
@@ -160,13 +169,23 @@ def discover_blockers(*, bundle: SharedRuntimeBundle,
 # ---------------------------------------------------------------------------
 def _expected_signature(controller, cand) -> Dict[str, float]:
     """Merged hypothesis prediction signature (same merge rule as the
-    controller's own symbolic path — least-fixed wins per key)."""
+    controller's own symbolic path — least-fixed wins per key).
+
+    P0-9: every hypothesis the candidate distinguishes MUST exist in the
+    ledger — an unknown id fails closed (a silently-dropped hypothesis
+    would merge a wrong predicted signature; NO_SILENT_FALLBACK).
+    """
     merged: Dict[str, float] = {}
     for hid in sorted(cand.distinguishes_hypothesis_ids):
         try:
             hyp = controller.ledger.get(hid)
-        except KeyError:
-            continue
+        except KeyError as exc:
+            raise RealTwoWindowBlocked(
+                "UNKNOWN_HYPOTHESIS_ID_IN_PREDICTED_SIGNATURE: candidate "
+                f"{cand.candidate_id!r} distinguishes {hid!r}, which is "
+                "not registered in the ledger — refusing to merge a "
+                "predicted signature with a silently-dropped hypothesis"
+            ) from exc
         for key, value in hyp.predicted_signature.items():
             merged.setdefault(key, float(value))
     return merged
@@ -177,29 +196,61 @@ def build_window_real_feedback(*, window: int, plan, candidates, batch,
                                student_binding, reference_binding):
     """One provenance-bound SimulatorFeedbackRecord per stage-1 probed
     candidate (the same staging population as the symbolic path), carrying
-    the deepest observed metrics and the FULL provenance binding."""
+    the deepest observed metrics and the FULL provenance binding.
+
+    P0-9 fail-closed bindings: a candidate appearing twice in the stage-1
+    results (duplicate feedback), a candidate with no probe evidence trail
+    (stale/missing evidence), or a feedback id already present in the
+    store (re-built record) are ALL refused — never coerced, never
+    silently deduplicated.
+    """
     cand_by_id = {c.candidate_id: c for c in candidates}
     stage2_by_id = {r["candidate_id"]: r for r in batch.stage2_results}
     known_hypothesis_ids = [h.hypothesis_id
                             for h in controller.ledger.all()]
     records = []
+    seen_candidate_ids = set()
     for stage1 in batch.stage1_results:
         cid = stage1["candidate_id"]
+        if cid in seen_candidate_ids:
+            raise RealTwoWindowBlocked(
+                f"DUPLICATE_PROBE_FEEDBACK_RECORD: candidate {cid!r} "
+                f"appears more than once in window {window}'s stage-1 "
+                "results — refusing to build duplicate feedback records")
+        seen_candidate_ids.add(cid)
         cand = cand_by_id[cid]
         deepest = (stage2_by_id[cid]["metrics"]
                    if cid in stage2_by_id else stage1["metrics"])
         metrics = ProbeMetrics(**deepest)
         stage_name = "full" if cid in stage2_by_id else "fast"
-        #: evidence trail recorded by the adapter at probe time
+        #: evidence trail recorded by the adapter at probe time — a
+        #: candidate with NO trail was never really probed this window;
+        #: building feedback for it would cite stale/absent evidence
         trail = probe_adapter.probe_evidence.get(cid, [])
-        evidence = trail[-1] if trail else {}
+        if not trail:
+            raise RealTwoWindowBlocked(
+                f"REAL_PROBE_EVIDENCE_MISSING: candidate {cid!r} has no "
+                f"probe evidence trail — no signed probe result was "
+                "consumed for it this window; refusing to build feedback "
+                "from absent evidence")
+        evidence = trail[-1]
+        feedback_id = f"fb-w{window:02d}-{cid}"
+        try:
+            controller.store.get(feedback_id)
+        except KeyError:
+            pass
+        else:
+            raise RealTwoWindowBlocked(
+                f"DUPLICATE_PROBE_FEEDBACK_RECORD: {feedback_id!r} already "
+                "exists in the feedback store — rebuilding a record is "
+                "refused (NO_LEGACY_ARTIFACT_OVERWRITE)")
         predicted = _expected_signature(controller, cand)
         reference_stats = dict(
             episode_success_rate=metrics.reference_success_rate,
             mean_progress=metrics.reference_mean_progress,
             behavior_activation_rate=metrics.reference_behavior_activation)
         record, _provenance = build_real_feedback_record(
-            feedback_id=f"fb-w{window:02d}-{cid}",
+            feedback_id=feedback_id,
             candidate=cand,
             source_window=window,
             source_plan_id=plan.plan_id,
