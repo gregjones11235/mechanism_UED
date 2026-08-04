@@ -203,11 +203,16 @@ from .feasibility_classifier import (
 )
 from .evidence_selector import (
     FRONTIER_START_WEIGHTS,
+    MIN_BUCKET_DIVERSITY,
     PRODUCTION_MEMORY_STATUSES,
+    SELECTION_EVIDENCE_SCHEMA,
     SELECTOR_VERSION,
+    STUDENT_DOMINANCE_GAP_THRESHOLD,
     EvidenceSelectionResult,
     SelectionEvidence,
     evidence_based_select,
+    mint_selection_evidence_from_outcomes,
+    verify_selection_evidence,
 )
 from .frontier_distributions import (
     DISTRIBUTION_SCHEMA,
@@ -321,8 +326,10 @@ __all__ = [
     "validate_diagnostician_output", "validate_planner_output",
     "CLASSIFICATION_VERSION", "FrontierClass", "FrontierClassification",
     "classify_frontier",
-    "FRONTIER_START_WEIGHTS", "PRODUCTION_MEMORY_STATUSES", "SELECTOR_VERSION",
+    "FRONTIER_START_WEIGHTS", "MIN_BUCKET_DIVERSITY", "PRODUCTION_MEMORY_STATUSES",
+    "SELECTION_EVIDENCE_SCHEMA", "SELECTOR_VERSION", "STUDENT_DOMINANCE_GAP_THRESHOLD",
     "EvidenceSelectionResult", "SelectionEvidence", "evidence_based_select",
+    "mint_selection_evidence_from_outcomes", "verify_selection_evidence",
     "DISTRIBUTION_SCHEMA", "FrontierDistribution", "FrontierDistributionPlan",
     "compose_12_plus_4", "validate_frontier_distribution_plan",
     "ANCHOR_SLOT_COUNT", "BLOCKED_SHARED_ANCHOR_MANIFEST",

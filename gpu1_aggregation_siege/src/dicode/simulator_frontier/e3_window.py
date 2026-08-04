@@ -47,7 +47,10 @@ from .discovery_provenance import (
 )
 from .env_restore import build_template, encode_env_state
 from .errors import InvalidEvidenceError, ProductionBlockedError
-from .evidence_selector import SelectionEvidence, evidence_based_select
+from .evidence_selector import (
+    evidence_based_select,
+    mint_selection_evidence_from_outcomes,
+)
 from .feasibility_classifier import classify_frontier
 from .frontier_archive import FrontierArchive
 from .frontier_distributions import compose_12_plus_4
@@ -62,7 +65,6 @@ from .invocation_gate import (
     InvocationReason,
     build_aggregate_evidence,
     decide_invocation,
-    evidence_hash_of,
 )
 from .llm_contracts import (
     REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT,
@@ -781,41 +783,24 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     }
 
     # STEP 6 — deterministic evidence selector: the OFFICIAL final authority.
-    student_rows = [o for o in outcomes
-                    if o.search_source in (SEARCH_SOURCE_STUDENT_DETERMINISTIC,
-                                           SEARCH_SOURCE_STUDENT_STOCHASTIC)]
-    reference_rows = [o for o in outcomes
-                      if o.search_source == SEARCH_SOURCE_REFERENCE_POLICY]
-
-    def _rate(rows: list[BranchOutcome]) -> float:
-        return sum(bool(r.success) for r in rows) / len(rows) if rows else 0.0
-
-    def _mean_progress(rows: list[BranchOutcome]) -> float:
-        return sum(float(r.progress) for r in rows) / len(rows) if rows else 0.0
-
-    student_rate, reference_rate = _rate(student_rows), _rate(reference_rows)
+    # CC4 follow-up (P0-7): the evidence vector is MINTED straight from the
+    # attested branch outcomes — rates, progress, per-source counts, gap and
+    # transition cost are recomputed inside the minter, and the evidence hash
+    # is derived, never supplied.  Self-reported evidence is structurally
+    # impossible on the production path.
     retention_ok = False
     try:
         config.retention.validate()
         retention_ok = True
     except InvalidEvidenceError:
         retention_ok = False
-    selection_evidence = SelectionEvidence(
+    selection_evidence = mint_selection_evidence_from_outcomes(
         state_id=state_id,
-        feasibility_class=classification.frontier_class,
-        student_success_rate=student_rate,
-        student_mean_progress=_mean_progress(student_rows),
-        reference_success_rate=reference_rate,
-        reference_mean_progress=_mean_progress(reference_rows),
-        student_reference_gap=reference_rate - student_rate,
-        actual_n=len(outcomes),
-        uncertainty=float(estimate.uncertainty),
-        transition_cost=int(estimate.transition_cost),
-        memory_compatibility_status=str(outcomes[0].memory_compatibility_status),
-        bucket_diversity=int(archive_summary["bucket_diversity"]),
-        global_retention_ok=retention_ok,
+        frontier_class=classification.frontier_class,
+        outcomes=outcomes,
+        retention_ok=retention_ok,
         anchor_coverage_ok=bool(pre.gates.get("SHARED_ANCHOR_MANIFEST")),
-        evidence_hash=evidence_hash_of(evidence),
+        bucket_diversity=int(archive_summary["bucket_diversity"]),
     )
     selection = evidence_based_select(plan, evidence=selection_evidence)
     steps["STEP06_EVIDENCE_SELECTOR_FINAL_AUTHORITY"] = {
