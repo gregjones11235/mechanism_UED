@@ -151,14 +151,15 @@ class TestAuthorizationPosture:
         # C8 double-window flags are ON
         assert C.NEXT_WINDOW_REVISION_ONLY is True
         assert C.SAME_WINDOW_REVISION_REJECTED is True
-        # CC3 C9 GATE (2026-08-04): the two C9 isolation flags were set
-        # False while the board-context assembly was re-anchored on the
-        # FeedbackView alone (no raw-store read) and the window lag was
-        # tightened to EXACTLY k-1 (STALE_FEEDBACK_ID fail closed). The
-        # targeted bypass and lag tests (test_feedback_llm_ued_c9_gate.py)
-        # passed, so both flags are earned back to True.
-        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is True
-        assert C.SHUFFLE_PERMUTATION_FROZEN is True
+        # CC4 C9 GATE ROUND TWO (2026-08-04): the two C9 isolation flags are
+        # False again while the shuffled view's identity-correlated NUMERIC
+        # side channels (exact probe rates / exact evidence gaps — per-
+        # candidate-hash fingerprints) are consistently anonymized at the
+        # prompt layer AND the BehaviorFailureEvidence layer. They are
+        # earned back only after the uniqueness/re-identification negative
+        # tests and the full-prompt byte-parity tests all pass.
+        assert C.STATIC_FEEDBACK_STRUCTURALLY_HIDDEN is False
+        assert C.SHUFFLE_PERMUTATION_FROZEN is False
         assert len(C.SEED_SCHEDULE_HASH) == 64
         # C10 RETIRE lifecycle constant
         assert C.RETIRE_COOLDOWN_WINDOWS == 3

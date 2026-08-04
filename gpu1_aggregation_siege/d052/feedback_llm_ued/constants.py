@@ -103,24 +103,17 @@ NEXT_WINDOW_REVISION_ONLY = True
 #: feedback_k is staged raises SAME_WINDOW_REVISION_FORBIDDEN (fail closed);
 #: negative tests prove the refusal.
 SAME_WINDOW_REVISION_REJECTED = True
-#: C9 earned again (CC3 gate, 2026-08-04): the static-no-feedback mode binds
-#: the board to the structurally empty NullFeedbackView, and the BoardContext
-#: is built ONLY from that view — empty behavior evidence, zero pooled
-#: episodes/SR, maximal-uncertainty CI, no candidate ids, no history — never
-#: from the raw SimulatorFeedbackStore (assemble_board_context refuses a raw
-#: store with BOARD_CONTEXT_STORE_FORBIDDEN). The CC3 gate found the previous
-#: store-fed assembly path leaking evidence into the static context; the fix
-#: plus the targeted bypass tests (test_feedback_llm_ued_c9_gate.py) earn
-#: this flag back.
-STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = True
-#: C9 earned again (CC3 gate, 2026-08-04): the shuffled permutation is a
-#: frozen recomputable anonymization with NO identity side channel — at the
-#: prompt layer AND at the BoardContext evidence layer (anonymized evidence
-#: ids consistent with the payload, candidate id masked) — and the window lag
-#: is EXACTLY one window (rec.window == window-1; older/current/future fail
-#: closed as STALE_FEEDBACK_ID). Re-earned by the targeted bypass and lag
-#: tests (test_feedback_llm_ued_c9_gate.py).
-SHUFFLE_PERMUTATION_FROZEN = True
+#: CC4 C9 GATE ROUND TWO (2026-08-04): RE-OPENED. The CC4 audit found that
+#: the shuffled view still carried identity-correlated NUMERIC side channels
+#: — the exact probe success rates and the exact evidence gaps derived from
+#: them are deterministic per-candidate-hash fingerprints, so a store-joining
+#: adversary could still recover the true candidate<->feedback pairing
+#: despite the anonymized ids. Both C9 flags stay False until the permuted
+#: view's numeric fields are consistently coarsened at the prompt layer AND
+#: the BehaviorFailureEvidence layer, the uniqueness/re-identification
+#: negative tests and the full-prompt byte-parity tests all pass.
+STATIC_FEEDBACK_STRUCTURALLY_HIDDEN = False
+SHUFFLE_PERMUTATION_FROZEN = False
 
 #: flags that must NEVER be True this round (authorization posture re-asserts)
 NEVER_TRUE_REAL_CAPABILITY_FLAGS = (
