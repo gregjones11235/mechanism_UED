@@ -144,6 +144,49 @@ class TrainingStepRecord:
     reason: str
 
 
+#: status a seam record carries when exactly one update + checkpoint
+#: round-trip executed (the ONLY status counted as an executed update)
+EXECUTED_ONE_UPDATE_STATUS = "EXECUTED_ONE_UPDATE_CHECKPOINT_ROUNDTRIP"
+
+
+@dataclass(frozen=True)
+class RealTwoWindowSmokePolicy:
+    """P0-10: the update-count contract of the two-window real smoke.
+
+    Window k FREEZES feedback_k; the first window that may CONSUME
+    feedback is window k+1 (exactly one window of lag — CC3 C9 gate),
+    i.e. plan_{k+1} is built from feedback_k. The single real optimizer
+    update therefore belongs to ``update_window_index`` (default 1):
+
+    * window 0 (and any non-update window) trains NOTHING (Δ=0) — there
+      is no prior feedback to train on;
+    * the update window executes EXACTLY ONE optimizer update (Δ=1) over
+      the probe-selected final batch, wrapped in the checkpoint
+      save/load round-trip;
+    * a COMPLETED run (no REQUEST_CONTROL stop) must end with exactly
+      ``updates_expected_total`` executed updates — anything else fails
+      closed at the end of ``run()`` (TWO_WINDOW_SMOKE_UPDATE_COUNT_
+      MISMATCH).
+    """
+
+    updates_expected_total: int = 1
+    update_window_index: int = 1
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.updates_expected_total, int)
+                or isinstance(self.updates_expected_total, bool)
+                or self.updates_expected_total < 0):
+            raise ValueError(
+                "ILLEGAL_SMOKE_POLICY_UPDATE_COUNT: "
+                f"updates_expected_total={self.updates_expected_total!r}")
+        if (not isinstance(self.update_window_index, int)
+                or isinstance(self.update_window_index, bool)
+                or self.update_window_index < 0):
+            raise ValueError(
+                "ILLEGAL_SMOKE_POLICY_UPDATE_WINDOW: "
+                f"update_window_index={self.update_window_index!r}")
+
+
 class StudentTrainingSeam:
     """The ONLY place the loop may touch Student training.
 
@@ -260,7 +303,7 @@ class StudentTrainingSeam:
         #: round-trip: the post-update checkpoint must reload cleanly
         contract.load_checkpoint(checkpoint_hash=hash_after)
         return TrainingStepRecord(
-            status="EXECUTED_ONE_UPDATE_CHECKPOINT_ROUNDTRIP",
+            status=EXECUTED_ONE_UPDATE_STATUS,
             student_training_transitions=int(
                 getattr(result, "env_steps", 0)),
             reason=(f"window={window}: exactly one optimizer update over "

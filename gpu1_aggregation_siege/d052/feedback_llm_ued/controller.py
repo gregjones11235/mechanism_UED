@@ -175,7 +175,10 @@ from d052.feedback_llm_ued.simulator_probe import (
     run_staged_funnel,
 )
 from d052.feedback_llm_ued.student_binding import (
+    EXECUTED_ONE_UPDATE_STATUS,
+    RealTwoWindowSmokePolicy,
     StudentTrainingSeam,
+    TrainingStepRecord,
     local_symbolic_binding,
     resolve_student_binding,
 )
@@ -284,7 +287,9 @@ class FeedbackUEDController:
                  runtime_authorization=None, student_init_contract=None,
                  training_contract=None, real_env_coder_callable=None,
                  probe_feedback_builder=None,
-                 reference_identity_hash: str = "") -> None:
+                 reference_identity_hash: str = "",
+                 two_window_smoke_policy:
+                 Optional[RealTwoWindowSmokePolicy] = None) -> None:
         """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
         All default to None, which reproduces the historical mock/symbolic
         behavior byte for byte. With any real capability granted through
@@ -355,6 +360,11 @@ class FeedbackUEDController:
         self.training_seam = StudentTrainingSeam(
             self.launch_gate, self.student_binding,
             training_contract=training_contract)
+        #: P0-10: the two-window smoke update-count contract (exactly one
+        #: optimizer update, in the window that consumes feedback_k).
+        #: None = historical behavior (every training-allowed window
+        #: updates); the two-window real entrypoint injects the policy.
+        self.two_window_smoke_policy = two_window_smoke_policy
         #: P0-2 seam: the real EnvCoder execution chain (unique template +
         #: four-link verification + bounded repair). Injectable only when
         #: the runtime grants authorize it; the default symbolic path stays
@@ -465,6 +475,8 @@ class FeedbackUEDController:
                     break
         self._summary = self._build_summary(records,
                                             stopped_window=stopped_window)
+        self._assert_two_window_smoke_update_count(
+            stopped_window=stopped_window)
         if self.launch_decision.real_llm_calls_allowed:
             #: the inverse honesty check: a real-authorized run MUST have
             #: consumed real calls and may not have served a single mock
@@ -484,6 +496,31 @@ class FeedbackUEDController:
         else:
             assert_no_real_llm_usage(self.backend.usage)
         return self._summary
+
+    def _assert_two_window_smoke_update_count(self, *, stopped_window
+                                              ) -> None:
+        """P0-10 end-of-run enforcement: a COMPLETED smoke run must have
+        executed EXACTLY the policy's update count — no more, no less.
+
+        Not enforced when no policy is injected, when training is not
+        authorized, or when the loop halted on REQUEST_CONTROL (nothing
+        past phase B executed there — the halt itself is the honest
+        outcome and is reported as such).
+        """
+        policy = self.two_window_smoke_policy
+        if policy is None or not self.launch_decision.training_allowed:
+            return
+        if stopped_window is not None:
+            return
+        executed = sum(1 for t in self.training_log
+                       if t.status == EXECUTED_ONE_UPDATE_STATUS)
+        if executed != policy.updates_expected_total:
+            raise RuntimeError(
+                "TWO_WINDOW_SMOKE_UPDATE_COUNT_MISMATCH: the smoke policy "
+                f"expects exactly {policy.updates_expected_total} optimizer "
+                f"update(s) for the completed run but {executed} executed "
+                "(the single update belongs to the window that consumes "
+                "feedback_k — NO_SILENT_FALLBACK)")
 
     def _run_window(self, window: int) -> WindowRecord:
         n_calls_before = self.backend.usage.total_calls
@@ -627,11 +664,26 @@ class FeedbackUEDController:
             gate_passed = gate_report.passed
         staged, batch = self._probe_and_stage(window, plan, board.directives)
         if self.launch_decision.training_allowed:
-            #: P0-4: window k+1's single real optimizer update over the
-            #: probe-selected final batch (12 dynamic + 4 anchors), wrapped
-            #: in the checkpoint save/load round-trip
-            training = self.training_seam.execute_real_window_update(
-                window, batch_candidate_ids=batch.final_batch)
+            policy = self.two_window_smoke_policy
+            if policy is not None and window != policy.update_window_index:
+                #: P0-10: every non-update window (in particular window k,
+                #: which has NO prior feedback to consume) trains nothing
+                #: — Δ=0. plan_{k+1} is built from feedback_k, so the
+                #: single optimizer update belongs to window k+1 only.
+                training = TrainingStepRecord(
+                    status="SKIPPED_SMOKE_POLICY_UPDATE_WINDOW",
+                    student_training_transitions=0,
+                    reason=(f"window={window}: the two-window smoke policy "
+                            "allows the single real optimizer update only "
+                            f"in window {policy.update_window_index} (the "
+                            "window that consumes feedback_k); this window "
+                            "trains nothing (delta=0)"))
+            else:
+                #: P0-4: window k+1's single real optimizer update over the
+                #: probe-selected final batch (12 dynamic + 4 anchors),
+                #: wrapped in the checkpoint save/load round-trip
+                training = self.training_seam.execute_real_window_update(
+                    window, batch_candidate_ids=batch.final_batch)
             self.training_log.append(training)
 
         # -- E. ATOMIC FREEZE: feedback_k + new hypotheses + FROZEN ---------

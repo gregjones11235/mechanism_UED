@@ -46,6 +46,13 @@ chain head, retry cap, exact counts, token totals and the journal file
 hash) is persisted atomically to ``--journal-path`` on EVERY terminal path
 (including REQUEST_CONTROL stops) and surfaced in the report.
 
+P0-10 (exactly one update): this entrypoint IS the two-window smoke —
+the injected ``RealTwoWindowSmokePolicy`` allows EXACTLY ONE optimizer
+update for the whole run, executed in window k+1 (the window that
+consumes feedback_k); window k trains nothing (delta=0), and ``run()``
+fails closed at the end of a completed run if the executed update count
+deviates (TWO_WINDOW_SMOKE_UPDATE_COUNT_MISMATCH).
+
 P0-8 / P0-9 (signed probe results + provenance binding): the probe seam
 consumes ONLY the immutable registry-signed ``CandidateProbeResult``
 (balanced episode accounting, requested-vs-completed verification,
@@ -95,6 +102,10 @@ from d052.feedback_llm_ued.real_probe_feedback import (
     build_real_feedback_record,
 )
 from d052.feedback_llm_ued.simulator_feedback_store import MATCH_UNGRADED
+from d052.feedback_llm_ued.student_binding import (
+    EXECUTED_ONE_UPDATE_STATUS,
+    RealTwoWindowSmokePolicy,
+)
 from d052.schemas.common import is_sha256_hex
 from d052.feedback_llm_ued.runtime_authorization import (
     RealRuntimeAuthorization,
@@ -382,7 +393,13 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         #: on this path (resolve_shared_runtime above refused every empty
         #: slot) — bind its canonical identity hash into every board role
         #: envelope's structured context binding
-        reference_identity_hash=bundle.reference.binding.identity_hash)
+        reference_identity_hash=bundle.reference.binding.identity_hash,
+        #: P0-10: this entrypoint IS the two-window smoke — exactly one
+        #: optimizer update total, executed in window k+1 (the window
+        #: that consumes feedback_k); window k trains nothing (delta=0).
+        #: run() fails closed if the completed run deviates.
+        two_window_smoke_policy=RealTwoWindowSmokePolicy(
+            updates_expected_total=1, update_window_index=1))
 
     summary = controller.run(max_windows=TWO_WINDOW_HORIZON)
 
@@ -410,6 +427,11 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         training=[dict(status=t.status,
                        transitions=t.student_training_transitions,
                        reason=t.reason) for t in controller.training_log],
+        #: P0-10 audit surface: the exact number of optimizer updates
+        #: executed (the smoke policy requires exactly one, in window 1)
+        optimizer_updates_executed=sum(
+            1 for t in controller.training_log
+            if t.status == EXECUTED_ONE_UPDATE_STATUS),
         journal_entries=len(journal.entries),
         #: P0-5 persisted journal audit surface
         journal_path=journal_path,
