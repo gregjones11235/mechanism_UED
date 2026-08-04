@@ -10,19 +10,20 @@
 ```bash
 cd /c/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree/gpu1_aggregation_siege
 
-# 方向二全部测试（17 个文件，含 C9 门禁定向测试）
+# 方向二全部测试（18 个文件，含 C9 门禁定向测试与 CC3 E2 真实 ABI 兼容性测试）
 PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests/test_feedback_llm_ued_*.py -q
 
 # d052 全量套件
 PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests -q
 ```
 
-## 2. 方向二测试结果：388 passed / 0 failed
+## 2. 方向二测试结果：426 passed / 0 failed
 
 ```
-388 passed（CC4 C9 门禁第二轮后：既有 370 + 门禁文件 18
-= 旁路/滞后 10 + 再识别负测 3 + 全 prompt 字节奇偶 3
-+ static 独立性/结构负测 2）
+426 passed（CC3 E2 后：既有 388 + 真实 ABI 兼容性文件 38
+= 真实胶囊绑定正测 3 + 绑定 fail-closed 负测 8 + checkpoint
+局部性 1 + normal/EnvCoder/static/shuffled/滞后/Copeland/anchors
+正负测 23 + 三模式同评估器集成 1 + 符号绑定戳正负测 2）
 ```
 
 | 文件 | 用例数 | 覆盖内容（摘要） |
@@ -30,6 +31,7 @@ PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests -q
 | `test_feedback_llm_ued_controller.py` | 58 | 授权姿态（全部 REAL_* 旗标 False、C16 工程旗标与 CC4 门禁后复 True 的两个 C9 旗标、任一 never-true 旗标为 True 即拒绝构造）；双窗口状态机：同窗 apply verdict/改计划→SAME_WINDOW_REVISION_FORBIDDEN、STALE/UNKNOWN/DUPLICATE_FEEDBACK_ID（旧/当前/未来引用均 fail-closed）、P0-6 绑定守卫、phase 迁移；三模式端到端（7 调用/窗、61440 transitions/探针窗、revision **恰好**滞后反馈一窗）；C10 cooldown/重开（CC3 重定基线）；C11 REQUEST_CONTROL 停环 + artifact + final_batch final=False；确定性逐字节；shuffled 决策分布按 CC4 数值侧信道加固重定基线 |
 | `test_feedback_llm_ued_review_board.py` | 32 | 六角色固定顺序与每窗完整 6 次调用；verdict 显式引用 feedback_id/hypothesis_id/prediction_signature；新假设 PENDING+预测签名；AxisDirective 合法性；Critic 升级规则（HIGH_SEVERITY_FLOOR/OPPOSITE_MATCH_FLOOR/WIDE_CI）与 endorsed；REQUEST_CONTROL 两触发路径；错误窗口视图/引用→STALE_FEEDBACK_ID（CC3 门禁） |
 | `test_feedback_llm_ued_c9_gate.py` | 18 | **C9 门禁定向测试（CC3 旁路/滞后 10 + CC4 再识别/字节奇偶 6 + CC4 static 独立性 2）**：static 满 store 下 board 上下文结构性空（证据/SR/CI/候选 id/历史全空，序列化扫描无真实 id）；shuffled 上下文+证据层仅匿名 id（证据与 payload 匿名 id 逐位一致、candidate id 掩码、置换恰好覆盖诚实记录集、resolve_citation 唯一还原路径）；混合窗口视图构造 fail-closed；旧/当前/未来引用→STALE_FEEDBACK_ID、恰好 k−1 通过；build_board_prompt_context 双重窗口校验；三模式端到端逐引用恰好滞后一窗。**CC4 新增**：两层数值全部等于公开可复算的族级窗口聚合（payload 与证据层一致、expected_signature 置空）；store 联接对手不得把任何条目收窄到单例（唯一性负测，含数值联接）；序列化上下文全 float 扫描无任何精确逐记录指标；两次独立运行全 prompt 上下文（载荷+BoardContext+假设，canonical JSON）逐字节一致（shuffled 与 normal 各一）+ 同运行内重组逐字节一致；**static 独立性负测**（director 点名的静态泄漏）：仅反馈记录不同的两个 store（运行前注入外来 fb-junk 记录）下，static 全 prompt 上下文与全部六个 board prompt 逐字节一致，且 `_retirement_state` 对 static 结构性 fail-closed（STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE） |
+| `test_feedback_llm_ued_student_abi_compat.py` | 38 | **CC3 E2 真实 ABI 兼容性（本次新增）**：真实 `SLOWGRU_PERSISTENT_CANONICAL_98304` 胶囊只读绑定正测（全部字面事实：params/optimizer 身份、global_step 98304/update_step 48/opt_step 96、RNG 42/777/200000..200063、wrapper ABI 与 FULL_CARRY_NO_CLEAR、字面 task_params、action ABI 8335/43/0..42/67、baseline_hash 确定性）；文档 SHA==胶囊台账 + CRLF 可逆视图逐字节重证 + 未篡改镜像绑定同一 baseline_hash；绑定 fail-closed 负测 8（缺根/缺件/字节篡改/台账缺行/台账坏行/跨文档步数一致性/wrapper 字面漂移/pkl 布局漂移，镜像重哈希使字节门通过以命中深层门）；checkpoint 服务器独有 + 本地加载拒绝 + REAL_CHECKPOINT_LOADED=False；单一评估器消费 EnvCoder 输出（含 ACTION_ABI_OVERRIDE_FORBIDDEN）、三模式 FeedbackView（static 结构性空/shuffled 置换+数值侧信道负测/normal 身份戳）、恰好 k−1 滞后、Soft Copeland 单一所有者（fork→拒绝）、四锚 manifest 接缝；三模式 controller 真实运行过同一评估器 |
 | `test_feedback_llm_ued_persistence.py` | 31 | C15：冻结点快照→恢复→续跑与不间断运行 summary 逐字节一致（normal+shuffled）；fresh subprocess 恢复哈希一致；篡改矩阵（顶层字段+重签名深篡改）→HASH_CHAIN_BROKEN；逐假设 revision 链校验单元负测；原子写无 .tmp 残留；停环恢复保持停止且零新增调用 |
 | `test_feedback_llm_ued_selection_anchors.py` | 26 | C12+C13：八准则 clamp 与 schema 合法性；共享 soft_copeland_rank 等价（ranking_hash 逐字节一致，不分叉）；constant 维度 provenance；族多样性贪心（penalty 0 vs 0.5 对照）；AnchorManifestSource（缺失/未冻结/哈希不一致 fail-closed）；controller 锚位绑定（占位标签、冻结 manifest 绑定、三模式预算相等） |
 | `test_feedback_llm_ued_compare_gate_reconcile.py` | 28 | 比较器阈值与 MAJORITY；reconciler 预算/探索预留/悬空引用/伪装禁止/RETIRE_REQUIRES_FEEDBACK/REQUEST_CONTROL 零预算 |
@@ -45,10 +47,10 @@ PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests -q
 | `test_feedback_llm_ued_student_binding.py` | 15 | 固定身份 PERSISTENT_RMT16_ORIGINAL_VTRACE_98304、CC4 缺失 fail-closed、训练接缝 no-op 记账、诚实姿态 |
 | `test_feedback_llm_ued_env_coder.py` | 14 | SpecEnvCoder 确定性、compile/reset/step 三级门禁 fail-closed、LLM 接缝 Blocked |
 
-## 3. d052 全量套件：942 passed / 6 failed（均为既有环境性失败）
+## 3. d052 全量套件：980 passed / 6 failed（均为既有环境性失败）
 
 ```
-6 failed, 942 passed, 2 warnings in 10.42s
+6 failed, 980 passed, 2 warnings in 13.37s
 
 FAILED d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13
 FAILED d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors
@@ -62,8 +64,8 @@ FAILED d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unc
 
 - 本方向开工前基线为 554 passed + 同样 6 个环境性失败；C1–C16 过程中基线
   演进 554→749→889→920，CC3 C9 门禁后 920→934，CC4 C9 门禁第二轮后
-  934→942（新增再识别负测、字节奇偶测试与 static 独立性负测），**6 个失败
-  名单全程未变**。
+  934→942（新增再识别负测、字节奇偶测试与 static 独立性负测），CC3 E2 后
+  942→980（新增真实 ABI 兼容性测试 38），**6 个失败名单全程未变**。
 - 6 个失败全部位于 `test_real_bundle_reconciliation.py`，依赖本 worktree
   不具备的历史 real-bundle 数据，与本方向无关。
 - 无新增失败、无跳过掩盖；CC4 门禁两个 C9 旗标翻转（Commit C 置 False →
@@ -118,7 +120,18 @@ smoke 在修复落地后原样重跑，输出逐字节一致。
 
 ## 5. 结论
 
-- 388 个方向二测试全绿；全量套件 942 通过、基线失败名单不变。
+- 426 个方向二测试全绿（18 文件）；全量套件 980 通过、基线失败名单不变。
+- **CC3 E2 真实 ABI 兼容性**（`test_feedback_llm_ued_student_abi_compat.py`，
+  38 用例）：兼容性基线是 worktree 内真实
+  `SLOWGRU_PERSISTENT_CANONICAL_98304` 胶囊（非 fixture）——只读绑定、
+  逐文档 SHA 对照胶囊台账（CRLF 可逆视图显式记录）、全部 ABI 事实由
+  SHA 验证过的文档交叉提取（无猜测）；缺失/错误 schema 一律 fail-closed
+  （8 个绑定负测，含镜像重哈希后命中跨文档一致性/wrapper 字面/pkl 布局
+  深层门）；EnvCoder 输出、三模式 FeedbackView、Soft Copeland 与四锚
+  manifest 经同一 `SlowgruStudentEvaluator` 消费（正负测试覆盖 normal/
+  static/shuffled），恰好 k−1 滞后与隔离不变量在评估器层重断，Soft
+  Copeland 保持唯一排序所有者；checkpoint pkl 为服务器独有工件，本地
+  加载被拒绝、REAL_CHECKPOINT_LOADED 保持 False（诚实记账）。
 - 双窗口时序（恰好 k−1）、对照隔离（BoardContext 只经视图）、哈希重算、
   持久化/跨窗恢复等价（含 fresh-process）均有专门正负测试锁定；两次独立
   运行 summary 逐字节一致（确定性），两次独立运行**全 prompt 上下文**亦

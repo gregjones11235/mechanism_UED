@@ -154,12 +154,33 @@ verify_content_hash，单一事实源）。
   逐字节一致（normal 与 shuffled）；fresh subprocess 恢复哈希一致；
   REQUEST_CONTROL 停环恢复后保持停止、零新增调用。
 
-## 10. Student 与训练接缝（C2）
+## 10. Student 与训练接缝（C2 + CC3 E2）
 
 - Student 身份固定 `PERSISTENT_RMT16_ORIGINAL_VTRACE_98304`；只消费 CC4
   共享 StudentAdapter（显式注入），缺失 → `STUDENT_ADAPTER_MISSING`
   fail-closed，不另建 loader/registry/codec。本 worktree 无 CC4 adapter →
   符号绑定 + `REAL_CHECKPOINT_LOADED=False`。
+- **CC3 E2 兼容性基线（真实胶囊，非 fixture）**：
+  `student_abi_baseline.bind_slowgru_persistent_baseline` 只读绑定 worktree
+  内真实 `SLOWGRU_PERSISTENT_CANONICAL_98304` 胶囊——每个文档按胶囊
+  `SHA256SUMS` 台账重哈希（字节一致；唯一承认的非字节一致是 git
+  `i/lf w/crlf` 的可逆 CRLF→LF 视图，逐文档记录、从不静默）；每个 ABI
+  事实（params/optimizer 身份、global_step 98304、update_step 48、
+  opt_step 96、RNG 42/777/200000..200063、wrapper ABI、字面 task_params、
+  action ABI 8335/43/0..42/67）由已验证文档跨文档交叉提取——缺失工件、
+  缺台账行、字节篡改、跨文档不一致一律 `StudentAbiBaselineBlocked`，
+  无猜测、无默认值。checkpoint pkl 本体为**服务器独有**工件：基线只绑
+  身份，本地加载恒拒绝（`LOCAL_CHECKPOINT_LOAD_REFUSED`）。
+- **单一 Student 评估器消费面**：EnvCoder 输出、三模式 FeedbackView、
+  Soft Copeland 排序、四锚 manifest 全部经同一
+  `SlowgruStudentEvaluator` 消费；缺失/错误 schema 一律 fail-closed；
+  恰好 k−1 滞后与 static/shuffled 隔离不变量（含置换视图数值侧信道
+  重算检查）在评估器层重断；Soft Copeland 保持**唯一排序所有者**
+  （评估器重消费 `soft_copeland_rank`，哈希不复现即
+  `SOFT_COPELAND_RANKING_FORKED`，绝不本地重排）。反馈记录身份戳三态：
+  空戳 / 本地符号绑定戳（仅 `REAL_CHECKPOINT_LOADED=False` 且 step=0
+  合法）/ 精确等于基线 params_sha256+global_step；其余一律
+  `STUDENT_PARAMETER_TREE_MISMATCH` / `STUDENT_CHECKPOINT_STEP_MISMATCH`。
 - `TRAINING_AUTHORIZED=False`：训练接缝只做 no-op 记账
   （TrainingStepRecord status=SKIPPED_UNAUTHORIZED），无 optimizer step。
 

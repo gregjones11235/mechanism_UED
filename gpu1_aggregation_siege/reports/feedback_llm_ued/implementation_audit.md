@@ -3,10 +3,11 @@
 - 分支：`henry/ba-bagr-ued-review-board-v2`
 - worktree：`C:/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree`
   （只在此 worktree 施工；未切换/未覆盖 CC1、CC2 分支，未整体合并 Mason 分支）
-- 代码根：`gpu1_aggregation_siege/d052/feedback_llm_ued/`（34 个模块）
+- 代码根：`gpu1_aggregation_siege/d052/feedback_llm_ued/`（35 个模块）
 - 测试：`gpu1_aggregation_siege/d052/tests/test_feedback_llm_ued_*.py`
-  （17 个文件，388 用例，含 C9 门禁定向测试 18 用例：CC3 旁路/滞后 10 +
-  CC4 再识别负测/字节奇偶 6 + CC4 static 独立性 2）
+  （18 个文件，426 用例，含 C9 门禁定向测试 18 用例：CC3 旁路/滞后 10 +
+  CC4 再识别负测/字节奇偶 6 + CC4 static 独立性 2；含 CC3 E2 真实 ABI
+  兼容性测试 38 用例）
 - 本文件只陈述**已验证**的事实；未运行/未实现内容一律显式标注。
 
 ## 1. 提交序列（C1–C16，全部原子提交、显式路径 add、无 amend/force/rebase）
@@ -31,9 +32,10 @@
 | CC3-A | C9 门禁：两个隔离旗标置 False + posture 同步（修复前姿态） | `ec4935f` |
 | CC3-B | C9 门禁修复：BoardContext 只经 FeedbackView + 恰好 k−1 滞后 + 定向旁路/滞后测试 + 旗标复 True + 报告重定基线 | `921edad` |
 | CC4-C | C9 门禁第二轮：两个隔离旗标再置 False + posture 同步（数值侧信道加固前姿态） | `77cea72` |
-| CC4-D | C9 门禁第二轮加固（两处 director 发现）：置换视图数值指纹移除（两层一致的族级窗口聚合）+ family-grain 预测签名移除 + **static phase-A 存储读取修复**（冻结空退休生命周期 + 退休查询对 static fail-closed）+ 再识别负测 3 + 全 prompt 字节奇偶测试 3 + static 独立性负测 2 + 旗标复 True + 报告重定基线（本次提交） | 见 git log |
+| CC4-D | C9 门禁第二轮加固（两处 director 发现）：置换视图数值指纹移除（两层一致的族级窗口聚合）+ family-grain 预测签名移除 + **static phase-A 存储读取修复**（冻结空退休生命周期 + 退休查询对 static fail-closed）+ 再识别负测 3 + 全 prompt 字节奇偶测试 3 + static 独立性负测 2 + 旗标复 True + 报告重定基线 | `a2e1bc5` |
+| CC3-E2 | 真实 `SLOWGRU_PERSISTENT_CANONICAL_98304` 胶囊 ABI 兼容性基线（`student_abi_baseline.py`，只读绑定、逐文档 SHA 对照台账、跨文档事实交叉提取、无猜测 fail-closed）+ 单一 `SlowgruStudentEvaluator` 消费面（EnvCoder/三模式 FeedbackView/Soft Copeland/四锚 manifest）+ normal/static/shuffled 兼容正负测试 38（本次提交） | 见 git log |
 
-基线演进：554→749→889→920→934→942 passed；6 个既有环境性失败名单全程未变。
+基线演进：554→749→889→920→934→942→980 passed；6 个既有环境性失败名单全程未变。
 
 ## 2. 模块清单（全部已实现、全部有测试覆盖；行数为 wc -l 实测）
 
@@ -83,6 +85,30 @@ family-grain 预测签名置空）；
 `student_binding.py`(175)：固定身份 + CC4 fail-closed + 训练 no-op 记账；
 `human_decision.py`(89)；`formal_isolation.py`(99)；
 `constants.py`(407)；`synthetic_feedback.py`(75)；`__init__.py`(33)。
+
+### 2.6 CC3 E2 真实 Student ABI 基线（本次新增）
+`student_abi_baseline.py`(1403)：真实 `SLOWGRU_PERSISTENT_CANONICAL_98304`
+胶囊的只读、fail-closed、无猜测绑定——每个被消费文档都按胶囊自带
+`SHA256SUMS` 台账重哈希验证（字节一致；唯一承认的非字节一致情形是
+git `i/lf w/crlf` 检出的**可逆** CRLF→LF 视图，逐文档显式记录、从不
+静默）；每个 ABI 事实（params/checkpoint 身份、opt/global step、RNG、
+wrapper、字面 task_params、action ABI）都从已验证文档**提取**并跨文档
+交叉一致（candidate_id 5 路、file SHA 6 路、params SHA 4 路、steps 3 路
++ train_summary 块三重一致、seeds 4 路、obs/action 2 路+smoke 检查、
+carry 4 路、resume/network/s4_task/trainer 出处交叉）；缺件/缺台账行/
+字节篡改/跨文档不一致/wrapper 字面漂移/pkl 布局漂移一律
+`StudentAbiBaselineBlocked`。checkpoint pkl 为服务器独有工件（本地镜像
+只有文档与摘要）：基线只绑定身份，`assert_checkpoint_consumable_locally`
+在本 worktree 恒拒绝（`REAL_CHECKPOINT_LOADED` 保持 False）。同文件含
+单一消费面 `SlowgruStudentEvaluator`：EnvCoder 输出（action/obs ABI
+覆盖尝试→ACTION_ABI_OVERRIDE_FORBIDDEN）、三模式 FeedbackView（static
+结构性空、normal 身份戳、shuffled 置换+族级聚合重算侧信道检查）、
+Soft Copeland（**重消费**共享 `soft_copeland_rank`，哈希不复现即
+SOFT_COPELAND_RANKING_FORKED，绝不本地重排）、四锚 manifest（经
+`AnchorManifestSource.resolve` 唯一接缝）——恰好 k−1 滞后与隔离不变量
+在评估器层重断；身份戳三态规则：空戳/本地符号绑定戳（仅
+REAL_CHECKPOINT_LOADED=False 且 step=0 时合法）/精确匹配基线
+params_sha256+global_step，其余一律 fail-closed。
 
 ## 3. 关键审计结论
 
@@ -156,13 +182,25 @@ family-grain 预测签名置空）；
   缺失 → `STUDENT_ADAPTER_MISSING` fail-closed，未另建 loader/registry/codec；
   **REAL_CHECKPOINT_LOADED=False**。训练接缝 no-op 记账
   （SKIPPED_UNAUTHORIZED），**REAL_TRAINING_UPDATE_EXECUTED=False**。
+- **CC3 E2（本次）**：兼容性基线改为 worktree 内真实
+  `SLOWGRU_PERSISTENT_CANONICAL_98304` 胶囊（不再只是 fixture）：只读
+  绑定其 manifest/checkpoint contract/ABI——params 与 optimizer 身份、
+  global_step=98304（update_step 48 / opt_step 96）、RNG（42/777/
+  200000..200063，cc3_created_full_seeds=false）、wrapper
+  （THIN_GTRXL128_SLOWGRU_RUNTIME@cc3_runtime_abi/v1，边界动作
+  FULL_CARRY_NO_CLEAR）、字面 task_params（DEFEAT_KOBOLD，S4_dark native，
+  replay/vtrace/egomap/nav_aux/novelty 全 OFF）与 action ABI
+  （obs 8335 / action 43 / legal 0..42 / conditioning 67）。绑定不加载
+  任何权重（pkl 服务器独有）；EnvCoder、三模式 FeedbackView、Soft
+  Copeland、四锚 manifest 全部经同一评估器消费并各有正负测试。
 
 ## 4. 验证矩阵（证据）
 
 | 主张 | 证据 |
 |---|---|
-| 388 个方向二测试全绿 | `test_report.md` §2（逐文件计数） |
-| 全量 d052 套件 942 通过 / 6 既有环境性失败 | `test_report.md` §3 |
+| 426 个方向二测试全绿（18 文件） | `test_report.md` §2（逐文件计数） |
+| 全量 d052 套件 980 通过 / 6 既有环境性失败 | `test_report.md` §3 |
+| CC3 E2 真实胶囊 ABI 绑定 + 单一评估器三模式兼容正负测 | `test_feedback_llm_ued_student_abi_compat.py`（38 用例：真实绑定正测 3 + fail-closed 负测 8 + checkpoint 局部性 1 + 四消费面正负测 23 + 符号戳 2 + 三模式集成 1） |
 | 闭环数值（三模式 6 窗，CC4 门禁后重定基线） | `final_implementation_report.md` §4（smoke 真实输出；static 泄漏修复后原样重跑逐字节一致） |
 | 双窗口时序负测（恰好 k−1） | `test_feedback_llm_ued_controller.py`（58 用例含同窗禁止/旧/未来/重复/缺失引用） |
 | CC3 C9 门禁旁路/滞后定向测试 | `test_feedback_llm_ued_c9_gate.py`（10 用例：static 满 store 零载荷、shuffled 证据层无身份、混合窗口/旧/当前/未来 fail-closed、端到端逐引用恰好滞后一窗） |
@@ -181,7 +219,12 @@ family-grain 预测签名置空）；
 2. **LLM 是确定性 mock**：`real_calls=0` 有运行时断言；全部角色逻辑为
    ENGINEERING_SCAFFOLD 级证据。
 3. **无训练步**：`TRAINING_AUTHORIZED=False`，无 optimizer step/checkpoint。
-4. **CC4 StudentAdapter 缺失**：REAL_CHECKPOINT_LOADED=False。
+4. **CC4 StudentAdapter 缺失**：REAL_CHECKPOINT_LOADED=False。CC3 E2 已把
+   兼容性基线绑定到真实 SLOWGRU_PERSISTENT 胶囊（身份级：params/步数/RNG/
+   wrapper/task_params/action ABI 全部 SHA 验证），但 checkpoint pkl 本体是
+   服务器独有工件，本地消费路径仍走授权 GPU 主机上的 SHA 验证 wrapper
+   `load_candidate`——本 worktree 内 `assert_checkpoint_consumable_locally`
+   恒拒绝，无本地加载、无猜测。
 5. **共享冻结 anchor manifest 缺失**：SHARED_ANCHOR_MANIFEST_BOUND=False。
 6. **push 网络受阻**（任务 #87）：GitHub 推送统一在本地 Windows 仓库完成，
    网络恢复前不重试。

@@ -11,9 +11,9 @@
 |---|---|
 | worktree | `C:/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree` |
 | 分支 | `henry/ba-bagr-ued-review-board-v2`（未切换/未覆盖 CC1、CC2 分支） |
-| 提交序列 | C1–C16 共 15 个原子提交（C12+C13 合并一次）+ CC3 C9 门禁 2 个提交（A：旗标置 False；B：修复+定向测试+旗标复 True）+ CC4 C9 门禁第二轮 2 个提交（C：旗标再置 False；D：数值侧信道加固+static 泄漏修复+负测+旗标复 True），全部显式路径 add、无 amend/force/rebase/merge/reset/clean |
+| 提交序列 | C1–C16 共 15 个原子提交（C12+C13 合并一次）+ CC3 C9 门禁 2 个提交（A：旗标置 False；B：修复+定向测试+旗标复 True）+ CC4 C9 门禁第二轮 2 个提交（C：旗标再置 False；D：数值侧信道加固+static 泄漏修复+负测+旗标复 True）+ CC3 E2 1 个提交（真实 SLOWGRU_PERSISTENT 胶囊 ABI 兼容性基线 + 单一 Student 评估器三模式兼容正负测试），全部显式路径 add、无 amend/force/rebase/merge/reset/clean |
 | 提交 SHA | 见 `implementation_audit.md` §1 |
-| 基线演进 | 554→749→889→920→934→942 passed；6 个既有环境性失败名单全程未变 |
+| 基线演进 | 554→749→889→920→934→942→980 passed；6 个既有环境性失败名单全程未变 |
 
 ## 2. 架构（总控权威方向 + REQUEST_CHANGES 修订，全部落地）
 
@@ -53,13 +53,25 @@
     不间断运行 summary 逐字节一致，fresh subprocess 哈希一致。
 12. **Student**：固定 PERSISTENT_RMT16_ORIGINAL_VTRACE_98304，只消费 CC4
     共享 StudentAdapter（缺失 fail-closed），不另建 loader/registry/codec。
+13. **CC3 E2 真实 ABI 兼容性基线**：`student_abi_baseline.py` 只读绑定 worktree
+    内真实 `SLOWGRU_PERSISTENT_CANONICAL_98304` 胶囊（非 fixture）：每个文档按
+    胶囊 SHA256SUMS 台账重哈希验证（字节一致或可逆 CRLF→LF 视图，逐文档记录、
+    从不静默）；全部 ABI 事实（params/optimizer treedef 身份、global_step
+    98304/update_step 48/opt_step 96、RNG 42/777/200000..200063、wrapper ABI、
+    字面 task_params、action ABI 8335/43/0..42/67）由已验证文档跨文档提取，
+    缺失/篡改/不一致一律 StudentAbiBaselineBlocked（无猜测、无默认值）；
+    EnvCoder 输出、三模式 FeedbackView、Soft Copeland、四锚 manifest 全部经
+    同一 `SlowgruStudentEvaluator` 消费（normal/static/shuffled 兼容正负测
+    38 用例），恰好 k−1 滞后与隔离不变量在评估器层重断，Soft Copeland 保持
+    唯一排序所有者；checkpoint pkl 本体为服务器独有工件，本地加载恒拒绝
+    （`LOCAL_CHECKPOINT_LOAD_REFUSED`，`REAL_CHECKPOINT_LOADED=False` 保持）。
 
 ## 3. 已完成 vs mock / 阻断
 
-**已完成（真实逻辑，全部有测试）：** 上述 12 项全部落地；34 个模块、
-17 个测试文件 388 用例（含 C9 门禁定向测试文件 18 用例：CC3 旁路/滞后 +
-CC4 再识别/字节奇偶/static 独立性）；示例 JSON 由真实运行导出（CC4 门禁后
-重跑验证数据载荷逐字节不变）。
+**已完成（真实逻辑，全部有测试）：** 上述 13 项全部落地；35 个模块、
+18 个测试文件 426 用例（含 C9 门禁定向测试文件 18 用例：CC3 旁路/滞后 +
+CC4 再识别/字节奇偶/static 独立性；CC3 E2 真实 ABI 兼容性文件 38 用例）；
+示例 JSON 由真实运行导出（CC4 门禁后重跑验证数据载荷逐字节不变）。
 
 | 模块 | 真实状态 | 诚实标记 |
 |---|---|---|
@@ -146,7 +158,7 @@ normal 与 shuffled 仍然不同（退休族集合不同），feedback_binding_m
 
 | 旗标 | 值 | 依据 |
 |---|---|---|
-| E2_FORMAL_PLAN_ALIGNED | **True** | C1–C16 全部落地 + CC3/CC4 C9 门禁修复，388 用例 + 全量 942 通过（ENGINEERING_SCAFFOLD 级证据） |
+| E2_FORMAL_PLAN_ALIGNED | **True** | C1–C16 全部落地 + CC3/CC4 C9 门禁修复 + CC3 E2 真实 ABI 兼容性基线，426 用例 + 全量 980 通过（ENGINEERING_SCAFFOLD 级证据） |
 | SIX_ROLE_BOARD_IMPLEMENTED | **True** | C6：六角色每窗完整 6 次调用（mock 规则） |
 | REAL_ENVCODER_USED | **False** | 符号 EnvCoder + LLM 接缝 Blocked（无真实 LLM） |
 | REAL_SIMULATOR_PROBE | **False** | 本地无 JAX/Craftax，符号 runner；真实接缝未授权 Blocked |
@@ -168,13 +180,15 @@ normal 与 shuffled 仍然不同（退休族集合不同），feedback_binding_m
 cd /c/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_bagr_ued_fix1_worktree/gpu1_aggregation_siege
 PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests/test_feedback_llm_ued_*.py -q
 ```
-真实结果：`388 passed`（C9 门禁定向测试文件 `test_feedback_llm_ued_c9_gate.py`
-18 用例：CC3 旁路/滞后 10 + CC4 再识别/字节奇偶 6 + CC4 static 独立性 2）
+真实结果：`426 passed`（含 C9 门禁定向测试文件
+`test_feedback_llm_ued_c9_gate.py` 18 用例：CC3 旁路/滞后 10 + CC4 再识别/
+字节奇偶 6 + CC4 static 独立性 2；CC3 E2
+`test_feedback_llm_ued_student_abi_compat.py` 38 用例）
 
 ```bash
 PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests -q
 ```
-真实结果：`942 passed, 6 failed, 2 warnings in 10.42s`。
+真实结果：`980 passed, 6 failed, 2 warnings in 13.37s`。
 6 个失败全部为改动前即存在的 `test_real_bundle_reconciliation.py` 环境性
 失败（依赖本 worktree 不具备的历史 real-bundle 数据），名单与基线完全一致。
 详见 `test_report.md`。
@@ -187,7 +201,10 @@ PYTHONPATH=. /d/Anaconda/python -m pytest d052/tests -q
    normal vs shuffled 验证真实模型确实利用反馈。
 3. **真实 EnvCoder**：LLM 接缝 Blocked。
 4. **训练集成**：本轮无 optimizer step、无 checkpoint。
-5. **CC4 共享 StudentAdapter**：本 worktree 不存在 → 符号绑定 fail-closed。
+5. **CC4 共享 StudentAdapter**：本 worktree 不存在 → 符号绑定 fail-closed；
+   CC3 E2 已完成身份级真实胶囊 ABI 绑定（SLOWGRU_PERSISTENT_CANONICAL_98304），
+   但 checkpoint pkl 本体为服务器独有工件，本地加载恒拒绝
+   （LOCAL_CHECKPOINT_LOAD_REFUSED），REAL_CHECKPOINT_LOADED 保持 False。
 6. **共享冻结 anchor manifest**：不存在 → BLOCKED_SHARED_ANCHOR_MANIFEST，
    锚位为脚手架占位。
 7. **推送**：push 受网络阻断（任务 #87），不重试；GitHub 推送统一在本地
