@@ -213,6 +213,10 @@ class SharedAnchorManifestSlot:
     anchor_ids: Tuple[str, ...] = ()
     manifest_hash: str = ""
     binding_label: str = SCAFFOLD_PLACEHOLDER_NOT_SHARED
+    #: the bound manifest object itself, kept so a production entrypoint can
+    #: hand the SAME verified manifest to the controller's anchor seam (no
+    #: re-derivation, no second parse)
+    manifest: Optional[object] = None
 
     def bind(self, manifest: object) -> "SharedAnchorManifestSlot":
         #: wraps the EXISTING AnchorManifestSource seam (manifest_hash
@@ -230,7 +234,8 @@ class SharedAnchorManifestSlot:
             detail="shared frozen anchor manifest bound",
             anchor_ids=tuple(anchor_ids),
             manifest_hash=str(getattr(manifest, "manifest_hash", "")),
-            binding_label=SHARED_MANIFEST_BOUND_LABEL)
+            binding_label=SHARED_MANIFEST_BOUND_LABEL,
+            manifest=manifest)
 
 
 @dataclass(frozen=True)

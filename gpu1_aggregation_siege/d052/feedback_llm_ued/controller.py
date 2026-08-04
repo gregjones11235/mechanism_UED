@@ -130,6 +130,7 @@ from d052.feedback_llm_ued.environment_generator import (
 )
 from d052.feedback_llm_ued.execution_mode import (
     EXECUTION_MODE_MOCK_DRY_RUN,
+    EXECUTION_MODE_REAL,
     FeedbackLaunchGate,
 )
 from d052.feedback_llm_ued.expected_observed import ExpectedObservedComparator
@@ -162,6 +163,9 @@ from d052.feedback_llm_ued.plan_revision import (
     assert_feedback_ids_known,
 )
 from d052.feedback_llm_ued.review_board import BoardOutput, run_review_board
+from d052.feedback_llm_ued.runtime_authorization import (
+    empty_authorization,
+)
 from d052.feedback_llm_ued.simulator_feedback_store import (
     SimulatorFeedbackRecord,
     SimulatorFeedbackStore,
@@ -173,6 +177,7 @@ from d052.feedback_llm_ued.simulator_probe import (
 from d052.feedback_llm_ued.student_binding import (
     StudentTrainingSeam,
     local_symbolic_binding,
+    resolve_student_binding,
 )
 
 #: deterministic bootstrap: first four families carry the seeded hypotheses
@@ -275,7 +280,17 @@ class FeedbackUEDController:
     """Deterministic, replayable driver of the double-window loop."""
 
     def __init__(self, mode: str, *, backend=None, probe_runner=None,
-                 human_reopen_families=(), anchor_manifest=None) -> None:
+                 human_reopen_families=(), anchor_manifest=None,
+                 runtime_authorization=None, student_init_contract=None,
+                 training_contract=None, real_env_coder_callable=None,
+                 probe_feedback_builder=None) -> None:
+        """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
+        All default to None, which reproduces the historical mock/symbolic
+        behavior byte for byte. With any real capability granted through
+        ``runtime_authorization`` the controller rejects every stand-in:
+        a non-real backend / probe runner, the local symbolic Student
+        binding, and a missing shared training contract all fail closed.
+        """
         if mode not in C.FEEDBACK_MODES:
             raise ValueError(f"UNKNOWN_MODE: {mode!r}")
         _assert_authorization_posture()
@@ -288,11 +303,34 @@ class FeedbackUEDController:
         #: their cooldown has passed (the only non-evidence reopen path)
         self.human_reopen_families = frozenset(human_reopen_families)
         self.mode = mode
-        self.launch_gate = FeedbackLaunchGate(EXECUTION_MODE_MOCK_DRY_RUN)
+        #: the round constants stay False; production authorization flows
+        #: ONLY through the injected runtime grants, and those take effect
+        #: only in EXECUTION_MODE_REAL (default: byte-identical gate)
+        self.runtime_authorization = (runtime_authorization
+                                      or empty_authorization())
+        if runtime_authorization is None:
+            self.launch_gate = FeedbackLaunchGate(EXECUTION_MODE_MOCK_DRY_RUN)
+        else:
+            self.launch_gate = FeedbackLaunchGate(
+                EXECUTION_MODE_REAL, runtime_grants=runtime_authorization)
         self.launch_decision = self.launch_gate.evaluate()
         self.backend = backend or DeterministicMockFeedbackBackend()
         self.launch_gate.assert_backend_allowed(self.backend.kind)
+        if self.launch_decision.real_llm_calls_allowed \
+                and self.backend.kind != C.BACKEND_KIND_REAL:
+            raise RuntimeError(
+                "REAL_RUN_BACKEND_NOT_REAL: real LLM calls are authorized "
+                f"but the backend kind is {self.backend.kind!r}; running on "
+                "a mock/replay backend while claiming real is forbidden "
+                "(NO_SILENT_FALLBACK)")
         self.runner = probe_runner or DeterministicSymbolicProbeRunner()
+        if self.launch_decision.real_simulator_probe_allowed \
+                and getattr(self.runner, "real_simulator", None) is not True:
+            raise RuntimeError(
+                "REAL_RUN_PROBE_RUNNER_NOT_REAL: real simulator probes are "
+                "authorized but the runner is not real_simulator=True; "
+                "candidate-hash-derived symbolic metrics may not serve a "
+                "real run (NO_SILENT_FALLBACK)")
         self.ledger = HypothesisLedger()
         self.store = SimulatorFeedbackStore()
         self.comparator = ExpectedObservedComparator()
@@ -303,9 +341,40 @@ class FeedbackUEDController:
         # from this worktree (verified), so the loop carries the honest local
         # symbolic binding (NOT_LOADED_LOCAL / ENGINEERING_SCAFFOLD) and the
         # training seam only records SKIPPED_UNAUTHORIZED this round.
-        self.student_binding = local_symbolic_binding()
-        self.training_seam = StudentTrainingSeam(self.launch_gate,
-                                                 self.student_binding)
+        # PRODUCTION PATH: any granted real capability rejects the local
+        # symbolic binding — the shared StudentInitContract must be injected
+        # explicitly (resolve_student_binding fails closed with
+        # STUDENT_INIT_CONTRACT_MISSING otherwise).
+        if self.launch_decision.real_simulator_probe_allowed \
+                or self.launch_decision.training_allowed:
+            self.student_binding = resolve_student_binding(
+                student_init_contract)
+        else:
+            self.student_binding = local_symbolic_binding()
+        self.training_seam = StudentTrainingSeam(
+            self.launch_gate, self.student_binding,
+            training_contract=training_contract)
+        #: P0-2 seam: the real EnvCoder execution chain (unique template +
+        #: four-link verification + bounded repair). Injectable only when
+        #: the runtime grants authorize it; the default symbolic path stays
+        #: untouched.
+        if real_env_coder_callable is not None \
+                and not self.runtime_authorization.real_envcoder:
+            raise RuntimeError(
+                "REAL_ENVCODER_SEAM_NOT_AUTHORIZED: a real EnvCoder "
+                "callable was injected but the runtime grant real_envcoder "
+                "is false")
+        self._real_env_coder_callable = real_env_coder_callable
+        #: P0-3 seam: production-path feedback record builder (provenance-
+        #: bound SimulatorFeedbackRecords). Injectable only when real
+        #: simulator probes are authorized.
+        if probe_feedback_builder is not None \
+                and not self.launch_decision.real_simulator_probe_allowed:
+            raise RuntimeError(
+                "PROBE_FEEDBACK_BUILDER_NOT_AUTHORIZED: a production "
+                "feedback builder was injected but real simulator probes "
+                "are not authorized")
+        self._probe_feedback_builder = probe_feedback_builder
         self.revisions: List[PlanRevisionRecord] = []
         self.envelopes: List[object] = []
         self.plans: Dict[str, CurriculumPlan] = {}
@@ -389,7 +458,24 @@ class FeedbackUEDController:
                     break
         self._summary = self._build_summary(records,
                                             stopped_window=stopped_window)
-        assert_no_real_llm_usage(self.backend.usage)
+        if self.launch_decision.real_llm_calls_allowed:
+            #: the inverse honesty check: a real-authorized run MUST have
+            #: consumed real calls and may not have served a single mock
+            #: completion (silently falling back to the mock backend and
+            #: still claiming "real" is forbidden — NO_SILENT_FALLBACK)
+            usage = self.backend.usage
+            if usage.real_calls <= 0:
+                raise RuntimeError(
+                    "REAL_LLM_USAGE_MISSING: real LLM calls are authorized "
+                    "but the backend served zero real calls — a real run "
+                    "that never called the real backend is not a real run")
+            if usage.mock_calls != 0:
+                raise RuntimeError(
+                    f"MOCK_CALLS_IN_REAL_RUN: {usage.mock_calls} mock "
+                    "completion(s) were served inside a real-authorized "
+                    "run — silent mock fallback is forbidden")
+        else:
+            assert_no_real_llm_usage(self.backend.usage)
         return self._summary
 
     def _run_window(self, window: int) -> WindowRecord:
@@ -465,20 +551,55 @@ class FeedbackUEDController:
         self._set_phase(window, PHASE_REVISION)
         self.apply_board_verdicts(window, board.verdicts, view=view)
         plan, revision = self.revise_plan(window, board, view=view)
-        training = self.training_seam.execute_training_step(window)
+        #: production path defers the single real optimizer update until the
+        #: probe funnel has selected the final batch (directive ordering:
+        #: probe -> select -> exactly one update); the default path keeps the
+        #: historical bookkeeping call
+        training = self.training_seam.execute_training_step(
+            window, defer_real_update=self.launch_decision.training_allowed)
         self.training_log.append(training)
 
         # -- D. PROBING phase: EnvCoder -> gates -> probe -> staged fb_k ----
         self._set_phase(window, PHASE_PROBING)
-        env_out, env_envelope = run_env_coder(
-            window=window, directives=list(board.directives),
-            backend=self.backend, sequence=self._sequence)
-        self._sequence += 1
-        self.envelopes.append(env_envelope)
-        gate_report = self.env_coder_gate.evaluate(
-            window=window, directives=list(board.directives), output=env_out)
-        self.env_coder_gate.assert_passed(gate_report)
+        if self._real_env_coder_callable is not None:
+            #: P0-2 production chain: unique template, one call per window
+            #: batch, four-link verification, bounded repair — the callable
+            #: itself raises RealEnvCoderBlocked on budget exhaustion (no
+            #: fallback to the symbolic coder exists)
+            env_artifact = self._real_env_coder_callable(
+                window=window, plan_id=plan.plan_id,
+                directives=list(board.directives),
+                sequence=self._sequence)
+            self._sequence += 1
+            if getattr(env_artifact, "overall_status", "") != "PASSED":
+                raise RuntimeError(
+                    "REAL_ENVCODER_NOT_PASSED: window="
+                    f"{window} overall_status="
+                    f"{getattr(env_artifact, 'overall_status', None)!r} — "
+                    "a real window may not probe against an unverified "
+                    "environment artifact")
+            n_coded = len(getattr(env_artifact, "directive_artifacts", []))
+            gate_passed = True
+        else:
+            env_out, env_envelope = run_env_coder(
+                window=window, directives=list(board.directives),
+                backend=self.backend, sequence=self._sequence)
+            self._sequence += 1
+            self.envelopes.append(env_envelope)
+            gate_report = self.env_coder_gate.evaluate(
+                window=window, directives=list(board.directives),
+                output=env_out)
+            self.env_coder_gate.assert_passed(gate_report)
+            n_coded = len(env_out.coded)
+            gate_passed = gate_report.passed
         staged, batch = self._probe_and_stage(window, plan, board.directives)
+        if self.launch_decision.training_allowed:
+            #: P0-4: window k+1's single real optimizer update over the
+            #: probe-selected final batch (12 dynamic + 4 anchors), wrapped
+            #: in the checkpoint save/load round-trip
+            training = self.training_seam.execute_real_window_update(
+                window, batch_candidate_ids=batch.final_batch)
+            self.training_log.append(training)
 
         # -- E. ATOMIC FREEZE: feedback_k + new hypotheses + FROZEN ---------
         self._freeze_window(window, staged, board.new_hypotheses)
@@ -497,8 +618,8 @@ class FeedbackUEDController:
             plan_signature_hash=plan_signature_hash(plan),
             revision_label=revision.label,
             n_directives=len(board.directives),
-            n_coded=len(env_out.coded),
-            gate_passed=gate_report.passed,
+            n_coded=n_coded,
+            gate_passed=gate_passed,
             n_candidates=C.RAW_CANDIDATES,
             n_feedback_records=len(staged),
             funnel_stats=dict(batch.funnel_stats),
@@ -869,6 +990,21 @@ class FeedbackUEDController:
         # inside the funnel
         batch = run_staged_funnel(candidates, self.runner, window=window,
                                   anchor_ids=self.anchor_ids)
+
+        if self._probe_feedback_builder is not None:
+            #: P0-3 production path: provenance-bound records (source
+            #: window/plan, hypothesis ids, candidate hash, changed + held
+            #: axes, predicted vs observed, residual, CI-sample count,
+            #: Student/Reference identity hashes, seed bank, transitions);
+            #: the isolation guard still re-scans every record
+            staged = self._probe_feedback_builder(
+                window=window, plan=plan, candidates=candidates,
+                batch=batch, controller=self)
+            for record in staged:
+                self.isolation.assert_record_clean(
+                    record.model_dump(),
+                    label=f"feedback:{record.feedback_id}")
+            return staged, batch
 
         cand_by_id = {c.candidate_id: c for c in candidates}
         fast_obs = {r["candidate_id"]: r["metrics"]

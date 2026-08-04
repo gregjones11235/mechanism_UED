@@ -150,14 +150,31 @@ class StudentTrainingSeam:
     Fail-closed twice: the launch gate refuses training this round, and even
     with training authorized the seam still requires real CC4 adapter evidence
     (``REAL_CHECKPOINT_LOADED``) before any update could exist.
+
+    Production path (P0-4): with training authorized AND an explicitly
+    injected shared training contract (consume-only — the shared runtime's
+    ``run_one_optimizer_update`` / ``save_checkpoint`` / ``load_checkpoint``
+    surface; direction two never implements an optimizer or a checkpoint
+    codec), the seam executes EXACTLY ONE optimizer update over the window's
+    final probe-selected batch and verifies the checkpoint save/load
+    round-trip around it. The directive ordering inside window k+1 is
+    probe -> select -> update -> checkpoint, so the window loop calls
+    ``execute_training_step(window, defer_real_update=True)`` in the
+    REVISION phase and ``execute_real_window_update`` only AFTER the probe
+    funnel has selected the final batch. Without a contract the historical
+    fail-closed behavior is preserved byte for byte.
     """
 
     def __init__(self, gate: FeedbackLaunchGate,
-                 identity: StudentBindingIdentity) -> None:
+                 identity: StudentBindingIdentity,
+                 training_contract=None) -> None:
         self._gate = gate
         self.identity = identity
+        self._training_contract = training_contract
 
-    def execute_training_step(self, window: int) -> TrainingStepRecord:
+    def execute_training_step(self, window: int, *,
+                              defer_real_update: bool = False
+                              ) -> TrainingStepRecord:
         try:
             self._gate.assert_training_allowed()
         except LaunchGateBlocked as exc:
@@ -165,11 +182,88 @@ class StudentTrainingSeam:
                 status="SKIPPED_UNAUTHORIZED",
                 student_training_transitions=0,
                 reason=f"window={window}: {exc}")
-        if not C.REAL_CHECKPOINT_LOADED:
+        if self._training_contract is None:
+            if not C.REAL_CHECKPOINT_LOADED:
+                raise StudentBindingBlocked(
+                    "REAL_TRAINING_SEAM_NOT_IMPLEMENTED: training is "
+                    "authorized by the gate but REAL_CHECKPOINT_LOADED="
+                    "false — CC4 adapter evidence is required before any "
+                    "real update can exist")
             raise StudentBindingBlocked(
-                "REAL_TRAINING_SEAM_NOT_IMPLEMENTED: training is authorized "
-                "by the gate but REAL_CHECKPOINT_LOADED=false — CC4 adapter "
-                "evidence is required before any real update can exist")
-        raise StudentBindingBlocked(
-            "REAL_TRAINING_SEAM_NOT_IMPLEMENTED: direction two consumes the "
-            "CC4 shared adapter only; no local optimizer path exists")
+                "REAL_TRAINING_SEAM_NOT_IMPLEMENTED: direction two consumes "
+                "the CC4 shared adapter only; no local optimizer path "
+                "exists")
+        if defer_real_update:
+            #: directive ordering: the real update consumes the window's
+            #: probe-selected final batch, which does not exist until AFTER
+            #: the PROBING phase — the update is deferred there, never run
+            #: on a stale or empty batch
+            return TrainingStepRecord(
+                status="DEFERRED_TO_POST_SELECTION",
+                student_training_transitions=0,
+                reason=(f"window={window}: the single real optimizer update "
+                        "is deferred until the probe funnel has selected the "
+                        "final batch (probe -> select -> exactly one "
+                        "optimizer update)"))
+        return self._execute_one_update(window, batch_candidate_ids=())
+
+    def execute_real_window_update(self, window: int, *,
+                                   batch_candidate_ids
+                                   ) -> TrainingStepRecord:
+        """Window k+1's single real optimizer update over the final batch
+        (12 dynamic + 4 anchors), wrapped in a checkpoint save/load
+        round-trip. Re-checks the gate; refuses without a contract."""
+        self._gate.assert_training_allowed()
+        if self._training_contract is None:
+            raise StudentBindingBlocked(
+                "REAL_TRAINING_SEAM_NOT_IMPLEMENTED: a real window update "
+                "requires the explicitly injected shared training contract")
+        if not batch_candidate_ids:
+            raise StudentBindingBlocked(
+                f"REAL_TRAINING_BATCH_EMPTY: window={window} — the update "
+                "must consume the probe-selected final batch; an empty "
+                "batch is refused (NO_SILENT_FALLBACK)")
+        return self._execute_one_update(window,
+                                        batch_candidate_ids
+                                        =tuple(batch_candidate_ids))
+
+    def _execute_one_update(self, window: int, *,
+                            batch_candidate_ids) -> TrainingStepRecord:
+        """Exactly one optimizer update + checkpoint round-trip, fail closed
+        on any deviation (wrong step count, unbound or unchanged checkpoint
+        hash, failed reload)."""
+        contract = self._training_contract
+        hash_before = contract.save_checkpoint(
+            tag=f"window-{window:02d}-pre-update")
+        result = contract.run_one_optimizer_update(
+            window=window, batch_candidate_ids=list(batch_candidate_ids))
+        if int(getattr(result, "optimizer_steps", 0)) != 1:
+            raise StudentBindingBlocked(
+                "REAL_TRAINING_STEP_COUNT_MISMATCH: window="
+                f"{window} requires EXACTLY ONE optimizer update, got "
+                f"{getattr(result, 'optimizer_steps', None)!r}")
+        if getattr(result, "window", None) != window:
+            raise StudentBindingBlocked(
+                f"REAL_TRAINING_WINDOW_MISMATCH: update result window="
+                f"{getattr(result, 'window', None)!r} != {window}")
+        if getattr(result, "checkpoint_hash_before", "") != hash_before:
+            raise StudentBindingBlocked(
+                "REAL_TRAINING_CHECKPOINT_BINDING_MISMATCH: the update "
+                "result's checkpoint_hash_before does not match the "
+                f"pre-update save ({hash_before[:16]}...)")
+        hash_after = contract.save_checkpoint(
+            tag=f"window-{window:02d}-post-update")
+        if hash_after == hash_before:
+            raise StudentBindingBlocked(
+                "REAL_TRAINING_CHECKPOINT_UNCHANGED: exactly one optimizer "
+                "update must change the full-state checkpoint hash")
+        #: round-trip: the post-update checkpoint must reload cleanly
+        contract.load_checkpoint(checkpoint_hash=hash_after)
+        return TrainingStepRecord(
+            status="EXECUTED_ONE_UPDATE_CHECKPOINT_ROUNDTRIP",
+            student_training_transitions=int(
+                getattr(result, "env_steps", 0)),
+            reason=(f"window={window}: exactly one optimizer update over "
+                    f"{len(batch_candidate_ids)} final-batch candidates; "
+                    f"checkpoint {hash_before[:16]} -> {hash_after[:16]}; "
+                    "reload round-trip completed"))

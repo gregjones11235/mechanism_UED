@@ -196,6 +196,13 @@ class RealProbeFeedbackRunner:
                           f"{shared_runner.runner_id}")
         self.probe_calls = 0
         self.total_transitions = 0
+        #: per-candidate evidence trail (candidate_id -> list of per-stage
+        #: evidence dicts): what the ProbeMetrics interface alone cannot
+        #: carry — the checkpoint hashes the shared runner signed, the
+        #: seed bank, the episode counts (= CI-sample count). Feedback
+        #: record builders bind provenance from this trail; it is derived
+        #: observation data, never a source of metrics.
+        self.probe_evidence: Dict[str, List[dict]] = {}
 
     def probe(self, candidate: CandidateEnvironment, *, stage: str,
               student_episodes: int,
@@ -228,6 +235,17 @@ class RealProbeFeedbackRunner:
                 f"{metrics.simulator_transitions}")
         self.probe_calls += 1
         self.total_transitions += transitions
+        self.probe_evidence.setdefault(candidate.candidate_id, []).append(
+            dict(stage=stage,
+                 seed_bank=[int(s) for s in seed_bank],
+                 student_episodes=student_episodes,
+                 reference_episodes=reference_episodes,
+                 ci_sample_count=student_episodes + reference_episodes,
+                 simulator_transitions=transitions,
+                 student_checkpoint_hash=str(
+                     getattr(result, "student_checkpoint_hash", "")),
+                 reference_checkpoint_hash=str(
+                     getattr(result, "reference_checkpoint_hash", ""))))
         return metrics
 
 
