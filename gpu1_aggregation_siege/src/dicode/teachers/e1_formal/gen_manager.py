@@ -714,6 +714,84 @@ class E1FormalGenManager:
         return self._ledger
 
     # ------------------------------------------------------------------
+    # CC2 follow-up P0-1/P0-10: read-only surfaces for the one-window
+    # driver. The driver orchestrates the SAME primitives evolve_tasks
+    # uses (board cycle, compile, envcoder) against THIS teacher
+    # instance — one GenManager across the whole window — so its state
+    # bookkeeping must stay identical to evolve_tasks'. Nothing here
+    # constructs, mints or mutates evidence.
+    # ------------------------------------------------------------------
+    @property
+    def llm_client(self) -> Any:
+        """The teacher's bound LLM client (injected at init; the
+        production driver never lets the teacher fall back on its
+        own)."""
+        return self._llm
+
+    @property
+    def last_review_window(self) -> Any:
+        """The previous review window (or None) — prev_window_hash
+        source for the gate signals."""
+        return self._last_window
+
+    @property
+    def seed_examples(self) -> Tuple[Dict[str, str], ...]:
+        return self._seed_examples
+
+    @property
+    def envcoder_backend(self) -> Any:
+        return self._envcoder_backend
+
+    @property
+    def max_repairs(self) -> int:
+        return self._max_repairs
+
+    @property
+    def invocation_thresholds(self) -> Any:
+        return self._invocation_thresholds
+
+    @property
+    def invocation_threshold_version(self) -> Optional[str]:
+        return self._invocation_threshold_version
+
+    @property
+    def cycles_run(self) -> int:
+        return self._cycles_run
+
+    @property
+    def consecutive_reuses(self) -> int:
+        return self._consecutive_reuses
+
+    def collect_evidence_raw_items(self) -> List[Dict[str, Any]]:
+        """Driver mirror of evolve_tasks' evidence collection: archive
+        items + pending feedback, with the feedback consumed exactly
+        once (cleared here exactly as evolve_tasks clears it after
+        building the snapshot)."""
+        raw_items = self._archive_view.evidence_items() + list(
+            self._pending_feedback
+        )
+        self._pending_feedback.clear()
+        return raw_items
+
+    def record_driver_cycle(self, outcome: Any) -> None:
+        """Driver bookkeeping mirror of evolve_tasks' post-cycle state
+        (cycle counter, last window, reuse counter on no-window)."""
+        self._cycles_run += 1
+        if getattr(outcome, "window", None) is not None:
+            self._last_window = outcome.window
+        if getattr(outcome, "reuse", False):
+            self._consecutive_reuses += 1
+
+    def record_driver_compiled_pool(self, compiled_count: int) -> None:
+        """Driver bookkeeping mirror of evolve_tasks' compiled-pool
+        outcome: < 12 dynamic artifacts => the window is refused and
+        counts as a reuse; a full pool resets the counter."""
+        if compiled_count < layout.NUM_DYNAMIC_SLOTS:
+            self._consecutive_reuses += 1
+        else:
+            self._consecutive_reuses = 0
+
+    # ------------------------------------------------------------------
     # stage 1 -> stage 9: the honest review/evolution cycle
     # ------------------------------------------------------------------
     def evolve_tasks(
