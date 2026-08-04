@@ -682,7 +682,12 @@ class TestNoHeavyImports:
     """The edge stays importable without jax/craftax (pure stdlib +
     teacher modules)."""
 
-    MODULES = ("gen_manager.py", "archive_view.py", "training_gate.py")
+    MODULES = (
+        "gen_manager.py",
+        "archive_view.py",
+        "training_gate.py",
+        "eval_adapter.py",
+    )
 
     def test_no_jax_or_craftax_imports(self):
         for relpath in self.MODULES:

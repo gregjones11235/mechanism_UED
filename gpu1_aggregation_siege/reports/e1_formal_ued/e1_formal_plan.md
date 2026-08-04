@@ -17,9 +17,12 @@
   `b5536d3` C13 fail-closed 训练门禁修复（总控 REQUEST_CHANGES）→
   `e623130` C14 REUSE 证据收紧（record_verified_batch 结构化 dual-probe
   绑定；总控 CC2/E1）→
-  （本提交）C15 REUSE 认证绑定与全量复核（adapter 铸造 dual-probe
+  `2a6122f` C15 REUSE 认证绑定与全量复核（adapter 铸造 dual-probe
   attestation；调用方串单独永不充分；_snapshot_still_valid 每次复用前
-  重验全部绑定；总控 CC2/E1）。
+  重验全部绑定；总控 CC2/E1）→
+  （本提交）C15-RC 铸造绑定内部 adapter registry + 不可变结果对象
+  （总控 REQUEST_CHANGES：删除 mapping 铸造缝；假 adapter/直接铸造/
+  未知结果/越域证据一律 fail-closed；1 条 adapter 签发正路径）。
 
 ## 一、九阶段管线 → 代码位置
 
@@ -69,12 +72,22 @@ REFERENCE_CONTRACT_UNFROZEN
    （`build_training_batch` 携带 `dual_probe`）同构收紧。详见
    gate_closure_v2.md「C14 REUSE 证据收紧」。
    **C15 认证绑定**：dual-probe 串/哈希还须匹配 adapter 铸造的
-   attestation（`record_dual_probe_attestation`；调用方串单独永不
-   充分），且 `_snapshot_still_valid` 在每次 REUSE 前重验全部绑定
-   （registry 逐条、窗口/候选集/身份/manifest 哈希、attestation、
-   门禁态）——窗口过期、身份/协议/manifest 变更、候选集换序、
-   篡改存储快照、直接私有旁路一律失效⇒零训练。详见
-   gate_closure_v2.md「C15 REUSE 认证绑定与全量复核」。
+   attestation（调用方串单独永不充分），且 `_snapshot_still_valid`
+   在每次 REUSE 前重验全部绑定（registry 逐条、窗口/候选集/身份/
+   manifest 哈希、attestation、门禁态）——窗口过期、身份/协议/
+   manifest 变更、候选集换序、篡改存储快照、直接私有旁路一律
+   失效⇒零训练。详见 gate_closure_v2.md「C15 REUSE 认证绑定与
+   全量复核」。
+   **C15-RC 收紧（REQUEST_CHANGES）**：首版 mapping 铸造缝
+   （`record_dual_probe_attestation`）已删除——任何调用方不得自行
+   铸造。铸造绑定内部 `eval_adapter.CandidateEvalAdapterRegistry`：
+   adapter 经 fail-closed 注册（pinned 能力串），签发只在 registry
+   内部（关键字标量、无 mapping 入参）且只认已注册 adapter；教师
+   只消费 registry 签发的不可变 `DualProbeResult`（字段全合法的
+   映射也拒），绑定 pinned Student、当前 Reference 候选/
+   checkpoint/reset 协议、窗口与候选集作用域；假 adapter、直接
+   构造/变形结果（未知结果）、越域证据一律 fail-closed。详见
+   gate_closure_v2.md「C15-RC 修订」。
 
 集成 smoke（`tests/e1_formal/test_integration_smoke.py`）断言链上每个码
 **如实出现**，且 batch 中没有任何伪造动态任务或伪造数值；

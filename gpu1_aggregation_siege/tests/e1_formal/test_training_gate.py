@@ -15,12 +15,22 @@ Proves, offline, that:
 Every snapshot used here is an explicitly labeled FIXTURE: no real
 Student/Reference evaluation happened this round; the tests exercise
 the mechanism, never claim real evidence.
+
+C15 (supervisor REQUEST_CHANGES fix): dual-probe minting is bound to
+the internal candidate-evaluation adapter registry — adapters register
+fail-closed, results are issued ONLY inside the registry as immutable
+``DualProbeResult`` objects, and the teacher consumes ONLY registry-
+issued instances. This file proves the negative matrix (direct-mint
+mappings, fake adapters, unknown/forged/mutated results, out-of-scope
+evidence all fail closed) plus the one adapter-issued positive path.
 """
+import dataclasses
 import hashlib
 
 import pytest
 
 from dicode.teachers.e1_formal import anchor_manifest as AM
+from dicode.teachers.e1_formal import eval_adapter as EA
 from dicode.teachers.e1_formal import gen_manager as GM
 from dicode.teachers.e1_formal import layout as L
 from dicode.teachers.e1_formal import training_gate as TG
@@ -42,6 +52,17 @@ WINDOW = "e1-w000007"
 WINDOW_HASH = "c1" * 32
 DYNAMIC_IDS = [f"{WINDOW}::fam_a::v{i:02d}" for i in range(1, 13)]
 CODE_TEMPLATE = "class Env{i}:\n    pass\n"
+
+#: FIXTURE adapter identity for the candidate-evaluation seam (C15).
+#: Test-only placeholder: the real CC4 StudentAdapter registration is
+#: still pending; nothing here claims a real adapter exists.
+ADAPTER_ID = "cc4-student-adapter-fixture-v1"
+ADAPTER_VERSION = "fixture-v1"
+ADAPTER_HASH = "a5" * 32
+#: FIXTURE Student checkpoint hash. This round has no frozen Student
+#: checkpoint contract (that is CC4's business); the value is carried
+#: as format-validated immutable evidence only.
+STUDENT_CHECKPOINT_HASH = "d0" * 32
 
 
 # ----------------------------------------------------------------------
@@ -131,38 +152,95 @@ def _consume_window_artifacts(
     return ids
 
 
-def _attestation(**overrides):
-    """FIXTURE adapter-minted dual-probe attestation (C15).
+def _adapter_spec(**overrides):
+    """FIXTURE signed adapter spec (C15 fix).
 
-    Stands in for the record the CC4 evaluation seam (shared
-    StudentAdapter + frozen Reference) would mint after real dual
-    probes. Explicitly a fixture: no real probe rollout happened this
-    round; the adapter id is a test placeholder.
+    Stands in for the CC4 evaluation seam's adapter registration.
+    Explicitly a fixture: the adapter id is a test placeholder; no
+    real adapter exists this round.
     """
-    att = {
-        "adapter_id": "cc4-student-adapter-fixture-v1",
+    spec = {
+        "adapter_id": ADAPTER_ID,
+        "adapter_version": ADAPTER_VERSION,
+        "adapter_hash": ADAPTER_HASH,
+        "capability": EA.CANDIDATE_EVAL_ADAPTER_CAPABILITY,
+    }
+    spec.update(overrides)
+    return spec
+
+
+def _result_kwargs(
+    manager, window_id=WINDOW, task_ids=None, window_hash=WINDOW_HASH,
+    **overrides,
+):
+    """Full keyword set for issuing the FIXTURE DualProbeResult (C15).
+
+    Bound to the manager's CURRENT frozen contract (Reference
+    candidate id + checkpoint params hash + episode reset protocol),
+    the given review window and the ordered candidate set — exactly
+    the evidence chain a real CC4 dual-probe evaluation would carry.
+    Every value is a fixture; no real probe rollout happened.
+    """
+    contract = manager.reference_contract
+    ids = list(task_ids or DYNAMIC_IDS)
+    kwargs = {
+        "adapter_id": ADAPTER_ID,
         "student_candidate_id": PINNED_STUDENT_CANDIDATE_ID,
+        "student_checkpoint_hash": STUDENT_CHECKPOINT_HASH,
         "student_probe_id": "fixture-student-probe-0001",
         "student_probe_hash": "d1" * 32,
-        "reference_candidate_id": (
-            "REFERENCE_CANDIDATE_FROZEN_BY_SUPERVISOR"
-        ),
+        "reference_candidate_id": contract.candidate_id,
+        "reference_checkpoint_hash": contract.params_sha256,
         "reference_probe_id": "fixture-reference-probe-0001",
         "reference_probe_hash": "d2" * 32,
+        "window_id": window_id,
+        "window_hash": window_hash,
+        "candidate_set_hash": canonical_sha256(ids),
+        "episode_reset_protocol_id": contract.episode_reset_protocol_id,
+        "episode_reset_protocol_hash": (
+            contract.episode_reset_protocol_hash
+        ),
     }
-    att.update(overrides)
-    return att
+    kwargs.update(overrides)
+    return kwargs
+
+
+def _mint_fixture_result(
+    manager, window_id=WINDOW, task_ids=None, window_hash=WINDOW_HASH,
+    **overrides,
+):
+    """Register the fixture adapter (idempotent) and issue + consume
+    ONE fixture DualProbeResult — the exact flow the CC4 seam would
+    run after a real dual-probe evaluation (C15 fix)."""
+    registry = manager.eval_adapter_registry
+    if ADAPTER_ID not in registry.registered_adapter_ids:
+        manager.register_candidate_eval_adapter(_adapter_spec())
+    result = registry.issue_dual_probe_result(
+        **_result_kwargs(
+            manager, window_id=window_id, task_ids=task_ids,
+            window_hash=window_hash, **overrides,
+        )
+    )
+    manager.consume_candidate_eval_result(result)
+    return result
 
 
 def _dual_probe(**overrides):
     """FIXTURE structured Student/Reference dual-probe evidence block.
 
-    Derived from the fixture attestation (C15) so the probe strings
-    match a minted attestation unless a test says otherwise.
-    Explicitly a fixture: no real probe rollout happened this round.
+    The values match the fixture registry-issued result (see
+    ``_mint_fixture_result``); a snapshot's probes certify REUSE only
+    if such a result was ACTUALLY issued and consumed in scope
+    (same window, candidate set and CURRENT Reference). Explicitly a
+    fixture: no real probe rollout happened this round.
     """
-    att = _attestation()
-    probe = {name: att[name] for name in GM._DUAL_PROBE_FIELDS}
+    probe = {
+        "student_candidate_id": PINNED_STUDENT_CANDIDATE_ID,
+        "student_probe_id": "fixture-student-probe-0001",
+        "student_probe_hash": "d1" * 32,
+        "reference_probe_id": "fixture-reference-probe-0001",
+        "reference_probe_hash": "d2" * 32,
+    }
     probe.update(overrides)
     return probe
 
@@ -181,20 +259,13 @@ def _valid_snapshot(manager, window_id=WINDOW, mint_probe=True):
     """Build a structurally honest snapshot from the teacher's OWN
     registry evidence (never from thin air).
 
-    C15: legitimate REUSE evidence carries ADAPTER-MINTED probes, so
-    the fixture mints its fixture attestation exactly as the CC4 seam
-    would mint a real one (``mint_probe``); blocked managers (unfrozen
-    contract) stay unminted — ``record_verified_batch`` refuses them
-    on the gate check before it ever looks at the probes.
+    C15 fix: legitimate REUSE evidence carries registry-ISSUED
+    dual-probe results, so the fixture issues + consumes its fixture
+    result exactly as the CC4 seam would (``mint_probe``), scoped to
+    this window + candidate set; blocked managers (unfrozen contract)
+    stay unminted — ``record_verified_batch`` refuses them on the gate
+    check before it ever looks at the probes.
     """
-    if mint_probe and manager.reference_contract is not None:
-        manager.record_dual_probe_attestation(
-            _attestation(
-                reference_candidate_id=(
-                    manager.reference_contract.candidate_id
-                )
-            )
-        )
     dynamic = []
     window_hashes = set()
     for task_id, record in manager.artifact_registry.items():
@@ -209,14 +280,22 @@ def _valid_snapshot(manager, window_id=WINDOW, mint_probe=True):
                 ).hexdigest(),
             }
         )
+    # the window hash is taken from the registry evidence itself —
+    # every recorded artifact of the window carries the same value
+    window_hash = (
+        window_hashes.pop() if len(window_hashes) == 1 else "0" * 64
+    )
+    if mint_probe and manager.reference_contract is not None and window_hash:
+        _mint_fixture_result(
+            manager,
+            window_id=window_id,
+            task_ids=[entry["task_id"] for entry in dynamic],
+            window_hash=window_hash,
+        )
     contract = manager.reference_contract
     return {
         "window_id": window_id,
-        # the window hash is taken from the registry evidence itself —
-        # every recorded artifact of the window carries the same value
-        "window_hash": (
-            window_hashes.pop() if len(window_hashes) == 1 else "0" * 64
-        ),
+        "window_hash": window_hash,
         "provenance": "CANDIDATE_EVALUATION",
         # for blocked-certification tests the contract is None; the
         # gate rejects on the frozen-state check before it ever trusts
@@ -928,6 +1007,11 @@ class TestLegitimateVerifiedReuseTrains:
         new_ids = [f"e1-w000008::fam_b::v{i:02d}" for i in range(1, 13)]
         _consume_window_artifacts(manager, task_ids=new_ids,
                                     window_id="e1-w000008")
+        # C15 fix: window B promotion requires a dual-probe result
+        # ISSUED for window B's OWN scope (window id + candidate set);
+        # window A's result cannot cover it
+        _mint_fixture_result(manager, window_id="e1-w000008",
+                             task_ids=new_ids)
         # C14: promotion requires structured dual-probe evidence
         batch = manager.build_training_batch(new_ids, dual_probe=_dual_probe())
         assert batch["training_permitted"] is True
@@ -1038,128 +1122,401 @@ class TestRequirement4Matrix:
 
 
 # ----------------------------------------------------------------------
-# C15: the adapter-minted dual-probe attestation seam (fail-closed)
+# C15 (REQUEST_CHANGES fix): the candidate-evaluation adapter registry
+# — registration and issuance are fail-closed; fake adapters can never
+# issue; every issued result is immutable
 # ----------------------------------------------------------------------
-class TestC15DualProbeAttestationSeam:
-    """Caller-supplied probe strings alone never suffice: only probes
-    minted through the adapter seam may ever certify REUSE, and the
-    mint seam itself is fail-closed on every field."""
+class TestC15AdapterRegistryFailClosed:
+    """Adapter registration and result issuance fail closed on every
+    field. Only a REGISTERED adapter carrying the pinned dual-probe
+    capability may issue, and issued results are immutable evidence."""
 
-    def test_blocked_teacher_cannot_mint_attestations(self):
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            _manager().record_dual_probe_attestation(_attestation())
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BLOCKED
-        assert "REFERENCE_CONTRACT_UNFROZEN" in str(excinfo.value)
-
-    def test_minted_attestation_is_recorded_and_read_only(self):
+    # --- registration ----------------------------------------------------
+    @pytest.mark.parametrize("bad", [None, [], "spec", 7])
+    def test_adapter_spec_must_be_a_mapping(self, bad):
         manager = _unblocked_manager()
-        assert manager.probe_attestations == []
-        minted = manager.record_dual_probe_attestation(_attestation())
-        assert minted == _attestation()
-        listed = manager.probe_attestations
-        assert listed == [_attestation()]
-        listed[0]["student_probe_id"] = "HACKED"
-        listed.append({"forged": "entry"})
-        assert manager.probe_attestations == [_attestation()]
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(bad)
+        assert excinfo.value.code == EA.EVAL_ADAPTER_BAD_TYPE
 
-    def test_duplicate_attestation_is_minted_once(self):
+    def test_unknown_adapter_spec_field_rejected(self):
         manager = _unblocked_manager()
-        manager.record_dual_probe_attestation(_attestation())
-        manager.record_dual_probe_attestation(_attestation())
-        assert len(manager.probe_attestations) == 1
-
-    @pytest.mark.parametrize("bad", [None, [], "attestation", 3])
-    def test_attestation_must_be_a_mapping(self, bad):
-        manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(bad)
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
-
-    def test_unknown_attestation_field_rejected(self):
-        manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(extra="trust me")
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(
+                _adapter_spec(extra="trust me")
             )
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+        assert excinfo.value.code == EA.EVAL_ADAPTER_UNKNOWN_FIELD
 
-    @pytest.mark.parametrize("field", GM._PROBE_ATTESTATION_FIELDS)
-    def test_every_attestation_field_is_mandatory(self, field):
+    @pytest.mark.parametrize("field", EA._ADAPTER_SPEC_FIELDS)
+    def test_every_adapter_spec_field_is_mandatory(self, field):
         manager = _unblocked_manager()
-        att = _attestation()
-        del att[field]
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(att)
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+        spec = _adapter_spec()
+        del spec[field]
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(spec)
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISSING_FIELD
 
     @pytest.mark.parametrize("value", ["", "   ", 42, None])
     def test_adapter_id_must_be_a_non_empty_string(self, value):
         manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(adapter_id=value)
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(
+                _adapter_spec(adapter_id=value)
             )
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+        assert excinfo.value.code in (
+            EA.EVAL_ADAPTER_MISSING_FIELD,
+            EA.EVAL_ADAPTER_BAD_TYPE,
+        )
 
-    def test_attestation_must_name_the_pinned_strong_student(self):
+    @pytest.mark.parametrize("value", ["todo", "latest", "unknown"])
+    def test_placeholder_adapter_id_refused(self, value):
         manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(student_candidate_id="SOME_OTHER_STUDENT")
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(
+                _adapter_spec(adapter_id=value)
             )
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISMATCH
 
-    def test_attestation_must_name_the_current_reference(self):
+    @pytest.mark.parametrize("value", ["nothex", "A5" * 32, "a5" * 31, 7])
+    def test_adapter_hash_must_be_sha256_hex(self, value):
         manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(reference_candidate_id="SOME_OTHER_REF")
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(
+                _adapter_spec(adapter_hash=value)
             )
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert excinfo.value.code == EA.EVAL_ADAPTER_BAD_TYPE
+
+    def test_capability_must_be_the_pinned_dual_probe_capability(self):
+        manager = _unblocked_manager()
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(
+                _adapter_spec(capability="dual_probe_anything_goes")
+            )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISMATCH
+
+    def test_conflicting_re_registration_refused(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.register_candidate_eval_adapter(
+                _adapter_spec(adapter_hash="b6" * 32)
+            )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISMATCH
+
+    def test_identical_re_registration_is_idempotent(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        assert manager.eval_adapter_registry.registered_adapter_ids == (
+            ADAPTER_ID,
+        )
+
+    # --- issuance ----------------------------------------------------------
+    def test_fake_unknown_adapter_can_never_issue(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        kwargs = _result_kwargs(manager)
+        kwargs["adapter_id"] = "totally-fake-adapter-v9"
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(**kwargs)
+        assert excinfo.value.code == EA.EVAL_ADAPTER_UNKNOWN
+        assert manager.eval_adapter_registry.issued_results == ()
+
+    def test_issuance_without_any_registered_adapter_fails_closed(self):
+        manager = _unblocked_manager()
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(manager)
+            )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_UNKNOWN
+
+    def test_issuance_with_unknown_field_rejected(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(manager), extra="trust me"
+            )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_UNKNOWN_FIELD
+
+    @pytest.mark.parametrize("field", EA._RESULT_FIELDS)
+    def test_every_result_field_is_mandatory(self, field):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        kwargs = _result_kwargs(manager)
+        del kwargs[field]
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(**kwargs)
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISSING_FIELD
+
+    @pytest.mark.parametrize("field", EA._RESULT_HASH_FIELDS)
+    @pytest.mark.parametrize("value", ["nothex", "D1" * 32, "d1" * 33, 7])
+    def test_result_hash_fields_must_be_sha256_hex(self, field, value):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(manager, **{field: value})
+            )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_BAD_TYPE
 
     @pytest.mark.parametrize(
-        "field", ["student_probe_id", "reference_probe_id"]
+        "field", ["student_probe_id", "reference_probe_id", "window_id"]
     )
-    @pytest.mark.parametrize("value", ["", "   ", 42, None])
-    def test_attestation_probe_ids_must_be_non_empty(self, field, value):
+    @pytest.mark.parametrize("value", ["", "   "])
+    def test_result_id_fields_must_be_non_empty(self, field, value):
         manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(**{field: value})
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(manager, **{field: value})
             )
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISSING_FIELD
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISSING_FIELD
 
-    def test_identical_probe_ids_rejected_as_swapped_or_degenerate(self):
+    def test_identical_probe_ids_refused_at_issuance(self):
         manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(
-                    reference_probe_id="fixture-student-probe-0001"
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(
+                    manager,
+                    reference_probe_id="fixture-student-probe-0001",
                 )
             )
-        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISMATCH
 
-    @pytest.mark.parametrize(
-        "field", ["student_probe_hash", "reference_probe_hash"]
-    )
-    @pytest.mark.parametrize(
-        "value", ["not-hex", "D1" * 32, "d1" * 31, "d1" * 33, 7, None]
-    )
-    def test_attestation_probe_hashes_sha256_hex(self, field, value):
+    def test_identical_probe_hashes_refused_at_issuance(self):
         manager = _unblocked_manager()
-        with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(**{field: value})
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(manager, reference_probe_hash="d1" * 32)
             )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISMATCH
+
+    def test_placeholder_window_id_refused_at_issuance(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        with pytest.raises(EA.CandidateEvalAdapterError) as excinfo:
+            manager.eval_adapter_registry.issue_dual_probe_result(
+                **_result_kwargs(manager, window_id="latest")
+            )
+        assert excinfo.value.code == EA.EVAL_ADAPTER_MISMATCH
+
+    def test_issued_result_is_immutable(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        result = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager)
+        )
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.student_probe_hash = "f0" * 32
+
+    def test_mutated_copy_is_not_an_issued_result(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        result = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager)
+        )
+        mutated = dataclasses.replace(result, window_hash="c9" * 32)
+        assert manager.eval_adapter_registry.lookup_result(result) is True
+        assert manager.eval_adapter_registry.lookup_result(mutated) is False
+
+    def test_exact_duplicate_result_is_issued_once(self):
+        manager = _unblocked_manager()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        first = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager)
+        )
+        second = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager)
+        )
+        assert first == second
+        assert len(manager.eval_adapter_registry.issued_results) == 1
+
+
+# ----------------------------------------------------------------------
+# C15 (REQUEST_CHANGES fix): direct minting and forged results never
+# become admissible evidence — the teacher consumes ONLY immutable
+# registry-issued instances, never caller-shaped mappings
+# ----------------------------------------------------------------------
+class TestC15DirectMintAndForgedResultsRejected:
+    """Direct-mint / fake-adapter / unknown-result negatives: a mapping
+    with ALL valid fields, directly constructed or mutated results,
+    non-result values and out-of-scope evidence all fail closed."""
+
+    def _manager_with_window(self):
+        manager = _unblocked_manager()
+        _consume_window_artifacts(manager)
+        return manager
+
+    # --- mappings are NEVER accepted, even field-perfect -----------------
+    def test_field_perfect_mapping_is_rejected_outright(self):
+        # THE REQUEST_CHANGES case: a caller-shaped mapping whose fields
+        # are ALL valid (the exact fields an issued result carries) is
+        # refused on sight — the teacher consumes instances, never
+        # mappings, so "mint then certify" is impossible
+        manager = self._manager_with_window()
+        mapping = _result_kwargs(manager)
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(mapping)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+        assert "NEVER accepted" in str(excinfo.value)
+        assert manager.probe_attestations == []
+
+    def test_mapping_of_a_real_issued_result_is_still_rejected(self):
+        manager = self._manager_with_window()
+        result = _mint_fixture_result(manager)
+        as_mapping = dataclasses.asdict(result)
+        assert manager.probe_attestations == [as_mapping]  # the real one
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(dict(as_mapping))
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
+        assert len(manager.probe_attestations) == 1
+
+    @pytest.mark.parametrize("bad", [None, [], "result", 42])
+    def test_non_result_values_rejected(self, bad):
+        manager = self._manager_with_window()
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(bad)
         assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BAD_TYPE
 
-    def test_identical_probe_hashes_rejected_as_degenerate(self):
-        manager = _unblocked_manager()
+    # --- unknown / forged results ------------------------------------------
+    def test_directly_constructed_result_is_an_unknown_result(self):
+        # same fields a registered adapter would issue — but constructed
+        # directly, so the registry never issued it (even citing the
+        # registered adapter id does not help)
+        manager = self._manager_with_window()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        forged = EA.DualProbeResult(**_result_kwargs(manager))
+        assert forged.adapter_id == ADAPTER_ID
+        assert manager.eval_adapter_registry.lookup_result(forged) is False
         with pytest.raises(GM.GenManagerError) as excinfo:
-            manager.record_dual_probe_attestation(
-                _attestation(reference_probe_hash="d1" * 32)
-            )
+            manager.consume_candidate_eval_result(forged)
         assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert "unknown result" in str(excinfo.value)
+        assert manager.probe_attestations == []
+
+    def test_mutated_issued_result_is_an_unknown_result(self):
+        manager = self._manager_with_window()
+        result = _mint_fixture_result(manager)
+        mutated = dataclasses.replace(
+            result, student_probe_hash="d9" * 32
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(mutated)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert len(manager.probe_attestations) == 1
+
+    # --- blocked teacher ----------------------------------------------------
+    def test_blocked_teacher_cannot_consume_results(self):
+        result = EA.DualProbeResult(
+            **_result_kwargs(_unblocked_manager())
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            _manager().consume_candidate_eval_result(result)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_BLOCKED
+        assert "REFERENCE_CONTRACT_UNFROZEN" in str(excinfo.value)
+
+    # --- consumed records are read-only and deduplicated -------------------
+    def test_consumed_result_is_recorded_and_read_only(self):
+        manager = self._manager_with_window()
+        result = _mint_fixture_result(manager)
+        listed = manager.probe_attestations
+        assert len(listed) == 1
+        assert listed[0]["adapter_id"] == ADAPTER_ID
+        assert listed[0]["student_checkpoint_hash"] == (
+            STUDENT_CHECKPOINT_HASH
+        )
+        assert listed[0]["reference_checkpoint_hash"] == (
+            manager.reference_contract.params_sha256
+        )
+        listed[0]["student_probe_id"] = "HACKED"
+        listed.append({"forged": "entry"})
+        fresh = manager.probe_attestations
+        assert len(fresh) == 1
+        assert fresh[0]["student_probe_id"] == result.student_probe_id
+
+    def test_duplicate_result_is_consumed_once(self):
+        manager = self._manager_with_window()
+        result = _mint_fixture_result(manager)
+        manager.consume_candidate_eval_result(result)
+        assert len(manager.probe_attestations) == 1
+
+    # --- evidence-chain bindings at consume time ----------------------------
+    def test_wrong_reference_checkpoint_hash_rejected(self):
+        manager = self._manager_with_window()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        # "b7"*32 is a DIFFERENT checkpoint than the contracted
+        # params_sha256 ("b"*64 in the fixture contract)
+        forged = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(
+                manager, reference_checkpoint_hash="b7" * 32
+            )
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(forged)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert manager.probe_attestations == []
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("episode_reset_protocol_id", "standard_reset_v2"),
+            ("episode_reset_protocol_hash", "aa" * 32),
+        ],
+    )
+    def test_wrong_reset_protocol_rejected(self, field, value):
+        manager = self._manager_with_window()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        forged = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager, **{field: value})
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(forged)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    def test_unpinned_student_rejected(self):
+        manager = self._manager_with_window()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        forged = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager, student_candidate_id="OTHER_STU")
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(forged)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    def test_other_reference_candidate_rejected(self):
+        manager = self._manager_with_window()
+        manager.register_candidate_eval_adapter(_adapter_spec())
+        forged = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager, reference_candidate_id="OTHER_REF")
+        )
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.consume_candidate_eval_result(forged)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+
+    # --- scope binding at certification time ---------------------------------
+    def test_result_issued_for_another_window_never_certifies(self):
+        manager = self._manager_with_window()
+        _mint_fixture_result(manager, window_id="e1-w000999")
+        snapshot = _valid_snapshot(manager, mint_probe=False)
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert "attestation" in str(excinfo.value)
+        assert manager.verified_batch_snapshot is None
+
+    def test_result_issued_for_another_candidate_set_never_certifies(self):
+        manager = self._manager_with_window()
+        _mint_fixture_result(
+            manager, task_ids=list(reversed(DYNAMIC_IDS))
+        )
+        snapshot = _valid_snapshot(manager, mint_probe=False)
+        with pytest.raises(GM.GenManagerError) as excinfo:
+            manager.record_verified_batch(snapshot)
+        assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
+        assert manager.verified_batch_snapshot is None
 
 
 # ----------------------------------------------------------------------
@@ -1213,17 +1570,17 @@ class TestC15CallerStringsNeverSuffice:
         assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
         assert manager.verified_batch_snapshot is None
 
-    def test_attestation_minted_under_old_reference_never_certifies(self):
+    def test_result_consumed_under_old_reference_never_certifies(self):
         manager = self._manager_with_window()
-        manager.record_dual_probe_attestation(_attestation())
+        _mint_fixture_result(manager)  # issued under the OLD contract
         # the supervisor re-freezes the Reference identity under a NEW
-        # candidate; the attestation minted under the old one must stop
+        # candidate; the result consumed under the old one must stop
         # certifying
         manager._reference_contract = consume_reference_identity_contract(
             _block(candidate_id="REFERENCE_CANDIDATE_REFROZEN_V2"), "t"
         )
         snapshot = _valid_snapshot(manager, mint_probe=False)
-        snapshot["dual_probe"] = _dual_probe()  # attested under OLD ref
+        snapshot["dual_probe"] = _dual_probe()  # issued under OLD ref
         with pytest.raises(GM.GenManagerError) as excinfo:
             manager.record_verified_batch(snapshot)
         assert excinfo.value.code == GM.GEN_MANAGER_SNAPSHOT_MISMATCH
@@ -1505,26 +1862,60 @@ class TestC15DirectMethodBypassFailsClosed:
 
 
 # ----------------------------------------------------------------------
-# C15: the ONE adapter-minted positive path (FIXTURE throughout)
+# C15 (REQUEST_CHANGES fix): the ONE adapter-issued positive path
+# (FIXTURE throughout)
 # ----------------------------------------------------------------------
-class TestC15AdapterMintedPositivePath:
-    """Legitimate flow: the CC4 seam mints the dual-probe attestation;
-    the certified window then reuses and trains. Every value is an
-    explicitly labeled fixture — no real probe happened this round."""
+class TestC15AdapterIssuedPositivePath:
+    """Legitimate flow: register the CC4 adapter fixture, issue the
+    immutable dual-probe result INSIDE the registry, consume it into
+    the teacher, certify the window, reuse — training proceeds exactly
+    once per session. Every value is an explicitly labeled fixture;
+    no real probe happened this round."""
 
-    def test_adapter_minted_probe_certifies_reuse_and_trains_once(self):
+    def test_adapter_issued_result_certifies_reuse_and_trains_once(self):
         manager = _unblocked_manager()
         _consume_window_artifacts(manager)
-        # the adapter seam mints the probe evidence BEFORE certification
-        minted = manager.record_dual_probe_attestation(_attestation())
-        assert minted["adapter_id"] == "cc4-student-adapter-fixture-v1"
+        # 1. adapter registration (signed spec, pinned capability)
+        registered = manager.register_candidate_eval_adapter(
+            _adapter_spec()
+        )
+        assert registered.adapter_id == ADAPTER_ID
+        assert manager.eval_adapter_registry.registered_adapter_ids == (
+            ADAPTER_ID,
+        )
+        # 2. issuance inside the registry — the ONLY mint path
+        result = manager.eval_adapter_registry.issue_dual_probe_result(
+            **_result_kwargs(manager)
+        )
+        assert manager.eval_adapter_registry.lookup_result(result) is True
+        assert len(manager.eval_adapter_registry.issued_results) == 1
+        # 3. the teacher consumes ONLY the registry-issued instance
+        record = manager.consume_candidate_eval_result(result)
+        assert record["adapter_id"] == ADAPTER_ID
+        assert record["reference_checkpoint_hash"] == (
+            manager.reference_contract.params_sha256
+        )
+        assert record["episode_reset_protocol_id"] == (
+            manager.reference_contract.episode_reset_protocol_id
+        )
+        assert record["window_id"] == WINDOW
+        assert record["window_hash"] == WINDOW_HASH
+        assert record["candidate_set_hash"] == canonical_sha256(
+            DYNAMIC_IDS
+        )
+        # 4. certify + reuse: the snapshot's probe block matches the
+        # issued result in scope
         snapshot = _valid_snapshot(manager, mint_probe=False)
         assert snapshot["dual_probe"] == {
-            name: minted[name] for name in GM._DUAL_PROBE_FIELDS
+            "student_candidate_id": result.student_candidate_id,
+            "student_probe_id": result.student_probe_id,
+            "student_probe_hash": result.student_probe_hash,
+            "reference_probe_id": result.reference_probe_id,
+            "reference_probe_hash": result.reference_probe_hash,
         }
         stored = manager.record_verified_batch(snapshot)
         assert stored["dual_probe"]["student_probe_id"] == (
-            minted["student_probe_id"]
+            result.student_probe_id
         )
         train_calls = []
         batch = _run_session_step(manager, train_calls)
@@ -1544,6 +1935,6 @@ class TestC15AdapterMintedPositivePath:
             evidence["dual_probe"]["student_candidate_id"]
             == PINNED_STUDENT_CANDIDATE_ID
         )
-        # re-validated on EVERY reuse: the bindings still hold, so the
-        # next session reuses the same verified window
+        # 5. re-validated on EVERY reuse: the bindings still hold, so
+        # the next session reuses the same verified window
         assert manager.build_training_batch()["training_permitted"] is True

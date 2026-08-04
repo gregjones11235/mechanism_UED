@@ -47,9 +47,16 @@ hash and the candidate-set hash — and every entry's artifact_id must
 equal the teacher's internal registry. A provenance string alone (even
 the exact CANDIDATE_EVALUATION value) NEVER certifies REUSE.
 
-C15 attestation binding: caller-supplied probe strings alone NEVER
-suffice either — the dual-probe block must match an ADAPTER-MINTED
-attestation (``record_dual_probe_attestation``), bound to the pinned
+C15 attestation binding (REQUEST_CHANGES fix): caller-supplied probe
+strings alone NEVER suffice either — probe evidence is accepted ONLY
+as an immutable ``eval_adapter.DualProbeResult`` ISSUED by this
+teacher's internal candidate-evaluation adapter registry
+(``consume_candidate_eval_result``). A caller-shaped mapping (even
+with all-valid fields), a directly constructed result, or a result
+citing an unregistered/fake adapter is refused. Every issued result
+binds Student/Reference probe ids + sha256 hashes, Student/Reference
+CHECKPOINT hashes, the review window id/hash, the ordered
+candidate-set hash and the episode reset protocol to the pinned
 strong Student and the CURRENT frozen Reference candidate, and every
 stored binding (registry artifact/spec/code hashes, window id/hash,
 candidate-set hash, Reference identity hash, manifest sha, probes) is
@@ -68,11 +75,12 @@ validated; ``status_report`` says so explicitly.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..static_llm.guards import raise_if_forbidden, scan_text
 from . import anchor_manifest as AM
+from . import eval_adapter as EA
 from . import layout
 from . import metrics as MT
 from . import selector
@@ -157,22 +165,6 @@ _DUAL_PROBE_FIELDS = (
     "student_candidate_id",
     "student_probe_id",
     "student_probe_hash",
-    "reference_probe_id",
-    "reference_probe_hash",
-)
-
-#: C15: fields of an ADAPTER-MINTED dual-probe attestation. The probe
-#: ids/hashes a snapshot carries are only accepted if they were minted
-#: through ``record_dual_probe_attestation`` — caller-supplied strings
-#: alone never suffice. The attestation binds the probes to the minting
-#: adapter, the pinned strong Student and the frozen Reference candidate
-#: that was current at mint time.
-_PROBE_ATTESTATION_FIELDS = (
-    "adapter_id",
-    "student_candidate_id",
-    "student_probe_id",
-    "student_probe_hash",
-    "reference_candidate_id",
     "reference_probe_id",
     "reference_probe_hash",
 )
@@ -469,9 +461,18 @@ class E1FormalGenManager:
         # selection is certified via record_verified_batch; while None,
         # every batch trains nothing.
         self._verified_batch_snapshot: Optional[Dict[str, Any]] = None
-        # C15: adapter-minted dual-probe attestations — the ONLY source
-        # of admissible probe ids/hashes. Caller-supplied probe strings
-        # that match no minted attestation never certify REUSE.
+        # C15 (REQUEST_CHANGES fix): the INTERNAL candidate-evaluation
+        # adapter registry — the ONLY mint path for dual-probe
+        # evidence. Adapters register fail-closed; results are issued
+        # ONLY inside the registry as immutable DualProbeResult
+        # objects. No caller-shaped mapping is ever accepted.
+        self._eval_adapter_registry = EA.CandidateEvalAdapterRegistry()
+        # C15: consumed registry-issued dual-probe results (stored as
+        # plain dicts of the immutable result's fields, with the full
+        # evidence chain: probes, checkpoints, window id/hash,
+        # candidate-set hash, reset protocol). A snapshot's probe block
+        # certifies REUSE only if it matches one of these records in
+        # scope (window + candidate set + CURRENT Reference).
         self._probe_attestations: List[Dict[str, str]] = []
 
     # ------------------------------------------------------------------
@@ -852,8 +853,11 @@ class E1FormalGenManager:
         ids + sha256 hashes on the pinned strong Student). Ids plus a
         provenance string alone NEVER certify a trainable batch.
 
-        C15: the probe block must match an ADAPTER-MINTED attestation;
-        caller-supplied probe strings alone never certify promotion.
+        C15: the probe block must match a dual-probe result ISSUED by
+        the internal candidate-evaluation adapter registry, bound to
+        this exact window, candidate set and the CURRENT frozen
+        Reference; caller-supplied probe strings (or mappings) alone
+        never certify promotion.
         """
         ids = list(promoted_dynamic_ids or ())
         blocked = self.current_blocked_codes()
@@ -959,8 +963,10 @@ class E1FormalGenManager:
             )
         # certified: this window becomes the REUSE source for the next
         # session. C15: _certify_dynamic_window itself validates the
-        # probe block AND requires an adapter-minted attestation, so the
-        # choke point stays fail-closed even for direct callers.
+        # probe block AND requires a dual-probe result ISSUED by the
+        # internal candidate-evaluation adapter registry (bound to this
+        # window + candidate set), so the choke point stays fail-closed
+        # even for direct callers.
         self._certify_dynamic_window(
             window_ids.pop(), ids, _VERIFIED_SNAPSHOT_PROVENANCE,
             "e1_formal.batch.promotion", dual_probe=dual_probe,
@@ -994,157 +1000,190 @@ class E1FormalGenManager:
         return copy
 
     # ------------------------------------------------------------------
-    # C15: adapter-minted dual-probe attestations (caller-supplied
-    # probe strings alone never certify REUSE)
+    # C15 (REQUEST_CHANGES fix): dual-probe evidence is minted ONLY by
+    # the internal candidate-evaluation adapter registry and consumed
+    # ONLY as immutable registry-issued results. Caller-shaped mappings
+    # — even with all-valid fields — are NEVER accepted.
     # ------------------------------------------------------------------
     @property
     def probe_attestations(self) -> List[Dict[str, str]]:
-        """Read-only copy of the minted dual-probe attestations (audit)."""
+        """Read-only copy of the consumed dual-probe results (audit)."""
         return [dict(att) for att in self._probe_attestations]
 
-    def record_dual_probe_attestation(
-        self, attestation: Any
+    @property
+    def eval_adapter_registry(self) -> EA.CandidateEvalAdapterRegistry:
+        """The internal candidate-evaluation adapter registry.
+
+        The ONLY mint path for dual-probe evidence: adapters register
+        fail-closed, results are issued inside the registry as
+        immutable ``DualProbeResult`` objects, and the teacher consumes
+        only registry-issued instances (``consume_candidate_eval_result``).
+        """
+        return self._eval_adapter_registry
+
+    def register_candidate_eval_adapter(
+        self, spec: Any
+    ) -> EA.RegisteredAdapter:
+        """Register ONE candidate-evaluation adapter (fail-closed).
+
+        Delegates to the internal registry: exact spec field set,
+        non-empty non-placeholder adapter id/version, a sha256-hex
+        adapter hash, and the pinned dual-probe capability. A fake or
+        malformed adapter never enters the registry, so it can never
+        issue probe evidence.
+        """
+        return self._eval_adapter_registry.register_adapter(spec)
+
+    def consume_candidate_eval_result(
+        self, result: Any
     ) -> Dict[str, str]:
-        """Mint ONE adapter dual-probe attestation (C15).
+        """Consume ONE registry-issued dual-probe result (C15 fix).
 
         The CC4 evaluation seam (StudentAdapter + frozen Reference) is
-        the only producer of real probe evidence; this consumer mints
-        its record so that later REUSE certification can refuse any
-        probe ids/hashes that were never minted. Fail-closed:
+        the only producer of real probe evidence; this is the ONLY
+        consumer entry point. Fail-closed:
 
+        * ONLY an immutable ``eval_adapter.DualProbeResult`` is
+          accepted — a caller-shaped mapping (even with ALL valid
+          fields), ``None``, a list or any other type is refused
+          outright;
+        * the result must have been ISSUED by this teacher's own
+          candidate-evaluation adapter registry — a directly
+          constructed (or mutated) result with identical fields is an
+          UNKNOWN result and never certifies anything;
         * the Reference identity contract must be frozen RIGHT NOW —
           probes run against the frozen Reference or not at all;
-        * exact field set (unknown fields refused); ``adapter_id`` is
-          the minting adapter's identity and must be non-empty;
         * ``student_candidate_id`` must be exactly the pinned strong
           Student; ``reference_candidate_id`` must equal the CURRENT
-          frozen contract's candidate id (an attestation minted under a
+          frozen contract's candidate id, ``reference_checkpoint_hash``
+          the contracted params sha256, and the episode reset protocol
+          id/hash the contracted protocol (a result minted under a
           re-frozen Reference never certifies again);
-        * Student and Reference probe ids must be non-empty and
-          DISTINCT, and both probe hashes must be lowercase sha256 hex;
-          identical ids or hashes (a swapped/degenerate probe pair) are
-          refused.
+        * the window id/hash and candidate-set hash carried by the
+          result become the SCOPE of any later REUSE certification.
 
-        Returns the cleaned attestation; an exact duplicate is minted
-        only once. Raises GenManagerError with a greppable code on ANY
-        violation. No file/network I/O, no training.
+        Returns the stored record (all result fields); an exact
+        duplicate is consumed only once. Raises GenManagerError with a
+        greppable code on ANY violation. No file/network I/O, no
+        training.
         """
-        ctx = "e1_formal.record_dual_probe_attestation"
+        ctx = "e1_formal.consume_candidate_eval_result"
+        if not isinstance(result, EA.DualProbeResult):
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
+                f"{ctx}: caller-shaped mappings are NEVER accepted — "
+                "expected an immutable DualProbeResult issued by the "
+                "candidate-evaluation adapter registry, got "
+                f"{type(result).__name__}",
+            )
         if self._reference_contract is None:
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_BLOCKED,
-                f"{ctx}: cannot mint a dual-probe attestation while the "
+                f"{ctx}: cannot consume dual-probe evidence while the "
                 "Reference identity is unfrozen "
                 "(REFERENCE_CONTRACT_UNFROZEN)",
             )
-        if not isinstance(attestation, Mapping):
+        if not self._eval_adapter_registry.lookup_result(result):
             raise GenManagerError(
-                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
-                f"{ctx}: attestation must be a mapping, got "
-                f"{type(attestation).__name__}",
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: this DualProbeResult was never ISSUED by this "
+                "teacher's candidate-evaluation adapter registry — a "
+                "directly constructed or forged result (unknown result) "
+                "never certifies REUSE",
             )
-        unknown = sorted(
-            k for k in attestation if k not in _PROBE_ATTESTATION_FIELDS
-        )
-        if unknown:
-            raise GenManagerError(
-                GEN_MANAGER_SNAPSHOT_BAD_TYPE,
-                f"{ctx}: unknown attestation field(s) {unknown}",
-            )
-        for name in _PROBE_ATTESTATION_FIELDS:
-            if name not in attestation:
-                raise GenManagerError(
-                    GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
-                    f"{ctx}: attestation missing field {name!r}",
-                )
-        adapter_id = attestation["adapter_id"]
-        if not isinstance(adapter_id, str) or not adapter_id.strip():
-            raise GenManagerError(
-                GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
-                f"{ctx}: attestation needs a non-empty adapter_id",
-            )
-        student_candidate_id = attestation["student_candidate_id"]
-        if student_candidate_id != PINNED_STUDENT_CANDIDATE_ID:
+        contracted = self._reference_contract
+        if result.student_candidate_id != PINNED_STUDENT_CANDIDATE_ID:
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_MISMATCH,
                 f"{ctx}: dual probes must run on the pinned strong "
                 f"Student {PINNED_STUDENT_CANDIDATE_ID!r}, got "
-                f"{student_candidate_id!r}",
+                f"{result.student_candidate_id!r}",
             )
-        reference_candidate_id = attestation["reference_candidate_id"]
-        contracted = self._reference_contract.candidate_id
-        if reference_candidate_id != contracted:
+        if result.reference_candidate_id != contracted.candidate_id:
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_MISMATCH,
                 f"{ctx}: reference_candidate_id "
-                f"{reference_candidate_id!r} != the CURRENT frozen "
-                f"Reference candidate {contracted!r}",
+                f"{result.reference_candidate_id!r} != the CURRENT "
+                f"frozen Reference candidate {contracted.candidate_id!r}",
             )
-        for name in ("student_probe_id", "reference_probe_id"):
-            value = attestation[name]
-            if not isinstance(value, str) or not value.strip():
-                raise GenManagerError(
-                    GEN_MANAGER_SNAPSHOT_MISSING_FIELD,
-                    f"{ctx}: attestation needs non-empty {name!r}",
-                )
+        if result.reference_checkpoint_hash != contracted.params_sha256:
+            raise GenManagerError(
+                GEN_MANAGER_SNAPSHOT_MISMATCH,
+                f"{ctx}: reference_checkpoint_hash "
+                f"{result.reference_checkpoint_hash!r} != the CURRENT "
+                f"contracted Reference params sha256 "
+                f"{contracted.params_sha256!r}",
+            )
         if (
-            attestation["student_probe_id"]
-            == attestation["reference_probe_id"]
+            result.episode_reset_protocol_id
+            != contracted.episode_reset_protocol_id
         ):
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_MISMATCH,
-                f"{ctx}: Student and Reference probes must be DISTINCT "
-                "(both probe ids are identical — a swapped or "
-                "degenerate probe pair)",
+                f"{ctx}: episode_reset_protocol_id "
+                f"{result.episode_reset_protocol_id!r} != the CURRENT "
+                "contracted episode reset protocol "
+                f"{contracted.episode_reset_protocol_id!r}",
             )
-        for name in ("student_probe_hash", "reference_probe_hash"):
-            value = attestation[name]
-            if not _is_sha256_hex(value):
-                raise GenManagerError(
-                    GEN_MANAGER_SNAPSHOT_BAD_TYPE,
-                    f"{ctx}: attestation field {name!r} must be "
-                    f"lowercase sha256 hex (64 chars), got {value!r}",
-                )
         if (
-            attestation["student_probe_hash"]
-            == attestation["reference_probe_hash"]
+            result.episode_reset_protocol_hash
+            != contracted.episode_reset_protocol_hash
         ):
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_MISMATCH,
-                f"{ctx}: Student and Reference probes must be DISTINCT "
-                "(both probe hashes are identical — a swapped or "
-                "degenerate probe pair)",
+                f"{ctx}: episode_reset_protocol_hash does not match the "
+                "CURRENT contracted episode reset protocol hash",
             )
-        cleaned = {
-            name: attestation[name] for name in _PROBE_ATTESTATION_FIELDS
-        }
-        if cleaned not in self._probe_attestations:
-            self._probe_attestations.append(cleaned)
-        return dict(cleaned)
+        record = asdict(result)
+        if record not in self._probe_attestations:
+            self._probe_attestations.append(record)
+        return dict(record)
 
-    def _dual_probe_attested(self, probe: Mapping[str, str]) -> bool:
-        """True iff ``probe`` matches a minted attestation bound to the
-        CURRENT frozen Reference candidate (C15)."""
+    def _dual_probe_attested(
+        self,
+        probe: Mapping[str, str],
+        window_id: str,
+        window_hash: str,
+        candidate_set_hash: str,
+    ) -> bool:
+        """True iff ``probe`` matches a consumed registry-issued result
+        bound to this exact window, candidate set and the CURRENT
+        frozen Reference candidate (C15)."""
         if self._reference_contract is None:
             return False
         contracted = self._reference_contract.candidate_id
         for att in self._probe_attestations:
             if att["reference_candidate_id"] != contracted:
                 continue
+            if att["window_id"] != window_id:
+                continue
+            if att["window_hash"] != window_hash:
+                continue
+            if att["candidate_set_hash"] != candidate_set_hash:
+                continue
             if all(att[name] == probe[name] for name in _DUAL_PROBE_FIELDS):
                 return True
         return False
 
     def _require_attested_dual_probe(
-        self, probe: Mapping[str, str], ctx: str
+        self,
+        probe: Mapping[str, str],
+        ctx: str,
+        window_id: str,
+        window_hash: str,
+        candidate_set_hash: str,
     ) -> None:
-        """Fail closed unless ``probe`` matches a minted attestation."""
-        if not self._dual_probe_attested(probe):
+        """Fail closed unless ``probe`` matches a registry-issued
+        dual-probe result bound to this window/candidate set."""
+        if not self._dual_probe_attested(
+            probe, window_id, window_hash, candidate_set_hash
+        ):
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_MISMATCH,
-                f"{ctx}: dual_probe matches no adapter-minted "
-                "attestation — caller-supplied probe ids/hashes alone "
-                "never certify REUSE",
+                f"{ctx}: dual_probe matches no adapter-issued dual-probe "
+                "attestation bound to this window, candidate set and "
+                "the CURRENT frozen Reference — caller-supplied probe "
+                "ids/hashes alone never certify REUSE",
             )
 
     def record_verified_batch(self, snapshot: Any) -> Dict[str, Any]:
@@ -1169,9 +1208,12 @@ class E1FormalGenManager:
           every one of the 12 tasks, and the ``candidate_set_hash``
           over the ordered certified candidate set;
         * C15 attestation binding: the ``dual_probe`` block must match
-          an ADAPTER-MINTED attestation (``record_dual_probe_attestation``)
-          bound to the CURRENT frozen Reference candidate — caller-
-          supplied probe ids/hashes alone never suffice;
+          a dual-probe result ISSUED by the internal candidate-
+          evaluation adapter registry and consumed via
+          ``consume_candidate_eval_result``, bound to this exact
+          window, candidate set and the CURRENT frozen Reference —
+          caller-supplied probe ids/hashes (or mappings) alone never
+          suffice;
         * EXACTLY 12 unique dynamic entries, each bound to a
           compiled artifact in this teacher's own registry with
           matching artifact_id, spec_hash and code sha256 (no entry
@@ -1270,10 +1312,6 @@ class E1FormalGenManager:
         probe = _validate_dual_probe(
             snapshot["dual_probe"], f"{ctx}.dual_probe"
         )
-        # C15: well-formed probe strings alone never suffice — they must
-        # match an adapter-minted attestation bound to the CURRENT
-        # frozen Reference candidate
-        self._require_attested_dual_probe(probe, f"{ctx}.dual_probe")
         anchor_ids = snapshot["anchor_task_ids"]
         if not isinstance(anchor_ids, (list, tuple)) or tuple(
             anchor_ids
@@ -1432,6 +1470,17 @@ class E1FormalGenManager:
                 f"canonical hash over the certified candidate set "
                 f"{contracted_set_hash!r}",
             )
+        # C15: well-formed probe strings alone never suffice — they must
+        # match a dual-probe result ISSUED by the internal adapter
+        # registry, bound to this exact window, candidate set and the
+        # CURRENT frozen Reference candidate
+        self._require_attested_dual_probe(
+            probe,
+            f"{ctx}.dual_probe",
+            window_id.strip(),
+            window_hash,
+            contracted_set_hash,
+        )
         stored = {
             "window_id": window_id.strip(),
             "window_hash": window_hash,
@@ -1466,15 +1515,17 @@ class E1FormalGenManager:
         reuse the WHOLE snapshot is re-checked against the CURRENT
         internal state: gate blockers, provenance, canonical anchors,
         the current frozen anchor manifest sha, the current frozen
-        Reference candidate and identity hash, the adapter-minted
-        dual-probe attestations, and — for every one of the 12 dynamic
-        tasks — the registry's artifact_id, spec_hash, code sha256,
-        window id and window hash, plus the candidate-set hash over the
-        ORDERED certified ids. ANY inconsistency (a stale window, a
-        re-frozen Reference or reset protocol, a changed manifest, a
-        reordered candidate set, a tampered stored snapshot, an
-        unattested probe) invalidates REUSE: the batch trains nothing.
-        Never raises — any surprise is False (fail-closed).
+        Reference candidate and identity hash, the adapter-registry-
+        ISSUED dual-probe results (matched in scope: window id/hash +
+        candidate-set hash + CURRENT Reference candidate), and — for
+        every one of the 12 dynamic tasks — the registry's artifact_id,
+        spec_hash, code sha256, window id and window hash, plus the
+        candidate-set hash over the ORDERED certified ids. ANY
+        inconsistency (a stale window, a re-frozen Reference or reset
+        protocol, a changed manifest, a reordered candidate set, a
+        tampered stored snapshot, an unissued/out-of-scope probe)
+        invalidates REUSE: the batch trains nothing. Never raises —
+        any surprise is False (fail-closed).
         """
         if not isinstance(snapshot, Mapping):
             return False
@@ -1510,23 +1561,27 @@ class E1FormalGenManager:
             self._reference_contract
         ):
             return False
-        # C15: dual probes must still be structurally valid AND match a
-        # minted attestation bound to the CURRENT Reference candidate
-        try:
-            probe = _validate_dual_probe(
-                snapshot["dual_probe"], "e1_formal.reuse.dual_probe"
-            )
-        except GenManagerError:
-            return False
-        if not self._dual_probe_attested(probe):
-            return False
         window_id = snapshot["window_id"]
         if not isinstance(window_id, str) or not window_id.strip():
             return False
         window_hash = snapshot["window_hash"]
         if not _is_sha256_hex(window_hash):
             return False
-        if not _is_sha256_hex(snapshot["candidate_set_hash"]):
+        candidate_set_hash = snapshot["candidate_set_hash"]
+        if not _is_sha256_hex(candidate_set_hash):
+            return False
+        # C15: dual probes must still be structurally valid AND match a
+        # registry-ISSUED result bound to this window, candidate set
+        # and the CURRENT Reference candidate
+        try:
+            probe = _validate_dual_probe(
+                snapshot["dual_probe"], "e1_formal.reuse.dual_probe"
+            )
+        except GenManagerError:
+            return False
+        if not self._dual_probe_attested(
+            probe, window_id.strip(), window_hash, candidate_set_hash
+        ):
             return False
         raw_tasks = snapshot["dynamic_tasks"]
         if not isinstance(raw_tasks, (list, tuple)):
@@ -1588,13 +1643,13 @@ class E1FormalGenManager:
         window whose registry records carry no window hash can never
         be certified (fail-closed).
 
-        C15: the dual-probe block is validated HERE and must match an
-        adapter-minted attestation — this method is the certification
-        choke point, so even a direct call can never store unattested
-        probe strings.
+        C15: the dual-probe block is validated HERE and must match a
+        dual-probe result ISSUED by the internal candidate-evaluation
+        adapter registry, bound to this exact window, candidate set
+        and the CURRENT frozen Reference — this method is the
+        certification choke point, so even a direct call can never
+        store unissued probe strings.
         """
-        probe = _validate_dual_probe(dual_probe, f"{ctx}.dual_probe")
-        self._require_attested_dual_probe(probe, f"{ctx}.dual_probe")
         entries = []
         window_hashes = set()
         for task_id in dynamic_ids:
@@ -1617,9 +1672,18 @@ class E1FormalGenManager:
                 f"carry no single non-empty window_hash "
                 f"(got {sorted(window_hashes)})",
             )
+        window_hash = next(iter(window_hashes))
+        probe = _validate_dual_probe(dual_probe, f"{ctx}.dual_probe")
+        self._require_attested_dual_probe(
+            probe,
+            f"{ctx}.dual_probe",
+            window_id,
+            window_hash,
+            canonical_sha256(list(dynamic_ids)),
+        )
         self._verified_batch_snapshot = {
             "window_id": window_id,
-            "window_hash": next(iter(window_hashes)),
+            "window_hash": window_hash,
             "provenance": provenance,
             "reference_candidate_id": (
                 self._reference_contract.candidate_id
@@ -1700,12 +1764,14 @@ class E1FormalGenManager:
                 "no dynamic task is ever promoted without real probes; "
                 "while hard gates block, the batch trains NOTHING (zero "
                 "updates, no anchors-only sneak); REUSE is only the "
-                "previous window's verified 12+4 with ADAPTER-MINTED "
-                "dual-probe attestations, Reference identity, window "
-                "and candidate-set hash evidence, re-validated against "
-                "the current internal state on every reuse — a "
-                "provenance string or caller-supplied probe strings "
-                "alone never certify it",
+                "previous window's verified 12+4 with dual-probe "
+                "results ISSUED by the internal candidate-evaluation "
+                "adapter registry, Reference identity, checkpoint, "
+                "window, candidate-set and reset-protocol hash "
+                "evidence, re-validated against the current internal "
+                "state on every reuse — a provenance string, a "
+                "caller-shaped mapping or caller-supplied probe "
+                "strings alone never certify it",
             ],
         }
 

@@ -262,6 +262,75 @@ REUSE**，必须携带全部结构化证据，逐字段 fail-closed。
   CC4 双 probe 记录到位前，生产路径永远落在阻断侧。`b5536d3` 的
   阻断零训练行为保持不变；REAL_* 标志保持 false。
 
+### C15-RC 修订（总控 REQUEST_CHANGES）：铸造绑定内部 registry +
+不可变结果对象——关闭
+
+**指令**：C15 首版的 `record_dual_probe_attestation` 是公开调用方
+方法——任何调用方可传入任意非空 `adapter_id` + 合法格式的 id/哈希
+先铸一条假 attestation，再凭它认证 REUSE。无 adapter 能力/注册表/
+真实评价结果查询 ⇒ 「先铸假、再认证」攻击面成立。要求：铸造绑定
+内部候选评价 adapter registry/结果对象与不可变 Student/Reference/
+checkpoint/window/protocol 证据；即便字段全合法也拒绝调用方形状的
+映射；补直接铸造/假 adapter/未知结果负例与 1 条 adapter 签发正路径。
+
+已实施（**上述 mapping 铸造缝已删除**；违反即 fail-closed）：
+
+1. **新模块 `e1_formal/eval_adapter.py`（纯 stdlib）**：
+   - `CandidateEvalAdapterRegistry`：adapter 仅经 fail-closed 注册
+     进入（字段集固定、id/version 非空非占位、adapter_hash
+     sha256-hex、能力串必恰为 pinned
+     `candidate_evaluation_dual_probe_v1`；同 id 异 spec 冲突拒、
+     同 spec 重注册幂等）。
+   - 签发只在 registry 内部（`issue_dual_probe_result`，**仅关键字
+     标量参数，铸造链上无任何 mapping 入参**），且只认**已注册**
+     adapter——假/未知 adapter ⇒ `EVAL_ADAPTER_UNKNOWN`，对象根本
+     不会被创建。
+   - `DualProbeResult`：frozen dataclass，14 字段完整证据链
+     （Student/Reference 候选 id、**Student/Reference checkpoint
+     哈希**、probe id+sha256、窗口 id/哈希、按序候选集哈希、episode
+     reset 协议 id+哈希）；构造即 fail-closed 校验（全部 str 非空、
+     占位值拒、7 个哈希字段 sha256-hex、probe id/哈希互异）。
+2. **教师消费端 `consume_candidate_eval_result`**（替换旧铸造法）：
+   只接受 `DualProbeResult` 实例——调用方形状映射（**字段全合法也
+   拒**）/None/list/str/int ⇒ SNAPSHOT_BAD_TYPE「NEVER accepted」；
+   必须为本教师 registry **签发过**的成员（直接构造或
+   `dataclasses.replace` 变形 ⇒ 未知结果 ⇒ SNAPSHOT_MISMATCH）；
+   Reference 契约必须当前冻结（SNAPSHOT_BLOCKED）；绑定当前契约：
+   pinned Student、Reference 候选 id、Reference checkpoint
+   （params_sha256）、reset 协议 id+哈希（任一不符 ⇒ MISMATCH）；
+   结果携带的窗口 id/哈希与候选集哈希成为后续 REUSE 认证的**作用域**。
+3. **作用域化认证匹配**：`_dual_probe_attested` /
+   `_require_attested_dual_probe` 现要求已消费记录同时匹配窗口 id、
+   窗口哈希、候选集哈希、5 个 probe 字段与**当前** Reference 候选；
+   `record_verified_batch` 的 attestation 检查移到候选集哈希核算
+   之后；`_certify_dynamic_window` 先核 registry 证据与窗口哈希、
+   后验 probe 作用域；`_snapshot_still_valid` 逐次 REUSE 以快照自身
+   窗口/候选集哈希复核作用域。
+4. **负例矩阵**：注册 fail-closed（非映射/未知字段/逐字段缺失/空或
+   占位 id/坏哈希/错能力/冲突重注册）；签发 fail-closed（**假/未知
+   adapter**、未注册任何 adapter、未知字段、14 字段逐一缺失、7 哈希
+   字段坏值、空 id 字段、同 probe id/哈希、占位窗口 id、不可变性、
+   变形副本非签发成员、重复签发去重）；**直接铸造拒绝**（字段全合法
+   的映射、真实结果的映射副本、None/list/str/int、**直接构造的
+   合法 DualProbeResult（即便引用已注册 adapter id）**、签发结果的
+   replace 变形、阻断教师消费）；**证据链绑定**（错 Reference
+   checkpoint 哈希、错 reset 协议 id/哈希、非 pinned Student、非当前
+   Reference 候选 ⇒ 消费即拒；为**他窗口/他候选集**签发的结果 ⇒
+   认证即拒）；1 条 adapter 签发正路径（注册⇒签发⇒消费⇒认证⇒
+   REUSE 恰训练一次，下一次复用仍过全量复核）。晋升正例补窗口 B
+   作用域签发（窗口 A 的结果不能覆盖窗口 B 的候选集）。
+- 证据：`tests/e1_formal/test_training_gate.py` C15 类重写为 6 类
+  共 121 条（registry 注册/签发 fail-closed 矩阵 80、直接铸造/
+  伪造/证据链/作用域 18、调用方串不足 4、逐次 REUSE 复核 13、
+  直接私有旁路 5、adapter 签发正路径 1；C13/C14 各类 111 条沿用）。
+  全套 **1124 passed / 5 skipped**。
+- 诚实声明：正路径 adapter/checkpoint/probe 值均为明示 FIXTURE；
+  Student checkpoint 哈希本轮仅作格式校验的不可变证据，真实 Student
+  checkpoint 核验待 CC4；`issue_dual_probe_result(**mapping)` 在
+  Python 层面仍可被解包调用，但每个值都经 fail-closed 类型/格式校验
+  且仅已注册 adapter 可签发、教师只认 registry 成员实例。真实 CC4
+  双 probe 到位前生产路径恒阻断；REAL_* 标志保持 false。
+
 ## 待总控冻结项清单
 
 1. **Reference 身份**（G1 身份值 + manifest hash）；
