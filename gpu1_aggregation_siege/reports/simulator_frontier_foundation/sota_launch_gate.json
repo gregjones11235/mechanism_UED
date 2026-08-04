@@ -38,7 +38,7 @@
     "FOUNDATION_READY means A AND B AND C AND D ONLY (base gates); it must never be phrased as 'direction 3 trainable' or 'SOTA ready'",
     "TWO_LLM_GATE_CONTRACT_ONLY means CONTRACT_AND_FAKE_CLIENT_TEST_READY and nothing more; REAL_TWO_LLM_CALL_EXECUTED stays false until a real authorized double-LLM run executes",
     "SHARED_ANCHOR_MANIFEST_BOUND stays false with status BLOCKED_SHARED_ANCHOR_MANIFEST until the shared frozen manifest signed by the controller arrives; anchor science content is never self-invented",
-    "COMBINED_FRESH_PROCESS_RESTORE stays false until run_combined_restore executes in ONE fresh process with every required component RESTORED; env-only PASS /\\ checkpoint-only PASS is NOT a joint proof",
+    "COMBINED_FRESH_PROCESS_RESTORE stays false until the production driver fresh_process_restore.run_fresh_process_restore_production spawns exactly ONE child process whose atomic evidence (real child PID/PPID/argv/start-end/exit=0 + per-component authoritative path/treedef/leaf count-order-shape-dtype-value hashes + exact checkpoint/Student-ABI/registry/manifest hashes + next-policy-step replay) verifies green on REAL artifacts; the callback driver run_combined_restore is frozen contract-level only (in-process callbacks, self-asserted statuses, never a production proof); env-only PASS /\\ checkpoint-only PASS is NOT a joint proof",
     "REAL_CHECKPOINT_LOADED / REAL_FORWARD_SMOKE_PASS are read-only R4b statements; forward smoke is never a performance evaluation",
     "DISCOVERY_FORMAL_PROVENANCE_ISOLATED stays false until the controller injects the REAL frozen formal asset identity registry; until then only DISCOVERY_PROVENANCE_CONTRACT_READY may be claimed, with status BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY (registry-bound contract + bypass-closure tests are green, but synthetic registries in tests are fixtures, not real isolation proof)",
     "PRODUCTION capture paths are mechanically restricted to the controller injection slot: inject_frozen_formal_asset_registry binds ONLY usage=PRODUCTION registries and validate_capture_provenance_production reads ONLY that slot (never synthetic fixtures); TEST_ONLY registries can never enter the production slot, an un-injected PRODUCTION registry used directly is rejected, and while unbound the production entry point fails closed with BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY"
@@ -77,7 +77,7 @@
   "sota_launch_blockers_this_round": [
     "E not executed: no real actual-N search (zero paid API / zero long jobs this round by standing order)",
     "F not executed: zero training updates this round by standing order",
-    "COMBINED_FRESH_PROCESS_RESTORE false: optimizer/train-rng/policy-memory/history restore is Phase 2; the audited CC2 pkl carries params + manifest only",
+    "COMBINED_FRESH_PROCESS_RESTORE false: optimizer/train-rng/policy-memory/history restore is Phase 2; the audited CC2 pkl carries params + manifest only; the single-fresh-process production driver and its mechanical evidence verification are contract-ready (labelled synthetic subprocess evidence green), but no real artifact run has executed",
     "SHARED_ANCHOR_MANIFEST_BOUND false: awaiting the controller-signed shared manifest",
     "DISCOVERY_FORMAL_PROVENANCE_ISOLATED false: awaiting the controller-injected frozen formal asset identity registry (BLOCKED_WAITING_FROZEN_FORMAL_ASSET_REGISTRY); contract + allowlist binding + forbidden identity sweep are implemented and bypass-closure tests are green, but only synthetic fixture registries exist this round"
   ]
