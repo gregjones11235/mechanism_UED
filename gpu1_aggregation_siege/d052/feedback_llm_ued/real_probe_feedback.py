@@ -29,6 +29,11 @@ from pydantic import Field, model_validator
 
 from d052.bagr_ued.hashing import verify_content_hash
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.executable_env_artifact import (
+    ExecutableEnvironmentArtifact,
+    assert_candidate_artifact_binding,
+    bind_candidate_to_artifact,
+)
 from d052.feedback_llm_ued.execution_mode import FeedbackLaunchGate
 from d052.feedback_llm_ued.feedback_contracts import (
     CandidateEnvironment,
@@ -199,10 +204,72 @@ class RealProbeFeedbackRunner:
         #: per-candidate evidence trail (candidate_id -> list of per-stage
         #: evidence dicts): what the ProbeMetrics interface alone cannot
         #: carry — the checkpoint hashes the shared runner signed, the
-        #: seed bank, the episode counts (= CI-sample count). Feedback
-        #: record builders bind provenance from this trail; it is derived
+        #: seed bank, the episode counts (= CI-sample count), and the
+        #: executable artifact the probe executed. Feedback record
+        #: builders bind provenance from this trail; it is derived
         #: observation data, never a source of metrics.
         self.probe_evidence: Dict[str, List[dict]] = {}
+        #: P0-2 (CC3 follow-up audit): the executable environment
+        #: artifacts this probe is allowed to execute — artifact_id ->
+        #: immutable artifact. Probes without a bound artifact fail
+        #: closed; there is no symbolic stand-in.
+        self._executable_artifacts: Dict[str,
+                                         ExecutableEnvironmentArtifact] = {}
+
+    # ---------------------------------------------------------- artifacts
+    def bind_executable_artifacts(self, artifacts
+                                  ) -> None:
+        """Bind derived executable artifacts (one per environment family).
+
+        A rebind of the SAME artifact_id must be byte-identical (equal
+        artifact_hash); a conflicting rebind fails closed. Artifacts whose
+        runtime adapter is on the symbolic/blocked-seam rejection list are
+        refused.
+        """
+        for art in artifacts:
+            if art.runtime_adapter_id in FORBIDDEN_PRODUCTION_RUNNER_IDS:
+                raise RealProbeBlocked(
+                    "PRODUCTION_PATH_FORBIDDEN_RUNNER: artifact runtime "
+                    f"adapter {art.runtime_adapter_id!r} is on the "
+                    "rejection list")
+            existing = self._executable_artifacts.get(art.artifact_id)
+            if existing is not None \
+                    and existing.artifact_hash != art.artifact_hash:
+                raise RealProbeBlocked(
+                    "EXECUTABLE_ARTIFACT_REBIND_MISMATCH: artifact_id="
+                    f"{art.artifact_id!r} is already bound with hash "
+                    f"{existing.artifact_hash!r}; refusing conflicting "
+                    f"hash {art.artifact_hash!r}")
+            self._executable_artifacts[art.artifact_id] = art
+
+    def lookup_executable_artifact(self, *, environment_family: str
+                                   ) -> Optional[ExecutableEnvironmentArtifact]:
+        """The (single) artifact bound for one environment family, if any."""
+        bound = [a for a in self._executable_artifacts.values()
+                 if a.environment_family == environment_family]
+        if len(bound) > 1:
+            raise RealProbeBlocked(
+                "EXECUTABLE_ARTIFACT_FAMILY_CONFLICT: family "
+                f"{environment_family!r} has {len(bound)} bound artifacts")
+        return bound[0] if bound else None
+
+    def bind_candidates_to_executable_artifacts(self, candidates
+                                                ) -> List[CandidateEnvironment]:
+        """P0-2 controller seam: every production candidate enters the
+        probe funnel as a BOUND copy of its family's executable artifact
+        (new candidate_hash; unbound families fail closed)."""
+        bound: List[CandidateEnvironment] = []
+        for cand in candidates:
+            artifact = self.lookup_executable_artifact(
+                environment_family=cand.environment_family)
+            if artifact is None:
+                raise RealProbeBlocked(
+                    "EXECUTABLE_ARTIFACT_MISSING: family "
+                    f"{cand.environment_family!r} has no bound executable "
+                    "environment artifact; production candidates may not "
+                    "be probed without one")
+            bound.append(bind_candidate_to_artifact(cand, artifact))
+        return bound
 
     def probe(self, candidate: CandidateEnvironment, *, stage: str,
               student_episodes: int,
@@ -211,6 +278,19 @@ class RealProbeFeedbackRunner:
         if student_episodes <= 0 or reference_episodes <= 0:
             raise RealProbeBlocked(
                 "ILLEGAL_PROBE_EPISODES: must be positive")
+        #: P0-2 (CC3 follow-up audit): a production probe executes ONLY a
+        #: bound executable environment artifact. Missing artifact for the
+        #: family, an unbound candidate, or any id / hash / family
+        #: mismatch fails closed BEFORE any episode runs.
+        artifact = self.lookup_executable_artifact(
+            environment_family=candidate.environment_family)
+        if artifact is None:
+            raise RealProbeBlocked(
+                "EXECUTABLE_ARTIFACT_MISSING: no executable environment "
+                f"artifact is bound for family "
+                f"{candidate.environment_family!r}; a production probe "
+                "refuses to run without one")
+        assert_candidate_artifact_binding(candidate, artifact)
         seed_bank = self._seed_bank_source(
             candidate.candidate_hash, stage=stage,
             n=max(student_episodes, reference_episodes))
@@ -245,7 +325,11 @@ class RealProbeFeedbackRunner:
                  student_checkpoint_hash=str(
                      getattr(result, "student_checkpoint_hash", "")),
                  reference_checkpoint_hash=str(
-                     getattr(result, "reference_checkpoint_hash", ""))))
+                     getattr(result, "reference_checkpoint_hash", "")),
+                 #: P0-2: the exact executable artifact these episodes ran
+                 #: against — feedback provenance binds the SAME hash
+                 executable_artifact_id=artifact.artifact_id,
+                 executable_artifact_hash=artifact.artifact_hash))
         return metrics
 
 
@@ -261,6 +345,11 @@ class RealProbeProvenance(CanonicalModel):
     candidate_id: str = Field(min_length=1)
     candidate_hash: str = Field(min_length=1)
     environment_family: str = Field(min_length=1)
+    #: P0-2 (CC3 follow-up audit): the content hash of the executable
+    #: environment artifact the probe episodes actually ran against — the
+    #: SAME hash the candidate carried into the probe. A production probe
+    #: provenance without it is illegal (min_length=1, sha256-checked).
+    executable_artifact_hash: str = Field(min_length=1)
     changed_axes: Dict[str, str] = Field(default_factory=dict)
     held_constant_axes: Dict[str, str] = Field(default_factory=dict)
     predicted_metrics: Dict[str, float] = Field(default_factory=dict)
@@ -284,6 +373,10 @@ class RealProbeProvenance(CanonicalModel):
         if not is_sha256_hex(self.candidate_hash):
             raise ValueError(
                 f"CANDIDATE_HASH_NOT_SHA256: {self.candidate_hash!r}")
+        if not is_sha256_hex(self.executable_artifact_hash):
+            raise ValueError(
+                "EXECUTABLE_ARTIFACT_HASH_NOT_SHA256: "
+                f"{self.executable_artifact_hash!r}")
         for field_name in ("student_identity_hash",
                            "reference_identity_hash",
                            "student_checkpoint_hash",
@@ -346,6 +439,7 @@ def build_real_feedback_record(*, feedback_id: str,
                                student_checkpoint_hash: str = "",
                                reference_checkpoint_hash: str = "",
                                expected_observed_match: str,
+                               executable_artifact_hash: str,
                                match_detail: Optional[dict] = None
                                ) -> Tuple[SimulatorFeedbackRecord,
                                           RealProbeProvenance]:
@@ -358,10 +452,31 @@ def build_real_feedback_record(*, feedback_id: str,
       * wrong/missing student -> STUDENT_IDENTITY_MISMATCH
       * missing reference     -> REFERENCE_IDENTITY_MISSING
       * unknown hypothesis    -> UNKNOWN_HYPOTHESIS_ID
+      * missing/illegal artifact hash -> EXECUTABLE_ARTIFACT_HASH_MISSING /
+                                        EXECUTABLE_ARTIFACT_HASH_NOT_SHA256
     """
     if source_window < 0:
         raise RealProbeBlocked(
             f"FEEDBACK_WINDOW_MISMATCH: source_window={source_window}")
+    #: P0-2: the feedback record must bind the SAME executable artifact
+    #: hash the candidate carried into the probe — never empty, never hex-
+    #: shaped garbage
+    if not executable_artifact_hash:
+        raise RealProbeBlocked(
+            "EXECUTABLE_ARTIFACT_HASH_MISSING: a production feedback "
+            "record must bind the executable artifact hash its probe "
+            "executed")
+    if not is_sha256_hex(executable_artifact_hash):
+        raise RealProbeBlocked(
+            "EXECUTABLE_ARTIFACT_HASH_NOT_SHA256: "
+            f"{executable_artifact_hash!r}")
+    if candidate.executable_artifact_hash \
+            and candidate.executable_artifact_hash \
+            != executable_artifact_hash:
+        raise RealProbeBlocked(
+            "EXECUTABLE_ARTIFACT_HASH_MISMATCH: the candidate entered the "
+            f"probe bound to {candidate.executable_artifact_hash!r} but "
+            f"the feedback record binds {executable_artifact_hash!r}")
     if not candidate.distinguishes_hypothesis_ids:
         raise RealProbeBlocked(
             f"PROVENANCE_WITHOUT_HYPOTHESES: candidate "
@@ -395,6 +510,7 @@ def build_real_feedback_record(*, feedback_id: str,
         candidate_id=candidate.candidate_id,
         candidate_hash=candidate.candidate_hash,
         environment_family=candidate.environment_family,
+        executable_artifact_hash=executable_artifact_hash,
         changed_axes=dict(candidate.axis_values),
         held_constant_axes=dict(candidate.held_constant_axes),
         predicted_metrics=dict(predicted_signature),
@@ -433,6 +549,7 @@ def build_real_feedback_record(*, feedback_id: str,
             runner_id=runner_id,
             ci_sample_count=ci_sample_count,
             seed_bank_size=len(provenance.seed_bank),
+            executable_artifact_hash=executable_artifact_hash,
             production_path=True,
             symbolic_metrics_forbidden=True),
         student_identity_hash=student_binding.identity_hash,

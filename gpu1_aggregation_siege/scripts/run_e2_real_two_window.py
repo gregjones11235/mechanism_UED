@@ -58,6 +58,9 @@ from typing import Dict, List, Optional, Tuple
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued import persistence
 from d052.feedback_llm_ued.controller import FeedbackUEDController
+from d052.feedback_llm_ued.executable_env_artifact import (
+    derive_executable_artifacts,
+)
 from d052.feedback_llm_ued.execution_mode import (
     EXECUTION_MODE_REAL,
     FeedbackLaunchGate,
@@ -70,6 +73,8 @@ from d052.feedback_llm_ued.real_probe_feedback import (
     RealProbeFeedbackRunner,
     build_real_feedback_record,
 )
+from d052.feedback_llm_ued.simulator_feedback_store import MATCH_UNGRADED
+from d052.schemas.common import is_sha256_hex
 from d052.feedback_llm_ued.runtime_authorization import (
     RealRuntimeAuthorization,
     RuntimeAuthorizationBlocked,
@@ -202,7 +207,16 @@ def build_window_real_feedback(*, window: int, plan, candidates, batch,
                 "student_checkpoint_hash", ""),
             reference_checkpoint_hash=evidence.get(
                 "reference_checkpoint_hash", ""),
-            expected_observed_match="")
+            #: constructed UN-graded: grading is the comparator's job in a
+            #: LATER window; "" is not a legal match state
+            #: (ILLEGAL_MATCH_STATE) and the record schema refuses it
+            expected_observed_match=MATCH_UNGRADED,
+            #: P0-2: the SAME executable artifact hash the candidate
+            #: carried into the probe (the adapter's evidence trail
+            #: recorded it; build_real_feedback_record refuses empty /
+            #: mismatched values fail-closed)
+            executable_artifact_hash=str(
+                evidence.get("executable_artifact_hash", "")))
         records.append(record)
     return records
 
@@ -246,13 +260,42 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         shared_runner=bundle.probe_runner.runner, gate=gate,
         student_identity_hash=bundle.student.binding.identity_hash)
 
+    #: P0-2 (CC3 follow-up audit): the executable artifact's ABI/protocol
+    #: hashes are OWNER-DECLARED on the shared CandidateProbeRunner
+    #: (consume-only); any missing/non-sha256 declaration fails closed —
+    #: they are never guessed.
+    abi_hashes = {}
+    for field_name in ("observation_abi_hash", "action_abi_hash",
+                       "reward_contract_hash", "reset_protocol_hash",
+                       "step_protocol_hash"):
+        value = getattr(bundle.probe_runner.runner, field_name, None)
+        if not isinstance(value, str) or not is_sha256_hex(value):
+            raise RealTwoWindowBlocked(
+                f"EXECUTABLE_ARTIFACT_ABI_UNDECLARED: the shared "
+                f"CandidateProbeRunner must declare {field_name!r} as a "
+                f"sha256 hex string, got {value!r}")
+        abi_hashes[field_name] = value
+
     def real_env_coder(*, window, plan_id, directives, sequence):
         #: the window's 7th LLM-family call under the unique template,
-        #: journaled, with bounded repair and NO symbolic fallback
+        #: journaled, with bounded repair and NO symbolic fallback. On
+        #: success the run_sink derives the immutable executable artifacts
+        #: from the SAME verified objects and binds them into the probe
+        #: adapter — that is how the artifact reaches the Probe.
+        def _bind_executable_run(**run):
+            artifacts = derive_executable_artifacts(
+                spec=run["spec"], parsed=run["parsed"],
+                source_artifact=run["artifact"],
+                directives=list(directives),
+                runtime_adapter_id=str(bundle.probe_runner.runner.runner_id),
+                **abi_hashes)
+            probe_adapter.bind_executable_artifacts(artifacts)
+
         return execute_real_env_coder(
             window=window, plan_id=plan_id, directives=directives,
             backend=backend, authorization=authorization,
-            sequence=sequence, journal=journal)
+            sequence=sequence, journal=journal,
+            run_sink=_bind_executable_run)
 
     def probe_feedback_builder(*, window, plan, candidates, batch,
                                controller):

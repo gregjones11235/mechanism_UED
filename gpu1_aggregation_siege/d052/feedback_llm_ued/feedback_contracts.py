@@ -49,6 +49,16 @@ class CandidateEnvironment(CanonicalModel):
     real_adapter_status: str = C.REAL_SIMULATOR_PROBE_STATUS
     legality_hint: str = ("MOCK_ONLY — convert through the real TaskParams "
                           "adapter once unblocked; do not execute directly")
+    #: P0-2 (CC3 follow-up audit): production-probe binding. A candidate
+    #: probed on the production path must carry the executable environment
+    #: artifact realizing its axes (id + content hash), its own
+    #: parameter-variant hash and its seed-policy hash — all bound before
+    #: the probe; the production probe refuses candidates with any of them
+    #: empty or mismatched. Defaults empty = unbound (mock/symbolic path).
+    executable_artifact_id: str = ""
+    executable_artifact_hash: str = ""
+    parameter_variant_hash: str = ""
+    seed_policy_hash: str = ""
     candidate_hash: str = ""
 
     @model_validator(mode="after")

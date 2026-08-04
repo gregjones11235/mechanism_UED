@@ -47,6 +47,26 @@ numbers. Both modes keep six unique plan signatures and anon-citation
 resolution into honest ledger/revision ids; static keeps {MUTATE: 6}, a
 single plan signature and 0.0 coverage.
 
+CC3 follow-up P0-2 re-baseline (executable-artifact contract extension):
+the audit-mandated binding fields on CandidateEnvironment
+(executable_artifact_id / executable_artifact_hash /
+parameter_variant_hash / seed_policy_hash — all "" on the symbolic path)
+enter the canonical dump, so every symbolic candidate_hash recomputes; the
+hash-derived symbolic probe seeds and metrics shift with it, and the mock
+boards' verdict/retirement timing moves deterministically. New frozen
+expectations: normal coverage 0.8047 with {MUTATE: 6, RETIRE: 4, RETAIN:
+3} — threat_distance retired@1, resource_pressure@3,
+day_night_rest_need@4, visibility@5; shuffled coverage 0.8047 with
+{MUTATE: 7, RETIRE: 4, RETAIN: 1} — threat_distance@2,
+resource_pressure@2, day_night_rest_need@3, visibility@5 (STILL a
+different retirement schedule and decision mix than normal, so
+feedback_binding_matters stays True). Everything structural is untouched
+by this re-baseline: 42 LLM-family calls and 368640 transitions per mode,
+exact k-1 lag, six unique plan signatures per feedback mode, no
+REQUEST_CONTROL, static {MUTATE: 6} / one signature / 0.0 coverage. The
+prior-round reports keep their then-correct numbers (they describe the
+pre-extension contract).
+
 C11 REQUEST_CONTROL blocking: a board that requests human control (critic
 escalation and/or a tutor REQUEST_CONTROL proposal) halts the loop right
 after phase B — no verdicts, no plan, no probe, no freeze, NO execution
@@ -535,8 +555,13 @@ class TestNormalFeedbackLoop:
         assert s.feedback_citation_coverage == 0.8047
         # CC3 C9 gate re-baseline (EXACT k-1 lag): each window's board sees
         # ONLY the previous window's 64 records, so refutations arrive with
-        # fresh citable evidence and every refuted line retires (4 of 4)
-        assert s.decision_distribution == {C.DECISION_MUTATE: 7,
+        # fresh citable evidence and every refuted line retires (4 of 4).
+        # CC3 follow-up P0-2 re-baseline: the candidate contract extension
+        # (four executable-artifact binding fields) recomputed every
+        # symbolic candidate_hash -> MUTATE 7 -> 6, retirement schedule
+        # threat_distance@1/resource_pressure@3/day_night_rest_need@4/
+        # visibility@5 (see the module docstring)
+        assert s.decision_distribution == {C.DECISION_MUTATE: 6,
                                            C.DECISION_RETIRE: 4,
                                            C.DECISION_RETAIN: 3}
         assert s.supported_retention_rate == 1.0
@@ -653,14 +678,18 @@ class TestShuffledFeedback:
         s = sums[C.MODE_SHUFFLED_FEEDBACK]
         assert s.feedback_citation_coverage == 0.8047
         # CC4 C9 gate round-two re-baseline (numeric side-channel
-        # hardening): the shuffled view now publishes ONLY family-level
-        # window aggregates (exact rates/gaps were per-candidate-hash
-        # fingerprints), so the mock roles see coarser numbers and the
-        # shuffled decision distribution shifts again — but the two modes
-        # STILL differ (3 vs 4 retirements, different decision mix), which
-        # is the point of the comparison
-        assert s.decision_distribution == {C.DECISION_MUTATE: 9,
-                                           C.DECISION_RETIRE: 3,
+        # hardening): the shuffled view publishes ONLY family-level window
+        # aggregates (exact rates/gaps were per-candidate-hash
+        # fingerprints), so the mock roles rank and retire from coarser
+        # numbers. CC3 follow-up P0-2 re-baseline: the candidate contract
+        # extension recomputed every symbolic candidate_hash -> shuffled
+        # {MUTATE: 7, RETIRE: 4, RETAIN: 1} with retirements
+        # threat_distance@2/resource_pressure@2/day_night_rest_need@3/
+        # visibility@5 — the two modes STILL differ (normal {6, 4, 3} with
+        # a different retirement schedule), which is the point of the
+        # comparison
+        assert s.decision_distribution == {C.DECISION_MUTATE: 7,
+                                           C.DECISION_RETIRE: 4,
                                            C.DECISION_RETAIN: 1}
         assert s.supported_retention_rate == 1.0
         assert s.refuted_retirement_rate == 1.0

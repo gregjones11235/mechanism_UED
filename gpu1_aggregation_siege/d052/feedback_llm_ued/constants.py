@@ -429,6 +429,16 @@ MOCK_TASKPARAMS_FIELD_WHITELIST = frozenset({
     "provenance",
     "real_adapter_status",
     "legality_hint",
+    #: P0-2 (CC3 follow-up audit): the production-probe binding of a
+    #: parameterized candidate — the executable environment artifact that
+    #: realizes its axes (id + content hash), the parameter-variant hash
+    #: and the seed-policy hash. Empty strings = unbound; a production
+    #: probe refuses unbound candidates. Mock/symbolic candidates never
+    #: set them.
+    "executable_artifact_id",
+    "executable_artifact_hash",
+    "parameter_variant_hash",
+    "seed_policy_hash",
 })
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ worktree, so locally the chain can only be READY, never executed.
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from pydantic import Field, model_validator
 
@@ -363,7 +363,8 @@ def execute_real_env_coder(*, window: int, plan_id: str,
                            sequence: int,
                            journal: Optional[RealCallJournal] = None,
                            max_repair_attempts: int
-                           = C.ENVCODER_MAX_REPAIR_ATTEMPTS
+                           = C.ENVCODER_MAX_REPAIR_ATTEMPTS,
+                           run_sink: Optional[Callable[..., None]] = None
                            ) -> RealEnvCoderArtifact:
     """The window's real 7th LLM-family call with bounded repair.
 
@@ -376,6 +377,14 @@ def execute_real_env_coder(*, window: int, plan_id: str,
     ``sequence + i``. A journal, when given, MUST be the same object the
     real backend journals into (schema outcomes are refused for calls the
     journal never transported).
+
+    ``run_sink`` (P0-2, CC3 follow-up audit): called EXACTLY ONCE on
+    success, BEFORE the artifact is returned, with the complete run
+    evidence — ``run_sink(spec=..., parsed=..., artifact=...)`` — so the
+    production path can derive the immutable ExecutableEnvironmentArtifacts
+    from the SAME objects that passed verification (never re-derived from
+    disk or memory copies). A sink failure propagates (the window is
+    blocked; there is no artifact without a reachable probe binding).
     """
     if not authorization.real_envcoder:
         raise RealEnvCoderBlocked(
@@ -464,7 +473,7 @@ def execute_real_env_coder(*, window: int, plan_id: str,
         all_passed = (parsed is not None and not blockers
                       and all(a.passed for a in directive_artifacts))
         if all_passed:
-            return RealEnvCoderArtifact(
+            artifact = RealEnvCoderArtifact(
                 window=window, plan_id=plan_id, template_id=spec.template_id,
                 spec_hash=spec.spec_hash, backend_id=backend.backend_id,
                 model_id=backend.model_id, n_calls=attempt + 1,
@@ -473,6 +482,13 @@ def execute_real_env_coder(*, window: int, plan_id: str,
                 envelope_request_hashes=envelope_request_hashes,
                 directive_artifacts=directive_artifacts,
                 overall_status=STATUS_PASSED, blockers=[])
+            if run_sink is not None:
+                #: P0-2: hand the EXACT verified run (spec + parsed output
+                #: + artifact) to the production path so the executable
+                #: artifacts are derived from the same objects that passed
+                #: the four-link chain
+                run_sink(spec=spec, parsed=parsed, artifact=artifact)
+            return artifact
         if attempt >= max_repair_attempts:
             raise RealEnvCoderBlocked(
                 "REAL_ENVCODER_REPAIR_BUDGET_EXHAUSTED: window="

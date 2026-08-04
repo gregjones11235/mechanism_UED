@@ -1001,6 +1001,16 @@ class FeedbackUEDController:
         candidates = generate_candidates_from_directives(
             plan, directives=list(directives),
             hypothesis_families=hyp_by_family)
+        #: P0-2 (CC3 follow-up audit): on the production path every
+        #: candidate enters the funnel as a BOUND copy of its family's
+        #: executable environment artifact (new candidate_hash; a family
+        #: without a bound artifact fails closed as
+        #: EXECUTABLE_ARTIFACT_MISSING). The symbolic runner exposes no
+        #: such seam, so the default path stays byte-identical.
+        bind_artifacts = getattr(
+            self.runner, "bind_candidates_to_executable_artifacts", None)
+        if bind_artifacts is not None:
+            candidates = bind_artifacts(candidates)
         # C13: the anchor ids come from the shared-manifest seam (this
         # round: the labeled scaffold placeholder), never from a hardcode
         # inside the funnel
