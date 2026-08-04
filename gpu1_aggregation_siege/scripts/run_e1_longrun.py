@@ -203,8 +203,10 @@ def build_frozen_manifest(teacher_config_path: str) -> dict:
 
     resolution = SRS.resolve_all_shared_runtime()["FullStateCheckpoint"]
     if resolution.bound:
+        # CC2 follow-up: the resolution now CARRIES the bound object
+        # (object_ref); the contract field is only the name
         checkpoint_hash = getattr(
-            resolution.contract, "checkpoint_sha256", ""
+            resolution.object_ref, "checkpoint_sha256", ""
         )
         if checkpoint_hash:
             fields["checkpoint_sha256"] = _field(checkpoint_hash, True)
