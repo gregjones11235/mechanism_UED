@@ -1,0 +1,6 @@
+# Frozen Phase-2.5 real-bundle evidence: every byte is pinned by the bundle's
+# own SHA256SUMS manifest (13 payloads) and reports/phase25/frozen_output_allowlist.json
+# (21 outputs files), and replay pins aggregation_original.py at sha256 27492e8a....
+# Line-ending conversion (core.autocrlf) silently rewrites those bytes on Windows
+# checkouts, breaking the integrity gates. Keep the whole evidence tree byte-exact.
+orchestration/experiments/d052_modeler_shadow_v1/** -text
