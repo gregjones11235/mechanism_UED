@@ -32,7 +32,6 @@ from typing import Any, Callable, Mapping
 
 from .archive_schema import FrontierArchiveEntry
 from .branch_search_runner import (
-    RESTORE_CONTEXT_DRIVER,
     BranchSearchRunConfig,
     BranchSearchRunner,
     MemoryArtifactRef,
@@ -79,6 +78,7 @@ from .anchor_manifest import (
     validate_anchor_manifest,
 )
 from .student_binding import bind_capture_entry
+from .verified_restore_context import mint_verified_restore_context
 from dicode.student_adapters.protocol import StudentAdapter
 
 E3_WINDOW_SCHEMA = "simulator_frontier.e3-window/v1"
@@ -547,18 +547,26 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     if not joint:
         raise ProductionBlockedError(
             "production_joint_pass is not green for the fresh-process evidence")
-    restore_context = {
-        "restore_driver": RESTORE_CONTEXT_DRIVER,
-        "child_pid": outcome.child_pid,
-        "bundle_hash": config.restore_request.registry_hash,
-        "component_digests": {comp.component: comp.leaves_digest
-                              for comp in outcome.evidence.components},
-        "production_joint_pass": True,
-    }
+    # P0-2: mint the immutable, evidence-bound restore context.  The minter
+    # RECOMPUTES the joint pass internally — no self-reported context exists.
+    validate_anchor_manifest(config.anchor_manifest)
+    restore_context = mint_verified_restore_context(
+        restore_request=config.restore_request,
+        outcome=outcome,
+        verdict=verdict,
+        student_identity_hash=identity.identity_hash(),
+        anchor_manifest_hash=config.anchor_manifest.manifest_hash,
+        state_id=state_id,
+        state_hash=finalized.state_hash,
+        archive_hash=archive.archive_hash(),
+        source_checkpoint_id=finalized.source_checkpoint_id,
+        source_memory_spec_hash=finalized.source_memory_spec_hash,
+    )
     steps["STEP03_COMBINED_FRESH_PROCESS_RESTORE"] = {
         "child_pid": outcome.child_pid,
         "joint_proof_status": outcome.joint_proof_status,
         "production_joint_pass": True,
+        "context_hash": restore_context.context_hash,
     }
 
     # STEP 4 — real actual-N branch search from the exact restored state.

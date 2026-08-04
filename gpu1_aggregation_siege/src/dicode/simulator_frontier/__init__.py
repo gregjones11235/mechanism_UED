@@ -130,6 +130,18 @@ from .fresh_process_restore import (
     verify_controller_signature,
     verify_fresh_process_evidence,
 )
+from .verified_restore_context import (
+    VERIFIED_RESTORE_CONTEXT_SCHEMA,
+    VERIFIER_HASH,
+    VERIFIER_ID,
+    VerifiedRestoreContext,
+    compute_context_hash,
+    mint_verified_restore_context,
+    process_evidence_hash_of,
+    restore_request_hash_of,
+    verify_verified_restore_context,
+    verdict_hash_of,
+)
 from .branch_search_runner import (
     RESTORE_CONTEXT_DRIVER,
     RUNNER_VERSION,
@@ -240,6 +252,11 @@ __all__ = [
     "ProductionBlockedError", "ProvenanceViolationError", "SchemaMismatchError",
     "SimulatorFrontierError",
     "BranchOutcome",
+    "VERIFIED_RESTORE_CONTEXT_SCHEMA", "VERIFIER_HASH", "VERIFIER_ID",
+    "VerifiedRestoreContext", "compute_context_hash",
+    "mint_verified_restore_context", "process_evidence_hash_of",
+    "restore_request_hash_of", "verify_verified_restore_context",
+    "verdict_hash_of",
     "RESTORE_CONTEXT_DRIVER", "RUNNER_VERSION", "SEARCH_SOURCES",
     "SEARCH_SOURCE_REFERENCE_POLICY", "SEARCH_SOURCE_STUDENT_DETERMINISTIC",
     "SEARCH_SOURCE_STUDENT_STOCHASTIC",

@@ -246,19 +246,38 @@ class FrontierArchive:
                 raise ArchiveWriteGuardError(
                     f"production save refused: entry {state_id} state payload hash "
                     "does not match entry.state_hash (fail closed)")
-        payload = {"schema_version": PRODUCTION_SCHEMA_VERSION,
-                   "capacity": self.capacity,
-                   "per_bucket_quota": self.per_bucket_quota,
-                   "entry_order": [e.state_id for e in self._entries.values()],
-                   "entry_count": len(self._entries),
-                   "state_count": len(self._states),
-                   "entries": [asdict(e) for e in self._entries.values()],
-                   "states": {k: asdict(v) for k, v in self._states.items()}}
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"),
-                               ensure_ascii=False, default=str)
-        payload["archive_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        payload = self._production_payload()
+        payload["archive_hash"] = self.archive_hash()
         _atomic_write_text(Path(path), json.dumps(payload, sort_keys=True, indent=2,
                                                   ensure_ascii=False, default=str))
+
+    def _production_payload(self) -> dict:
+        """The v2 production payload WITHOUT the archive_hash field.
+
+        Shared by ``archive_hash`` and ``save_production`` so the hash
+        semantics can never drift between computing and persisting.
+        """
+        return {"schema_version": PRODUCTION_SCHEMA_VERSION,
+                "capacity": self.capacity,
+                "per_bucket_quota": self.per_bucket_quota,
+                "entry_order": [e.state_id for e in self._entries.values()],
+                "entry_count": len(self._entries),
+                "state_count": len(self._states),
+                "entries": [asdict(e) for e in self._entries.values()],
+                "states": {k: asdict(v) for k, v in self._states.items()}}
+
+    def archive_hash(self) -> str:
+        """Canonical hash over the full production payload (minus the hash).
+
+        This is the same hash ``save_production`` persists as
+        ``archive_hash`` and ``load_production`` recomputes — downstream
+        bindings (verified restore contexts) reference it so a tampered
+        archive can never silently back a production search.
+        """
+        canonical = json.dumps(self._production_payload(), sort_keys=True,
+                               separators=(",", ":"), ensure_ascii=False,
+                               default=str)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @classmethod
     def load_production(cls, path: str | Path, codec: StateCodec | None = None) -> "FrontierArchive":

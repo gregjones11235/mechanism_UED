@@ -22,9 +22,14 @@ executed by ``fresh_process_restore.run_fresh_process_restore_production``
 (exactly one fresh child process, controller-signed ProductionRegistryBundle,
 atomic evidence bound to the single child PID and every component digest).
 ``require_production_restore_context`` mechanically rejects anything else —
-parent-process global-registry fallbacks and callback self-asserted restores
-included.  Without a verified context ``run_actual_n`` stays blocked; the
-blocking interface is explicit, never papered over.
+plain Mappings (self-reported contexts), parent-process global-registry
+fallbacks and callback self-asserted restores included.  ``run_actual_n``
+accepts ONLY a minted ``verified_restore_context.VerifiedRestoreContext`` and
+re-binds it to the run before the first branch: state id/hash, capture
+checkpoint id, memory spec hash and the search Student identity hash must all
+agree with the archive entry and the mounted Student.  Without a verified
+context ``run_actual_n`` stays blocked; the blocking interface is explicit,
+never papered over.
 """
 
 from __future__ import annotations
@@ -39,14 +44,20 @@ from typing import Any, Callable, Mapping, Sequence
 import jax
 import numpy as np
 
+from .combined_restore_contract import REQUIRED_COMPONENTS
 from .discovery_provenance import DiscoveryProvenance
 from .env_restore import flatten_env_state, restore_env_state
-from .errors import BranchSearchBlockedError, ProvenanceViolationError
+from .errors import BranchSearchBlockedError, InvalidEvidenceError, ProvenanceViolationError
 from .fresh_process_restore import BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE
 from .memory_modes import MemoryRestoreMode
 from .provenance import SearchActionLeakageGuard
 from .search_statistics import BranchOutcome
 from .state_codec import StateCodec
+from .verified_restore_context import (
+    RESTORE_CONTEXT_DRIVER,
+    VerifiedRestoreContext,
+    verify_verified_restore_context,
+)
 from .student_binding import (
     assert_entry_bound,
     assert_outcome_bound,
@@ -67,8 +78,6 @@ SEARCH_SOURCES = (
     SEARCH_SOURCE_STUDENT_STOCHASTIC,
     SEARCH_SOURCE_REFERENCE_POLICY,
 )
-
-RESTORE_CONTEXT_DRIVER = "fresh_process_restore.run_fresh_process_restore_production"
 
 _HEX64 = "^[0-9a-f]{64}$"
 
@@ -152,39 +161,35 @@ class BranchSearchRunConfig:
         object.__setattr__(self, "temperature", float(self.temperature))
 
 
-def require_production_restore_context(context: Any) -> None:
-    """Mechanical P0-3 gate: only a verified single-fresh-process restore counts.
+def require_production_restore_context(context: Any) -> VerifiedRestoreContext:
+    """Mechanical P0-2/P0-3 gate: only a MINTED verified context counts.
 
-    The context must come from ``run_fresh_process_restore_production`` and
-    carry the real child PID, the controller-signed bundle hash, every
-    component digest and a green ``production_joint_pass``.  Anything else —
-    including no context, parent-process execution or callback self-asserted
-    restores — raises ``BranchSearchBlockedError`` (never faked, never
-    silently accepted).
+    The context must be a ``VerifiedRestoreContext`` minted by
+    ``verified_restore_context.mint_verified_restore_context`` from
+    mechanically verified ``run_fresh_process_restore_production`` evidence.
+    Plain Mappings are rejected outright — a self-reported
+    ``production_joint_pass`` field can never be production evidence (the
+    mint-only constructor does not accept it in the first place).  Anything
+    else — no context, parent-process execution, callback self-asserted
+    restores, tampered fields — raises ``BranchSearchBlockedError`` (never
+    faked, never silently accepted).
     """
-    if not isinstance(context, Mapping):
+    if isinstance(context, Mapping):
+        raise BranchSearchBlockedError(
+            "plain Mapping restore contexts are rejected: self-reported "
+            "production_joint_pass is never production evidence; run_actual_n "
+            "requires a minted VerifiedRestoreContext bound to "
+            f"{RESTORE_CONTEXT_DRIVER} evidence (fail closed)")
+    if not isinstance(context, VerifiedRestoreContext):
         raise BranchSearchBlockedError(
             f"{BLOCKED_WAITING_CONTROLLER_SIGNED_REGISTRY_BUNDLE}: production branch "
-            "search requires the verified joint fresh-process restore context "
-            f"({RESTORE_CONTEXT_DRIVER}); none supplied")
-    if context.get("restore_driver") != RESTORE_CONTEXT_DRIVER:
+            "search requires a minted VerifiedRestoreContext from verified "
+            f"fresh-process evidence ({RESTORE_CONTEXT_DRIVER}); none supplied")
+    try:
+        return verify_verified_restore_context(context)
+    except InvalidEvidenceError as exc:
         raise BranchSearchBlockedError(
-            f"restore context driver must be {RESTORE_CONTEXT_DRIVER}, got "
-            f"{context.get('restore_driver')!r} (parent-process / callback restores "
-            "are never production evidence)")
-    child_pid = context.get("child_pid")
-    if not isinstance(child_pid, int) or isinstance(child_pid, bool) or child_pid <= 0:
-        raise BranchSearchBlockedError("restore context must carry the real child PID (> 0)")
-    _require_sha256("restore context bundle_hash", context.get("bundle_hash"))
-    digests = context.get("component_digests")
-    if not isinstance(digests, Mapping) or not digests:
-        raise BranchSearchBlockedError("restore context must carry per-component digests")
-    for name, digest in digests.items():
-        _require_sha256(f"restore context component digest {name!r}", digest)
-    if context.get("production_joint_pass") is not True:
-        raise BranchSearchBlockedError(
-            "restore context production_joint_pass is not True — the joint restore "
-            "evidence did not verify green (fail closed)")
+            f"verified restore context rejected fail closed: {exc}") from exc
 
 
 def derive_branch_seeds(*, seed_base: int, state_id: str, source: str,
@@ -498,7 +503,7 @@ class BranchSearchRunner:
         or raises ``BranchSearchBlockedError`` — it never reports a partial
         run as complete.
         """
-        require_production_restore_context(restore_context)
+        context = require_production_restore_context(restore_context)
         source_tuple = tuple(sources)
         if not source_tuple:
             raise BranchSearchBlockedError("run_actual_n requires at least one search source")
@@ -509,6 +514,39 @@ class BranchSearchRunner:
                 self._reference_student is None or self._reference_params is None):
             raise BranchSearchBlockedError(
                 "REFERENCE_POLICY requested but no reference student/params mounted (fail closed)")
+
+        # Context <-> run/state binding (P0-2): the minted context must name
+        # EXACTLY the state, checkpoint, memory binding and Student this run
+        # consumes.  Any mismatch is a wrong-state/wrong-checkpoint attempt.
+        if context.state_id != config.state_id:
+            raise BranchSearchBlockedError(
+                f"restore context state_id {context.state_id!r} != run config state_id "
+                f"{config.state_id!r} (search must start from the captured state)")
+        bound_entry, bound_encoded = archive.get(config.state_id)
+        if context.state_hash != bound_encoded.payload_hash \
+                or context.state_hash != bound_entry.state_hash:
+            raise BranchSearchBlockedError(
+                "restore context state_hash does not equal the archive-encoded state "
+                "hash for this run (wrong-state search rejected fail closed)")
+        if context.source_checkpoint_id != bound_entry.source_checkpoint_id:
+            raise BranchSearchBlockedError(
+                f"restore context checkpoint {context.source_checkpoint_id!r} != capture "
+                f"checkpoint {bound_entry.source_checkpoint_id!r} (wrong-checkpoint "
+                "search rejected fail closed)")
+        if context.source_memory_spec_hash != bound_entry.source_memory_spec_hash:
+            raise BranchSearchBlockedError(
+                "restore context memory spec hash does not equal the capture entry "
+                "memory binding (memory-substitution search rejected fail closed)")
+        if set(context.component_digests) != set(REQUIRED_COMPONENTS):
+            raise BranchSearchBlockedError(
+                "restore context must bind EXACTLY the nine required restored "
+                f"components {tuple(REQUIRED_COMPONENTS)}")
+        runner_identity_hash = self._student.identity().identity_hash()
+        if context.student_identity_hash != runner_identity_hash:
+            raise BranchSearchBlockedError(
+                "restore context student identity hash does not equal the mounted "
+                "search Student identity (identity-substitution search rejected "
+                "fail closed)")
 
         entry, restored = self.restore_entry(archive, config.state_id)
         memory, memory_status = self._prepare_memory(entry, restored, config)
