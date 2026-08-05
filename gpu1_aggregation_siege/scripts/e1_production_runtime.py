@@ -50,7 +50,10 @@ from dicode.teachers.e1_formal.student_contract import (  # noqa: E402
     PINNED_STUDENT_CANDIDATE_ID,
 )
 
-#: the pinned longrun horizon (supervisor-frozen)
+#: the INTENDED longrun total horizon. CC2 follow-up P0-15: this is
+#: NOT auto-applied — it only takes effect inside an explicit director
+#: training-budget decision (budget_semantics); an unresolved 98304 is
+#: BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION and a longrun never starts.
 LONGRUN_TOTAL_ENV_STEPS = 98304
 
 #: production gate stages, in the order the entrypoints audit them

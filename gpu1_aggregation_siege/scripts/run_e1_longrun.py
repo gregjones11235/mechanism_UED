@@ -57,15 +57,70 @@ def _field(value, frozen: bool, code: str = "", detail: str = "") -> dict:
     }
 
 
-def build_frozen_manifest(teacher_config_path: str) -> dict:
-    """Compute every manifest field from REAL state — never guess."""
+def build_frozen_manifest(
+    teacher_config_path: str, budget_block: dict = None
+) -> dict:
+    """Compute every manifest field from REAL state — never guess.
+
+    CC2 follow-up P0-15: the 98304 total is NOT a supervisor constant
+    anymore — it must come from an explicit director budget decision
+    with semantics. Absent/unfrozen => the budget fields are unfrozen
+    with BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION and the run REFUSES
+    (never starts).
+    """
     fields = {}
     blockers = []
 
-    # ---- total_env_steps (supervisor-pinned constant) ----------------
-    fields["total_env_steps"] = _field(
-        RT.LONGRUN_TOTAL_ENV_STEPS, True
-    )
+    # ---- training-budget semantics (director decision ONLY) ----------
+    from dicode.teachers.e1_formal import budget_semantics as BS
+
+    try:
+        budget = BS.resolve_training_budget(
+            budget_block, "e1_longrun.budget"
+        )
+        fields["training_budget_semantics"] = _field(
+            budget.semantics, True
+        )
+        fields["initial_checkpoint_env_steps"] = _field(
+            budget.initial_checkpoint_env_steps, True
+        )
+        fields["additional_training_env_steps"] = _field(
+            budget.additional_training_env_steps, True
+        )
+        fields["final_total_env_steps"] = _field(
+            budget.final_total_env_steps, True
+        )
+        fields["total_env_steps"] = _field(
+            budget.final_total_env_steps, True
+        )
+    except BS.BudgetError as e:
+        detail = str(e)
+        fields["training_budget_semantics"] = _field(
+            None,
+            False,
+            BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+            detail,
+        )
+        fields["initial_checkpoint_env_steps"] = _field(
+            None, False, e.code, detail
+        )
+        fields["additional_training_env_steps"] = _field(
+            None, False, e.code, detail
+        )
+        fields["final_total_env_steps"] = _field(
+            None, False, e.code, detail
+        )
+        fields["total_env_steps"] = _field(
+            None, False, BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+            detail,
+        )
+        blockers.append(
+            {
+                "field": "training_budget",
+                "code": BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+                "detail": detail,
+            }
+        )
 
     # ---- Student identity (pinned; CC4 owns the checkpoint) ----------
     fields["student_candidate_id"] = _field(
@@ -266,6 +321,13 @@ def main(argv=None) -> int:
         help="manifest JSON path relative to gpu1_aggregation_siege/",
     )
     parser.add_argument(
+        "--budget-block",
+        default="",
+        help="path to the director's training-budget decision JSON "
+        "(semantics + initial/additional/final env steps); ABSENT => "
+        "BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION and the run REFUSES",
+    )
+    parser.add_argument(
         "--launch",
         action="store_true",
         help="request launch (STILL gated; unauthorized this round — "
@@ -273,7 +335,20 @@ def main(argv=None) -> int:
     )
     args = parser.parse_args(argv)
 
-    manifest = build_frozen_manifest(args.teacher_config)
+    budget_block = None
+    if args.budget_block:
+        budget_path = args.budget_block
+        if not os.path.isabs(budget_path):
+            budget_path = os.path.join(RT.SIEGE_ROOT, budget_path)
+        try:
+            with open(budget_path, "r", encoding="utf-8") as handle:
+                budget_block = json.load(handle)
+        except (OSError, ValueError) as e:
+            budget_block = {"_parse_failed": str(e)}
+
+    manifest = build_frozen_manifest(
+        args.teacher_config, budget_block=budget_block
+    )
     unfrozen = [b for b in manifest["blockers"]]
 
     if args.launch:
