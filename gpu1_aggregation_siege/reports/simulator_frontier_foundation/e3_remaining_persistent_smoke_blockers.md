@@ -1,26 +1,25 @@
 # E3 Persistent 剩余 Smoke 阻断(复审前)
 
-阶段最高: **E3_PERSISTENT_OBJECT_CONSUMER_READY**(未伪造 DIRECTOR_SMOKE_HANDOFF_READY)。
+阶段: **E3_PERSISTENT_OBJECT_CONSUMER_IMPLEMENTED**(head 750d17b68e4288454023d868c4e6c646ad89b55b)。
 
-## 本轮已修复
-1. **manifest_hash 统一**: REQUIRED_TOP_KEYS 要求 manifest_hash;schema 校验/verifier/入口
-   验证同一 canonical hash(排除自身),单一 payload hash;夹具已补。
-2. **伪签名删除**: `signature_ref.split(":",1)[0]` 字符串推断已删;DirectorBundleVerifier 现携带
-   总监注入的 `verify_signature(signer_id, payload_hash, signature_ref) -> bool`,生产验证顺序为
-   registry 信任 -> payload hash 重算 -> 注入 verify_signature 必须返回 True -> allowlist -> 实现 hash。
-   未注入: `E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND` BLOCKED。
-3. **字段统一**: checkpoint_file_sha256 用于 student/reference 段与入口 restore cross-binding;
-   bundle schema 中残留 checkpoint_sha256 已清除。
-4. **自定义训练路径**: OriginalTrainingRuntime 仅保留为 TEST_ONLY_LEGACY_ADAPTER;
-   生产训练委托 CanonicalDiCodeOneUpdateRuntime(STEP09-13 完整接线与 E3WindowConfig
-   canonical 字段作为下一提交追踪)。
+## 本轮落地
+- controller_identity 进入 exact schema(非空、参与 manifest_hash);controller_signature_ref 仅作签名引用。
+- manifest_hash 唯一 canonical(排除自身),schema validator 与 verifier 调用同一 manifest_canonical_hash。
+- 伪密码学已删;DirectorBundleVerifier 注入 verify_signature 必须返回 True。
+- checkpoint_file_sha256 统一;checkpoint_sha256 被 exact schema 拒绝。
+- E3_WINDOW_STEPS 改为 STEP09_COMPILE_CANONICAL_DICODE_PLAN .. STEP13_FRESH_PROCESS_RESTORE_AND_EQUIVALENCE。
+- py_compile(5 文件)OK;24 bundle 定向测试 + 既有 530 全绿。
 
-## 仍存阻断
+## 仍存阻断(下一提交/总监侧)
 | 阻断 | 解除 |
 |------|------|
-| `E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND` | 总监注入共享 DirectorBundleVerifier |
-| Persistent 真实 CC2 checkpoint 本地缺位 | 提供真实 checkpoint 文件 |
-| STEP09-13 canonical 全接线(E3WindowConfig 字段、8 元组解析、TaskArchive 真实 API、RunState checkpoint、fresh-process 恢复) | 下一提交实现 |
-| `E3_REAL_SMOKE_AUTHORIZED=false / FORMAL_EXPERIMENT_AUTHORIZED=false` | 总监人工批准 |
+| E3WindowConfig canonical 字段 + 入口构造 Canonical 对象 | 下一提交实现 |
+| execute_one_update 8 元组解析 + OneUpdateReceipt | 下一提交实现 |
+| TaskArchive 真实 API 注册 + load_tasks_from_env_codes 验证 | 下一提交实现 |
+| Smoke config 副本(deepcopy,max_updates_per_session=1) | 下一提交实现 |
+| CanonicalDiCodeRunStateCheckpoint + fresh-process 恢复 | 下一提交实现 |
+| `E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND`(真实 verifier 未注入) | 总监注入 |
+| Persistent 真实 CC2 checkpoint 本地缺位 | 总监提供 |
+| `E3_REAL_SMOKE_AUTHORIZED=false / FORMAL_EXPERIMENT_AUTHORIZED=false` | 总监批准 |
 
-Persistent 真实对象级 check-only 通过后才允许 DIRECTOR_SMOKE_HANDOFF_READY=true。
+真实 Persistent 对象级 check-only 通过后才允许 E3_PERSISTENT_OBJECT_CHECK_ONLY_OK / DIRECTOR_SMOKE_HANDOFF_READY=true。

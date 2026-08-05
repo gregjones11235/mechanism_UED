@@ -37,6 +37,7 @@ def _manifest() -> dict:
         "schema": rb.RUNTIME_BUNDLE_SCHEMA,
         "bundle_id": "bundle-001",
         "run_id": "run-001",
+        "controller_identity": "director/cc4",
         "controller_signature_ref": "controller-signature/abc",
         "student": {
             "selected_candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",

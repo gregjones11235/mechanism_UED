@@ -1,0 +1,29 @@
+{
+  "stage": "E3_PERSISTENT_OBJECT_CONSUMER_IMPLEMENTED",
+  "head": "750d17b68e4288454023d868c4e6c646ad89b55b",
+  "schema_verifier_unified": true,
+  "controller_identity_in_schema": true,
+  "controller_identity_participates_in_manifest_hash": true,
+  "signature_verification": "director-injected verify_signature(signer_id,payload_hash,signature_ref)->bool EXECUTED; membership alone insufficient",
+  "checkpoint_field": "checkpoint_file_sha256 single field; checkpoint_sha256 rejected by exact schema",
+  "canonical_steps": [
+    "STEP09_COMPILE_CANONICAL_DICODE_PLAN",
+    "STEP10_REGISTER_TASKS_IN_DICODE_ARCHIVE",
+    "STEP11_CANONICAL_DICODE_ONE_UPDATE",
+    "STEP12_FULL_RUNSTATE_CHECKPOINT",
+    "STEP13_FRESH_PROCESS_RESTORE_AND_EQUIVALENCE"
+  ],
+  "original_training_runtime": "TEST_ONLY_LEGACY_ADAPTER only; not in production config (config canonical wiring is the tracked next commit)",
+  "persistent_object_check": "OBJECT_LEVEL_CHECK_BLOCKED: real CC2 checkpoint not mounted locally + director verifier unbound; no Synthetic PASS",
+  "readiness": {
+    "E3_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "E3_STUDENT_TRAINING_RUNTIME_READY": false,
+    "E3_REAL_SMOKE_READY": false,
+    "REAL_ACTUAL_N_EXECUTED": false,
+    "REAL_TWO_LLM_EXECUTED": false,
+    "REAL_ONE_UPDATE_EXECUTED": false,
+    "CHECKPOINT_RELOAD": false
+  },
+  "schema": "e3_canonical_step09_13_wiring_audit/v1"
+}

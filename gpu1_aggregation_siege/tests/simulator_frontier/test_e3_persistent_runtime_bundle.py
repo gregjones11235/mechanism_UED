@@ -26,6 +26,7 @@ def _manifest():
     manifest = {
         "schema": rb.RUNTIME_BUNDLE_SCHEMA,
         "bundle_id": "bundle-001", "run_id": "run-001",
+        "controller_identity": "director/cc4",
         "controller_signature_ref": "controller-signature/abc",
         "student": {
             "selected_candidate_id": PERSISTENT,

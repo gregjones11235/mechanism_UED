@@ -73,7 +73,8 @@ RUNTIME_BUNDLE_VERSION = "e3-runtime-bundle/v1"
 _BLOCKER_PREFIX = "RUNTIME_BUNDLE"
 
 REQUIRED_TOP_KEYS = frozenset({
-    "schema", "bundle_id", "run_id", "controller_signature_ref",
+    "schema", "bundle_id", "run_id", "controller_identity",
+    "controller_signature_ref",
     "student", "reference", "training_runtime", "training_surface_capability",
     "memory", "capture_provenance", "formal_asset_registry_payload_path",
     "restore_request_payload_path", "anchor_manifest_payload_path",
@@ -204,6 +205,7 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
               "declared manifest_hash (tamper rejected; fail closed)")
     _require_nonempty_str("bundle_id", manifest["bundle_id"])
     _require_nonempty_str("run_id", manifest["run_id"])
+    _require_nonempty_str("controller_identity", manifest["controller_identity"])
     signature = _require_nonempty_str(
         "controller_signature_ref", manifest["controller_signature_ref"])
     if signature.startswith(_SYNTHETIC_SIGNATURE_PREFIX):
