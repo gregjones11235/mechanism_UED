@@ -1,0 +1,133 @@
+{
+  "schema": "simulator_frontier.e3_runtime_binding_matrix/v1",
+  "note": "Every production surface that receives a runtime object requires a MINT-ONLY, mechanically verifiable binding.  This matrix records which binding each surface enforces, what the production code recomputes, and which round commit closed it.  All contract flags are implemented and pinned by the dedicated C18 tests; none of them claim real execution (all REAL_* flags remain false).",
+  "bindings": [
+    {
+      "surface": "frozen formal asset registry (production archive write path)",
+      "binding": "DiscoveryProvenanceRegistry resolved ONLY from the controller injection slot; usage must be PRODUCTION; registry_hash recomputed",
+      "recomputed": "registry_hash_of over forbidden/allowed identity sets + usage",
+      "fake_surfaces_rejected": "TEST_ONLY registries, caller-supplied Mappings, re-injection without clear",
+      "commit": "95701ae C1"
+    },
+    {
+      "surface": "verified restore context (actual-N branch search)",
+      "binding": "VerifiedRestoreContext minted ONLY from an accepted fresh-process outcome + mechanically verified process evidence + the injection slot",
+      "recomputed": "production_joint_pass, context_hash over the dataclass fields (to_payload-free)",
+      "fake_surfaces_rejected": "plain Mappings, self-reported production_joint_pass, tampered fields, synthetic evidence",
+      "commit": "c727e8c C2"
+    },
+    {
+      "surface": "captured state memory",
+      "binding": "encode_env_state forwards policy_memory / history_reference into the encoded bundle; per-bundle fresh, never shared",
+      "recomputed": "bundle round-trip through StateCodec; mode-conditional presence re-verified by the guard chain",
+      "fake_surfaces_rejected": "omitted memory (fields stay empty and the write is refused), shared memory objects",
+      "commit": "ea0134e C3"
+    },
+    {
+      "surface": "per-branch start state (actual-N)",
+      "binding": "every branch re-restores its OWN state and compares against the verified context state hash",
+      "recomputed": "per-branch start digest equality with the first branch; payload hash re-decoded",
+      "fake_surfaces_rejected": "partial actual-N, wrong-state branch starts, identity substitution",
+      "commit": "5703342 C4"
+    },
+    {
+      "surface": "Reference policy memory (REFERENCE_POLICY branches)",
+      "binding": "Reference branches consume ONLY the Reference memory surface; identity/checkpoint/memory spec bound from construction",
+      "recomputed": "reference identity hash == executing policy identity; Reference artifact spec/identity hashes",
+      "fake_surfaces_rejected": "Student memory substituted into Reference branches, anonymous References",
+      "commit": "e5ac61b C5"
+    },
+    {
+      "surface": "feasibility evidence",
+      "binding": "per-source Wilson estimates; frontier classification from STUDENT branches only",
+      "recomputed": "per-source success rates and CIs; never pooled into one rate",
+      "fake_surfaces_rejected": "Student+Reference mixing",
+      "commit": "7b6708c C6"
+    },
+    {
+      "surface": "selection evidence (final authority)",
+      "binding": "SelectionEvidence mint-only; every measured quantity recomputed inside the minter; evidence_hash derived",
+      "recomputed": "rates, per-source counts, gap, uncertainty, transition cost, evidence_hash",
+      "fake_surfaces_rejected": "unsigned evidence, tampered evidence, arbitrary Mappings, priority_score surfaces",
+      "commit": "0a10e9f C7"
+    },
+    {
+      "surface": "two-LLM runtime",
+      "binding": "AuthorizedTwoLLMRuntime = mint-only TwoLLMAuthorization + hash-chained CallJournal; ceiling exactly 2",
+      "recomputed": "authorization_hash; journal chain from JOURNAL_CHAIN_SEED; role order",
+      "fake_surfaces_rejected": "bare client factories, FakeLLMClient fallback, more than two calls, out-of-order roles",
+      "commit": "5e22670 C8"
+    },
+    {
+      "surface": "0-or-2 LLM decision",
+      "binding": "derive_invocation_from_evidence from measured evidence change; previous plan re-verified before reuse",
+      "recomputed": "current evidence hash vs previous plan's bound hash; actual_n/horizon/memory_mode freshness",
+      "fake_surfaces_rejected": "untyped previous plan, tampered plan (PREVIOUS_PLAN_HASH_MISMATCH)",
+      "commit": "a0cde08 C9"
+    },
+    {
+      "surface": "12 dynamic frontier distributions",
+      "binding": "compile_planner_to_frontier_distributions: deterministic function of the typed PlannerOutput + minted selection evidence",
+      "recomputed": "plan_hash re-bound to plan_evidence_hash; selection evidence verified; every state validated against the archive; single measured bucket per slot; compilation_hash",
+      "fake_surfaces_rejected": "caller-supplied distribution lists, hand-built Mappings, ZERO_MEMORY, empty distribution fields",
+      "commit": "118fae4 C10"
+    },
+    {
+      "surface": "distribution execution (mixed-start)",
+      "binding": "resolve_distribution_binding consumes seed/stochasticity/taskparams into an immutable per-episode binding",
+      "recomputed": "episode_seed (canonical sha256), epsilon/temperature from stochasticity_range, taskparams pass-through, binding_hash",
+      "fake_surfaces_rejected": "empty/unknown/out-of-range distribution fields, Mappings, shared window memory",
+      "commit": "2a9da92 C11"
+    },
+    {
+      "surface": "original training runtime",
+      "binding": "OriginalTrainingRuntime minted from the injected loss/update callables; per-callable source file+text hash; runtime_hash",
+      "recomputed": "current source hashes of stored callables + runtime hash (substitution/tamper detection)",
+      "fake_surfaces_rejected": "plain callables, source-less builtins, Mapping loss, substituted callables",
+      "commit": "c7e6ba7 C12"
+    },
+    {
+      "surface": "optimizer update",
+      "binding": "OptimizerUpdateAttestation minted from pipeline-measured facts (before/after params hashes, loaded-state step baseline, structural finiteness, batch digest)",
+      "recomputed": "batch digest over the exact arrays; step increment before+1; params_changed/finite invariants",
+      "fake_surfaces_rejected": "self-reported update_count / grad_norm, bit-identical updates, non-finite params, unmeasurable step baseline",
+      "commit": "017970e C13"
+    },
+    {
+      "surface": "checkpoint round trip + replay",
+      "binding": "CheckpointRoundTripEvidence requires full state (params+step) survival AND exact replay equivalence (action/logits/value/new-memory)",
+      "recomputed": "params hashes, global step, replay equivalence on one identical deterministic step; evidence_hash",
+      "fake_surfaces_rejected": "params-only comparison, action-range-only replay, lossy round trips, missing logits",
+      "commit": "a9a55d7 C14"
+    },
+    {
+      "surface": "training-surface capability (preflight)",
+      "binding": "TrainingSurfaceCapability signed descriptor verified, bound to the MOUNTED adapter identity, non-synthetic signature",
+      "recomputed": "capability_hash; adapter identity cross-check",
+      "fake_surfaces_rejected": "exception-inference probes (deleted), self-signed descriptors, foreign-identity descriptors",
+      "commit": "bef514d C15"
+    },
+    {
+      "surface": "asset injection (one-window entrypoint)",
+      "binding": "signed runtime bundle manifest (exact-key, per-file exist + sha256, non-synthetic signatures) is the ONLY injection channel",
+      "recomputed": "referenced file sha256; registry/restore/anchor payloads rebuilt and re-verified; capability minted against the mounted identity",
+      "fake_surfaces_rejected": "env-var guessing, ad-hoc overrides, missing/null channels, TEST_ONLY registry payloads",
+      "commit": "c7c884e C16"
+    },
+    {
+      "surface": "long-run launch gate",
+      "binding": "evaluate_launch_blockers from real preflight report, Reference/anchor designation state, director-signed LongRunBudgetDecision, audit approval",
+      "recomputed": "budget decision hash + payload schema; cross-bound total_env_steps == frozen TOTAL_ENV_STEPS",
+      "fake_surfaces_rejected": "hardcoded blocker lists, assumed budget semantics, self-signed decisions",
+      "commit": "7f6831c C17"
+    }
+  ],
+  "cross_cutting": {
+    "mint_only_contracts": ["archive registry", "verified restore context", "selection evidence", "two-llm authorization", "distribution runtime binding", "original training runtime", "optimizer update attestation", "checkpoint round-trip evidence", "training-surface capability", "longrun budget decision"],
+    "hash_tamper_rejected_everywhere": true,
+    "fake_mapping_rejected_everywhere": true,
+    "synthetic_signature_rejected_everywhere": true,
+    "zero_memory_never_production": true,
+    "real_execution_flags_all_false": true
+  }
+}
