@@ -121,6 +121,7 @@ from d052.feedback_llm_ued.runtime_authorization import (
     assert_real_mode_servicable,
 )
 from d052.feedback_llm_ued.shared_runtime_binding import (
+    STATUS_BOUND,
     SharedRuntimeBundle,
     resolve_shared_runtime,
 )
@@ -637,7 +638,7 @@ def main(argv=None) -> int:
         #: is absent; REAL_CHECKPOINT_LOADED never implies a training
         #: update executed
         student_read_only_mount_ready=(
-            bundle.student.status == "BOUND"
+            bundle.student.status == STATUS_BOUND
             if bundle.student is not None else False),
         student_training_runtime_ready=(
             bundle.training.contract is not None

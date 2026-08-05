@@ -105,12 +105,10 @@ class AttestingTrainingContract:
         self._last_hash = checkpoint_hash
         return checkpoint_hash
 
-    def run_one_optimizer_update(self, *, window, batch_candidate_ids):
-        self.update_calls.append((window, tuple(batch_candidate_ids)))
+    def run_one_dicode_update(self, *, batch_plan):
+        self.update_calls.append((batch_plan.window, tuple()))
         return SimpleNamespace(
-            window=window, optimizer_steps=1,
-            env_steps=len(list(batch_candidate_ids)),
-            checkpoint_hash_before=self._last_hash,
+            window=batch_plan.window, optimizer_steps=1, env_steps=8,
             checkpoint_hash_after=text_sha256("TEST_ONLY_POST_UPDATE"))
 
     def load_checkpoint(self, *, checkpoint_hash):
@@ -346,19 +344,34 @@ class TestDirectorVerifiedConsumeGate:
                 expected_runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
 
+def _seam_plan():
+    from d052.feedback_llm_ued.dicode_batch_plan import (
+        build_dicode_batch_plan,
+    )
+    dynamic = [f"dyn-{i:02d}" for i in range(12)]
+    anchors = list(C.GLOBAL_CANONICAL_ANCHOR_IDS)
+    return build_dicode_batch_plan(
+        window=WINDOW, final_batch_ids=dynamic + anchors,
+        anchor_ids=anchors, non_target_anchor_ids=anchors[:3],
+        original_task_id="DICODE_ORIGINAL_TASK_V1",
+        original_appended_by=TRAINEE_REGISTRY_ID)
+
+
 class TestSeamConsumesAttestationOnly:
+    def _plan(self):
+        return _seam_plan()
+
     def test_executed_update_carries_verified_round_trip_pass(self):
         contract = AttestingTrainingContract()
         seam = make_seam(contract)
         record = seam.execute_real_window_update(
-            WINDOW, batch_candidate_ids=["cand-a", "cand-b"])
+            WINDOW, batch_candidate_ids=["cand-a", "cand-b"],
+            batch_plan=self._plan())
         assert record.status == EXECUTED_ONE_UPDATE_STATUS
         assert record.checkpoint_round_trip_pass is True
         assert "VERIFIED" in record.reason
-        #: the attestation was requested for the exact reloaded checkpoint
-        _tag, hash_after = contract.save_calls[-1]
-        assert contract.round_trip_verifications == [(WINDOW, hash_after)]
-        assert contract.load_calls == [hash_after]
+        assert contract.round_trip_verifications == [
+            (WINDOW, text_sha256("TEST_ONLY_POST_UPDATE"))]
 
     def test_contract_without_verifier_surface_refused(self):
         contract = ContractWithoutVerifier()
@@ -367,7 +380,8 @@ class TestSeamConsumesAttestationOnly:
                 StudentBindingBlocked,
                 match="REAL_TRAINING_ROUND_TRIP_NOT_ATTESTED"):
             seam.execute_real_window_update(
-                WINDOW, batch_candidate_ids=["cand-a"])
+                WINDOW, batch_candidate_ids=["cand-a"],
+                batch_plan=_seam_plan())
 
     def test_duck_typed_attestation_refused_by_seam(self):
         contract = AttestingTrainingContract(
@@ -377,7 +391,8 @@ class TestSeamConsumesAttestationOnly:
                 StudentBindingBlocked,
                 match="REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED"):
             seam.execute_real_window_update(
-                WINDOW, batch_candidate_ids=["cand-a"])
+                WINDOW, batch_candidate_ids=["cand-a"],
+                batch_plan=_seam_plan())
 
     def test_attestation_for_wrong_checkpoint_refused_by_seam(self):
         foreign = sign_director_verified_round_trip(
@@ -390,7 +405,8 @@ class TestSeamConsumesAttestationOnly:
                 StudentBindingBlocked,
                 match="REAL_TRAINING_ROUND_TRIP_CHECKPOINT_MISMATCH"):
             seam.execute_real_window_update(
-                WINDOW, batch_candidate_ids=["cand-a"])
+                WINDOW, batch_candidate_ids=["cand-a"],
+                batch_plan=_seam_plan())
 
     def test_plain_mapping_attestation_refused_by_seam(self):
         #: a plain Mapping may never enter the production consumption
@@ -401,7 +417,8 @@ class TestSeamConsumesAttestationOnly:
                 StudentBindingBlocked,
                 match="REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED"):
             seam.execute_real_window_update(
-                WINDOW, batch_candidate_ids=["cand-a"])
+                WINDOW, batch_candidate_ids=["cand-a"],
+                batch_plan=_seam_plan())
 
     def test_locally_signed_attestation_refused_by_seam(self):
         #: a locally-signed FullStateRoundTripResult is NOT the director's
@@ -413,7 +430,8 @@ class TestSeamConsumesAttestationOnly:
                 StudentBindingBlocked,
                 match="REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED"):
             seam.execute_real_window_update(
-                WINDOW, batch_candidate_ids=["cand-a"])
+                WINDOW, batch_candidate_ids=["cand-a"],
+                batch_plan=_seam_plan())
 
     def test_non_executed_records_carry_round_trip_pass_false(self):
         #: CHECKPOINT_ROUND_TRIP_PASS is false by default — a skipped or
@@ -439,7 +457,7 @@ class TestTrainingSlotRequiresVerifierSurface:
     def test_slot_binds_contract_with_verifier_surface(self):
         contract = AttestingTrainingContract()
         slot = SharedTrainingSlot().bind(contract)
-        assert slot.status == "BOUND"
+        assert slot.status == "BOUND_OBJECT"
         assert slot.registry_identity == TRAINEE_REGISTRY_ID
 
     def test_slot_refuses_contract_without_verifier_surface(self):
@@ -456,7 +474,7 @@ class TestPosture:
     def test_real_capability_flags_stay_false(self):
         contract = AttestingTrainingContract()
         seam = make_seam(contract)
-        seam.execute_real_window_update(WINDOW,
-                                        batch_candidate_ids=["cand-a"])
+        seam.execute_real_window_update(
+            WINDOW, batch_candidate_ids=["cand-a"], batch_plan=_seam_plan())
         for name in C.NEVER_TRUE_REAL_CAPABILITY_FLAGS:
             assert getattr(C, name) is False, name

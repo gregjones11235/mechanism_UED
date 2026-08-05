@@ -77,9 +77,10 @@ class TestAcceptsReset128Student:
         assert code == 1
         report = json.loads(capsys.readouterr().out)
         codes = [b["code"] for b in report["blockers"]]
-        assert C.BLOCKED_WAITING_SHARED_RUNTIME not in codes
         assert "STUDENT_INIT_CONTRACT_NOT_INJECTED" not in codes
-        assert codes == ["LOCAL_RUNTIME_MODULE_MISSING"] * 2
+        assert "REAL_BACKEND_IDENTITY_UNDECLARED" not in codes
+        assert "LOCAL_RUNTIME_MODULE_MISSING" in codes
+        assert C.BLOCKED_WAITING_SHARED_RUNTIME in codes
 
 
 class TestPosture:

@@ -88,18 +88,28 @@ class TestBuildSharedBundle:
     def test_all_slots_bound_from_valid_bundle(self):
         manifest = valid_director_bundle()
         bundle = build_shared_bundle(manifest)
-        assert bundle.missing_assets() == []
         report = bundle.status_report()
-        for name, entry in report.items():
-            assert entry["status"] == "BOUND", name
-        #: the object slots are DIRECTOR-DECLARED (identity folded, no
-        #: fabricated object)
+        #: three-state model: data slots BOUND_OBJECT; the object slots are
+        #: DECLARED_NOT_RESOLVED (identity present, object NOT resolved) —
+        #: MANIFEST_ONLY is NOT a handoff
+        assert report["student"]["status"] == "BOUND_OBJECT"
+        assert report["reference"]["status"] == "BOUND_OBJECT"
+        assert report["anchor_manifest"]["status"] == "BOUND_OBJECT"
+        assert report["probe_runner"]["status"] == "DECLARED_NOT_RESOLVED"
+        assert report["training"]["status"] == "DECLARED_NOT_RESOLVED"
         assert bundle.probe_runner.runner is None
         assert bundle.probe_runner.registry_identity \
             == manifest.candidate_probe_runner
         assert bundle.training.contract is None
         assert bundle.training.registry_identity \
             == manifest.canonical_dicode_one_update_runtime
+        #: resolve_shared_runtime REFUSES the unresolved object slots
+        from d052.feedback_llm_ued.shared_runtime_binding import (
+            resolve_shared_runtime,
+        )
+        with pytest.raises(Exception,
+                           match=C.BLOCKED_WAITING_SHARED_RUNTIME):
+            resolve_shared_runtime(bundle)
         #: bindings_hash folds the declared identities (never status
         #: strings) and is deterministic
         assert len(bundle.bindings_hash()) == 64

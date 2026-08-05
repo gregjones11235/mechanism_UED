@@ -50,8 +50,16 @@ from d052.feedback_llm_ued.student_binding import (
 )
 from d052.schemas.common import is_sha256_hex
 
-#: slot statuses
-STATUS_BOUND = "BOUND"
+#: slot statuses (P0-16 request-changes: three-state object model)
+#: EMPTY               — not declared at all (BLOCKED_WAITING_SHARED_RUNTIME)
+#: DECLARED_NOT_RESOLVED — the manifest declares the registry identity but
+#:                         the REAL object has NOT been resolved from the
+#:                         FormalAssetRegistry (NOT a handoff state)
+#: BOUND_OBJECT         — the real object was resolved from the registry and
+#:                         its identity matches the manifest (the ONLY state
+#:                         resolve_shared_runtime accepts)
+STATUS_BOUND = "BOUND_OBJECT"
+STATUS_DECLARED_NOT_RESOLVED = "DECLARED_NOT_RESOLVED"
 STATUS_EMPTY = C.BLOCKED_WAITING_SHARED_RUNTIME
 
 #: P0-7: folded into ``bindings_hash`` for every asset that is NOT bound.
@@ -272,7 +280,32 @@ class SharedProbeRunnerSlot:
     #: issued by the formal asset registry — never derived locally)
     registry_identity: str = ""
 
-    def bind(self, runner: object) -> "SharedProbeRunnerSlot":
+    def declare(self, *, registry_identity: str,
+                detail: str) -> "SharedProbeRunnerSlot":
+        """P0-16 (request-changes): record a DECLARED-NOT-RESOLVED runner
+        identity. The manifest declares the identity; the REAL runner
+        OBJECT has NOT been resolved from the FormalAssetRegistry — this is
+        NOT a handoff state (resolve_shared_runtime refuses it)."""
+        if not is_sha256_hex(registry_identity):
+            raise SharedBindingRejected(
+                "PROBE_RUNNER_DIRECTOR_DECLARED_IDENTITY_INVALID: "
+                f"{registry_identity!r}")
+        return SharedProbeRunnerSlot(
+            status=STATUS_DECLARED_NOT_RESOLVED, detail=detail,
+            runner=None, registry_identity=registry_identity)
+
+    def bind_object(self, runner: object, *, expected_identity: str,
+                    ) -> "SharedProbeRunnerSlot":
+        """P0-16 (request-changes): bind the REAL resolved runner OBJECT.
+        The object must be non-None, real_simulator=True, carry a runner_id
+        and the FULL executable ABI hash set, and its registry_identity must
+        EQUAL the manifest-declared identity — an identity string alone is
+        never treated as a bound object."""
+        if runner is None:
+            raise SharedBindingRejected(
+                "PROBE_RUNNER_OBJECT_NONE: a declared identity is NOT a "
+                "bound object — the runner object must be resolved from the "
+                "FormalAssetRegistry")
         if getattr(runner, "real_simulator", None) is not True:
             raise SharedBindingRejected(
                 "PROBE_RUNNER_NOT_REAL: the shared CandidateProbeRunner "
@@ -283,9 +316,6 @@ class SharedProbeRunnerSlot:
             raise SharedBindingRejected(
                 "PROBE_RUNNER_ID_MISSING: the shared runner must expose a "
                 "non-empty runner_id")
-        #: P0-7: registry-issued identity only — a runner that does not
-        #: declare the sha256 identity the formal asset registry issued
-        #: for it cannot be bound (direction two never derives one)
         registry_identity = getattr(runner, "registry_identity", "")
         if (not isinstance(registry_identity, str)
                 or not is_sha256_hex(registry_identity)):
@@ -294,24 +324,32 @@ class SharedProbeRunnerSlot:
                 "must expose ``registry_identity`` — the sha256 hex "
                 "identity issued for it by the formal asset registry, got "
                 f"{registry_identity!r}")
+        if registry_identity != expected_identity:
+            raise SharedBindingRejected(
+                "PROBE_RUNNER_OBJECT_IDENTITY_MISMATCH: the resolved runner "
+                f"identity {registry_identity!r} does not equal the "
+                f"manifest-declared identity {expected_identity!r}")
+        #: the full executable ABI surface (P0-2) the real runner must carry
+        for abi_field in ("observation_abi_hash", "action_abi_hash",
+                          "reward_contract_hash", "reset_protocol_hash",
+                          "step_protocol_hash"):
+            value = getattr(runner, abi_field, "")
+            if not is_sha256_hex(value):
+                raise SharedBindingRejected(
+                    f"PROBE_RUNNER_ABI_HASH_MISSING: the shared runner must "
+                    f"declare {abi_field} as a sha256 hex string, got "
+                    f"{value!r}")
         return SharedProbeRunnerSlot(status=STATUS_BOUND,
                                      detail=runner_id,
                                      runner=runner,
                                      registry_identity=registry_identity)
 
-    def bind_director_declared(self, *, registry_identity: str,
-                               detail: str) -> "SharedProbeRunnerSlot":
-        """P0-16: bind a DIRECTOR-DECLARED runner identity (the director's
-        Runtime Bundle records the registry identity; the runner OBJECT is
-        injected by the director at smoke time). Direction two records the
-        identity — it never fabricates a runner object."""
-        if not is_sha256_hex(registry_identity):
-            raise SharedBindingRejected(
-                "PROBE_RUNNER_DIRECTOR_DECLARED_IDENTITY_INVALID: "
-                f"{registry_identity!r}")
-        return SharedProbeRunnerSlot(status=STATUS_BOUND, detail=detail,
-                                     runner=None,
-                                     registry_identity=registry_identity)
+    def bind(self, runner: object) -> "SharedProbeRunnerSlot":
+        """Direct object bind (TEST_ONLY / direct-injection paths): the
+        object's own registry_identity is authoritative (identity-matched
+        against the manifest happens through bind_object)."""
+        registry_identity = getattr(runner, "registry_identity", "")
+        return self.bind_object(runner, expected_identity=registry_identity)
 
     def slot_identity(self) -> str:
         """P0-7: the REAL asset identity folded into ``bindings_hash`` —
@@ -393,19 +431,38 @@ class SharedTrainingSlot:
     #: surface (sha256 hex, issued by the formal asset registry)
     registry_identity: str = ""
 
-    def bind(self, contract: SharedTrainingContract) -> "SharedTrainingSlot":
-        #: P0-16 (section 6): the director-runtime attestation surface is
-        #: part of the contract — a training surface without it cannot
-        #: prove a checkpoint round-trip and is refused
-        for method in ("run_one_optimizer_update", "save_checkpoint",
-                       "load_checkpoint", "verify_director_round_trip"):
+    def declare(self, *, registry_identity: str,
+                detail: str) -> "SharedTrainingSlot":
+        """P0-16 (request-changes): record a DECLARED-NOT-RESOLVED
+        CanonicalDiCodeOneUpdateRuntime identity. The REAL object has NOT
+        been resolved — this is NOT a handoff state."""
+        if not is_sha256_hex(registry_identity):
+            raise SharedBindingRejected(
+                "SHARED_TRAINING_DIRECTOR_DECLARED_IDENTITY_INVALID: "
+                f"{registry_identity!r}")
+        return SharedTrainingSlot(
+            status=STATUS_DECLARED_NOT_RESOLVED, detail=detail,
+            contract=None, registry_identity=registry_identity)
+
+    def bind_object(self, contract: object, *, expected_identity: str,
+                    ) -> "SharedTrainingSlot":
+        """P0-16 (request-changes): bind the REAL resolved
+        CanonicalDiCodeOneUpdateRuntime OBJECT. The object must be non-None,
+        expose the Canonical DiCode surface (registry_identity +
+        run_one_dicode_update + verify_director_round_trip) and its
+        registry_identity must EQUAL the manifest-declared identity.
+        Direction two never implements a second optimizer."""
+        if contract is None:
+            raise SharedBindingRejected(
+                "SHARED_TRAINING_OBJECT_NONE: a declared identity is NOT a "
+                "bound object — the CanonicalDiCodeOneUpdateRuntime object "
+                "must be resolved from the FormalAssetRegistry")
+        for method in ("run_one_dicode_update", "verify_director_round_trip"):
             if not callable(getattr(contract, method, None)):
                 raise SharedBindingRejected(
                     f"SHARED_TRAINING_CONTRACT_INCOMPLETE: missing callable "
-                    f"{method!r}")
-        #: P0-7: registry-issued identity only — a training surface that
-        #: does not declare the sha256 identity the formal asset registry
-        #: issued for it cannot be bound (direction two never derives one)
+                    f"{method!r} — the production training surface is the "
+                    "Canonical DiCode one-update runtime only")
         registry_identity = getattr(contract, "registry_identity", "")
         if (not isinstance(registry_identity, str)
                 or not is_sha256_hex(registry_identity)):
@@ -414,24 +471,22 @@ class SharedTrainingSlot:
                 "training contract must expose ``registry_identity`` — the "
                 "sha256 hex identity issued for it by the formal asset "
                 f"registry, got {registry_identity!r}")
+        if registry_identity != expected_identity:
+            raise SharedBindingRejected(
+                "SHARED_TRAINING_OBJECT_IDENTITY_MISMATCH: the resolved "
+                f"runtime identity {registry_identity!r} does not equal the "
+                f"manifest-declared identity {expected_identity!r}")
         return SharedTrainingSlot(status=STATUS_BOUND,
-                                  detail="shared training contract bound",
+                                  detail="CanonicalDiCodeOneUpdateRuntime "
+                                         "object bound",
                                   contract=contract,
                                   registry_identity=registry_identity)
 
-    def bind_director_declared(self, *, registry_identity: str,
-                               detail: str) -> "SharedTrainingSlot":
-        """P0-16: bind a DIRECTOR-DECLARED training runtime identity (the
-        director's Runtime Bundle records the CanonicalDiCodeOneUpdateRuntime
-        registry identity; the object is injected by the director at smoke
-        time). Direction two never implements an optimizer."""
-        if not is_sha256_hex(registry_identity):
-            raise SharedBindingRejected(
-                "SHARED_TRAINING_DIRECTOR_DECLARED_IDENTITY_INVALID: "
-                f"{registry_identity!r}")
-        return SharedTrainingSlot(status=STATUS_BOUND, detail=detail,
-                                  contract=None,
-                                  registry_identity=registry_identity)
+    def bind(self, contract: SharedTrainingContract) -> "SharedTrainingSlot":
+        """Direct object bind (TEST_ONLY / direct-injection paths): the
+        object's own registry_identity is authoritative."""
+        registry_identity = getattr(contract, "registry_identity", "")
+        return self.bind_object(contract, expected_identity=registry_identity)
 
     def slot_identity(self) -> str:
         """P0-7: the REAL asset identity folded into ``bindings_hash`` —
@@ -550,12 +605,26 @@ def resolve_shared_runtime(bundle: Optional[SharedRuntimeBundle] = None
                            ) -> SharedRuntimeBundle:
     """Return a COMPLETE bundle or fail closed with the full missing list.
 
-    A missing asset is never downgraded to a local stand-in on the
-    production path — the entrypoint must report
+    P0-16 (request-changes): the ONLY acceptable state is BOUND_OBJECT for
+    every slot — a DECLARED_NOT_RESOLVED identity is NOT a handoff. The
+    object-carrying slots are checked MECHANICALLY: probe_runner.runner and
+    training.contract must be actual objects, never None.
+
+    A missing/unresolved asset is never downgraded to a local stand-in on
+    the production path — the entrypoint must report
     ``BLOCKED_WAITING_SHARED_RUNTIME`` and stop.
     """
     bundle = bundle or SharedRuntimeBundle()
     missing = bundle.missing_assets()
+    if not missing:
+        for name, slot in (("probe_runner", bundle.probe_runner),
+                           ("training", bundle.training)):
+            if name == "probe_runner" and slot.runner is None:
+                missing.append(SLOT_ASSET_DESCRIPTIONS[name] +
+                               " (DECLARED_NOT_RESOLVED: runner is None)")
+            if name == "training" and slot.contract is None:
+                missing.append(SLOT_ASSET_DESCRIPTIONS[name] +
+                               " (DECLARED_NOT_RESOLVED: contract is None)")
     if missing:
         raise SharedRuntimeBlocked(
             f"{C.BLOCKED_WAITING_SHARED_RUNTIME}: missing shared assets: "

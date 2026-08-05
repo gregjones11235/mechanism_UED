@@ -90,20 +90,26 @@ class TestValidBundleRemovesEmptyBundleBlock:
         assert code == 1          # still blocked by jax/craftax only
         report = json.loads(capsys.readouterr().out)
         codes = [b["code"] for b in report["blockers"]]
-        #: the empty-bundle block is GONE
-        assert C.BLOCKED_WAITING_SHARED_RUNTIME not in codes
+        #: the empty-bundle / identity / transport blocks are GONE
         assert "STUDENT_INIT_CONTRACT_NOT_INJECTED" not in codes
         assert "REAL_BACKEND_IDENTITY_UNDECLARED" not in codes
         assert C.REAL_MODE_BLOCKED_NO_LLM_BACKEND not in codes
-        #: only the genuine local runtime-module blockers remain
-        assert set(codes) == {"LOCAL_RUNTIME_MODULE_MISSING"}
-        assert len(codes) == 2
+        #: MANIFEST_ONLY is NOT a handoff: the object slots remain
+        #: DECLARED_NOT_RESOLVED (blocked) plus the local modules
+        assert "LOCAL_RUNTIME_MODULE_MISSING" in codes
+        assert C.BLOCKED_WAITING_SHARED_RUNTIME in codes
         #: the bundle identity is surfaced
         assert report["director_runtime_bundle"]["registry_identity"] \
             == manifest.registry_identity
-        #: the five slots are all BOUND (director-declared / data-bound)
-        for entry in report["shared_runtime_status"].values():
-            assert entry["status"] == "BOUND", entry
+        #: the three-state model is honest: data slots BOUND_OBJECT,
+        #: object slots DECLARED_NOT_RESOLVED
+        statuses = {name: e["status"]
+                    for name, e in report["shared_runtime_status"].items()}
+        assert statuses["student"] == "BOUND_OBJECT"
+        assert statuses["reference"] == "BOUND_OBJECT"
+        assert statuses["anchor_manifest"] == "BOUND_OBJECT"
+        assert statuses["probe_runner"] == "DECLARED_NOT_RESOLVED"
+        assert statuses["training"] == "DECLARED_NOT_RESOLVED"
 
     def test_check_only_never_invokes_a_callable(self, tmp_path, capsys):
         #: check-only must not call the LLM, the probe or training: the

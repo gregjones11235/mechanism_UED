@@ -39,6 +39,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from typing import Optional, Protocol, runtime_checkable
+
 from pydantic import Field, model_validator
 
 from d052.bagr_ued.hashing import canonical_sha256, verify_content_hash
@@ -225,6 +227,10 @@ class DirectorRuntimeBundleManifest(CanonicalModel):
     registry_identity: str = Field(min_length=1)
     #: the formal asset registry that issued this bundle
     formal_asset_registry: str = Field(min_length=1)
+    #: P0-16 (request-changes): the trusted signer id and the source commit
+    #: the shared DirectorBundleVerifier checks (registry-signed)
+    signer_id: str = Field(min_length=1)
+    source_commit: str = Field(min_length=1)
 
     student_init_contract: StudentInitContractData
     student_identity: str = Field(min_length=1)
@@ -266,30 +272,45 @@ class DirectorRuntimeBundleManifest(CanonicalModel):
             raise ValueError(
                 "DIRECTOR_RUNTIME_BUNDLE_UNSIGNED: the director must sign "
                 "the bundle (bundle_hash is mandatory)")
-        computed = verify_content_hash(self.model_dump(),
-                                       hash_field="bundle_hash",
-                                       carried=self.bundle_hash,
-                                       kind="DirectorRuntimeBundleManifest")
+        computed = canonical_sha256(_manifest_hash_body(self))
+        if self.bundle_hash and self.bundle_hash != computed:
+            raise ValueError(
+                "CONTENT_HASH_MISMATCH: DirectorRuntimeBundleManifest "
+                "carried bundle_hash="
+                f"{self.bundle_hash!r} but its content recomputes to "
+                f"{computed!r} — the bundle was tampered with or signed "
+                "over a non-canonical body")
         object.__setattr__(self, "bundle_hash", computed)
         return self
 
 
-def sign_director_runtime_bundle(payload: Dict[str, Any]
-                                 ) -> DirectorRuntimeBundleManifest:
-    """DIRECTOR-side signing helper (TEST_ONLY in this worktree). The
-    production path NEVER calls this — direction two consumes the
-    director's signed manifest only. Kept here under an explicit
-    DIRECTOR/TEST_ONLY contract so tests can mint fixtures; production
-    entrypoints call :func:`load_director_runtime_bundle` only."""
-    body = dict(payload)
-    body.pop("bundle_hash", None)
-    body.setdefault(
-        "protocol_version",
-        DirectorRuntimeBundleManifest.model_fields["protocol_version"]
-        .default)
-    body.setdefault("bundle_version", DIRECTOR_RUNTIME_BUNDLE_VERSION)
-    signature = canonical_sha256(body)
-    return DirectorRuntimeBundleManifest(**body, bundle_hash=signature)
+def _manifest_hash_body(manifest: "DirectorRuntimeBundleManifest") -> dict:
+    """The canonical body the bundle hash is computed over: the full dump
+    minus ``bundle_hash`` and minus the Student contract's self-referential
+    ``runtime_bundle_hash`` (which, by contract, BINDS the bundle's own
+    hash — the cross-binding is verified separately)."""
+    body = {k: v for k, v in manifest.model_dump().items()
+            if k != "bundle_hash"}
+    student = dict(body["student_init_contract"])
+    student.pop("runtime_bundle_hash", None)
+    body["student_init_contract"] = student
+    return body
+
+
+@runtime_checkable
+class DirectorBundleVerifier(Protocol):
+    """P0-16 (request-changes): the DIRECTOR-shared Bundle verifier the
+    production path CONSUMES. It — not a local content hash — establishes
+    that the manifest was ISSUED by a trusted signer of the FormalAssetRegistry.
+    Direction two never implements its own signature scheme."""
+
+    verifier_id: str
+    verifier_implementation_hash: str
+
+    def verify_manifest(self, manifest: "DirectorRuntimeBundleManifest"
+                        ) -> bool: ...
+    def signer_trusted(self, signer_id: str) -> bool: ...
+    def verify_source_commit(self, source_commit: str) -> bool: ...
 
 
 def runtime_bundle_binding_problems(manifest: DirectorRuntimeBundleManifest
@@ -440,14 +461,18 @@ def build_shared_bundle(manifest: DirectorRuntimeBundleManifest
         anchors=list(manifest.shared_anchor_manifest.anchors),
         frozen=True,
         manifest_hash=manifest.shared_anchor_manifest.manifest_hash))
-    probe_runner = SharedProbeRunnerSlot().bind_director_declared(
+    #: P0-16 (request-changes): the manifest declares ONLY identities — the
+    #: REAL objects must be resolved from the FormalAssetRegistry via
+    #: resolve_director_runtime_objects before the bundle can hand off. A
+    #: declared-not-resolved slot is NOT a handoff state.
+    probe_runner = SharedProbeRunnerSlot().declare(
         registry_identity=manifest.candidate_probe_runner,
-        detail="candidate probe runner: DIRECTOR-DECLARED (object injected "
-               "at smoke time)")
-    training = SharedTrainingSlot().bind_director_declared(
+        detail="candidate probe runner: DECLARED_NOT_RESOLVED (object must "
+               "be resolved from the FormalAssetRegistry)")
+    training = SharedTrainingSlot().declare(
         registry_identity=manifest.canonical_dicode_one_update_runtime,
-        detail="CanonicalDiCodeOneUpdateRuntime: DIRECTOR-DECLARED (object "
-               "injected at smoke time)")
+        detail="CanonicalDiCodeOneUpdateRuntime: DECLARED_NOT_RESOLVED "
+               "(object must be resolved from the FormalAssetRegistry)")
     return SharedRuntimeBundle(student=student, reference=reference,
                                probe_runner=probe_runner,
                                anchor_manifest=anchor, training=training)
@@ -456,6 +481,81 @@ def build_shared_bundle(manifest: DirectorRuntimeBundleManifest
 def bundle_backend_identity(manifest: DirectorRuntimeBundleManifest
                             ) -> Dict[str, str]:
     return dict(manifest.backend_model_identity)
+
+
+def require_trusted_verifier(verifier: Optional[DirectorBundleVerifier],
+                             manifest: DirectorRuntimeBundleManifest) -> None:
+    """P0-16 (request-changes): the bundle is only trusted when the
+    DIRECTOR-shared verifier passes — a local content hash alone proves
+    nothing. Without an injected shared verifier the path fails closed
+    (PRODUCTION_BUNDLE_VERIFIER_UNBOUND)."""
+    if verifier is None:
+        raise DirectorRuntimeBundleBlocked(
+            "PRODUCTION_BUNDLE_VERIFIER_UNBOUND: the production path "
+            "consumes the director-shared DirectorBundleVerifier; without "
+            "it no bundle is trusted (a content hash is not a signature)")
+    if not verifier.verify_manifest(manifest):
+        raise DirectorRuntimeBundleBlocked(
+            "PRODUCTION_BUNDLE_VERIFIER_REJECTED: the shared verifier "
+            "rejected the manifest (signature / payload / schema check)")
+    if not verifier.signer_trusted(manifest.signer_id):
+        raise DirectorRuntimeBundleBlocked(
+            "PRODUCTION_BUNDLE_SIGNER_UNTRUSTED: signer_id="
+            f"{manifest.signer_id!r} is not in the director's trusted "
+            "signer registry")
+    if not verifier.verify_source_commit(manifest.source_commit):
+        raise DirectorRuntimeBundleBlocked(
+            "PRODUCTION_BUNDLE_SOURCE_COMMIT_UNTRUSTED: source_commit="
+            f"{manifest.source_commit!r} is not trusted")
+
+
+def assert_runtime_bundle_hash_cross_bound(
+        manifest: DirectorRuntimeBundleManifest) -> None:
+    """P0-16 (request-changes, section 5): the Student contract's
+    runtime_bundle_hash MUST equal the manifest's own bundle hash — every
+    object (StudentBindingIdentity, feedback, plan, probe result, batch
+    plan, training result, round-trip attestation) binds the SAME hash."""
+    if manifest.student_init_contract.runtime_bundle_hash \
+            != manifest.bundle_hash:
+        raise DirectorRuntimeBundleBlocked(
+            "E2_RUNTIME_BUNDLE_HASH_MISMATCH: the Student contract binds "
+            f"runtime_bundle_hash "
+            f"{manifest.student_init_contract.runtime_bundle_hash!r} but "
+            f"the manifest bundle_hash is {manifest.bundle_hash!r}")
+
+
+def resolve_director_runtime_objects(
+        manifest: DirectorRuntimeBundleManifest,
+        formal_asset_registry, bundle: SharedRuntimeBundle
+) -> SharedRuntimeBundle:
+    """P0-16 (request-changes, section 3): resolve the REAL objects from
+    the shared FormalAssetRegistry and bind them as BOUND_OBJECT.
+
+    Each resolved object must satisfy ``object.registry_identity ==
+    manifest-declared identity`` (and the shared registry verifies the
+    implementation hash). Direction two only consumes — it never builds a
+    second loader / registry / optimizer / checkpoint codec."""
+    probe_runner = formal_asset_registry.resolve_asset(
+        identity=manifest.candidate_probe_runner)
+    if probe_runner is None:
+        raise DirectorRuntimeBundleBlocked(
+            "OBJECT_LEVEL_CHECK_BLOCKED: the CandidateProbeRunner object "
+            "was not resolved from the FormalAssetRegistry")
+    training = formal_asset_registry.resolve_asset(
+        identity=manifest.canonical_dicode_one_update_runtime)
+    if training is None:
+        raise DirectorRuntimeBundleBlocked(
+            "OBJECT_LEVEL_CHECK_BLOCKED: the CanonicalDiCodeOneUpdateRuntime "
+            "object was not resolved from the FormalAssetRegistry")
+    probe_slot = bundle.probe_runner.bind_object(
+        probe_runner, expected_identity=manifest.candidate_probe_runner)
+    training_slot = bundle.training.bind_object(
+        training, expected_identity=manifest.canonical_dicode_one_update_runtime)
+    return SharedRuntimeBundle(
+        student=bundle.student, reference=bundle.reference,
+        probe_runner=probe_slot, anchor_manifest=bundle.anchor_manifest,
+        training=training_slot,
+        formal_registry_identity=bundle.formal_registry_identity)
 
 
 __all__ = [

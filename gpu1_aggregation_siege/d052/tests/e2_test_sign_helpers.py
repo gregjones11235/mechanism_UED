@@ -46,6 +46,8 @@ def valid_director_bundle_payload(*, anchors=None,
     return dict(
         registry_identity=text_sha256("TEST_ONLY_RUNTIME_BUNDLE"),
         formal_asset_registry=text_sha256("TEST_ONLY_FORMAL_ASSET_REGISTRY"),
+        signer_id=text_sha256("TEST_ONLY_TRUSTED_SIGNER"),
+        source_commit=text_sha256("TEST_ONLY_SOURCE_COMMIT"),
         student_init_contract=dict(
             candidate_id=candidate_id,
             architecture_family="RMT16",
@@ -108,17 +110,18 @@ def valid_director_bundle(*, anchors=None,
 def sign_director_runtime_bundle(
         payload: Dict[str, Any]) -> DirectorRuntimeBundleManifest:
     """TEST_ONLY: mint a director Runtime Bundle (the DIRECTOR's side is
-    emulated with a canonical hash — direction two never signs a bundle
-    in production; it only verifies the director's). The nested model
-    fields are normalized through their own model dumps so the signature
-    covers exactly what ``model_dump()`` reproduces (including the nested
-    ``protocol_version`` fields)."""
+    emulated — direction two never signs a bundle in production). The
+    signature is computed over the SAME canonical body the production
+    validator uses (``_manifest_hash_body`` — the Student's self-referential
+    runtime_bundle_hash is excluded and then set to the bundle's own hash,
+    the §5 cross-binding)."""
     from d052.feedback_llm_ued.director_runtime_bundle import (
         AnchorManifestData,
         DiCodeBatchBindingData,
         ReferenceIdentityData,
         SmokeSemanticsData,
         StudentInitContractData,
+        _manifest_hash_body,
     )
     body = dict(payload)
     body.pop("bundle_hash", None)
@@ -137,7 +140,18 @@ def sign_director_runtime_bundle(
         **body["smoke_semantics"]).model_dump()
     body["batch_binding"] = DiCodeBatchBindingData(
         **body["batch_binding"]).model_dump()
-    signature = canonical_sha256(body)
+    #: §5 cross-binding: the signature covers the body WITHOUT the Student's
+    #: self-referential runtime_bundle_hash, which is then set to the
+    #: bundle's own hash (the production validator recomputes the SAME body)
+    sign_body = dict(body)
+    sign_body.pop("bundle_hash", None)
+    student = dict(sign_body["student_init_contract"])
+    student.pop("runtime_bundle_hash", None)
+    sign_body["student_init_contract"] = student
+    signature = canonical_sha256(sign_body)
+    student_final = dict(body["student_init_contract"])
+    student_final["runtime_bundle_hash"] = signature
+    body["student_init_contract"] = student_final
     return DirectorRuntimeBundleManifest(**body, bundle_hash=signature)
 
 

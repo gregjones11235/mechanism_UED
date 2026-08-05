@@ -742,7 +742,11 @@ class FeedbackUEDController:
                     batch_candidate_ids=(batch_plan.batch_candidate_ids
                                          if batch_plan is not None
                                          else batch.final_batch),
-                    batch_plan=batch_plan)
+                    batch_plan=batch_plan,
+                    #: P0-16 request-changes (§6): without the director
+                    #: DiCode binding the legacy optimizer surface is
+                    #: reachable ONLY as TEST_ONLY_LEGACY_ADAPTER
+                    test_only=(self.dicode_batch_binding is None))
             self.training_log.append(training)
 
         # -- E. ATOMIC FREEZE: feedback_k + new hypotheses + FROZEN ---------

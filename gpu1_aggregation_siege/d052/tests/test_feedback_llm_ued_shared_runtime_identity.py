@@ -88,16 +88,17 @@ def reference_contract(parameter_tree_hash=REFERENCE_PARAM_HASH_A):
 
 def probe_runner(*, registry_identity=RUNNER_REGISTRY_ID_A,
                  runner_id="TEST_ONLY_RUNNER_01", real_simulator=True):
-    return SimpleNamespace(real_simulator=real_simulator,
-                           runner_id=runner_id,
-                           registry_identity=registry_identity)
+    return SimpleNamespace(
+        real_simulator=real_simulator, runner_id=runner_id,
+        registry_identity=registry_identity,
+        observation_abi_hash="a1" * 32, action_abi_hash="a2" * 32,
+        reward_contract_hash="a3" * 32, reset_protocol_hash="a4" * 32,
+        step_protocol_hash="a5" * 32)
 
 
 def training_contract(registry_identity=TRAINING_REGISTRY_ID_A):
     return SimpleNamespace(
-        run_one_optimizer_update=lambda **kw: None,
-        save_checkpoint=lambda **kw: "TEST_ONLY_CHECKPOINT_HASH",
-        load_checkpoint=lambda **kw: None,
+        run_one_dicode_update=lambda **kw: None,
         verify_director_round_trip=lambda **kw: None,
         registry_identity=registry_identity)
 

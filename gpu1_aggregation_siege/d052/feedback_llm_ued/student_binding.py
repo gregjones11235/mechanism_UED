@@ -579,15 +579,22 @@ class StudentTrainingSeam:
 
     def execute_real_window_update(self, window: int, *,
                                    batch_candidate_ids,
-                                   batch_plan=None) -> TrainingStepRecord:
+                                   batch_plan=None,
+                                   test_only=False) -> TrainingStepRecord:
         """Window k+1's single real optimizer update over the batch.
 
         P0-16 (DiCode 15+1): with a :class:`CanonicalDiCodeTrainingBatchPlan`
         the update is executed EXCLUSIVELY by the director-shared
         CanonicalDiCodeOneUpdateRuntime over the 15 curriculum task ids
         (the OriginalTask is appended internally once by that runtime —
-        direction two never implements a second optimizer). Re-checks the
-        gate; refuses without a contract.
+        direction two never implements a second optimizer).
+
+        Request-changes (section 6): the PRODUCTION path requires the
+        canonical batch plan — without it the update fails
+        (REAL_DICODE_BATCH_PLAN_REQUIRED); the legacy optimizer surface
+        (run_one_optimizer_update / save_checkpoint / load_checkpoint) is
+        reachable ONLY through the explicit TEST_ONLY_LEGACY_ADAPTER
+        (``test_only=True``).
         """
         self._gate.assert_training_allowed()
         if self._training_contract is None:
@@ -599,11 +606,18 @@ class StudentTrainingSeam:
                 f"REAL_TRAINING_BATCH_EMPTY: window={window} — the update "
                 "must consume the probe-selected final batch; an empty "
                 "batch is refused (NO_SILENT_FALLBACK)")
-        if batch_plan is not None:
-            return self._execute_one_dicode_update(window, batch_plan)
-        return self._execute_one_update(window,
-                                        batch_candidate_ids
-                                        =tuple(batch_candidate_ids))
+        if batch_plan is None:
+            if not test_only:
+                raise StudentBindingBlocked(
+                    "REAL_DICODE_BATCH_PLAN_REQUIRED: window="
+                    f"{window} — the production training path consumes "
+                    "ONLY the canonical DiCode 15+1 batch plan; the legacy "
+                    "optimizer surface is TEST_ONLY_LEGACY_ADAPTER "
+                    "(test_only=True) and never enters the production "
+                    "path")
+            return self._execute_one_update(
+                window, batch_candidate_ids=tuple(batch_candidate_ids))
+        return self._execute_one_dicode_update(window, batch_plan)
 
     def _execute_one_dicode_update(self, window: int, batch_plan
                                    ) -> TrainingStepRecord:
