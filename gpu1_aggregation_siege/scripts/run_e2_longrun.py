@@ -44,7 +44,17 @@ import sys
 from typing import Dict, List
 
 from d052.feedback_llm_ued import constants as C
+from d052.feedback_llm_ued.real_compute_ledger import (
+    TRAINING_BUDGET_SEMANTICS,
+)
 from d052.feedback_llm_ued.shared_runtime_binding import SharedRuntimeBundle
+
+#: P0-14: the long-run training-budget SEMANTICS is a DIRECTOR decision
+#: (TOTAL_FROM_COMMON_INITIALIZATION | ADDITIONAL_FROM_PRETRAINED_-
+#: CHECKPOINT). Direction two consumes the shared runtime and cannot
+#: decide it itself; until the director decides, the budget is blocked
+#: and no long run may launch.
+TRAINING_BUDGET_SEMANTICS_SELECTED = C.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION
 
 #: CLI mode name -> frozen loop mode (NO new modes are forked)
 MODE_TO_LOOP_MODE = {
@@ -159,6 +169,13 @@ def main(argv=None) -> int:
         config=selected,
         all_modes_compute_fields_identical=not problems,
         total_env_steps_required=C.TOTAL_ENV_STEPS_LONG_RUN,
+        #: P0-13/P0-14 audit surface: the executed compute must be
+        #: reconciled by the RealComputeLedger after every completed run,
+        #: and the training-budget SEMANTICS is a director decision —
+        #: blocked until decided
+        training_budget_semantics=TRAINING_BUDGET_SEMANTICS_SELECTED,
+        training_budget_semantics_legal_values=sorted(
+            TRAINING_BUDGET_SEMANTICS),
         e2_pilot_authorized=C.E2_PILOT_AUTHORIZED)
     print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False,
                      default=str))
@@ -176,6 +193,19 @@ def main(argv=None) -> int:
               "the long run is NOT started; starting it requires the "
               "explicit pilot authorization plus the shared runtime assets "
               "(see scripts/run_e2_real_two_window.py blocker gate)",
+              file=sys.stderr)
+        return 1
+    if TRAINING_BUDGET_SEMANTICS_SELECTED \
+            not in TRAINING_BUDGET_SEMANTICS:
+        #: P0-14: the 98304-step budget's meaning is a director decision;
+        #: a launch under an undecided budget semantics is refused
+        print("\nLONGRUN REFUSED: training_budget_semantics="
+              f"{TRAINING_BUDGET_SEMANTICS_SELECTED!r} is not a decided "
+              f"semantics (legal: {sorted(TRAINING_BUDGET_SEMANTICS)}) — "
+              "the director must decide whether the 98304 environment "
+              "steps are a TOTAL budget from common initialization or "
+              "ADDITIONAL from a pretrained checkpoint before any long "
+              "run may launch",
               file=sys.stderr)
         return 1
     #: beyond this point the launch would reuse the SAME fail-closed asset

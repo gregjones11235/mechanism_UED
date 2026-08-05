@@ -114,6 +114,16 @@ BLOCKED_WAITING_SHARED_RUNTIME = "BLOCKED_WAITING_SHARED_RUNTIME"
 #: without modifying any frozen historical evidence.
 LEGACY_REPLAY_BLOCKED_NON_PRODUCTION = "LEGACY_REPLAY_BLOCKED_NON_PRODUCTION"
 
+#: P0-14: training-budget semantics — what the long-run's environment-step
+#: budget MEANS. Direction two consumes the shared runtime and cannot
+#: decide this itself; the director must. Default: blocked until decided.
+TRAINING_BUDGET_TOTAL_FROM_COMMON_INITIALIZATION = \
+    "TOTAL_FROM_COMMON_INITIALIZATION"
+TRAINING_BUDGET_ADDITIONAL_FROM_PRETRAINED_CHECKPOINT = \
+    "ADDITIONAL_FROM_PRETRAINED_CHECKPOINT"
+BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION = \
+    "BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION"
+
 #: engineering-progress flags (may flip True as scaffold pieces land):
 #: C16 earned: the direction-two formal plan (six-role Review Board +
 #: independent EnvCoder + double-window state machine + three-mode
