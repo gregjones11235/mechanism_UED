@@ -1,0 +1,40 @@
+{
+  "audit": "E2 Persistent object-level binding (REQUEST_CHANGES repair)",
+  "max_status": "E2_PERSISTENT_OBJECT_CONSUMER_READY",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "focused_student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "continuity_chain": {
+    "window_k_student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "feedback_k_student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "window_k_plus_1_student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "probe_student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "training_student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "cross_student_feedback": "REFUSED"
+  },
+  "entrypoint_call_chain": [
+    "load_director_runtime_bundle",
+    "require_trusted_verifier",
+    "assert_runtime_bundle_hash_cross_bound",
+    "build_shared_bundle",
+    "resolve_director_runtime_objects",
+    "resolve_shared_runtime",
+    "discover_blockers",
+    "check-only / execution"
+  ],
+  "cli_lock": {
+    "--student-candidate-id": "consistency-only; conflict -> E2_STUDENT_CANDIDATE_CLI_OVERRIDE_FORBIDDEN",
+    "--backend-id": "consistency-only; conflict -> E2_CLI_BACKEND_OVERRIDE_FORBIDDEN",
+    "--model-id": "consistency-only; conflict -> E2_CLI_MODEL_OVERRIDE_FORBIDDEN",
+    "--transport": "dynamic import FORBIDDEN; transport resolved ONLY from the FormalAssetRegistry"
+  },
+  "production_never_test_only": true,
+  "legacy_optimizer_surface": "TEST_ONLY_LEGACY_ADAPTER (explicit test_only=True) only",
+  "formal_start": {
+    "smoke_only_origin": "REMOVED (the Persistent checkpoint is NOT encoded as smoke-only; after human approval it MAY be the formal experiment start)",
+    "formal_start_requires_human": true,
+    "98304_is_checkpoint_identity_not_budget": true
+  },
+  "tests_full": 1552,
+  "all_passing": true
+}

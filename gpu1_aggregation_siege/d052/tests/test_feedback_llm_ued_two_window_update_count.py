@@ -74,33 +74,16 @@ class ScriptedTrainingContract:
     verifier_id = text_sha256("TEST_ONLY_DIRECTOR_VERIFIER_IDENTITY")
 
     def __init__(self) -> None:
-        self.update_calls = []
-        self.save_calls = []
-        self.load_calls = []
+        self.plan_calls = []
         self.round_trip_verifications = []
-        self._version = 0
-        self._last_hash = text_sha256("TEST_ONLY_GENESIS_STATE")
 
-    def save_checkpoint(self, *, tag: str) -> str:
-        self._version += 1
-        checkpoint_hash = text_sha256(
-            f"TEST_ONLY_CHECKPOINT_STATE_{self._version}")
-        self.save_calls.append((tag, checkpoint_hash))
-        self._last_hash = checkpoint_hash
-        return checkpoint_hash
-
-    def run_one_optimizer_update(self, *, window: int,
-                                 batch_candidate_ids) -> TrainingUpdateResult:
-        self.update_calls.append((window, tuple(batch_candidate_ids)))
-        return TrainingUpdateResult(
-            window=window, optimizer_steps=1,
-            env_steps=len(list(batch_candidate_ids)),
-            checkpoint_hash_before=self._last_hash,
+    def run_one_dicode_update(self, *, batch_plan):
+        self.plan_calls.append((batch_plan.window,
+                                tuple(batch_plan.batch_candidate_ids)))
+        return SimpleNamespace(
+            window=batch_plan.window, optimizer_steps=1, env_steps=8,
             checkpoint_hash_after=text_sha256(
-                f"TEST_ONLY_POST_UPDATE_{window}"))
-
-    def load_checkpoint(self, *, checkpoint_hash: str) -> None:
-        self.load_calls.append(checkpoint_hash)
+                f"TEST_ONLY_POST_UPDATE_{batch_plan.window}"))
 
     def verify_director_round_trip(self, *, window: int,
                                    checkpoint_hash: str):
@@ -149,7 +132,8 @@ def student_contract():
                runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
 
-def make_controller(*, policy=None, contract=None) -> FeedbackUEDController:
+def make_controller(*, policy=None, contract=None,
+                    batch_binding=None) -> FeedbackUEDController:
     #: the grant ladder requires EVERY lower capability for training
     #: (real_training -> real_probe -> real_envcoder -> real_llm_backend);
     #: the probe runner is the scripted TEST_ONLY real-kind runner and the
@@ -171,80 +155,92 @@ def make_controller(*, policy=None, contract=None) -> FeedbackUEDController:
         real_env_coder_callable=scripted_real_env_coder({}),
         two_window_smoke_policy=policy,
         runtime_bundle_hash=RUNTIME_BUNDLE_HASH,
-        director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
+        director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
+        dicode_batch_binding=batch_binding)
+
+
+def _binding():
+    from d052.feedback_llm_ued.director_runtime_bundle import (
+        DiCodeBatchBindingData,
+    )
+    return DiCodeBatchBindingData(
+        dynamic_task_count=C.DICODE_CURRICULUM_DYNAMIC,
+        non_target_anchor_count=C.DICODE_CURRICULUM_NON_TARGET_ANCHORS,
+        curriculum_task_count=C.DICODE_CURRICULUM_TASK_COUNT,
+        non_target_anchor_ids=list(C.GLOBAL_CANONICAL_ANCHOR_IDS[:3]),
+        original_task_id="DICODE_ORIGINAL_TASK_V1",
+        original_task_proportion=C.DICODE_ORIGINAL_TASK_PROPORTION,
+        total_task_count=C.DICODE_BATCH_TOTAL_TASKS)
 
 
 class TestExactlyOneUpdate:
     def test_smoke_executes_exactly_one_update_in_window_one(self):
         contract = ScriptedTrainingContract()
         controller = make_controller(policy=RealTwoWindowSmokePolicy(),
-                                     contract=contract)
+                                     contract=contract,
+                                     batch_binding=_binding())
         summary = controller.run(max_windows=2)
         assert summary.n_windows == 2
 
         #: delta semantics: window 0 trains NOTHING, window 1 updates ONCE
-        assert [window for window, _ in contract.update_calls] == [1]
+        assert [window for window, _ in contract.plan_calls] == [1]
         statuses = [t.status for t in controller.training_log]
         assert statuses.count(EXECUTED_ONE_UPDATE_STATUS) == 1
         assert statuses.count(SKIPPED_STATUS) == 1
-        #: phase-D ordering: window 0 skipped, window 1 executed (each
-        #: preceded by its REVISION-phase DEFERRED record)
         phase_d = [s for s in statuses
                    if s in (SKIPPED_STATUS, EXECUTED_ONE_UPDATE_STATUS)]
         assert phase_d == [SKIPPED_STATUS, EXECUTED_ONE_UPDATE_STATUS]
 
-    def test_update_consumes_probe_selected_final_batch(self):
+    def test_update_consumes_probe_selected_curriculum_batch(self):
         contract = ScriptedTrainingContract()
         controller = make_controller(policy=RealTwoWindowSmokePolicy(),
-                                     contract=contract)
+                                     contract=contract,
+                                     batch_binding=_binding())
         controller.run(max_windows=2)
-        window, batch_ids = contract.update_calls[0]
+        window, batch_ids = contract.plan_calls[0]
         assert window == 1
-        #: the final batch (12 dynamic + 4 anchors), probe-selected after
-        #: window 1 consumed feedback_0
-        assert len(batch_ids) == C.FINAL_BATCH
-        assert len(set(batch_ids)) == C.FINAL_BATCH
+        #: the canonical 15 curriculum ids (12 dynamic + 3 non-target
+        #: anchors); the OriginalTask is appended internally once
+        assert len(batch_ids) == C.DICODE_CURRICULUM_TASK_COUNT
+        assert "DICODE_ORIGINAL_TASK_V1" not in batch_ids
 
     def test_checkpoint_roundtrip_wraps_the_single_update(self):
         contract = ScriptedTrainingContract()
         controller = make_controller(policy=RealTwoWindowSmokePolicy(),
-                                     contract=contract)
+                                     contract=contract,
+                                     batch_binding=_binding())
         controller.run(max_windows=2)
-        assert [tag for tag, _ in contract.save_calls] == [
-            "window-01-pre-update", "window-01-post-update"]
-        hash_before, hash_after = (h for _, h in contract.save_calls)
-        assert hash_before != hash_after
-        #: the post-update checkpoint reloads (round-trip) and ONLY then
-        assert contract.load_calls == [hash_after]
+        #: the director round-trip attestation was requested for window 1
+        assert [w for w, _ in contract.round_trip_verifications] == [1]
 
     def test_no_policy_updates_every_training_window(self):
-        #: regression contrast: without the smoke policy the historical
-        #: behavior updates in BOTH windows — exactly what P0-10 forbids
-        #: for the two-window smoke
+        #: regression contrast: without the smoke policy both windows would
+        #: update — exactly what P0-10 forbids for the two-window smoke
         contract = ScriptedTrainingContract()
-        controller = make_controller(policy=None, contract=contract)
+        controller = make_controller(policy=None, contract=contract,
+                                     batch_binding=_binding())
         controller.run(max_windows=2)
-        assert [window for window, _ in contract.update_calls] == [0, 1]
+        assert [window for window, _ in contract.plan_calls] == [0, 1]
 
     def test_unreachable_update_window_fails_closed(self):
         contract = ScriptedTrainingContract()
         controller = make_controller(
             policy=RealTwoWindowSmokePolicy(update_window_index=5),
-            contract=contract)
+            contract=contract, batch_binding=_binding())
         with pytest.raises(RuntimeError,
                            match="TWO_WINDOW_SMOKE_UPDATE_COUNT_MISMATCH"):
             controller.run(max_windows=2)
-        assert contract.update_calls == []
+        assert contract.plan_calls == []
 
     def test_zero_expected_and_no_update_window_is_consistent(self):
         contract = ScriptedTrainingContract()
         controller = make_controller(
             policy=RealTwoWindowSmokePolicy(updates_expected_total=0,
                                             update_window_index=5),
-            contract=contract)
+            contract=contract, batch_binding=_binding())
         summary = controller.run(max_windows=2)
         assert summary.n_windows == 2
-        assert contract.update_calls == []
+        assert contract.plan_calls == []
 
     def test_policy_inert_without_training_authorization(self):
         #: the default mock/symbolic controller never trains; the policy
@@ -281,7 +277,8 @@ class TestPosture:
     def test_real_capability_flags_stay_false(self):
         contract = ScriptedTrainingContract()
         controller = make_controller(policy=RealTwoWindowSmokePolicy(),
-                                     contract=contract)
+                                     contract=contract,
+                                     batch_binding=_binding())
         controller.run(max_windows=2)
         #: the update EXECUTED inside the scripted contract, yet no
         #: capability constant may flip

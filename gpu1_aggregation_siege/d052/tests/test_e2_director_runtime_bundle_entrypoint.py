@@ -81,57 +81,43 @@ class TestNoManifestPreservesHonestBlock:
 
 
 class TestValidBundleRemovesEmptyBundleBlock:
-    def test_empty_bundle_block_is_gone_with_valid_bundle(self, tmp_path,
-                                                          capsys):
+    def test_manifest_only_bundle_honestly_blocked(self, tmp_path, capsys):
+        #: without an injected DirectorBundleVerifier the production chain
+        #: fails closed — a manifest identity is NOT a handoff
         manifest = valid_director_bundle()
         path = _write_bundle(manifest, tmp_path)
         code = ENTRYPOINT.main(
             ["--check-only", "--director-runtime-bundle", path])
-        assert code == 1          # still blocked by jax/craftax only
-        report = json.loads(capsys.readouterr().out)
-        codes = [b["code"] for b in report["blockers"]]
-        #: the empty-bundle / identity / transport blocks are GONE
-        assert "STUDENT_INIT_CONTRACT_NOT_INJECTED" not in codes
-        assert "REAL_BACKEND_IDENTITY_UNDECLARED" not in codes
-        assert C.REAL_MODE_BLOCKED_NO_LLM_BACKEND not in codes
-        #: MANIFEST_ONLY is NOT a handoff: the object slots remain
-        #: DECLARED_NOT_RESOLVED (blocked) plus the local modules
-        assert "LOCAL_RUNTIME_MODULE_MISSING" in codes
-        assert C.BLOCKED_WAITING_SHARED_RUNTIME in codes
-        #: the bundle identity is surfaced
-        assert report["director_runtime_bundle"]["registry_identity"] \
-            == manifest.registry_identity
-        #: the three-state model is honest: data slots BOUND_OBJECT,
-        #: object slots DECLARED_NOT_RESOLVED
-        statuses = {name: e["status"]
-                    for name, e in report["shared_runtime_status"].items()}
-        assert statuses["student"] == "BOUND_OBJECT"
-        assert statuses["reference"] == "BOUND_OBJECT"
-        assert statuses["anchor_manifest"] == "BOUND_OBJECT"
-        assert statuses["probe_runner"] == "DECLARED_NOT_RESOLVED"
-        assert statuses["training"] == "DECLARED_NOT_RESOLVED"
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "OBJECT_LEVEL_CHECK_BLOCKED" in err
+        assert "PRODUCTION_BUNDLE_VERIFIER_UNBOUND" in err
 
-    def test_check_only_never_invokes_a_callable(self, tmp_path, capsys):
-        #: check-only must not call the LLM, the probe or training: the
-        #: report carries no execution fields and no journal was persisted
+    def test_cli_transport_dynamic_import_forbidden(self, tmp_path, capsys):
+        #: production never loads a transport from an arbitrary module.attr
+        code = ENTRYPOINT.main(["--check-only", "--transport",
+                                "d052.feedback_llm_ued.constants.MODE"])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "REAL_LLM_TRANSPORT_DYNAMIC_IMPORT_FORBIDDEN" in err
+
+    def test_cli_backend_conflict_rejected(self, tmp_path, capsys):
         manifest = valid_director_bundle()
         path = _write_bundle(manifest, tmp_path)
-        ENTRYPOINT.main(["--check-only", "--director-runtime-bundle", path])
-        report = json.loads(capsys.readouterr().out)
-        assert "journal_entries" not in report
-        assert "optimizer_updates_executed" not in report
-        assert report["blockers"]
+        code = ENTRYPOINT.main(["--check-only", "--director-runtime-bundle",
+                                path, "--backend-id", "NOT_THE_BUNDLE_BACKEND"])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "E2_CLI_BACKEND_OVERRIDE_FORBIDDEN" in err
 
-    def test_report_out_writes_the_report(self, tmp_path, capsys):
+    def test_cli_model_conflict_rejected(self, tmp_path, capsys):
         manifest = valid_director_bundle()
         path = _write_bundle(manifest, tmp_path)
-        out_path = tmp_path / "report_out.json"
-        ENTRYPOINT.main(["--check-only", "--director-runtime-bundle", path,
-                         "--report-out", str(out_path)])
-        written = json.loads(out_path.read_text(encoding="utf-8"))
-        assert written["entrypoint"] == \
-            "scripts/run_e2_real_two_window.py"
-        assert "blockers" in written
+        code = ENTRYPOINT.main(["--check-only", "--director-runtime-bundle",
+                                path, "--model-id", "NOT_THE_BUNDLE_MODEL"])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "E2_CLI_MODEL_OVERRIDE_FORBIDDEN" in err
 
 
 class TestInvalidBundleFailsClosed:
@@ -148,17 +134,19 @@ class TestInvalidBundleFailsClosed:
         err = capsys.readouterr().err
         assert C.DIRECTOR_RUNTIME_BUNDLE_INVALID in err
 
-    def test_wrong_batch_binding_reported_as_blocker(self, tmp_path, capsys):
+    def test_wrong_batch_binding_fails_closed_at_verifier(self, tmp_path,
+                                                          capsys):
+        #: the chain blocks at the trusted-verifier gate BEFORE the binding
+        #: problems are evaluated (no verifier injected -> unbound)
         payload = valid_director_bundle_payload()
         payload["batch_binding"]["total_task_count"] = 17
         manifest = sign_director_runtime_bundle(payload)
         path = _write_bundle(manifest, tmp_path)
-        ENTRYPOINT.main(["--check-only", "--director-runtime-bundle", path])
-        report = json.loads(capsys.readouterr().out)
-        codes = [b["code"] for b in report["blockers"]]
-        assert C.DIRECTOR_RUNTIME_BUNDLE_INVALID in codes
-        assert any("DICODE_TOTAL_COUNT_MISMATCH" in b["detail"]
-                   for b in report["blockers"])
+        code = ENTRYPOINT.main(["--check-only", "--director-runtime-bundle",
+                                path])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "OBJECT_LEVEL_CHECK_BLOCKED" in err
 
     def test_missing_bundle_path_rejected(self, tmp_path, capsys):
         code = ENTRYPOINT.main(

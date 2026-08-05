@@ -163,44 +163,18 @@ class TestOneDiCodeUpdateWindow1Only:
                            match="REAL_DICODE_RUNTIME_MISSING"):
             controller.run(max_windows=2)
 
-    def test_no_binding_keeps_legacy_final_batch(self):
-        #: without the director batch binding the update consumes the
-        #: historical final batch (16) through the legacy surface
-        from e2_test_sign_helpers import (
-            director_round_trip_payload,
-            sign_director_verified_round_trip,
-        )
-
-        class LegacyScriptedContract:
-            def __init__(self):
-                self._n = 0
-                self._last = text_sha256("TEST_ONLY_GENESIS")
-
-            def save_checkpoint(self, *, tag):
-                self._n += 1
-                self._last = text_sha256(f"TEST_ONLY_SAVE_{self._n}")
-                return self._last
-
-            def run_one_optimizer_update(self, *, window,
-                                         batch_candidate_ids):
-                return SimpleNamespace(
-                    window=window, optimizer_steps=1, env_steps=8,
-                    checkpoint_hash_before=self._last,
-                    checkpoint_hash_after=text_sha256("TEST_ONLY_POST"))
-
-            def load_checkpoint(self, *, checkpoint_hash):
-                pass
-
-            def verify_director_round_trip(self, *, window,
-                                           checkpoint_hash):
-                return sign_director_verified_round_trip(
-                    director_round_trip_payload(
-                        window, checkpoint_hash, RUNTIME_BUNDLE_HASH))
-
-        controller = make_controller(LegacyScriptedContract(),
-                                     batch_binding=None)
-        summary = controller.run(max_windows=2)
-        assert summary.n_windows == 2
+    def test_no_binding_production_fails_closed(self):
+        #: the PRODUCTION controller never auto-selects the TEST_ONLY path:
+        #: without the director DiCode batch binding the update is refused
+        legacy = SimpleNamespace(
+            run_one_optimizer_update=lambda **kw: None,
+            save_checkpoint=lambda **kw: "hash",
+            load_checkpoint=lambda **kw: None,
+            verify_director_round_trip=lambda **kw: None)
+        controller = make_controller(legacy, batch_binding=None)
+        with pytest.raises(RuntimeError,
+                           match="REAL_DICODE_BATCH_PLAN_REQUIRED"):
+            controller.run(max_windows=2)
 
 
 class TestPosture:

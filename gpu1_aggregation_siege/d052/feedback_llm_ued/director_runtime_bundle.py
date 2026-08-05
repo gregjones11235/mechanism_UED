@@ -328,14 +328,9 @@ def runtime_bundle_binding_problems(manifest: DirectorRuntimeBundleManifest
             f"candidate_id={manifest.student_init_contract.candidate_id!r} "
             "is not one of ALLOWED_STUDENT_CANDIDATE_IDS="
             f"{sorted(C.ALLOWED_STUDENT_CANDIDATE_IDS)}")
-    #: 2. formal-start gate: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 may
-    #:    only ever initialize the SMOKE — the formal start needs a
-    #:    human-approved Formal Manifest
-    if manifest.formal_start_gate.get("smoke_only_origin") is not True:
-        problems.append(
-            "FORMAL_START_GATE_MISSING: the bundle must declare "
-            "formal_start_gate.smoke_only_origin=true (the 98304 origin "
-            "is the SMOKE origin, never the automatic formal start)")
+    #: 2. formal-start gate: the checkpoint id is NOT "smoke-only" — after
+    #:    human approval it MAY become the formal experiment start; the only
+    #:    hard rule is that the formal start requires human approval
     if manifest.formal_start_gate.get("formal_start_requires_human") \
             is not True:
         problems.append(
@@ -563,7 +558,7 @@ __all__ = [
     "DATA_CARRYING_ASSETS", "DirectorRuntimeBundleBlocked",
     "StudentInitContractData", "ReferenceIdentityData", "AnchorManifestData",
     "DiCodeBatchBindingData", "SmokeSemanticsData",
-    "DirectorRuntimeBundleManifest", "sign_director_runtime_bundle",
+    "DirectorRuntimeBundleManifest",
     "runtime_bundle_binding_problems", "load_director_runtime_bundle",
     "build_student_init_contract", "build_shared_bundle",
     "bundle_backend_identity",

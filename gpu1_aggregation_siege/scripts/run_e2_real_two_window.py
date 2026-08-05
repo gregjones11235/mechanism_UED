@@ -128,10 +128,13 @@ from d052.feedback_llm_ued.shared_runtime_binding import (
 from d052.feedback_llm_ued.director_runtime_bundle import (
     DirectorRuntimeBundleBlocked,
     DirectorRuntimeBundleManifest,
+    assert_runtime_bundle_hash_cross_bound,
     build_shared_bundle,
     build_student_init_contract,
     bundle_backend_identity,
     load_director_runtime_bundle,
+    require_trusted_verifier,
+    resolve_director_runtime_objects,
     runtime_bundle_binding_problems,
 )
 
@@ -569,46 +572,77 @@ def _load_transport(dotted: str):
     return transport
 
 
-def main(argv=None) -> int:
+def main(argv=None, *, director_bundle_verifier=None,
+         formal_asset_registry=None) -> int:
     args = parse_args(argv)
-    #: P0-16 consume-only posture: direction two loads NO shared asset
-    #: itself — the Runtime Bundle is the DIRECTOR's signed manifest
-    #: (--director-runtime-bundle). With no bundle the honest state is the
-    #: EMPTY bundle (every slot BLOCKED_WAITING_SHARED_RUNTIME); with a
-    #: valid bundle the shared assets + Student contract are bound from it
-    #: and the empty-bundle block disappears (check-only validates the
-    #: bindings and data flow WITHOUT invoking any callable).
+    #: P0-16 request-changes: production consumes the DIRECTOR-signed
+    #: manifest + the DIRECTOR-shared verifier + FormalAssetRegistry; no
+    #: real object is ever loaded through an arbitrary CLI module.attr.
+    if args.transport:
+        print("\nREAL_LLM_TRANSPORT_DYNAMIC_IMPORT_FORBIDDEN: the "
+              "production path never loads a transport from an arbitrary "
+              "module.attr — the transport closure is resolved ONLY from "
+              "the FormalAssetRegistry", file=sys.stderr)
+        return 1
     try:
         manifest = load_director_runtime_bundle(args.director_runtime_bundle)
     except DirectorRuntimeBundleBlocked as exc:
         print(f"\nDIRECTOR RUNTIME BUNDLE REJECTED: {exc}", file=sys.stderr)
         return 1
-    if manifest is not None:
-        bundle = build_shared_bundle(manifest)
-        student_init_contract = build_student_init_contract(manifest)
-        _identity = bundle_backend_identity(manifest)
-        backend_id = args.backend_id or _identity.get("backend_id", "")
-        model_id = args.model_id or _identity.get("model_id", "")
-        #: P0-16 (dual student): the bundle's signed Student identity is
-        #: authoritative — the CLI candidate cannot override it
-        director_selected_candidate_id = (
-            manifest.student_init_contract.candidate_id)
-        if args.student_candidate_id \
-                and args.student_candidate_id \
-                != director_selected_candidate_id:
-            print(f"\nE2_STUDENT_CANDIDATE_CLI_OVERRIDE_FORBIDDEN: "
-                  f"--student-candidate-id={args.student_candidate_id!r} "
-                  f"conflicts with the director bundle's signed Student "
-                  f"{director_selected_candidate_id!r}",
-                  file=sys.stderr)
-            return 1
-    else:
+    if manifest is None:
         bundle = SharedRuntimeBundle()
         student_init_contract = None
         backend_id = args.backend_id
         model_id = args.model_id
         director_selected_candidate_id = args.student_candidate_id
-    transport = _load_transport(args.transport)
+        transport = None
+    else:
+        #: §6 CLI lock first: backend/model/student are consistency-only —
+        #: any conflict with the bundle's signed identity is rejected
+        _identity = bundle_backend_identity(manifest)
+        if args.backend_id and args.backend_id != _identity.get("backend_id"):
+            print(f"\nE2_CLI_BACKEND_OVERRIDE_FORBIDDEN: "
+                  f"--backend-id={args.backend_id!r} != bundle "
+                  f"{_identity.get('backend_id')!r}", file=sys.stderr)
+            return 1
+        if args.model_id and args.model_id != _identity.get("model_id"):
+            print(f"\nE2_CLI_MODEL_OVERRIDE_FORBIDDEN: "
+                  f"--model-id={args.model_id!r} != bundle "
+                  f"{_identity.get('model_id')!r}", file=sys.stderr)
+            return 1
+        if args.student_candidate_id and args.student_candidate_id != \
+                manifest.student_init_contract.candidate_id:
+            print(f"\nE2_STUDENT_CANDIDATE_CLI_OVERRIDE_FORBIDDEN: "
+                  f"--student-candidate-id={args.student_candidate_id!r} "
+                  f"conflicts with the director bundle's signed Student "
+                  f"{manifest.student_init_contract.candidate_id!r}",
+                  file=sys.stderr)
+            return 1
+        #: the director's object-level check chain (fixed order):
+        #: verifier -> bundle-hash cross-bind -> build -> resolve -> resolve
+        try:
+            require_trusted_verifier(director_bundle_verifier, manifest)
+            assert_runtime_bundle_hash_cross_bound(manifest)
+            bundle = build_shared_bundle(manifest)
+            if formal_asset_registry is None:
+                raise DirectorRuntimeBundleBlocked(
+                    "FORMAL_ASSET_REGISTRY_UNBOUND: the production path "
+                    "resolves real objects ONLY from the director's "
+                    "FormalAssetRegistry")
+            bundle = resolve_director_runtime_objects(
+                manifest, formal_asset_registry, bundle)
+            resolve_shared_runtime(bundle)
+        except DirectorRuntimeBundleBlocked as exc:
+            print(f"\nOBJECT_LEVEL_CHECK_BLOCKED: {exc}", file=sys.stderr)
+            return 1
+        student_init_contract = build_student_init_contract(manifest)
+        backend_id = _identity.get("backend_id", "")
+        model_id = _identity.get("model_id", "")
+        director_selected_candidate_id = (
+            manifest.student_init_contract.candidate_id)
+        #: the transport closure comes ONLY from the FormalAssetRegistry
+        transport = formal_asset_registry.resolve_asset(
+            identity=manifest.transport_closure)
     blockers = discover_blockers(
         bundle=bundle, llm_transport=transport,
         backend_id=backend_id, model_id=model_id,

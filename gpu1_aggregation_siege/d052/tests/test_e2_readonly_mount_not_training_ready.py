@@ -38,14 +38,12 @@ class TestReadOnlyMountNotTrainingReady:
                                    default=str), encoding="utf-8")
         code = ENTRYPOINT.main(
             ["--check-only", "--director-runtime-bundle", str(path)])
+        #: without an injected verifier the object-level chain fails closed
         assert code == 1
-        report = json.loads(capsys.readouterr().out)
-        #: the Student is read-only mounted (bound from the bundle)...
-        assert report["student_read_only_mount_ready"] is True
-        #: ...but the training runtime OBJECT is absent (director-injected
-        #: at smoke time) — the loop reports read-only, NOT training-ready
-        assert report["student_training_runtime_ready"] is False
-        #: REAL_CHECKPOINT_LOADED does NOT imply a training update
+        err = capsys.readouterr().err
+        assert "OBJECT_LEVEL_CHECK_BLOCKED" in err
+        assert "PRODUCTION_BUNDLE_VERIFIER_UNBOUND" in err
+        #: REAL_CHECKPOINT_LOADED never implies a training update
         assert C.REAL_CHECKPOINT_LOADED is False
         assert C.REAL_TRAINING_UPDATE_EXECUTED is False
 

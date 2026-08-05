@@ -737,16 +737,21 @@ class FeedbackUEDController:
                         original_appended_by=(
                             self.dicode_runtime_identity
                             or self.dicode_batch_binding.original_task_id))
+                if batch_plan is None:
+                    #: P0-16 request-changes (§5): the PRODUCTION controller
+                    #: NEVER auto-selects the TEST_ONLY path — a real
+                    #: training window without the director DiCode batch
+                    #: binding fails closed
+                    raise RuntimeError(
+                        "REAL_DICODE_BATCH_PLAN_REQUIRED: window="
+                        f"{window} — the production training path consumes "
+                        "ONLY the canonical DiCode 15+1 batch plan; the "
+                        "director DiCode batch binding is missing")
                 training = self.training_seam.execute_real_window_update(
                     window,
-                    batch_candidate_ids=(batch_plan.batch_candidate_ids
-                                         if batch_plan is not None
-                                         else batch.final_batch),
+                    batch_candidate_ids=batch_plan.batch_candidate_ids,
                     batch_plan=batch_plan,
-                    #: P0-16 request-changes (§6): without the director
-                    #: DiCode binding the legacy optimizer surface is
-                    #: reachable ONLY as TEST_ONLY_LEGACY_ADAPTER
-                    test_only=(self.dicode_batch_binding is None))
+                    test_only=False)
             self.training_log.append(training)
 
         # -- E. ATOMIC FREEZE: feedback_k + new hypotheses + FROZEN ---------

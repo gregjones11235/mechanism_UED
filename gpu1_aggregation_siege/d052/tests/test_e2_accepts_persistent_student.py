@@ -53,8 +53,11 @@ class TestAcceptsPersistentStudent:
         assert manifest.student_init_contract.candidate_id == \
             C.STRONG_STUDENT_CANDIDATE_ID
 
-    def test_two_window_check_only_not_blocked_by_empty_bundle(
+    def test_two_window_check_only_honestly_blocked_without_objects(
             self, tmp_path, capsys):
+        #: without an injected DirectorBundleVerifier the production chain
+        #: fails closed at the trusted-verifier gate (OBJECT_LEVEL_CHECK
+        #: cannot pass on a manifest-only bundle)
         manifest = valid_director_bundle(
             candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
         path = tmp_path / "bundle.json"
@@ -64,17 +67,9 @@ class TestAcceptsPersistentStudent:
             ["--check-only", "--director-runtime-bundle", str(path),
              "--student-candidate-id", C.STRONG_STUDENT_CANDIDATE_ID])
         assert code == 1
-        report = json.loads(capsys.readouterr().out)
-        codes = [b["code"] for b in report["blockers"]]
-        #: the empty-bundle / identity / transport blocks are gone
-        assert "STUDENT_INIT_CONTRACT_NOT_INJECTED" not in codes
-        assert "REAL_BACKEND_IDENTITY_UNDECLARED" not in codes
-        assert C.REAL_MODE_BLOCKED_NO_LLM_BACKEND not in codes
-        #: MANIFEST_ONLY is NOT a handoff: the object slots are still
-        #: DECLARED_NOT_RESOLVED (blocked) plus the local modules
-        assert "LOCAL_RUNTIME_MODULE_MISSING" in codes
-        assert C.BLOCKED_WAITING_SHARED_RUNTIME in codes
-        assert report["student_read_only_mount_ready"] is True
+        err = capsys.readouterr().err
+        assert "OBJECT_LEVEL_CHECK_BLOCKED" in err
+        assert "PRODUCTION_BUNDLE_VERIFIER_UNBOUND" in err
 
 
 class TestPosture:

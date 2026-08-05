@@ -94,8 +94,7 @@ def valid_director_bundle_payload(*, anchors=None,
             original_task_id=original_task_id,
             original_task_proportion=C.DICODE_ORIGINAL_TASK_PROPORTION,
             total_task_count=C.DICODE_BATCH_TOTAL_TASKS),
-        formal_start_gate=dict(smoke_only_origin=True,
-                               formal_start_requires_human=True))
+        formal_start_gate=dict(formal_start_requires_human=True))
 
 
 def valid_director_bundle(*, anchors=None,

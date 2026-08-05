@@ -65,7 +65,7 @@ class TestAcceptsReset128Student:
         assert persistent.memory_mode != reset128.memory_mode
         assert persistent.identity_hash != reset128.identity_hash
 
-    def test_two_window_check_only_not_blocked_by_empty_bundle(
+    def test_two_window_check_only_honestly_blocked_without_objects(
             self, tmp_path, capsys):
         manifest = valid_director_bundle(candidate_id=RESET128)
         path = tmp_path / "bundle.json"
@@ -75,12 +75,9 @@ class TestAcceptsReset128Student:
             ["--check-only", "--director-runtime-bundle", str(path),
              "--student-candidate-id", RESET128])
         assert code == 1
-        report = json.loads(capsys.readouterr().out)
-        codes = [b["code"] for b in report["blockers"]]
-        assert "STUDENT_INIT_CONTRACT_NOT_INJECTED" not in codes
-        assert "REAL_BACKEND_IDENTITY_UNDECLARED" not in codes
-        assert "LOCAL_RUNTIME_MODULE_MISSING" in codes
-        assert C.BLOCKED_WAITING_SHARED_RUNTIME in codes
+        err = capsys.readouterr().err
+        assert "OBJECT_LEVEL_CHECK_BLOCKED" in err
+        assert "PRODUCTION_BUNDLE_VERIFIER_UNBOUND" in err
 
 
 class TestPosture:
