@@ -62,19 +62,27 @@ ALLOWED_STUDENT_CANDIDATE_IDS = frozenset(
 )
 
 #: EXPLICIT profile mapping (never guessed from the name)
-#: candidate_id -> (profile_id, memory_mode)
+#: candidate_id -> (profile_id, memory_mode, carry_mode)
 STUDENT_PROFILE_MAP: Mapping[str, tuple] = {
     PERSISTENT_STUDENT_CANDIDATE_ID: (
         "rmt16_persistent_98304",
         "PERSISTENT",
+        "persistent-memory-progression",
     ),
-    RESET128_STUDENT_CANDIDATE_ID: ("rmt16_reset128_98304", "RESET128"),
+    RESET128_STUDENT_CANDIDATE_ID: (
+        "rmt16_reset128_98304",
+        "RESET128",
+        "reset-to-128-window-memory",
+    ),
 }
 STUDENT_PROFILE_BY_CANDIDATE = {
     cid: entry[0] for cid, entry in STUDENT_PROFILE_MAP.items()
 }
 STUDENT_MEMORY_MODE_BY_CANDIDATE = {
     cid: entry[1] for cid, entry in STUDENT_PROFILE_MAP.items()
+}
+STUDENT_CARRY_MODE_BY_CANDIDATE = {
+    cid: entry[2] for cid, entry in STUDENT_PROFILE_MAP.items()
 }
 STUDENT_CANDIDATE_BY_PROFILE = {
     entry[0]: cid for cid, entry in STUDENT_PROFILE_MAP.items()
@@ -369,7 +377,7 @@ def build_synthetic_student_contract(candidate_id: str, ctx: str):
 def mount_student_from_director_bundle(
     *,
     bundle: Any,
-    director_selected_candidate_id: Any,
+    director_selected_candidate_id: Any = None,
     ctx: str,
     contract: Any = None,
     training_runtime_bound: bool = False,
@@ -377,21 +385,37 @@ def mount_student_from_director_bundle(
 ) -> SelectedStudentMount:
     """Mount the director-selected Student from the Runtime Bundle.
 
-    The bundle's ``student`` block carries the director-issued
-    selection (profile, expected_params_sha256, memory mode, adapter
-    identity hash). The CLI may never override it — a caller-provided
-    ``director_selected_candidate_id`` must equal the bundle's
-    selection. E1 consumes the shared registry (absent => read-only
-    mount is NOT ready; training is NEVER implied).
+    CC2-Student repair: the selection comes from the bundle's
+    EXPLICIT ``student_selection`` descriptor (never a nonexistent
+    ``bundle.student`` attribute). Rules:
+
+    * the CLI can NEVER override the bundle-issued identity;
+    * a PRODUCTION bundle REQUIRES a REAL StudentInitContract (from
+      the shared FormalAssetRegistry) — a missing real contract is
+      BLOCKED, never synthesized;
+    * a TEST_ONLY bundle may use a synthetic contract ONLY in explicit
+      test-only flows (marked TEST_ONLY / SYNTHETIC / NOT_REAL_
+      EXECUTION / NOT_SMOKE_HANDOFF);
+    * the identity hashes are verified SEPARATELY: adapter_identity_
+      hash, adapter_implementation_hash, driver_source_sha256,
+      params_sha256, checkpoint_file_sha256 (driver_source_sha256 is
+      NEVER used as the adapter identity hash);
+    * E1 consumes the shared registry (absent => read-only mount is
+      NOT ready; training is NEVER implied).
     """
-    student_block = getattr(bundle, "student", None)
-    if student_block is None:
+    from .runtime_bundle import (
+        BUNDLE_MODE_PRODUCTION,
+        BUNDLE_MODE_TEST_ONLY,
+    )
+
+    descriptor = getattr(bundle, "student_selection", None)
+    if descriptor is None:
         raise StudentSelectionError(
             STUDENT_SELECTION_REQUIRED,
-            f"{ctx}: the runtime bundle carries no student selection "
-            "(student block missing); E1 never defaults a Student",
+            f"{ctx}: the runtime bundle carries no student_selection "
+            "descriptor; E1 never defaults a Student",
         )
-    bundle_candidate = student_block.get("candidate_id")
+    bundle_candidate = descriptor.selected_candidate_id
     if director_selected_candidate_id is not None and (
         director_selected_candidate_id != bundle_candidate
     ):
@@ -402,6 +426,15 @@ def mount_student_from_director_bundle(
             f"bundle's issued candidate {bundle_candidate!r} (the CLI "
             "can never override the director-issued identity)",
         )
+    mode = getattr(bundle, "mode", "")
+    if mode == BUNDLE_MODE_PRODUCTION and contract is None:
+        raise StudentSelectionError(
+            STUDENT_SELECTION_REQUIRED,
+            f"{ctx}: a PRODUCTION bundle requires the REAL "
+            "StudentInitContract resolved from the shared "
+            "FormalAssetRegistry; a missing real contract is BLOCKED "
+            "(never synthesized on the production path)",
+        )
     if contract is None:
         contract = build_synthetic_student_contract(
             bundle_candidate, ctx
@@ -410,19 +443,38 @@ def mount_student_from_director_bundle(
         shared_bound, _module = resolve_shared_student_registry()
     else:
         shared_bound = bool(shared_registry_bound)
+    if mode == BUNDLE_MODE_PRODUCTION:
+        # the real contract must match the descriptor's identity
+        if contract.candidate_id != bundle_candidate:
+            raise StudentSelectionError(
+                STUDENT_CONTRACT_MISMATCH,
+                f"{ctx}: resolved contract candidate "
+                f"{contract.candidate_id!r} != the bundle-issued "
+                f"{bundle_candidate!r}",
+            )
+        if contract.parameter_tree_hash != descriptor.params_sha256:
+            raise StudentSelectionError(
+                STUDENT_CHECKPOINT_MISMATCH,
+                f"{ctx}: resolved contract params "
+                f"{contract.parameter_tree_hash!r} != the descriptor "
+                f"params {descriptor.params_sha256!r}",
+            )
     return consume_e1_student_contract(
         contract,
         director_selected_candidate_id=bundle_candidate,
         runtime_bundle_hash=bundle.bundle_hash,
         ctx=ctx,
-        director_profile=student_block.get("profile"),
-        director_memory_mode=student_block.get("memory_mode"),
-        director_expected_params_sha256=student_block.get(
-            "expected_params_sha256"
+        director_profile=descriptor.profile_id,
+        director_memory_mode=descriptor.memory_mode,
+        # the params-identity check binds the REAL contract on the
+        # production path (verified above); TEST_ONLY synthetic
+        # fixtures never pass a params-identity check
+        director_expected_params_sha256=(
+            descriptor.params_sha256
+            if mode == BUNDLE_MODE_PRODUCTION
+            else None
         ),
-        director_adapter_identity_hash=student_block.get(
-            "driver_source_sha256"
-        ),
+        director_adapter_identity_hash=descriptor.adapter_identity_hash,
         shared_registry_bound=shared_bound,
         training_runtime_bound=training_runtime_bound,
     )

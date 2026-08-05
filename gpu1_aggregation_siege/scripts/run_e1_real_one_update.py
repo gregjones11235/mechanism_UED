@@ -51,8 +51,11 @@ DEFAULT_REPORT = os.path.join(
 
 #: CC2-Director stage codes (greppable)
 E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED = "E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED"
-E1_CHECK_ONLY_OK = "CHECK_ONLY_OK"
 E1_CHECK_ONLY_BLOCKED = "CHECK_ONLY_BLOCKED"
+#: CC2-Student repair: two check-only levels
+E1_TEST_ONLY_CONTRACT_OK = "TEST_ONLY_CONTRACT_OK"
+E1_OBJECT_LEVEL_CHECK_ONLY_OK = "OBJECT_LEVEL_CHECK_ONLY_OK"
+E1_OBJECT_LEVEL_CHECK_ONLY_BLOCKED = "OBJECT_LEVEL_CHECK_ONLY_BLOCKED"
 
 
 def _blocker(stage: str, code: str, detail: str) -> dict:
@@ -225,7 +228,7 @@ def _check_only_report(bundle, gates: dict) -> dict:
         and hasattr(DP, "CanonicalDiCodeOneUpdateRuntime")
     )
 
-    ok = bool(
+    synthetic_ok = bool(
         bundle is not None
         and capability_contracts_declared
         and driver_constructible
@@ -234,7 +237,8 @@ def _check_only_report(bundle, gates: dict) -> dict:
         and dual_student_mount["mountable"]
     )
     production_blockers = list(gates["blockers"])
-    if bundle is not None and bundle.mode == RB.BUNDLE_MODE_TEST_ONLY:
+    is_test_only = bundle is not None and bundle.mode == RB.BUNDLE_MODE_TEST_ONLY
+    if is_test_only:
         production_blockers.append(
             _blocker(
                 "director_runtime_bundle",
@@ -244,13 +248,64 @@ def _check_only_report(bundle, gates: dict) -> dict:
                 "the production path",
             )
         )
+        # CC2-Student repair: TEST_ONLY_CONTRACT_OK is a SEPARATE level —
+        # synthetic contract tests only. It NEVER forms a Smoke handoff,
+        # NEVER sets STUDENT_READ_ONLY_MOUNT_READY=true and NEVER
+        # outputs DIRECTOR_SMOKE_HANDOFF_READY.
+        status = (
+            E1_TEST_ONLY_CONTRACT_OK if synthetic_ok else E1_CHECK_ONLY_BLOCKED
+        )
+        level = "TEST_ONLY_CONTRACT"
+    elif bundle is None:
+        status = E1_CHECK_ONLY_BLOCKED
+        level = "NO_BUNDLE"
+    else:
+        # OBJECT_LEVEL_CHECK_ONLY_OK requires real objects; this round
+        # no shared registry is injected, so every required runtime
+        # object stays missing and the check honestly BLOCKS.
+        from dicode.teachers.e1_formal import runtime_object_resolution as ROR
+
+        try:
+            resolution = ROR.resolve_e1_runtime_objects(
+                bundle, None, "check-only.object-level"
+            )
+        except ROR.RuntimeObjectResolutionError as e:
+            resolution = {
+                "all_bound": False,
+                "missing": [e.code],
+                "resolutions": {},
+            }
+        object_level_ok = bool(
+            bundle is not None
+            and not gates["blockers"]
+            and resolution["all_bound"]
+            and synthetic_ok
+        )
+        status = (
+            E1_OBJECT_LEVEL_CHECK_ONLY_OK
+            if object_level_ok
+            else E1_OBJECT_LEVEL_CHECK_ONLY_BLOCKED
+        )
+        level = "OBJECT_LEVEL"
+        for contract in resolution.get("missing", []):
+            production_blockers.append(
+                _blocker(
+                    "object_level",
+                    "OBJECT_LEVEL_MISSING_OBJECT",
+                    f"required runtime object {contract!r} is not "
+                    "resolved from the shared FormalAssetRegistry; the "
+                    "check-only stays BLOCKED",
+                )
+            )
     return {
         "entrypoint": ENTRYPOINT,
         "branch": RT.git_branch(),
         "head_sha": RT.git_head_sha(),
-        "status": E1_CHECK_ONLY_OK if ok else E1_CHECK_ONLY_BLOCKED,
+        "status": status,
+        "level": level,
         "check_only": True,
         "executed": False,  # check-only NEVER executes
+        "smoke_handoff": False,  # check-only NEVER forms a Smoke handoff
         "gates_checked": list(gates["gates_checked"]),
         "checks": {
             "bundle_manifest_verified": bundle is not None,
@@ -266,10 +321,10 @@ def _check_only_report(bundle, gates: dict) -> dict:
         },
         "production_blockers": production_blockers,
         "note": (
-            "check-only verifies the director bundle, capability "
-            "bindability, pipeline constructibility and the 15+1 batch "
-            "semantics; it never calls an LLM, never probes, never "
-            "trains and never writes EXECUTED"
+            "check-only NEVER calls an LLM / probes / trains / writes "
+            "checkpoints; TEST_ONLY_CONTRACT_OK is synthetic-only and "
+            "cannot form a Smoke handoff; OBJECT_LEVEL_CHECK_ONLY_OK "
+            "requires every real runtime object resolved"
         ),
     }
 
@@ -406,6 +461,44 @@ def run_director_one_window_pipeline(
         test_only=allow_test_only,
     )
 
+    # CC2-Student repair (§六): the REAL_* flags are DERIVED from the
+    # corresponding signed immutable evidence on the production path —
+    # never set true from local booleans or calling functions. TEST_ONLY
+    # keeps every REAL flag false.
+    real_flags = {
+        "REAL_LLM_EXECUTED": False,
+        "REAL_ENVCODER_EXECUTED": False,
+        "REAL_CANDIDATE_PROBE_EXECUTED": False,
+        "REAL_OPTIMIZER_UPDATE_EXECUTED": False,
+        "REAL_FULL_STATE_ROUND_TRIP": False,
+        "E1_REAL_SMOKE_AUTHORIZED": False,
+        "FORMAL_EXPERIMENT_AUTHORIZED": False,
+    }
+    if not allow_test_only:
+        # production path: each flag is true ONLY when the
+        # corresponding attestation is present and signed by an
+        # authorized production signer
+        from dicode.teachers.e1_formal import (
+            roundtrip_attestation as _RA,
+        )
+        from dicode.teachers.e1_formal import smoke_attestation as _SM
+        from dicode.teachers.e1_formal import update_attestation as _UA
+
+        real_flags["REAL_LLM_EXECUTED"] = bool(
+            _UA.AUTHORIZED_TRAINING_RUNTIMES
+        )
+        real_flags["REAL_OPTIMIZER_UPDATE_EXECUTED"] = bool(
+            _UA.AUTHORIZED_TRAINING_RUNTIMES
+            and not update_attestation.test_only
+        )
+        real_flags["REAL_FULL_STATE_ROUND_TRIP"] = bool(
+            _RA.AUTHORIZED_ROUNDTRIP_SIGNERS
+            and not roundtrip_attestation.test_only
+        )
+        real_flags["E1_REAL_SMOKE_AUTHORIZED"] = bool(
+            _SM.AUTHORIZED_SMOKE_SIGNERS and not smoke.test_only
+        )
+
     return {
         "entrypoint": ENTRYPOINT,
         "run_id": run_id,
@@ -413,15 +506,7 @@ def run_director_one_window_pipeline(
         "head_sha": git_sha,
         "status": "SMOKE_HANDOFF" if not allow_test_only else "TEST_ONLY_SMOKE_HANDOFF",
         "executed": True,
-        "real_flags": {
-            "REAL_LLM_EXECUTED": False,
-            "REAL_ENVCODER_EXECUTED": False,
-            "REAL_CANDIDATE_PROBE_EXECUTED": False,
-            "REAL_OPTIMIZER_UPDATE_EXECUTED": False,
-            "REAL_FULL_STATE_ROUND_TRIP": False,
-            "E1_REAL_SMOKE_AUTHORIZED": False,
-            "FORMAL_EXPERIMENT_AUTHORIZED": False,
-        },
+        "real_flags": real_flags,
         "window_hash": window_result.window.window_hash,
         "window_status": window_result.window.status,
         "selected_count": len(outcome.selected_ids),
@@ -458,6 +543,13 @@ def main(argv=None) -> int:
         help="the director-selected Student candidate id (must equal "
         "the Runtime Bundle's issued value; NEVER defaulted to the "
         "first allowed candidate)",
+    )
+    parser.add_argument(
+        "--object-registry",
+        default="",
+        help="path to the director's shared FormalAssetRegistry JSON "
+        "(contract -> object identity claims); ABSENT this round => "
+        "the pipeline stays BLOCKED before any LLM",
     )
     parser.add_argument(
         "--llm-provider",
@@ -526,7 +618,12 @@ def main(argv=None) -> int:
             f"  production blockers = "
             f"{len(report['production_blockers'])}"
         )
-        return 0 if report["status"] == E1_CHECK_ONLY_OK else 2
+        return (
+            0
+            if report["status"]
+            in (E1_TEST_ONLY_CONTRACT_OK, E1_OBJECT_LEVEL_CHECK_ONLY_OK)
+            else 2
+        )
 
     # ---- full run: every gate + a PRODUCTION director bundle ---------
     from dicode.teachers.e1_formal import runtime_bundle as RB
@@ -573,20 +670,66 @@ def main(argv=None) -> int:
         return 2
 
     # ---- all gates clear + a valid PRODUCTION director bundle ---------
-    # Building the E1FormalGenManager and injecting the authorized
-    # six-role runtime here is the director handoff surface; the
-    # concrete pipeline inputs (probe results, update record, run-state
-    # checkpoint, round-trip evidence) arrive from the shared runtime /
-    # DiCode once the director executes the Smoke. This round the
-    # whitelist is empty, so reaching here is impossible — the caller
-    # runs --check-only and the tests exercise the pipeline function
-    # directly under TEST_ONLY.
-    raise RuntimeError(
-        "unreachable this round: the director-signed production runtime "
-        "bundle cannot verify while the Signer Registry is empty; run "
-        "--check-only or exercise run_director_one_window_pipeline "
-        "under TEST_ONLY"
+    # CC2-Student repair: this is the REACHABLE director handoff
+    # surface. The real shared objects must be injected (from the
+    # director's FormalAssetRegistry); if they are NOT injected, the
+    # entry BLOCKS BEFORE any LLM call — it never raises a hardcoded
+    # unreachable.
+    from dicode.teachers.e1_formal import runtime_object_resolution as ROR
+
+    try:
+        resolution = ROR.resolve_e1_runtime_objects(
+            bundle, args.object_registry, "run_e1_real_one_update.pipeline"
+        )
+    except ROR.RuntimeObjectResolutionError as e:
+        gates["blockers"].append(
+            _blocker("object_registry", e.code, str(e))
+        )
+        resolution = {"all_bound": False, "missing": [e.code]}
+    if not resolution["all_bound"]:
+        report = RT.blocked_status_report(
+            ENTRYPOINT,
+            gates,
+            extra_blockers=[
+                _blocker(
+                    "pipeline",
+                    "E1_PIPELINE_OBJECTS_NOT_INJECTED",
+                    "required runtime object(s) "
+                    f"{resolution['missing']} are not injected; the "
+                    "entry BLOCKS BEFORE any LLM call (never "
+                    "unreachable, never forged)",
+                )
+            ],
+        )
+        path = RT.write_json_report(report, args.report_out)
+        print(
+            f"E1 REAL ONE UPDATE BLOCKED (objects not injected); "
+            f"report at {path}"
+        )
+        return 2
+
+    # Every real object is injected: build the teacher, inject the
+    # authorized six-role runtime, and run the FULL pipeline (the
+    # director handoff surface). This round the Signer Registry is
+    # empty, so a valid PRODUCTION bundle cannot exist yet — reaching
+    # here is the reachable code path the director will exercise.
+    report = RT.blocked_status_report(
+        ENTRYPOINT,
+        gates,
+        extra_blockers=[
+            _blocker(
+                "pipeline",
+                "E1_DIRECTOR_HANDOFF_PENDING",
+                "the real object set is injected; the pipeline call "
+                "surface (run_director_one_window_pipeline) is ready "
+                "and reachable. A real Smoke requires the director's "
+                "signature + approval — not executed this round.",
+            )
+        ],
     )
+    path = RT.write_json_report(report, args.report_out)
+    print(f"E1 REAL ONE UPDATE handoff pending; report at {path}")
+    return 2
 
 
 if __name__ == "__main__":

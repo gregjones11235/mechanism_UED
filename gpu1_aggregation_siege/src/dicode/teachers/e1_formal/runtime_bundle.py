@@ -30,6 +30,13 @@ from typing import Any, Dict, Mapping, Tuple
 
 from .canonical import canonical_sha256
 from .schemas import E1SchemaError
+from .student_contract import (
+    ALLOWED_STUDENT_CANDIDATE_IDS,
+    STUDENT_CANDIDATE_BY_PROFILE,
+    STUDENT_CARRY_MODE_BY_CANDIDATE,
+    STUDENT_MEMORY_MODE_BY_CANDIDATE,
+    STUDENT_PROFILE_BY_CANDIDATE,
+)
 
 #: bundle modes — the ONLY two values ever admitted
 BUNDLE_MODE_PRODUCTION = "PRODUCTION"
@@ -66,6 +73,260 @@ RUNTIME_BUNDLE_TEST_ONLY_REJECTED = "RUNTIME_BUNDLE_TEST_ONLY_REJECTED"
 RUNTIME_BUNDLE_STRING_PLACEHOLDER = "RUNTIME_BUNDLE_STRING_PLACEHOLDER"
 RUNTIME_BUNDLE_UNBOUND = "RUNTIME_BUNDLE_UNBOUND"
 RUNTIME_BUNDLE_GRANT_MISMATCH = "RUNTIME_BUNDLE_GRANT_MISMATCH"
+#: student-selection schema codes
+RUNTIME_BUNDLE_STUDENT_SELECTION_MISSING = (
+    "RUNTIME_BUNDLE_STUDENT_SELECTION_MISSING"
+)
+RUNTIME_BUNDLE_STUDENT_SELECTION_BAD = (
+    "RUNTIME_BUNDLE_STUDENT_SELECTION_BAD"
+)
+RUNTIME_BUNDLE_STUDENT_IDENTITY_MISMATCH = (
+    "RUNTIME_BUNDLE_STUDENT_IDENTITY_MISMATCH"
+)
+
+
+@dataclass(frozen=True)
+class StudentSelectionDescriptor:
+    """The director-issued Student selection (immutable, hash-bound).
+
+    CC2-Student repair: the Runtime Bundle EXPLICITLY carries the
+    selected Student; the selection is never read from a nonexistent
+    ``bundle.student`` attribute. The profile / memory mode / carry
+    mode come from the EXPLICIT frozen mapping (never guessed).
+    """
+
+    selected_candidate_id: str
+    profile_id: str
+    architecture_family: str
+    memory_mode: str
+    memory_spec_hash: str
+    carry_mode: str
+    checkpoint_path: str
+    checkpoint_file_sha256: str
+    params_sha256: str
+    adapter_identity_hash: str
+    adapter_implementation_hash: str
+    driver_source_path: str
+    driver_source_sha256: str
+    source_commit: str
+    descriptor_hash: str
+
+
+#: the exact manifest field set for the student selection block
+_STUDENT_SELECTION_FIELDS = frozenset(
+    {
+        "selected_candidate_id",
+        "profile_id",
+        "architecture_family",
+        "memory_mode",
+        "memory_spec_hash",
+        "carry_mode",
+        "checkpoint_path",
+        "checkpoint_file_sha256",
+        "params_sha256",
+        "adapter_identity_hash",
+        "adapter_implementation_hash",
+        "driver_source_path",
+        "driver_source_sha256",
+        "source_commit",
+    }
+)
+
+_STUDENT_HASH_FIELDS = (
+    "memory_spec_hash",
+    "checkpoint_file_sha256",
+    "params_sha256",
+    "adapter_identity_hash",
+    "adapter_implementation_hash",
+    "driver_source_sha256",
+)
+
+
+def compute_student_selection_hash(descriptor: Any) -> str:
+    """The canonical identity of one StudentSelectionDescriptor."""
+    return canonical_sha256(
+        {
+            "selected_candidate_id": descriptor.selected_candidate_id,
+            "profile_id": descriptor.profile_id,
+            "architecture_family": descriptor.architecture_family,
+            "memory_mode": descriptor.memory_mode,
+            "memory_spec_hash": descriptor.memory_spec_hash,
+            "carry_mode": descriptor.carry_mode,
+            "checkpoint_path": descriptor.checkpoint_path,
+            "checkpoint_file_sha256": descriptor.checkpoint_file_sha256,
+            "params_sha256": descriptor.params_sha256,
+            "adapter_identity_hash": descriptor.adapter_identity_hash,
+            "adapter_implementation_hash": (
+                descriptor.adapter_implementation_hash
+            ),
+            "driver_source_path": descriptor.driver_source_path,
+            "driver_source_sha256": descriptor.driver_source_sha256,
+            "source_commit": descriptor.source_commit,
+        }
+    )
+
+
+def _require_sha64(value: Any, name: str, ctx: str) -> str:
+    if not isinstance(value, str) or len(value) != 64:
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
+            f"{ctx}: student_selection.{name} must be a 64-hex hash, "
+            f"got {value!r}",
+        )
+    return value
+
+
+def _require_non_empty_str(value: Any, name: str, ctx: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
+            f"{ctx}: student_selection.{name} must be a non-empty str, "
+            f"got {value!r}",
+        )
+    return value.strip()
+
+
+def parse_student_selection(
+    mapping: Any, ctx: str
+) -> StudentSelectionDescriptor:
+    """Parse + verify the student_selection block fail-closed."""
+    if not isinstance(mapping, Mapping):
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_SELECTION_MISSING,
+            f"{ctx}: the runtime bundle manifest carries no "
+            "student_selection block; a director-issued bundle MUST "
+            "select exactly one allowed Student (never defaulted)",
+        )
+    unknown = sorted(k for k in mapping if k not in _STUDENT_SELECTION_FIELDS)
+    if unknown:
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_UNKNOWN_FIELD,
+            f"{ctx}: unknown student_selection field(s) {unknown}",
+        )
+    selected = _require_non_empty_str(
+        mapping.get("selected_candidate_id"),
+        "selected_candidate_id",
+        ctx,
+    )
+    if selected not in ALLOWED_STUDENT_CANDIDATE_IDS:
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
+            f"{ctx}: selected_candidate_id {selected!r} is not in the "
+            f"director-frozen allowed set "
+            f"{sorted(ALLOWED_STUDENT_CANDIDATE_IDS)}",
+        )
+    expected_profile = STUDENT_PROFILE_BY_CANDIDATE[selected]
+    profile_id = _require_non_empty_str(
+        mapping.get("profile_id"), "profile_id", ctx
+    )
+    if profile_id != expected_profile:
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_IDENTITY_MISMATCH,
+            f"{ctx}: profile_id {profile_id!r} != the frozen profile "
+            f"{expected_profile!r} for {selected!r}",
+        )
+    expected_memory = STUDENT_MEMORY_MODE_BY_CANDIDATE[selected]
+    memory_mode = _require_non_empty_str(
+        mapping.get("memory_mode"), "memory_mode", ctx
+    )
+    if memory_mode != expected_memory:
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_IDENTITY_MISMATCH,
+            f"{ctx}: memory_mode {memory_mode!r} != the frozen mode "
+            f"{expected_memory!r} for {selected!r}",
+        )
+    expected_carry = STUDENT_CARRY_MODE_BY_CANDIDATE[selected]
+    carry_mode = _require_non_empty_str(
+        mapping.get("carry_mode"), "carry_mode", ctx
+    )
+    if carry_mode != expected_carry:
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_IDENTITY_MISMATCH,
+            f"{ctx}: carry_mode {carry_mode!r} != the frozen mode "
+            f"{expected_carry!r} for {selected!r}",
+        )
+    hashes = {
+        name: _require_sha64(mapping.get(name), name, ctx)
+        for name in _STUDENT_HASH_FIELDS
+    }
+    descriptor = StudentSelectionDescriptor(
+        selected_candidate_id=selected,
+        profile_id=profile_id,
+        architecture_family=_require_non_empty_str(
+            mapping.get("architecture_family"),
+            "architecture_family",
+            ctx,
+        ),
+        memory_mode=memory_mode,
+        memory_spec_hash=hashes["memory_spec_hash"],
+        carry_mode=carry_mode,
+        checkpoint_path=_require_non_empty_str(
+            mapping.get("checkpoint_path"), "checkpoint_path", ctx
+        ),
+        checkpoint_file_sha256=hashes["checkpoint_file_sha256"],
+        params_sha256=hashes["params_sha256"],
+        adapter_identity_hash=hashes["adapter_identity_hash"],
+        adapter_implementation_hash=hashes["adapter_implementation_hash"],
+        driver_source_path=_require_non_empty_str(
+            mapping.get("driver_source_path"),
+            "driver_source_path",
+            ctx,
+        ),
+        driver_source_sha256=hashes["driver_source_sha256"],
+        source_commit=_require_non_empty_str(
+            mapping.get("source_commit"), "source_commit", ctx
+        ),
+        descriptor_hash="",
+    )
+    descriptor = StudentSelectionDescriptor(
+        **{
+            **{name: getattr(descriptor, name) for name in (
+                "selected_candidate_id",
+                "profile_id",
+                "architecture_family",
+                "memory_mode",
+                "memory_spec_hash",
+                "carry_mode",
+                "checkpoint_path",
+                "checkpoint_file_sha256",
+                "params_sha256",
+                "adapter_identity_hash",
+                "adapter_implementation_hash",
+                "driver_source_path",
+                "driver_source_sha256",
+                "source_commit",
+            )},
+            "descriptor_hash": compute_student_selection_hash(descriptor),
+        }
+    )
+    return descriptor
+
+
+def _synthetic_test_only_student_selection() -> StudentSelectionDescriptor:
+    """TEST_ONLY / SYNTHETIC default selection for TEST_ONLY bundles
+    (conspicuously marked; never admissible on a production path)."""
+    # deterministic per-process synthetic selection (explicitly TEST_ONLY)
+    candidate = sorted(ALLOWED_STUDENT_CANDIDATE_IDS)[0]
+    block = {
+        "selected_candidate_id": candidate,
+        "profile_id": STUDENT_PROFILE_BY_CANDIDATE[candidate],
+        "architecture_family": "rmt16",
+        "memory_mode": STUDENT_MEMORY_MODE_BY_CANDIDATE[candidate],
+        "memory_spec_hash": "d0" * 32,
+        "carry_mode": STUDENT_CARRY_MODE_BY_CANDIDATE[candidate],
+        "checkpoint_path": "TEST_ONLY_SYNTHETIC_CHECKPOINT_PATH",
+        "checkpoint_file_sha256": "d1" * 32,
+        "params_sha256": "d2" * 32,
+        "adapter_identity_hash": "d3" * 32,
+        "adapter_implementation_hash": "d4" * 32,
+        "driver_source_path": "TEST_ONLY_SYNTHETIC_DRIVER_PATH",
+        "driver_source_sha256": "d5" * 32,
+        "source_commit": "TEST_ONLY_SYNTHETIC_SOURCE_COMMIT",
+    }
+    descriptor = parse_student_selection(
+        block, "runtime_bundle.test_only.student_selection"
+    )
+    return descriptor
 
 
 class RuntimeBundleError(E1SchemaError):
@@ -100,6 +361,9 @@ class E1RuntimeBundle:
     capabilities: Tuple[Tuple[str, Any], ...]  # RUNTIME_CAPABILITY_CONTRACTS
     object_identity_hashes: Tuple[Tuple[str, str], ...]
     bundle_hash: str
+    #: CC2-Student repair: the EXPLICIT director-issued Student
+    #: selection (never read from a nonexistent bundle.student)
+    student_selection: StudentSelectionDescriptor
 
     def capability(self, contract: str) -> Any:
         for name, obj in self.capabilities:
@@ -153,6 +417,31 @@ class E1RuntimeBundle:
     @property
     def full_state_checkpoint(self) -> Any:
         return self.capability("full_state_checkpoint")
+
+    @property
+    def student_selection_mapping(self) -> Dict[str, str]:
+        """The manifest-serializable student_selection block (no
+        descriptor_hash — the hash is derived, never stored in the
+        manifest)."""
+        descriptor = self.student_selection
+        return {
+            "selected_candidate_id": descriptor.selected_candidate_id,
+            "profile_id": descriptor.profile_id,
+            "architecture_family": descriptor.architecture_family,
+            "memory_mode": descriptor.memory_mode,
+            "memory_spec_hash": descriptor.memory_spec_hash,
+            "carry_mode": descriptor.carry_mode,
+            "checkpoint_path": descriptor.checkpoint_path,
+            "checkpoint_file_sha256": descriptor.checkpoint_file_sha256,
+            "params_sha256": descriptor.params_sha256,
+            "adapter_identity_hash": descriptor.adapter_identity_hash,
+            "adapter_implementation_hash": (
+                descriptor.adapter_implementation_hash
+            ),
+            "driver_source_path": descriptor.driver_source_path,
+            "driver_source_sha256": descriptor.driver_source_sha256,
+            "source_commit": descriptor.source_commit,
+        }
 
 
 def _capability_mapping(
@@ -208,8 +497,14 @@ def compute_bundle_hash(
     signer_id: str,
     authorization_grant_hash: str,
     object_identity_hashes: Mapping[str, str],
+    student_selection_hash: str = "",
 ) -> str:
-    """The canonical identity of one bundle (tamper-evident)."""
+    """The canonical identity of one bundle (tamper-evident).
+
+    CC2-Student repair: ``student_selection_hash`` is part of the
+    bundle identity — a different Student selection yields a different
+    bundle hash.
+    """
     return canonical_sha256(
         {
             "bundle_id": bundle_id,
@@ -221,6 +516,7 @@ def compute_bundle_hash(
                 [contract, object_identity_hashes[contract]]
                 for contract in RUNTIME_CAPABILITY_CONTRACTS
             ],
+            "student_selection_hash": student_selection_hash,
         }
     )
 
@@ -254,9 +550,14 @@ def _assemble(
     signer_id: str,
     authorization_grant_hash: str,
     capabilities: Mapping[str, Any],
+    student_selection: Any,
     ctx: str,
 ) -> E1RuntimeBundle:
     resolved = _capability_mapping(capabilities, ctx)
+    if isinstance(student_selection, StudentSelectionDescriptor):
+        descriptor = student_selection
+    else:
+        descriptor = parse_student_selection(student_selection, ctx)
     identity_hashes = {
         contract: object_identity_hash(resolved[contract])
         for contract in RUNTIME_CAPABILITY_CONTRACTS
@@ -268,6 +569,7 @@ def _assemble(
         signer_id=signer_id,
         authorization_grant_hash=authorization_grant_hash,
         object_identity_hashes=identity_hashes,
+        student_selection_hash=descriptor.descriptor_hash,
     )
     return E1RuntimeBundle(
         bundle_id=bundle_id,
@@ -284,6 +586,7 @@ def _assemble(
             for contract in RUNTIME_CAPABILITY_CONTRACTS
         ),
         bundle_hash=bundle_hash,
+        student_selection=descriptor,
     )
 
 
@@ -293,6 +596,7 @@ def build_test_only_runtime_bundle(
     capabilities: Mapping[str, Any],
     bundle_id: str = "e1-test-only-runtime-bundle",
     authorization_grant_hash: str = "",
+    student_selection: Any = None,
 ) -> E1RuntimeBundle:
     """Assemble the TEST_ONLY bundle from conspicuously-marked
     SYNTHETIC capability objects.
@@ -300,7 +604,9 @@ def build_test_only_runtime_bundle(
     TEST_ONLY / SYNTHETIC / NOT_REAL_EXECUTION / NOT_SCIENTIFIC_EVIDENCE:
     this bundle proves code path and identity binding ONLY. It never
     authorizes a real LLM / EnvCoder / probe / update, never flips a
-    REAL_* flag, and every production surface refuses it.
+    REAL_* flag, and every production surface refuses it. Absent
+    ``student_selection`` => the conspicuously-marked TEST_ONLY
+    synthetic selection (never admissible on a production path).
     """
     ctx = "runtime_bundle.test_only"
     return _assemble(
@@ -312,6 +618,11 @@ def build_test_only_runtime_bundle(
         signer_id=SYNTHETIC_TEST_ONLY_SIGNER,
         authorization_grant_hash=authorization_grant_hash,
         capabilities=capabilities,
+        student_selection=(
+            _synthetic_test_only_student_selection()
+            if student_selection is None
+            else student_selection
+        ),
         ctx=ctx,
     )
 
@@ -325,6 +636,7 @@ _MANIFEST_FIELDS = frozenset(
         "authorization_grant_hash",
         "object_identity_hashes",
         "bundle_hash",
+        "student_selection",
     }
 )
 
@@ -392,6 +704,10 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
                 f"64-hex identity hash, got {digest!r}",
             )
         identity_hashes[contract] = digest
+    # ---- student_selection (REQUIRED; parsed + verified fail-closed) --
+    descriptor = parse_student_selection(
+        mapping.get("student_selection"), f"{ctx}.student_selection"
+    )
     declared_hash = _require_non_empty_str(
         mapping.get("bundle_hash"), "bundle_hash", ctx
     )
@@ -402,6 +718,7 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
         signer_id=signer_id,
         authorization_grant_hash=grant_hash,
         object_identity_hashes=identity_hashes,
+        student_selection_hash=descriptor.descriptor_hash,
     )
     if recomputed != declared_hash:
         raise RuntimeBundleError(
@@ -437,6 +754,7 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
             for contract in RUNTIME_CAPABILITY_CONTRACTS
         ),
         bundle_hash=declared_hash,
+        student_selection=descriptor,
     )
 
 

@@ -1,0 +1,52 @@
+{
+  "allowed_student_candidate_ids": [
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+  ],
+  "audit": "cc2_runtime_schema_repair",
+  "branch": "henry/static-llm-ued-v1",
+  "descriptor_fields": [
+    "selected_candidate_id",
+    "profile_id",
+    "architecture_family",
+    "memory_mode",
+    "memory_spec_hash",
+    "carry_mode",
+    "checkpoint_path",
+    "checkpoint_file_sha256",
+    "params_sha256",
+    "adapter_identity_hash",
+    "adapter_implementation_hash",
+    "driver_source_path",
+    "driver_source_sha256",
+    "source_commit"
+  ],
+  "head_after": "d4e9173948ce427b097a8a53ee2304d508c00d9b",
+  "head_before": "d4e9173948ce427b097a8a53ee2304d508c00d9b",
+  "identity_hashes_verified_separately": [
+    "adapter_identity_hash",
+    "adapter_implementation_hash",
+    "driver_source_sha256",
+    "params_sha256",
+    "checkpoint_file_sha256"
+  ],
+  "note": "the four P0 breaks are fixed in code + tests. The shared FormalAssetRegistry and the runtime Signer Registry are absent this round, so OBJECT_LEVEL_CHECK_ONLY_OK and the Director Smoke handoff honestly stay BLOCKED; every REAL_* flag stays false.",
+  "object_level_ready": false,
+  "p0_fixed": {
+    "bundle_student_selection_schema": true,
+    "check_only_two_levels": true,
+    "main_reachable_pipeline_no_unreachable": true,
+    "production_synthetic_student_fallback_removed": true
+  },
+  "real_and_authorization_flags": {
+    "E1_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "REAL_CANDIDATE_PROBE_EXECUTED": false,
+    "REAL_ENVCODER_EXECUTED": false,
+    "REAL_FULL_STATE_ROUND_TRIP": false,
+    "REAL_LLM_EXECUTED": false,
+    "REAL_OPTIMIZER_UPDATE_EXECUTED": false
+  },
+  "stage": "E1_OBJECT_LEVEL_CONSUMER_READY",
+  "student_selection_in_bundle_hash": true
+}
