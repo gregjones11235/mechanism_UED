@@ -299,7 +299,8 @@ class FeedbackUEDController:
                  dicode_batch_binding=None,
                  dicode_runtime_identity: str = "",
                  runtime_bundle_hash: str = "",
-                 director_selected_candidate_id: str = "") -> None:
+                 director_selected_candidate_id: str = "",
+                 execution_mode: str = "PRODUCTION") -> None:
         """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
         All default to None, which reproduces the historical mock/symbolic
         behavior byte for byte. With any real capability granted through
@@ -309,6 +310,14 @@ class FeedbackUEDController:
         """
         if mode not in C.FEEDBACK_MODES:
             raise ValueError(f"UNKNOWN_MODE: {mode!r}")
+        if execution_mode not in ("PRODUCTION", "TEST_ONLY"):
+            raise ValueError(
+                f"ILLEGAL_EXECUTION_MODE: {execution_mode!r} — the "
+                "controller's execution mode is EXPLICIT (PRODUCTION | "
+                "TEST_ONLY); it is never derived from missing objects")
+        #: P0-16 request-changes (§7): the production entrypoint pins
+        #: PRODUCTION; the controller never self-derives TEST_ONLY
+        self.execution_mode = execution_mode
         _assert_authorization_posture()
         for fam in human_reopen_families:
             if fam not in C.ENVIRONMENT_FAMILIES:

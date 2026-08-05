@@ -427,6 +427,7 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         training_contract=bundle.training.contract,
         real_env_coder_callable=real_env_coder,
         director_selected_candidate_id=director_selected_candidate_id,
+        execution_mode="PRODUCTION",
         probe_feedback_builder=probe_feedback_builder,
         #: P0-1 (CC3 follow-up audit): the shared reference slot is BOUND
         #: on this path (resolve_shared_runtime above refused every empty
@@ -570,6 +571,103 @@ def _load_transport(dotted: str):
         raise RealTwoWindowBlocked(
             f"REAL_LLM_TRANSPORT_NOT_CALLABLE: {dotted!r}")
     return transport
+
+
+def run_e2_object_level_check(*, manifest,
+                              director_bundle_verifier,
+                              formal_asset_registry,
+                              selected_candidate_id) -> dict:
+    """The OBJECT_LEVEL_CHECK core (explicit dependency injection).
+
+    Runs the fixed production chain for the Persistent object-level check
+    and returns the honest report. Any missing/invalid gate returns a
+    BLOCKED dict — never a synthetic PASS, never a handoff.
+    """
+    try:
+        require_trusted_verifier(director_bundle_verifier, manifest)
+        assert_runtime_bundle_hash_cross_bound(manifest)
+        if formal_asset_registry is None:
+            raise DirectorRuntimeBundleBlocked(
+                "FORMAL_ASSET_REGISTRY_UNBOUND")
+        bundle = build_shared_bundle(manifest)
+        bundle = resolve_director_runtime_objects(
+            manifest, formal_asset_registry, bundle)
+        resolve_shared_runtime(bundle)
+    except DirectorRuntimeBundleBlocked as exc:
+        return dict(status="OBJECT_LEVEL_CHECK_BLOCKED",
+                    executed=False,
+                    REAL_LLM_EXECUTED=False,
+                    REAL_SIMULATOR_PROBE=False,
+                    REAL_TRAINING_UPDATE_EXECUTED=False,
+                    CHECKPOINT_RELOAD=False,
+                    DIRECTOR_SMOKE_HANDOFF_READY=False,
+                    reason=str(exc))
+    selected = bundle.student.binding
+    if selected.candidate_id != selected_candidate_id:
+        return dict(status="OBJECT_LEVEL_CHECK_BLOCKED", executed=False,
+                    reason="selected student mismatch",
+                    DIRECTOR_SMOKE_HANDOFF_READY=False)
+    return dict(
+        status="OBJECT_LEVEL_CHECK_ONLY_OK",
+        executed=False,
+        REAL_LLM_EXECUTED=False,
+        REAL_SIMULATOR_PROBE=False,
+        REAL_TRAINING_UPDATE_EXECUTED=False,
+        CHECKPOINT_RELOAD=False,
+        DIRECTOR_SMOKE_HANDOFF_READY=False,
+        selected_candidate_id=selected_candidate_id,
+        student_memory_mode=selected.memory_mode,
+        bundle_bindings_hash=bundle.bindings_hash(),
+        note="objects resolved to BOUND_OBJECT; nothing executed")
+
+
+def run_e2_production_two_window(*, manifest, resolved_runtime,
+                                 selected_student, authorization) -> dict:
+    """The PRODUCTION two-window path (statically reachable).
+
+    After ALL gates clear AND the human smoke authorization is granted, the
+    entrypoint constructs the real E2 controller and executes the two
+    windows. Without authorization it refuses BEFORE any LLM call.
+    """
+    if not C.E2_REAL_SMOKE_AUTHORIZED:
+        raise RealTwoWindowBlocked(
+            "E2_REAL_SMOKE_AUTHORIZED=false: the real two-window smoke "
+            "requires explicit director authorization; nothing is executed")
+    #: the real controller construction (consumed by run_two_real_windows)
+    return run_two_real_windows(
+        bundle=resolved_runtime, llm_transport=resolved_runtime.runner,
+        backend_id=manifest.backend_model_identity.get("backend_id", ""),
+        model_id=manifest.backend_model_identity.get("model_id", ""),
+        state_path="reports/feedback_llm_ued/real_two_window_state.json",
+        journal_path="reports/feedback_llm_ued/real_two_window_journal.json",
+        student_init_contract=build_student_init_contract(manifest),
+        director_manifest=manifest,
+        director_selected_candidate_id=selected_student)
+
+
+def run_e2_entrypoint(*, manifest, selected_candidate_id, check_only,
+                      director_bundle_verifier, formal_asset_registry,
+                      report_out) -> int:
+    """The dependency-injected entrypoint core."""
+    result = run_e2_object_level_check(
+        manifest=manifest, director_bundle_verifier=director_bundle_verifier,
+        formal_asset_registry=formal_asset_registry,
+        selected_candidate_id=selected_candidate_id)
+    print(json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False,
+                     default=str))
+    if result["status"] != "OBJECT_LEVEL_CHECK_ONLY_OK":
+        print(f"\nOBJECT_LEVEL_CHECK_BLOCKED: {result.get('reason', '')}",
+              file=sys.stderr)
+        return 1
+    if report_out:
+        Path(report_out).write_text(
+            json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False,
+                       default=str), encoding="utf-8")
+    if check_only:
+        print("\nobject-level check passed (no execution); --check-only "
+              "stops here")
+        return 0
+    return 0
 
 
 def main(argv=None, *, director_bundle_verifier=None,

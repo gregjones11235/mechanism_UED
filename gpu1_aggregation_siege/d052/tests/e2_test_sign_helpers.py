@@ -129,6 +129,8 @@ def sign_director_runtime_bundle(
         DirectorRuntimeBundleManifest.model_fields["protocol_version"]
         .default)
     body.setdefault("bundle_version", DIRECTOR_RUNTIME_BUNDLE_VERSION)
+    body.setdefault("student_adapter", "")
+    body.setdefault("reference_adapter", "")
     body["student_init_contract"] = StudentInitContractData(
         **body["student_init_contract"]).model_dump()
     body["reference_identity"] = ReferenceIdentityData(

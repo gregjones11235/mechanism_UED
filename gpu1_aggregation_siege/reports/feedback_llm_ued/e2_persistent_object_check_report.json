@@ -1,0 +1,17 @@
+{
+  "check_only": "E2 + PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 object-level check",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "status": "OBJECT_LEVEL_CHECK_BLOCKED",
+  "executed": false,
+  "REAL_LLM_EXECUTED": false,
+  "REAL_SIMULATOR_PROBE": false,
+  "REAL_TRAINING_UPDATE_EXECUTED": false,
+  "CHECKPOINT_RELOAD": false,
+  "DIRECTOR_SMOKE_HANDOFF_READY": false,
+  "reason": "no real DirectorBundleVerifier / FormalAssetRegistry / Persistent checkpoint objects are injected in this worktree — a manifest identity is NOT a bound object; the production chain fails closed (PRODUCTION_BUNDLE_VERIFIER_UNBOUND) BEFORE any LLM/Probe/Simulator/optimizer step",
+  "criteria_met": ["bundle hash recompute", "bundle hash cross-bound", "Anchor manifest frozen", "15+1 contract constructible", "window k delta=0", "window k+1 delta=1", "total update=1", "no execution"],
+  "criteria_unmet": ["verifier injected", "registry injected", "Persistent student object resolved", "Reference object resolved", "Probe runner non-None", "Training runtime non-None", "RunStateCheckpoint non-None", "LLM runtime + transport resolved", "checkpoint file present + SHA256"],
+  "pass": false,
+  "no_synthetic_pass": true
+}

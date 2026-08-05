@@ -234,7 +234,9 @@ class DirectorRuntimeBundleManifest(CanonicalModel):
 
     student_init_contract: StudentInitContractData
     student_identity: str = Field(min_length=1)
+    student_adapter: str = Field(default="")
     reference_identity: ReferenceIdentityData
+    reference_adapter: str = Field(default="")
     candidate_probe_runner: str = Field(min_length=1)
     shared_anchor_manifest: AnchorManifestData
     canonical_dicode_one_update_runtime: str = Field(min_length=1)
@@ -260,6 +262,12 @@ class DirectorRuntimeBundleManifest(CanonicalModel):
                            "transport_closure", "auxiliary_compute_ledger"):
             value = getattr(self, field_name)
             if not is_sha256_hex(value):
+                raise ValueError(
+                    "DIRECTOR_BUNDLE_ASSET_IDENTITY_NOT_SHA256: "
+                    f"{field_name}={value!r}")
+        for field_name in ("student_adapter", "reference_adapter"):
+            value = getattr(self, field_name) or ""
+            if value and not is_sha256_hex(value):
                 raise ValueError(
                     "DIRECTOR_BUNDLE_ASSET_IDENTITY_NOT_SHA256: "
                     f"{field_name}={value!r}")
@@ -519,29 +527,90 @@ def assert_runtime_bundle_hash_cross_bound(
             f"the manifest bundle_hash is {manifest.bundle_hash!r}")
 
 
+#: the complete director object set the production path depends on —
+#: every manifest-declared identity must resolve through the shared
+#: FormalAssetRegistry to a REAL object (never a bare string / Mapping /
+#: synthetic stand-in)
+REQUIRED_DIRECTOR_OBJECTS = (
+    "student_init_contract", "student_identity", "student_adapter",
+    "reference_identity", "reference_adapter", "candidate_probe_runner",
+    "shared_anchor_manifest", "canonical_dicode_one_update_runtime",
+    "canonical_dicode_run_state_checkpoint", "authorized_six_role_llm_runtime",
+    "transport_closure", "auxiliary_compute_ledger",
+)
+
+
 def resolve_director_runtime_objects(
         manifest: DirectorRuntimeBundleManifest,
         formal_asset_registry, bundle: SharedRuntimeBundle
 ) -> SharedRuntimeBundle:
-    """P0-16 (request-changes, section 3): resolve the REAL objects from
+    """P0-16 (request-changes, section 3-4): resolve the REAL objects from
     the shared FormalAssetRegistry and bind them as BOUND_OBJECT.
 
-    Each resolved object must satisfy ``object.registry_identity ==
-    manifest-declared identity`` (and the shared registry verifies the
-    implementation hash). Direction two only consumes — it never builds a
-    second loader / registry / optimizer / checkpoint codec."""
+    EVERY object the production path depends on must resolve to a real
+    object whose registry identity matches the manifest (the registry also
+    verifies the implementation hash). Fail-closed: None / bare string /
+    Mapping / identity mismatch / implementation-hash drift all refuse.
+    Direction two only consumes — it never builds a second loader /
+    registry / optimizer / checkpoint codec."""
+    #: the registry itself must be the shared FormalAssetRegistry, not a
+    #: test / synthetic / locally-constructed stand-in
+    if not hasattr(formal_asset_registry, "registry_identity") or \
+            not hasattr(formal_asset_registry, "resolve_asset") or \
+            not hasattr(formal_asset_registry, "verify_implementation"):
+        raise DirectorRuntimeBundleBlocked(
+            "OBJECT_LEVEL_CHECK_BLOCKED: the injected registry is not the "
+            "shared FormalAssetRegistry surface (registry_identity / "
+            "resolve_asset / verify_implementation required)")
+    manifest_ids = {
+        "student_init_contract": manifest.student_init_contract,
+        "student_identity": manifest.student_identity,
+        "student_adapter": getattr(manifest, "student_adapter", ""),
+        "reference_identity": manifest.reference_identity,
+        "reference_adapter": getattr(manifest, "reference_adapter", ""),
+        "candidate_probe_runner": manifest.candidate_probe_runner,
+        "shared_anchor_manifest": manifest.shared_anchor_manifest,
+        "canonical_dicode_one_update_runtime":
+            manifest.canonical_dicode_one_update_runtime,
+        "canonical_dicode_run_state_checkpoint":
+            manifest.canonical_dicode_run_state_checkpoint,
+        "authorized_six_role_llm_runtime":
+            manifest.authorized_six_role_llm_runtime,
+        "transport_closure": manifest.transport_closure,
+        "auxiliary_compute_ledger": manifest.auxiliary_compute_ledger,
+    }
+    for name in REQUIRED_DIRECTOR_OBJECTS:
+        identity = manifest_ids[name]
+        if isinstance(identity, str):
+            obj = formal_asset_registry.resolve_asset(identity=identity)
+        else:
+            obj = formal_asset_registry.resolve_asset(
+                identity=str(getattr(identity, "identity_hash", identity)))
+        if obj is None or isinstance(obj, (str, dict, Mapping)):
+            raise DirectorRuntimeBundleBlocked(
+                "OBJECT_LEVEL_CHECK_BLOCKED: the "
+                f"{name} object was not resolved to a real object from the "
+                "FormalAssetRegistry (None / bare string / Mapping refuse)")
+        resolved_identity = getattr(obj, "registry_identity", "")
+        expected_identity = (identity if isinstance(identity, str)
+                             else getattr(identity, "identity_hash", ""))
+        if resolved_identity != expected_identity:
+            raise DirectorRuntimeBundleBlocked(
+                "OBJECT_LEVEL_CHECK_BLOCKED: "
+                f"{name} resolved identity {resolved_identity!r} does not "
+                f"equal the manifest-declared {expected_identity!r}")
+        expected_impl = getattr(obj, "implementation_hash", "")
+        if not formal_asset_registry.verify_implementation(
+                identity=expected_identity, obj=obj,
+                expected_implementation_hash=expected_impl):
+            raise DirectorRuntimeBundleBlocked(
+                "OBJECT_LEVEL_CHECK_BLOCKED: the "
+                f"{name} object's implementation hash was not verified by "
+                "the FormalAssetRegistry")
     probe_runner = formal_asset_registry.resolve_asset(
         identity=manifest.candidate_probe_runner)
-    if probe_runner is None:
-        raise DirectorRuntimeBundleBlocked(
-            "OBJECT_LEVEL_CHECK_BLOCKED: the CandidateProbeRunner object "
-            "was not resolved from the FormalAssetRegistry")
     training = formal_asset_registry.resolve_asset(
         identity=manifest.canonical_dicode_one_update_runtime)
-    if training is None:
-        raise DirectorRuntimeBundleBlocked(
-            "OBJECT_LEVEL_CHECK_BLOCKED: the CanonicalDiCodeOneUpdateRuntime "
-            "object was not resolved from the FormalAssetRegistry")
     probe_slot = bundle.probe_runner.bind_object(
         probe_runner, expected_identity=manifest.candidate_probe_runner)
     training_slot = bundle.training.bind_object(
