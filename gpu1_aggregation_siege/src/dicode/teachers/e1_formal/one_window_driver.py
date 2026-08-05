@@ -38,6 +38,7 @@ from typing import Any, Tuple
 from . import probe_result_binding as PRB
 from . import selection_attestation as SA
 from . import shared_runtime_seam as SRS
+from . import teacher_continuity as TC
 from . import variant_binding as VB
 from .board import ReviewWindow, WINDOW_STATUS_COMPLETE
 from .canonical import canonical_sha256
@@ -133,13 +134,19 @@ def validate_runtime_surface(runtime: Any, ctx: str) -> E1RuntimeBundle:
 
 @dataclass(frozen=True)
 class E1WindowResult:
-    """The REAL review-window stage output (object, not summary)."""
+    """The REAL review-window stage output (object, not summary).
+
+    ``continuity`` binds the window to its ONE teacher instance +
+    signed runtime bundle (CC2 follow-up P0-10); every later stage
+    re-checks it before running.
+    """
 
     window: ReviewWindow
     evidence: EvidenceSnapshot
     gate_signals: GateSignalReport
     cycle: CycleOutcome
     window_result_hash: str
+    continuity: TC.OneWindowContinuity
 
 
 @dataclass(frozen=True)
@@ -311,12 +318,14 @@ def execute_real_review_window(teacher: Any, runtime: Any) -> E1WindowResult:
             f"({outcome.window.void_code}); a void window can never "
             "feed the pipeline (and is never relabelled COMPLETE)",
         )
+    continuity = TC.begin_one_window_session(teacher, runtime)
     window_result_hash = canonical_sha256(
         {
             "window_hash": outcome.window.window_hash,
             "evidence_hash": evidence.evidence_hash,
             "signals_binding_hash": signals.binding_hash,
             "decision_code": outcome.decision.code,
+            "continuity_session_hash": continuity.session_hash,
         }
     )
     return E1WindowResult(
@@ -325,6 +334,7 @@ def execute_real_review_window(teacher: Any, runtime: Any) -> E1WindowResult:
         gate_signals=signals,
         cycle=outcome,
         window_result_hash=window_result_hash,
+        continuity=continuity,
     )
 
 
@@ -353,6 +363,14 @@ def execute_real_envcoder_and_compile(
             f"{ctx}: window_result must be the E1WindowResult object "
             f"the board stage produced, got {type(window_result).__name__}",
         )
+    # P0-10: the SAME GenManager + the SAME signed bundle as the stage
+    # that opened the window (a swapped teacher fails closed)
+    try:
+        TC.assert_one_window_continuity(
+            window_result.continuity, teacher, runtime, ctx
+        )
+    except TC.TeacherContinuityError as e:
+        raise DriverError(e.code, f"{ctx}: {e}") from e
     compile_result = compile_task_specs(window_result.window)
     template_artifacts = []
     for template in compile_result.templates:
@@ -460,6 +478,13 @@ def execute_real_candidate_binding(
             f"{materials.window_result_hash!r} but the window stage "
             f"produced {window_result.window_result_hash!r}",
         )
+    # P0-10: one teacher / one bundle across the whole window
+    try:
+        TC.assert_one_window_continuity(
+            window_result.continuity, teacher, runtime, ctx
+        )
+    except TC.TeacherContinuityError as e:
+        raise DriverError(e.code, f"{ctx}: {e}") from e
     # the seam binds every capability object and re-checks its
     # identity hash; TEST_ONLY bundles are refused unless the explicit
     # gate is opened (never by default)
@@ -491,6 +516,7 @@ def execute_real_candidate_probes(
     probe_results: Any,
     student_checkpoint_identity: str,
     reference_checkpoint_identity: str,
+    window_result: Any = None,
     allow_test_only: bool = False,
 ) -> Tuple[Any, ...]:
     """Consume the window's REGISTRY-SIGNED probe pool fail-closed.
@@ -521,6 +547,16 @@ def execute_real_candidate_probes(
                 f"{ctx}: executable_candidate_pool[{index}] must be an "
                 f"ExecutableCandidate, got {type(candidate).__name__}",
             )
+    # P0-10: one teacher / one bundle across the whole window
+    if window_result is not None and isinstance(
+        window_result, E1WindowResult
+    ):
+        try:
+            TC.assert_one_window_continuity(
+                window_result.continuity, teacher, runtime, ctx
+            )
+        except TC.TeacherContinuityError as e:
+            raise DriverError(e.code, f"{ctx}: {e}") from e
     for name, value in (
         ("student_checkpoint_identity", student_checkpoint_identity),
         ("reference_checkpoint_identity", reference_checkpoint_identity),
@@ -607,6 +643,13 @@ def execute_real_criterion_selection(
             f"{ctx}: window_result must be the E1WindowResult object, "
             f"got {type(window_result).__name__}",
         )
+    # P0-10: one teacher / one bundle across the whole window
+    try:
+        TC.assert_one_window_continuity(
+            window_result.continuity, teacher, runtime, ctx
+        )
+    except TC.TeacherContinuityError as e:
+        raise DriverError(e.code, f"{ctx}: {e}") from e
     return SA.execute_criterion_selection(
         window_id=window_result.window.window_id,
         window_hash=window_result.window.window_hash,
