@@ -83,6 +83,7 @@ import argparse
 import importlib
 import json
 import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from d052.feedback_llm_ued import constants as C
@@ -123,6 +124,15 @@ from d052.feedback_llm_ued.shared_runtime_binding import (
     SharedRuntimeBundle,
     resolve_shared_runtime,
 )
+from d052.feedback_llm_ued.director_runtime_bundle import (
+    DirectorRuntimeBundleBlocked,
+    DirectorRuntimeBundleManifest,
+    build_shared_bundle,
+    build_student_init_contract,
+    bundle_backend_identity,
+    load_director_runtime_bundle,
+    runtime_bundle_binding_problems,
+)
 
 #: the shared simulator runtime modules a REAL window must execute against
 REQUIRED_LOCAL_MODULES = ("jax", "craftax")
@@ -142,19 +152,34 @@ class RealTwoWindowBlocked(RuntimeError):
 def discover_blockers(*, bundle: SharedRuntimeBundle,
                       llm_transport: Optional[object],
                       backend_id: str, model_id: str,
-                      student_init_contract: Optional[object] = None
+                      student_init_contract: Optional[object] = None,
+                      director_manifest: Optional[
+                          DirectorRuntimeBundleManifest] = None
                       ) -> List[Tuple[str, str]]:
     """Every reason the REAL two-window run cannot start, fail-closed codes
     first. An empty list is the ONLY condition under which execution may be
-    attempted."""
+    attempted. A director Runtime Bundle (signed manifest) satisfies the
+    shared-asset and identity declarations; only the genuinely-injected
+    objects (real transport closure) and the local runtime modules remain
+    blocking."""
     blockers: List[Tuple[str, str]] = []
+    if director_manifest is not None:
+        #: P0-16: a director-provided bundle removes the empty-bundle
+        #: block ONLY when its bindings validate (check-only: no callable
+        #: is ever invoked)
+        for problem in runtime_bundle_binding_problems(director_manifest):
+            blockers.append((C.DIRECTOR_RUNTIME_BUNDLE_INVALID, problem))
     if student_init_contract is None:
         blockers.append((
             "STUDENT_INIT_CONTRACT_NOT_INJECTED",
             "the shared StudentInitContract object must be injected "
             "explicitly by the production launcher (consume-only: "
             "direction two loads nothing itself)"))
-    if llm_transport is None:
+    if llm_transport is None and director_manifest is None:
+        #: P0-16: a director Runtime Bundle DECLARES the transport closure
+        #: identity — that satisfies the check-only binding validation (no
+        #: call is made); the actual run path separately requires the
+        #: injected closure object via assert_real_mode_servicable.
         blockers.append((
             C.REAL_MODE_BLOCKED_NO_LLM_BACKEND,
             "no real LLM transport closure is injected in this worktree; "
@@ -486,6 +511,15 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="dotted path to an injected real transport "
                              "closure (empty = none; direction two holds "
                              "no credentials)")
+    parser.add_argument(
+        "--director-runtime-bundle", default="",
+        help="path to the DIRECTOR-signed Runtime Bundle manifest "
+             "(consume-only; without it the shared assets are absent and "
+             "the path blocks on the empty bundle state)")
+    parser.add_argument(
+        "--report-out", default="",
+        help="optional path to ALSO write the JSON report to "
+             "(in addition to stdout)")
     parser.add_argument("--state-path",
                         default="reports/feedback_llm_ued/"
                                 "real_two_window_state.json",
@@ -516,33 +550,65 @@ def _load_transport(dotted: str):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    #: consume-only posture: direction two loads no shared asset itself —
-    #: the bundle starts with every slot EMPTY (BLOCKED_WAITING_SHARED_
-    #: RUNTIME), and only an explicit owner-side injection can bind a slot.
-    #: The StudentInitContract object is likewise absent here; a future
-    #: production launcher injects it together with the bound bundle.
-    bundle = SharedRuntimeBundle()
-    student_init_contract = None
+    #: P0-16 consume-only posture: direction two loads NO shared asset
+    #: itself — the Runtime Bundle is the DIRECTOR's signed manifest
+    #: (--director-runtime-bundle). With no bundle the honest state is the
+    #: EMPTY bundle (every slot BLOCKED_WAITING_SHARED_RUNTIME); with a
+    #: valid bundle the shared assets + Student contract are bound from it
+    #: and the empty-bundle block disappears (check-only validates the
+    #: bindings and data flow WITHOUT invoking any callable).
+    try:
+        manifest = load_director_runtime_bundle(args.director_runtime_bundle)
+    except DirectorRuntimeBundleBlocked as exc:
+        print(f"\nDIRECTOR RUNTIME BUNDLE REJECTED: {exc}", file=sys.stderr)
+        return 1
+    if manifest is not None:
+        bundle = build_shared_bundle(manifest)
+        student_init_contract = build_student_init_contract(manifest)
+        _identity = bundle_backend_identity(manifest)
+        backend_id = args.backend_id or _identity.get("backend_id", "")
+        model_id = args.model_id or _identity.get("model_id", "")
+    else:
+        bundle = SharedRuntimeBundle()
+        student_init_contract = None
+        backend_id = args.backend_id
+        model_id = args.model_id
     transport = _load_transport(args.transport)
     blockers = discover_blockers(
         bundle=bundle, llm_transport=transport,
-        backend_id=args.backend_id, model_id=args.model_id,
-        student_init_contract=student_init_contract)
+        backend_id=backend_id, model_id=model_id,
+        student_init_contract=student_init_contract,
+        director_manifest=manifest)
     report = dict(
         entrypoint="scripts/run_e2_real_two_window.py",
         target="TWO_REAL_WINDOWS_READY_FOR_AUDIT",
+        stage="DIRECTOR_SMOKE_HANDOFF_READY (max; real smoke not started)",
         execution_mode="REAL",
         mode=C.MODE_NORMAL_FEEDBACK,
         window_horizon=TWO_WINDOW_HORIZON,
+        #: P0-16: the director-provided Runtime Bundle (identity), if any
+        director_runtime_bundle=(
+            dict(registry_identity=manifest.registry_identity,
+                 formal_asset_registry=manifest.formal_asset_registry,
+                 bundle_hash=manifest.bundle_hash,
+                 batch_binding=manifest.batch_binding.model_dump(),
+                 smoke_semantics=manifest.smoke_semantics.model_dump())
+            if manifest is not None else None),
+        e2_pilot_authorized=C.E2_PILOT_AUTHORIZED,
+        e2_real_smoke_authorized=C.E2_REAL_SMOKE_AUTHORIZED,
+        formal_experiment_authorized=C.FORMAL_EXPERIMENT_AUTHORIZED,
         real_capability_flags={
             name: bool(getattr(C, name))
             for name in C.NEVER_TRUE_REAL_CAPABILITY_FLAGS},
-        e2_pilot_authorized=C.E2_PILOT_AUTHORIZED,
         shared_runtime_status=bundle.status_report(),
         blockers=[dict(code=code, detail=detail)
                   for code, detail in blockers])
     print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False,
                      default=str))
+    if args.report_out:
+        Path(args.report_out).write_text(
+            json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False,
+                       default=str), encoding="utf-8")
     if blockers:
         print(f"\nREAL TWO-WINDOW RUN BLOCKED ({len(blockers)} blocker(s)); "
               "no fallback exists and none will be invented. Codes: "

@@ -94,9 +94,34 @@ E2_REAL_MINIMAL_LOOP = False
 #: and the compute-matched controls all pass external audit.
 E2_PILOT_AUTHORIZED = False
 
-#: unified long-run environment-step budget, compute-matched across the
-#: three comparison configurations (normal / no-feedback / shuffled).
+#: DEPRECATED (director smoke handoff round): the historical unified
+#: long-run budget. MUST NOT be used as the formal training budget — the
+#: formal timeline is the frozen DiCode resolved config's
+#: ``training.total_timesteps`` / ``global_env_steps`` (see
+#: run_e2_longrun.py). Kept only for historical reports/tests; new code
+#: consumes the DiCode clock instead.
 TOTAL_ENV_STEPS_LONG_RUN = 98304
+
+#: P0-16 (director smoke handoff): the two-window real SMOKE authorization
+#: and the FORMAL experiment authorization. Both stay False this round;
+#: only the director may grant them (the smoke itself is the DIRECTOR's
+#: job — direction two only prepares the handoff and validates bindings).
+E2_REAL_SMOKE_AUTHORIZED = False
+FORMAL_EXPERIMENT_AUTHORIZED = False
+
+#: the director-provided runtime bundle status codes (consume-only)
+DIRECTOR_RUNTIME_BUNDLE_NOT_PROVIDED = "DIRECTOR_RUNTIME_BUNDLE_NOT_PROVIDED"
+DIRECTOR_RUNTIME_BUNDLE_INVALID = "DIRECTOR_RUNTIME_BUNDLE_INVALID"
+
+#: DiCode 15+1 batch binding (consume-only, declared by the director
+#: bundle): 12 dynamic + 3 non-target anchors = 15 curriculum task ids;
+#: the OriginalTask is appended ONCE internally by DiCode (never in
+#: batch_candidate_ids, never duplicated); total 16.
+DICODE_CURRICULUM_DYNAMIC = 12
+DICODE_CURRICULUM_NON_TARGET_ANCHORS = 3
+DICODE_CURRICULUM_TASK_COUNT = 15
+DICODE_BATCH_TOTAL_TASKS = 16
+DICODE_ORIGINAL_TASK_PROPORTION = 0.20
 
 #: real EnvCoder: bounded repair budget per directive batch. Once exhausted
 #: the execution blocks (REAL_ENVCODER_REPAIR_BUDGET_EXHAUSTED) — there is

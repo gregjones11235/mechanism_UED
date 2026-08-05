@@ -85,15 +85,24 @@ class ReferenceInitContract(Protocol):
 
 @dataclass(frozen=True)
 class ReferenceBindingIdentity:
-    """Identity stamped onto feedback records alongside the Student's."""
+    """Identity stamped onto feedback records alongside the Student's.
+
+    P0-16: ``declared_identity_hash`` is the DIRECTOR-issued canonical
+    Reference identity (consume-only — authenticated by the signed
+    Runtime Bundle). When declared it is authoritative; otherwise the
+    identity is recomputed from the fields (historical behavior).
+    """
 
     candidate_id: str
     parameter_tree_hash: str
     checkpoint_global_step: int
     provenance_label: str
+    declared_identity_hash: str = ""
 
     @property
     def identity_hash(self) -> str:
+        if self.declared_identity_hash:
+            return self.declared_identity_hash
         return canonical_sha256(dict(
             candidate_id=self.candidate_id,
             parameter_tree_hash=self.parameter_tree_hash,
@@ -101,13 +110,19 @@ class ReferenceBindingIdentity:
             provenance_label=self.provenance_label))
 
 
-def resolve_reference_binding(contract: Optional[ReferenceInitContract]
+def resolve_reference_binding(contract: Optional[ReferenceInitContract],
+                              *,
+                              declared_identity_hash: str = ""
                               ) -> ReferenceBindingIdentity:
     """Validate an explicitly injected shared Reference contract.
 
     Fail-closed ladder:
       * no contract           -> REFERENCE_INIT_CONTRACT_MISSING
       * incomplete identity   -> REFERENCE_IDENTITY_INCOMPLETE
+
+    P0-16: ``declared_identity_hash`` is the DIRECTOR-issued canonical
+    Reference identity (consume-only, authenticated by the signed Runtime
+    Bundle); when declared it is authoritative.
     """
     if contract is None:
         raise SharedBindingRejected(
@@ -129,11 +144,16 @@ def resolve_reference_binding(contract: Optional[ReferenceInitContract]
         raise SharedBindingRejected(
             f"REFERENCE_IDENTITY_INCOMPLETE: checkpoint_global_step must be "
             f"a non-negative int, got {step!r}")
+    if declared_identity_hash and not is_sha256_hex(declared_identity_hash):
+        raise SharedBindingRejected(
+            f"REFERENCE_IDENTITY_INCOMPLETE: declared_identity_hash must be "
+            f"a sha256 hex string, got {declared_identity_hash!r}")
     return ReferenceBindingIdentity(
         candidate_id=candidate_id,
         parameter_tree_hash=param_hash,
         checkpoint_global_step=step,
-        provenance_label="SHARED_REFERENCE_INIT_CONTRACT")
+        provenance_label="SHARED_REFERENCE_INIT_CONTRACT",
+        declared_identity_hash=declared_identity_hash)
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +236,10 @@ class SharedReferenceSlot:
     detail: str = "shared ReferenceAdapter absent from this worktree"
     binding: Optional[ReferenceBindingIdentity] = None
 
-    def bind(self, contract: ReferenceInitContract) -> "SharedReferenceSlot":
-        binding = resolve_reference_binding(contract)
+    def bind(self, contract: ReferenceInitContract, *,
+             declared_identity_hash: str = "") -> "SharedReferenceSlot":
+        binding = resolve_reference_binding(
+            contract, declared_identity_hash=declared_identity_hash)
         return SharedReferenceSlot(status=STATUS_BOUND,
                                    detail=binding.provenance_label,
                                    binding=binding)
@@ -272,6 +294,20 @@ class SharedProbeRunnerSlot:
         return SharedProbeRunnerSlot(status=STATUS_BOUND,
                                      detail=runner_id,
                                      runner=runner,
+                                     registry_identity=registry_identity)
+
+    def bind_director_declared(self, *, registry_identity: str,
+                               detail: str) -> "SharedProbeRunnerSlot":
+        """P0-16: bind a DIRECTOR-DECLARED runner identity (the director's
+        Runtime Bundle records the registry identity; the runner OBJECT is
+        injected by the director at smoke time). Direction two records the
+        identity — it never fabricates a runner object."""
+        if not is_sha256_hex(registry_identity):
+            raise SharedBindingRejected(
+                "PROBE_RUNNER_DIRECTOR_DECLARED_IDENTITY_INVALID: "
+                f"{registry_identity!r}")
+        return SharedProbeRunnerSlot(status=STATUS_BOUND, detail=detail,
+                                     runner=None,
                                      registry_identity=registry_identity)
 
     def slot_identity(self) -> str:
@@ -378,6 +414,20 @@ class SharedTrainingSlot:
         return SharedTrainingSlot(status=STATUS_BOUND,
                                   detail="shared training contract bound",
                                   contract=contract,
+                                  registry_identity=registry_identity)
+
+    def bind_director_declared(self, *, registry_identity: str,
+                               detail: str) -> "SharedTrainingSlot":
+        """P0-16: bind a DIRECTOR-DECLARED training runtime identity (the
+        director's Runtime Bundle records the CanonicalDiCodeOneUpdateRuntime
+        registry identity; the object is injected by the director at smoke
+        time). Direction two never implements an optimizer."""
+        if not is_sha256_hex(registry_identity):
+            raise SharedBindingRejected(
+                "SHARED_TRAINING_DIRECTOR_DECLARED_IDENTITY_INVALID: "
+                f"{registry_identity!r}")
+        return SharedTrainingSlot(status=STATUS_BOUND, detail=detail,
+                                  contract=None,
                                   registry_identity=registry_identity)
 
     def slot_identity(self) -> str:
