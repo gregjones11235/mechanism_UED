@@ -1,0 +1,5 @@
+python -m py_compile src/dicode/simulator_frontier/*.py  -> 0 errors
+git diff --check  -> 0 errors
+pytest tests/simulator_frontier/  -> COLLECTION BLOCKED: ImportError 'No module named jax'
+   (simulator_frontier/__init__.py chain imports jax; jaxlib Windows wheel DLL load failure;
+    declared deps jax/craftax cannot be installed on this host)

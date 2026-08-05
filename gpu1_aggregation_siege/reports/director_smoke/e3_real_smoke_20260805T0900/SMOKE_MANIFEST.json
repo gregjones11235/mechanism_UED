@@ -1,0 +1,10 @@
+{
+  "actual_n": "NOT_COMPUTED (would be derived from real rollout data; never read from manifest)",
+  "exact_restore": "NOT_EXECUTED",
+  "frontier_capture": "NOT_EXECUTED",
+  "frontier_distributions": "NOT_GENERATED",
+  "run_id": "e3_real_smoke_20260805T0900",
+  "standard_rollout": "NOT_EXECUTED (jax/craftax absent)",
+  "status": "BLOCKED_EXTERNAL",
+  "two_real_llm_roles": "NOT_EXECUTED (no credentials)"
+}

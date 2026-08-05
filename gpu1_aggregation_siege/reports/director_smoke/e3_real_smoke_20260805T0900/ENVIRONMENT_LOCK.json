@@ -1,0 +1,30 @@
+{
+  "craftax": {
+    "installed": false
+  },
+  "dicode_shared_runtime": {
+    "present": false
+  },
+  "external_blocks": [
+    "jax uninstallable (blocks test collection + canonical training)",
+    "craftax missing",
+    "no LLM credentials"
+  ],
+  "gpu": {
+    "memory_mib": 8151,
+    "name": "NVIDIA GeForce RTX 5070 Laptop GPU",
+    "present": true,
+    "uuid": "GPU-63493c36-721b-a8de-1a35-43c5b623964f"
+  },
+  "host": "LAPTOP-OHKQP6UK",
+  "jax": {
+    "import_error": "DLL load failed while importing _jax (Windows wheel) - simulator_frontier module chain imports jax at top level; test collection blocked",
+    "installed": false
+  },
+  "llm_credentials": {
+    "anthropic_api_key": false,
+    "openai_api_key": false
+  },
+  "platform": "win32",
+  "python": "3.12.4"
+}

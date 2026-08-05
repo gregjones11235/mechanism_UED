@@ -1,0 +1,6 @@
+{
+  "optimizer_updates_expected": 1,
+  "optimizer_updates_observed": 0,
+  "run_session_training_return": "8-tuple (rng, rl_train_state, global_update_step, global_env_steps, training_metrics, num_updates_in_session, categorized_tasks, evaluation_metrics)",
+  "status": "BLOCKED_EXTERNAL (canonical DiCode runtime not runnable; jax absent)"
+}

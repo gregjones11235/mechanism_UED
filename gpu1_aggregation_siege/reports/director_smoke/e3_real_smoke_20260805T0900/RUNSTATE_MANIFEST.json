@@ -1,0 +1,6 @@
+{
+  "checkpoint_written": false,
+  "current_implementation_note": "e3_window STEP11 still writes params+global_step via adapter (BUG-E3-07/09); full RunState + fresh-process restore require the canonical runtime (jax)",
+  "kind": "Canonical DiCode RunState checkpoint (full)",
+  "status": "BLOCKED_EXTERNAL"
+}

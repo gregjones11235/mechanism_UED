@@ -1,0 +1,9 @@
+{
+  "dynamic": 12,
+  "final_internal_task_count": 16,
+  "non_target_anchors": 3,
+  "original_task_appended_internally_by_dicode": "original_craftax",
+  "registration_api": "TaskArchive.record_new_task (BUG-E3-05 fixed; register_task removed)",
+  "sampled_ids_total": 15,
+  "target_probability": 0.2
+}

@@ -1,0 +1,7 @@
+{
+  "active_pipeline_note": "e3_window.one_window_pipeline still uses OriginalTrainingRuntime.loss_fn/optimizer_update_fn (BUG-E3-01/02/03); rewiring to canonical runtime requires jax/craftax",
+  "bundle_mode": "PRODUCTION (runtime bundle driver)",
+  "canonical_dicode_runtime_binding": "CanonicalDiCodeOneUpdateRuntime (binds run_session_training + run_training_session entrypoints)",
+  "execute_one_update": "8-tuple parsed (BUG-E3-06 fixed)",
+  "materialize_and_register": "TaskArchive.record_new_task (BUG-E3-05 fixed)"
+}

@@ -1,0 +1,7 @@
+{
+  "architecture_family": "RMT16",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "memory_mode": "PERSISTENT",
+  "mounted": false,
+  "reason": "real checkpoint artifact + canonical runtime not present (external)"
+}

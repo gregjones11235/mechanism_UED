@@ -1,0 +1,14 @@
+{
+  "schema": "simulator_frontier.e3_runtime_bundle/v1",
+  "REAL_ACTUAL_N_EXECUTED": false,
+  "REAL_TWO_LLM_EXECUTED": false,
+  "REAL_ONE_UPDATE_EXECUTED": false,
+  "CHECKPOINT_RELOAD": false,
+  "disclaimers": [
+    "the signed runtime bundle is the only asset injection channel: no environment variables, no ad-hoc overrides, nothing guessed",
+    "a blocked preflight is reported as BLOCKED, never as executed",
+    "the Student network/reward/action head/optimizer/original loss are never modified by this driver"
+  ],
+  "verdict": "FAIL",
+  "reason": "RUNTIME_BUNDLE_USAGE: unknown argument 'student.profile=oops': the signed runtime bundle is the ONLY injection channel — no ad-hoc overrides, no env-var guessing"
+}

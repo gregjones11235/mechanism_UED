@@ -1,0 +1,8 @@
+{
+  "git_diff_check_errors": 0,
+  "py_compile_errors": 0,
+  "pytest_errors": "BLOCKED (collection - jax import in module chain)",
+  "pytest_failed": "BLOCKED (collection)",
+  "pytest_passed": "n/a",
+  "pytest_skipped": "n/a"
+}

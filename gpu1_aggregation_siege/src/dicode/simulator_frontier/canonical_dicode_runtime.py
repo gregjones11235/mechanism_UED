@@ -322,8 +322,9 @@ def mint_frontier_distribution_environment_adapter(
 
 
 def materialize_and_register(adapter: Any, plan: Any,
-                             gen_manager_archive: Any) -> tuple[str, ...]:
-    """Register the 15 curriculum tasks into the GenManager archive.
+                             gen_manager_archive: Any,
+                             session_idx: int = 0) -> tuple[str, ...]:
+    """Register the 15 curriculum tasks into the GenManager TaskArchive.
 
     E3-P0-3: ``run_session_training`` only receives ``sampled_task_ids`` and
     loads tasks through the GenManager archive.  This contract method
@@ -333,6 +334,12 @@ def materialize_and_register(adapter: Any, plan: Any,
     source frontier, Student identity and memory binding.  Registration
     failure fails closed; no second training loop is constructed.  Returns
     the 15 registered task ids (== plan.curriculum_slots).
+
+    BUG-E3-05: the real ``TaskArchive`` has NO ``register_task`` — tasks are
+    registered through ``record_new_task(child_task, parent_tasks,
+    description, session_id)``, then the distribution metadata is stamped
+    as node attributes and the environment-factory source as the loadable
+    ``code`` (so ``load_tasks_from_env_codes`` reads back the SAME 15 ids).
     """
     verify_frontier_distribution_environment_adapter(adapter)
     if not isinstance(plan, CanonicalDiCodeTrainingBatchPlan):
@@ -344,6 +351,9 @@ def materialize_and_register(adapter: Any, plan: Any,
             "materialize_and_register requires the GenManager archive — "
             "frontier tasks are never invented outside the archive "
             "(fail closed)")
+    env_factory = _import_entrypoint(str(adapter.env_entrypoint),
+                                     "frontier environment factory")
+    env_code = inspect.getsource(env_factory)
     registered = []
     for slot in plan.curriculum_slots:
         distribution = plan.slot_distributions.get(slot)
@@ -352,19 +362,31 @@ def materialize_and_register(adapter: Any, plan: Any,
                 f"task registration failed: slot {slot!r} has no distribution "
                 "binding (fail closed)")
         try:
-            task_id = gen_manager_archive.register_task(
-                task_id=slot,
-                distribution_hash=plan.plan_hash,
-                source_frontier="FRONTIER_DYNAMIC" if "::" in slot
-                else "NON_TARGET_ANCHOR",
-                student_identity=plan.env_adapter_id,
-                memory_binding=plan.memory_bindings.get(slot, {}),
+            #: the REAL TaskArchive registration surface (record_new_task),
+            #: never a nonexistent register_task
+            gen_manager_archive.record_new_task(
+                child_task=str(slot),
+                parent_tasks=[],
+                description=str(slot),
+                session_id=int(session_idx),
             )
+            if gen_manager_archive.graph.has_node(str(slot)):
+                gen_manager_archive.graph.nodes[str(slot)].update({
+                    "distribution_hash": str(plan.plan_hash),
+                    "source_frontier": (
+                        "FRONTIER_DYNAMIC" if "::" in slot
+                        else "NON_TARGET_ANCHOR"),
+                    "student_identity": str(plan.env_adapter_id),
+                    "memory_binding": json.dumps(
+                        plan.memory_bindings.get(slot, {}),
+                        sort_keys=True),
+                    "code": env_code,
+                })
         except Exception as exc:
             raise ProductionBlockedError(
-                f"GenManager archive refused task registration for {slot!r}: "
-                f"{exc!r} (fail closed)") from exc
-        registered.append(str(task_id))
+                f"GenManager TaskArchive refused task registration for "
+                f"{slot!r}: {exc!r} (fail closed)") from exc
+        registered.append(str(slot))
     return tuple(registered)
 
 
@@ -635,7 +657,7 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
             "OriginalTask must never enter sampled_task_ids — DiCode appends "
             "it exactly once (fail closed)")
     try:
-        receipt = session(
+        receipt_tuple = session(
             context.config,
             context.rng,
             context.rl_train_state,
@@ -649,8 +671,49 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
     except Exception as exc:
         raise ProductionBlockedError(
             f"run_session_training rejected the one-update request: {exc!r}") from exc
-    if not isinstance(receipt, Mapping):
+    # BUG-E3-06: run_session_training returns the canonical EIGHT-tuple
+    # (rng, rl_train_state, global_update_step, global_env_steps,
+    #  training_metrics, num_updates_in_session, categorized_tasks,
+    #  evaluation_metrics) — NEVER a Mapping. Unpack it EXPLICITLY and
+    # validate every field's semantics fail-closed; a wrong structure is
+    # refused, never silently accepted by a compatibility fallback.
+    if not isinstance(receipt_tuple, tuple) or len(receipt_tuple) != 8:
         raise ProductionBlockedError(
-            "run_session_training must return a mapping OneUpdateReceipt "
+            "run_session_training must return the canonical 8-tuple "
+            "(rng, rl_train_state, global_update_step, global_env_steps, "
+            "training_metrics, num_updates_in_session, categorized_tasks, "
+            "evaluation_metrics); got "
+            f"{type(receipt_tuple).__name__} of length "
+            f"{len(receipt_tuple) if isinstance(receipt_tuple, tuple) else 'n/a'} "
             "(fail closed)")
-    return receipt
+    (rng, rl_train_state, global_update_step, global_env_steps,
+     training_metrics, num_updates_in_session, categorized_tasks,
+     evaluation_metrics) = receipt_tuple
+    if isinstance(num_updates_in_session, bool) \
+            or not isinstance(num_updates_in_session, int) \
+            or num_updates_in_session < 0:
+        raise ProductionBlockedError(
+            "run_session_training returned an invalid "
+            f"num_updates_in_session={num_updates_in_session!r} "
+            "(fail closed)")
+    if isinstance(global_update_step, bool) \
+            or not isinstance(global_update_step, int) \
+            or global_update_step < 0:
+        raise ProductionBlockedError(
+            "run_session_training returned an invalid "
+            f"global_update_step={global_update_step!r} (fail closed)")
+    if not isinstance(training_metrics, Mapping):
+        raise ProductionBlockedError(
+            "run_session_training returned non-mapping training_metrics "
+            f"({type(training_metrics).__name__}); fail closed")
+    return {
+        "rng": rng,
+        "rl_train_state": rl_train_state,
+        "global_update_step": int(global_update_step),
+        "global_env_steps": int(global_env_steps),
+        "training_metrics": training_metrics,
+        "num_updates_in_session": int(num_updates_in_session),
+        "categorized_tasks": categorized_tasks,
+        "evaluation_metrics": evaluation_metrics,
+        "sampled_task_ids": tuple(sampled_task_ids),
+    }

@@ -1,0 +1,7 @@
+{
+  "branch": "henry/simulator-frontier-foundation-codex",
+  "evaluation_branch_not_production": "henry/tier3-scaffolded-evaluation is eval/evidence only; E3 production fixes committed here",
+  "local_head": "7d5715323c579baef5aa0b0cf4c794add220eb9a",
+  "remote_baseline": "7d5715323c579baef5aa0b0cf4c794add220eb9a",
+  "source_commit": "7d5715323c579baef5aa0b0cf4c794add220eb9a"
+}

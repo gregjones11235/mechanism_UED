@@ -1,0 +1,13 @@
+{
+  "external_dependencies_verified": {
+    "canonical_dicode_runtime_executable": false,
+    "craftax": "NOT_IMPORTABLE",
+    "gpu": "GPU-63493c36-721b-a8de-1a35-43c5b623964f",
+    "jax": "NOT_IMPORTABLE",
+    "llm_transport": "NOT_AUTHORIZED"
+  },
+  "final_status": "BLOCKED_EXTERNAL",
+  "reason": "E3 real smoke blocked externally: (1) jax cannot be imported on this Windows host (jaxlib DLL load failure); the simulator_frontier module chain imports jax at import time, so the E3 test suite cannot even collect and the canonical DiCode training (run_session_training) cannot run; (2) craftax not installed; (3) no LLM credentials for the two real LLM roles. Code fixes E3-05 (real TaskArchive registration) and E3-06 (8-tuple parsing) are applied and py_compile-clean. BLOCKED_EXTERNAL, evidence preserved, no forged PASS.",
+  "result": "NOT_PASS",
+  "run_id": "e3_real_smoke_20260805T0900"
+}

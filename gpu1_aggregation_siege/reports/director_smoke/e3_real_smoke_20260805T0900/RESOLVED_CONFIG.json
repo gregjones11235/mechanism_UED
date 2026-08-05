@@ -1,0 +1,4 @@
+{
+  "e3_entry": "scripts/run_e3_real_one_window.py",
+  "runtime_bundle_driver": "scripts/run_e3_runtime_bundle.py"
+}
