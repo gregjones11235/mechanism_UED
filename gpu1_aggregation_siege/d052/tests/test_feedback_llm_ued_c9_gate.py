@@ -75,6 +75,7 @@ from d052.feedback_llm_ued.causal_failure_analyst import BoardHypothesisVerdict
 from d052.feedback_llm_ued.controller import FeedbackUEDController
 from d052.feedback_llm_ued.feedback_view import (
     MASKED_IDENTITY,
+    MaskedFeedbackView,
     NormalFeedbackView,
     NullFeedbackView,
     PermutedFeedbackView,
@@ -127,12 +128,13 @@ def _synthetic_record(i, *, window):
 
 # --------------------------------------------------------- BYPASS: static
 class TestStaticBypassSealed:
-    def test_full_store_yields_a_structurally_empty_board_context(self,
-                                                                  runs):
-        """CC3 C9 gate: the static store is HONEST and FULL (64 records per
-        completed window), yet every board context assembled from the
-        static view is structurally empty — the store's content is
-        unreachable through the view by construction."""
+    def test_full_store_yields_a_content_masked_board_context(self, runs):
+        """CC3 C9 gate + P0-12: the static store is HONEST and FULL (64
+        records per completed window), yet every board context assembled
+        from the static view is shape-matched AND content-masked — the
+        same feedback item count as the normal mode, every value a
+        controlled NULL/MASK; no real feedback id / candidate id / value
+        ever reaches a prompt."""
         ctls, _sums = runs
         ctl = ctls[C.MODE_STATIC_LLM]
         assert len(list(ctl.store.ids())) == 64 * WINDOWS
@@ -141,24 +143,42 @@ class TestStaticBypassSealed:
         assert real_feedback_ids and real_candidate_ids
         for window in range(1, WINDOWS):
             view = ctl._feedback_view(window)
-            assert isinstance(view, NullFeedbackView)
-            assert view.records() == []
-            assert view.to_prompt_payload() == []
-            assert view.behavior_evidence() == []
+            assert isinstance(view, MaskedFeedbackView)
+            payload = view.to_prompt_payload()
+            evidence = view.behavior_evidence()
+            #: shape-matched: the SAME item count the normal mode presents
+            assert len(payload) == len(evidence) == 64
+            assert len(view.records()) == 64
+            #: content-masked: every payload value is the controlled mask
+            for p in payload:
+                assert p["candidate_id"] == MASKED_IDENTITY
+                assert p["environment_family"] == MASKED_IDENTITY
+                assert p["mutation_axes"] == []
+                assert p["axis_values"] == {}
+                assert p["held_constant_axes"] == {}
+                assert p["distinguishes_hypothesis_ids"] == []
+                assert p["expected_signature"] == {}
+                assert p["expected_observed_match"] \
+                    == C.MATCH_DIRECTION_NEUTRAL
+                assert p["student_success_rate"] == 0.0
+                assert p["reference_success_rate"] == 0.0
             ctx = assemble_board_context(
                 view, window=window - 1, mode=C.MODE_STATIC_LLM)
-            # empty evidence, zero pooled SR/episodes, maximal uncertainty
-            assert ctx.behavior_evidence == []
-            assert ctx.pooled_episodes == 0
-            assert ctx.pooled_student_success_rate == 0.0
-            assert ctx.student_success_rate_ci == 1.0
-            assert ctx.feedback_view_label == "null"
-            # no real identity / history anywhere in the assembled context
+            assert ctx.feedback_view_label == "masked"
+            assert len(ctx.behavior_evidence) == 64
+            for e in ctx.behavior_evidence:
+                assert e.candidate_id == MASKED_IDENTITY
+                assert e.environment_family == MASKED_IDENTITY
+                assert e.reference_gap == 0.0
+                assert e.severity == "none"
+                assert e.expected_observed_match \
+                    == C.MATCH_DIRECTION_NEUTRAL
+            # no real identity / content anywhere in the assembled context
             context = build_board_prompt_context(
                 window=window, mode=C.MODE_STATIC_LLM, board_context=ctx,
                 view=view,
                 hypotheses=normalize_hypothesis_inputs(ctl.ledger.all()))
-            assert context["feedback"] == []
+            assert len(context["feedback"]) == 64
             serialized = json.dumps(context, sort_keys=True)
             for fid in real_feedback_ids:
                 assert fid not in serialized, (window, fid)
@@ -452,11 +472,14 @@ class TestFrozenPromptByteParity:
 
 # ------------------------- STATIC INDEPENDENCE: no store read in phase A
 class TestStaticContextIsFeedbackIndependent:
-    """CC4 C9 gate round two (director REQUEST_CHANGES): the static
-    BoardContext and all six board prompts must be byte-identical for two
-    stores differing ONLY in feedback records — the retirement lifecycle
-    is feedback-driven, so the static mode gets the FROZEN EMPTY lifecycle
-    and the store-reading retirement-state query is refused outright."""
+    """CC4 C9 gate round two (director REQUEST_CHANGES) + P0-12: the
+    static (no-feedback control) mask's CONTENT is feedback-independent —
+    every value is a fixed controlled NULL/MASK regardless of what the
+    store holds; only the SHAPE (item count) follows the window k-1
+    record set (exactly like the normal mode, keeping the modes
+    compute-matched). The retirement lifecycle stays frozen-empty: a
+    RETIRE decision cites feedback, and the masked view resolves no
+    citation, so the registry can never become non-empty."""
 
     @staticmethod
     def _pollute(ctl):
@@ -477,53 +500,89 @@ class TestStaticContextIsFeedbackIndependent:
                     expected_signature={"student_success_rate": 0.42},
                     distinguishes_hypothesis_ids=["hyp-00", "hyp-01"]))
 
-    def test_static_context_and_prompts_byte_identical_under_foreign_store(
+    def test_static_mask_content_is_feedback_independent_under_foreign_store(
             self):
+        """CC4 C9 gate + P0-12: the static (no-feedback control) mask's
+        CONTENT is feedback-independent — every payload value is the fixed
+        controlled NULL/MASK regardless of what the store holds; the SHAPE
+        (item count) follows the window k-1 record set exactly like the
+        normal mode's view, so the two modes stay compute-matched under
+        any store. Junk feedback ids/candidates never reach a prompt."""
         clean = FeedbackUEDController(C.MODE_STATIC_LLM)
         polluted = FeedbackUEDController(C.MODE_STATIC_LLM)
         self._pollute(polluted)
         # the two stores genuinely differ in feedback records BEFORE the
         # runs start (and the difference survives them)
-        assert set(polluted.store.ids()) - set(clean.store.ids()) == {
-            f"fb-junk-w{w}-{i}" for w in range(WINDOWS) for i in range(4)}
+        junk_ids = {f"fb-junk-w{w}-{i}"
+                    for w in range(WINDOWS) for i in range(4)}
+        assert set(polluted.store.ids()) - set(clean.store.ids()) == junk_ids
         clean.run(max_windows=WINDOWS)
         polluted.run(max_windows=WINDOWS)
-        assert set(polluted.store.ids()) - set(clean.store.ids()) == {
-            f"fb-junk-w{w}-{i}" for w in range(WINDOWS) for i in range(4)}
-        # 1) the full prompt context (view payload + BoardContext, incl.
-        #    families_in_cooldown/retired_families + hypotheses) is
-        #    byte-identical at every window
-        for window in range(WINDOWS):
-            a = json.dumps(_prompt_context_of(clean, window), sort_keys=True)
-            b = json.dumps(_prompt_context_of(polluted, window),
-                           sort_keys=True)
-            assert a == b, window
-        # 2) all six board prompts are byte-identical at every window
-        clean_board = [e for e in clean.envelopes
-                       if e.role in C.BOARD_ROLES]
-        polluted_board = [e for e in polluted.envelopes
-                          if e.role in C.BOARD_ROLES]
-        assert len(clean_board) == len(polluted_board) == 6 * WINDOWS
-        for window in range(WINDOWS):
-            for role in C.BOARD_ROLES:
-                slot = window * len(C.BOARD_ROLES) + C.BOARD_ROLES.index(role)
-                a, b = clean_board[slot], polluted_board[slot]
-                assert a.role == b.role == role, (window, slot)
-                assert a.prompt == b.prompt, (window, role)
-                assert a.prompt_sha256 == b.prompt_sha256, (window, role)
-                assert a.request_hash == b.request_hash, (window, role)
+        assert set(polluted.store.ids()) - set(clean.store.ids()) == junk_ids
 
-    def test_retirement_state_is_structurally_unreachable_in_static(self):
-        """The store-reading retirement-state query fails closed for the
-        static mode — the frozen empty lifecycle is the ONLY static
-        lifecycle, by construction rather than by coincidence."""
+        def _freeze(value):
+            if isinstance(value, dict):
+                return tuple(sorted((k, _freeze(v)) for k, v in value.items()))
+            if isinstance(value, list):
+                return tuple(_freeze(v) for v in value)
+            return value
+
+        def _strip(item):
+            content = dict(item)
+            content.pop("feedback_id")     #: positional masked id only
+            return frozenset((k, _freeze(v)) for k, v in content.items())
+
+        for window in range(WINDOWS):
+            v_clean = clean._feedback_view(window)
+            v_polluted = polluted._feedback_view(window)
+            assert isinstance(v_clean, MaskedFeedbackView)
+            assert isinstance(v_polluted, MaskedFeedbackView)
+            # shape follows the record set: polluted carries 4 extra junk
+            # records per window -> 4 extra masked items
+            assert (len(v_polluted.records())
+                    == len(v_clean.records()) + (4 if window >= 1 else 0))
+            # window 0 has no frozen feedback under ANY mode -> empty mask
+            if window == 0:
+                assert v_clean.to_prompt_payload() == []
+                assert v_polluted.to_prompt_payload() == []
+                continue
+            # content is invariant: every masked value is the FIXED mask
+            assert {_strip(item)
+                    for item in v_clean.to_prompt_payload()} == \
+                {_strip(item) for item in v_polluted.to_prompt_payload()}
+            expected = frozenset({
+                ("axis_values", ()), ("candidate_id", MASKED_IDENTITY),
+                ("distinguishes_hypothesis_ids", ()),
+                ("environment_family", MASKED_IDENTITY),
+                ("expected_observed_match", C.MATCH_DIRECTION_NEUTRAL),
+                ("expected_signature", ()), ("held_constant_axes", ()),
+                ("mutation_axes", ()), ("reference_success_rate", 0.0),
+                ("student_success_rate", 0.0), ("window", window - 1)})
+            for item in v_clean.to_prompt_payload():
+                assert _strip(item) == expected
+
+        # no junk id or candidate ever reaches any of the six prompts
+        junk_candidates = {f"c-junk-w{w}-{i}"
+                           for w in range(WINDOWS) for i in range(4)}
+        for ctl in (clean, polluted):
+            for e in ctl.envelopes:
+                if e.role in C.BOARD_ROLES:
+                    assert all(j not in e.prompt for j in junk_ids)
+                    assert all(j not in e.prompt for j in junk_candidates)
+                    #: windows >= 1 carry the shape-matched mask (window 0
+                    #: has no frozen feedback under ANY mode)
+                    if e.window >= 1:
+                        assert MASKED_IDENTITY in e.prompt
+
+    def test_retirement_state_is_frozen_empty_in_static(self):
+        """P0-12: every mode runs the SAME lifecycle query; the static
+        mode's masked view resolves no citation, so the retirement
+        registry can never become non-empty and the query returns the
+        frozen empty partition by construction."""
         ctl = FeedbackUEDController(C.MODE_STATIC_LLM)
         ctl.run(max_windows=2)
         assert ctl._retired_at == {}
-        with pytest.raises(
-                ValueError,
-                match="STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE"):
-            ctl._retirement_state(1)
+        assert ctl._retirement_state(1) == ([], [], ())
 
 
 # -------------------------------------------------------- LAG: exactly k-1
@@ -548,11 +607,20 @@ class TestExactOneWindowLag:
                 # the store already holds ALL windows — the view still
                 # presents exactly one of them
                 assert len(list(ctl.store.ids())) == 64 * WINDOWS
-        # static: structurally empty at every window
+        # static: shape-matched mask at every window — the SAME item count
+        # the normal mode's view presents for the same store
         static = ctls[C.MODE_STATIC_LLM]
+        normal = ctls[C.MODE_NORMAL_FEEDBACK]
         for window in range(WINDOWS):
-            assert isinstance(static._feedback_view(window),
-                              NullFeedbackView)
+            s_view = static._feedback_view(window)
+            assert isinstance(s_view, MaskedFeedbackView)
+            assert s_view.window_scope == max(0, window - 1)
+            assert (len(s_view.records())
+                    == len(normal._feedback_view(window).records()))
+            assert (len(s_view.to_prompt_payload())
+                    == len(s_view.records()))
+            assert (len(s_view.behavior_evidence())
+                    == len(s_view.records()))
 
     def test_mixed_window_view_construction_fails_closed(self):
         """CC3 C9 gate defense in depth: handing a Normal/Permuted view a

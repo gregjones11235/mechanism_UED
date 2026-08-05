@@ -6,9 +6,10 @@ Three configurations, ONE frozen architecture (no mode forks):
 * ``normal_feedback``      -> ``MODE_NORMAL_FEEDBACK`` (honest
                               candidate<->feedback binding);
 * ``no_feedback_control``  -> ``MODE_STATIC_LLM``: the board reads the
-                              structurally empty NullFeedbackView — feedback
-                              is hidden BY CONSTRUCTION, not by a separate
-                              code path;
+                              P0-12 shape-matched MaskedFeedbackView — the
+                              same feedback item count / prompt field set,
+                              every value a controlled NULL/MASK value (no
+                              feedback content);
 * ``shuffled_feedback``    -> ``MODE_SHUFFLED_FEEDBACK``: the honest store
                               stays untouched; the board reads a frozen,
                               recomputable permutation under anonymized ids
@@ -48,9 +49,9 @@ from d052.feedback_llm_ued.shared_runtime_binding import SharedRuntimeBundle
 #: CLI mode name -> frozen loop mode (NO new modes are forked)
 MODE_TO_LOOP_MODE = {
     "normal_feedback": C.MODE_NORMAL_FEEDBACK,
-    #: the no-feedback control is the static mode: the NullFeedbackView
-    #: hides feedback structurally (the board context is a pure function of
-    #: the non-feedback state)
+    #: the no-feedback control is the static mode: the shape-matched
+    #: MaskedFeedbackView masks every feedback value (controlled NULL/MASK
+    #: values, same item count / field set as the normal mode)
     "no_feedback_control": C.MODE_STATIC_LLM,
     "shuffled_feedback": C.MODE_SHUFFLED_FEEDBACK,
 }

@@ -8,9 +8,15 @@ The board never receives a store. It receives a view:
                              k-1 — the CC3 C9 gate's exact lag);
 * ``NullFeedbackView``     — STRUCTURAL blocking: the type holds no store, no
                              records and no ids — feedback is unreachable by
-                             construction, not by prompt omission (static
-                             mode; the board context built from it carries a
-                             zero feedback payload);
+                             construction, not by prompt omission (the
+                             legacy empty control; superseded for the static
+                             mode by the shape-matched mask below);
+* ``MaskedFeedbackView``   — P0-12 shape-matched no-feedback control
+                             (static mode): presents EXACTLY the window k-1
+                             record set (same item count, same prompt field
+                             set) with every value replaced by a controlled
+                             NULL/MASK value — the board runs the same
+                             computation with no feedback content;
 * ``PermutedFeedbackView`` — frozen recomputable permutation with anonymized
                              identities (shuffled mode): the permutation
                              derives ONLY from (mode, board window, window
@@ -42,11 +48,12 @@ bookkeeper), never by a board role.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Protocol, Sequence, runtime_checkable
+from typing import Dict, List, Protocol, Sequence, Tuple, runtime_checkable
 
 from d052.bagr_ued.hashing import canonical_sha256
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.behavior_failure import (
+    SEVERITY_NONE,
     BehaviorFailureEvidence,
     severity_for,
 )
@@ -57,10 +64,19 @@ from d052.schemas.common import is_sha256_hex
 
 VIEW_LABEL_NORMAL = "normal"
 VIEW_LABEL_NULL = "null"
+VIEW_LABEL_MASKED = "masked"
 VIEW_LABEL_PERMUTED = "permuted"
 
 #: sentinel standing in for every masked identity-bearing field
 MASKED_IDENTITY = "MASKED_IDENTITY"
+
+#: P0-12: the controlled NULL/MASK values of the shape-matched no-feedback
+#: control. Every record field is replaced by a fixed, content-free value:
+#: NEUTRAL is the only match state that carries no direction and is not
+#: counted as ungraded (an ungraded control board would escalate the
+#: critic); 0.0 rates / empty collections carry no probe content.
+MASKED_MATCH_STATE = C.MATCH_DIRECTION_NEUTRAL
+MASKED_RATE = 0.0
 
 
 @runtime_checkable
@@ -202,6 +218,116 @@ class NullFeedbackView:
         raise ValueError(
             f"NULL_VIEW_HAS_NO_FEEDBACK: {citation!r} cannot be resolved — "
             f"the static mode's feedback view is structurally empty")
+
+
+def _masked_payload(masked_id: str, record: SimulatorFeedbackRecord
+                    ) -> Dict[str, object]:
+    """P0-12: one record's board-visible slice under the shape-matched
+    mask — the EXACT field set of :func:`record_payload`, every value
+    replaced by its controlled NULL/MASK value. The board prompt of the
+    no-feedback control is therefore byte-identical in SHAPE to the
+    normal mode's prompt (same item count, same keys) and carries no
+    feedback CONTENT."""
+    return dict(
+        feedback_id=masked_id,
+        candidate_id=MASKED_IDENTITY,
+        window=record.window,
+        environment_family=MASKED_IDENTITY,
+        mutation_axes=[],
+        axis_values={},
+        held_constant_axes={},
+        distinguishes_hypothesis_ids=[],
+        expected_observed_match=MASKED_MATCH_STATE,
+        expected_signature={},
+        student_success_rate=MASKED_RATE,
+        reference_success_rate=MASKED_RATE)
+
+
+def _masked_evidence(masked_id: str, record: SimulatorFeedbackRecord
+                     ) -> BehaviorFailureEvidence:
+    """P0-12: BoardContext evidence for one masked record — the SAME
+    anonymized id the prompt payload shows, every numeric field the
+    controlled null (0.0 / severity none), every identity masked. The
+    evidence layer carries no channel the prompt layer does not."""
+    return BehaviorFailureEvidence(
+        feedback_id=masked_id,
+        candidate_id=MASKED_IDENTITY,
+        window=record.window,
+        environment_family=MASKED_IDENTITY,
+        student_success_rate=MASKED_RATE,
+        reference_success_rate=MASKED_RATE,
+        return_shortfall=MASKED_RATE,
+        behavior_activation_gap=MASKED_RATE,
+        front_progress_gap=MASKED_RATE,
+        reference_gap=MASKED_RATE,
+        severity=SEVERITY_NONE,
+        expected_observed_match=MASKED_MATCH_STATE)
+
+
+class MaskedFeedbackView:
+    """P0-12: the SHAPE-MATCHED no-feedback control (static mode).
+
+    Presents EXACTLY the window k-1 records the normal mode would see —
+    the same item count, the same deterministic order, the same prompt
+    field set — but every value is replaced by its controlled NULL/MASK
+    value (``_masked_payload`` / ``_masked_evidence``): ids and family
+    masked, axes / signatures / hypothesis bindings emptied, match state
+    neutral, rates zero. The board therefore runs the SAME computation
+    (six roles, same prompt shape, same item count, same lifecycle
+    queries) with NO feedback content — the honest no-feedback control
+    the comparison demands (an empty view changed the prompt shape and
+    could not isolate feedback's contribution).
+
+    * ``records()`` still presents the wrapped records for the pooled-
+      episode COMPUTE aggregate only (episode counts are compute, matched
+      across modes by construction); no content derived from them ever
+      reaches a prompt;
+    * ``resolve_citation`` fails closed for every citation — the control
+      can never act on feedback (a verdict citing a masked id has no
+      referent; the board's mock rules derive nothing from masked
+      content, so no citation is produced).
+    """
+
+    label = VIEW_LABEL_MASKED
+
+    def __init__(self, records: Sequence[SimulatorFeedbackRecord], *,
+                 window_scope: int, board_window: int) -> None:
+        if window_scope < 0:
+            raise ValueError(f"ILLEGAL_VIEW_WINDOW_SCOPE: {window_scope}")
+        if board_window < 0:
+            raise ValueError(f"ILLEGAL_VIEW_BOARD_WINDOW: {board_window}")
+        _assert_exact_window(records, window_scope)
+        self.window_scope = window_scope
+        self.board_window = board_window
+        ordered = sorted(records, key=lambda r: r.feedback_id)
+        self._records = tuple(ordered)
+        self._payloads: List[Dict[str, object]] = []
+        self._evidence: List[BehaviorFailureEvidence] = []
+        for slot, record in enumerate(ordered):
+            masked_id = f"masked-w{board_window:02d}-{slot:03d}"
+            self._payloads.append(_masked_payload(masked_id, record))
+            self._evidence.append(_masked_evidence(masked_id, record))
+
+    @property
+    def masked_ids(self) -> Tuple[str, ...]:
+        return tuple(p["feedback_id"] for p in self._payloads)
+
+    def records(self) -> List[SimulatorFeedbackRecord]:
+        """The wrapped records — pooled-episode COMPUTE aggregate only;
+        their content never reaches a prompt payload or evidence item."""
+        return list(self._records)
+
+    def to_prompt_payload(self) -> List[dict]:
+        return [dict(p) for p in self._payloads]
+
+    def behavior_evidence(self) -> List[BehaviorFailureEvidence]:
+        return list(self._evidence)
+
+    def resolve_citation(self, citation: str) -> str:
+        raise ValueError(
+            f"MASKED_VIEW_CITATION_NOT_RESOLVABLE: {citation!r} cannot be "
+            "resolved — the shape-matched mask presents no feedback "
+            "content; the no-feedback control can never act on feedback")
 
 
 def _permutation_unit(seed: str, index: int) -> float:

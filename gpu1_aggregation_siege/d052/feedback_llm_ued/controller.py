@@ -8,9 +8,12 @@ still runs its complete six roles):
                    k-1 (CC3 C9 gate: the lag is exactly one window —
                    older/current/future records fail closed as
                    STALE_FEEDBACK_ID; the BoardContext is assembled from
-                   the view ONLY, never from the raw store). Static mode
-                   gets the structurally empty NullFeedbackView; shuffled
-                   mode the frozen permuted + anonymized
+                   the view ONLY, never from the raw store). Static
+                   (no-feedback control) mode gets the P0-12 shape-matched
+                   MaskedFeedbackView — the SAME window k-1 record set,
+                   every value a controlled NULL/MASK — so the board runs
+                   the same computation with no feedback content;
+                   shuffled mode the frozen permuted + anonymized
                    PermutedFeedbackView;
     B. BOARD     — six-role Review Board, always all six calls: verdicts on
                    window k-1 feedback (explicit feedback_id /
@@ -37,8 +40,10 @@ exactly one window (``NEXT_WINDOW_REVISION_ONLY`` /
 Three comparison modes (§5) share the SAME six roles / EnvCoder / probe /
 training seam / seeds / budget:
 
-* ``static_llm``        — the board reads the structurally empty
-                          NullFeedbackView; every revision is EXPLORATION;
+* ``static_llm``        — the board reads the P0-12 shape-matched
+                          MaskedFeedbackView (same item count / field set,
+                          every value a controlled NULL/MASK); every
+                          revision is EXPLORATION;
 * ``normal_feedback``   — honest candidate<->feedback binding;
 * ``shuffled_feedback`` — the FeedbackStore stays HONEST in every mode; the
                           isolation happens at view time: the board reads a
@@ -141,6 +146,7 @@ from d052.feedback_llm_ued.feedback_contracts import (
 )
 from d052.feedback_llm_ued.causal_failure_analyst import BoardHypothesisVerdict
 from d052.feedback_llm_ued.feedback_view import (
+    MaskedFeedbackView,
     NormalFeedbackView,
     NullFeedbackView,
     PermutedFeedbackView,
@@ -531,19 +537,13 @@ class FeedbackUEDController:
         self._set_phase(window, PHASE_EVIDENCE)
         evidence_window = max(0, window - 1)
         view = self._feedback_view(window)
-        if self.mode == C.MODE_STATIC_LLM:
-            # CC4 C9 gate (director review): the static BoardContext must
-            # be a pure function of the NON-feedback state — no production
-            # path may read the store to build it. The RETIRE lifecycle is
-            # feedback-driven (a retirement is a verdict that cites
-            # feedback, and the static view resolves no citation), so the
-            # static lifecycle is the FROZEN EMPTY one by construction:
-            # the store-reading retirement-state query is omitted entirely
-            # (not merely empty by coincidence).
-            in_cooldown, blocked_retired, _reopened = [], [], ()
-        else:
-            in_cooldown, blocked_retired, _reopened = \
-                self._retirement_state(window)
+        #: P0-12: EVERY mode runs the same lifecycle query — the static
+        #: (no-feedback control) mode's masked view resolves no citation,
+        #: so its retirement registry can never become non-empty and the
+        #: query returns the empty partition by construction (re-checked
+        #: fail-closed inside _retirement_state).
+        in_cooldown, blocked_retired, _reopened = \
+            self._retirement_state(window)
         board_context = assemble_board_context(
             view, window=evidence_window, mode=self.mode,
             families_in_cooldown=in_cooldown,
@@ -753,17 +753,22 @@ class FeedbackUEDController:
         point of view; all three fail closed as STALE_FEEDBACK_ID if they
         ever reach a view or a citation validator).
 
-        static:   NullFeedbackView (structural — holds no store reference).
+        static:   MaskedFeedbackView (P0-12 shape-matched no-feedback
+                  control — the SAME window k-1 record set the normal mode
+                  sees, every value replaced by its controlled NULL/MASK
+                  value; the board runs the same computation with no
+                  feedback content).
         normal:   read-only snapshot of EXACTLY window k-1.
         shuffled: PermutedFeedbackView over the SAME honest records — a
                   frozen, recomputable permutation presented under
                   anonymized ids with the identity side channels masked
                   (the store itself is never permuted).
         """
-        if self.mode == C.MODE_STATIC_LLM:
-            return NullFeedbackView()
         records = [r for r in self.store.all() if r.window == window - 1]
         scope = max(0, window - 1)
+        if self.mode == C.MODE_STATIC_LLM:
+            return MaskedFeedbackView(records, window_scope=scope,
+                                      board_window=window)
         if self.mode == C.MODE_SHUFFLED_FEEDBACK:
             return PermutedFeedbackView(
                 records, window_scope=scope, board_window=window,
@@ -806,20 +811,24 @@ class FeedbackUEDController:
         * ``reopened``             — cooldown over AND authorized: behaves
           like a normal family this window.
 
-        CC4 C9 gate: this query is FEEDBACK-DRIVEN by construction — the
-        reopen gate reads the raw SimulatorFeedbackStore (``_reopen_eligible``),
-        which is exactly the store the static mode must never consult to
-        build its board context. Static has no retirement lifecycle (a
-        RETIRE decision cites feedback, and the NullFeedbackView resolves no
-        citation), so the query fails closed for it instead of returning a
-        value that is empty only by coincidence.
+        P0-12: every mode runs this SAME query (the compute-matched
+        lifecycle contract). The static (no-feedback control) mode's
+        masked view resolves NO citation, so a RETIRE verdict — which
+        cites feedback — can never occur there and the retirement
+        registry can never become non-empty: a non-empty registry in the
+        static mode is an impossible state and fails closed; the query
+        then returns the empty partition by construction (never reads the
+        store).
         """
         if self.mode == C.MODE_STATIC_LLM:
-            raise ValueError(
-                "STATIC_MODE_HAS_NO_RETIREMENT_LIFECYCLE: the static board "
-                "context must be a pure function of the non-feedback state; "
-                "the retirement-state query reads the feedback store and is "
-                "therefore refused for mode %r" % (self.mode,))
+            if self._retired_at:
+                raise ValueError(
+                    "STATIC_MODE_RETIREMENT_REGISTRY_NOT_EMPTY: a "
+                    "retirement cites feedback, and the static mode's "
+                    "masked view resolves no citation — the registry can "
+                    "never become non-empty in mode "
+                    f"{self.mode!r} (impossible state)")
+            return [], [], ()
         retired_windows: Mapping[str, int] = dict(self._retired_at)
         reopened = self._reopen_eligible(window, retired_windows)
         in_cooldown = sorted(

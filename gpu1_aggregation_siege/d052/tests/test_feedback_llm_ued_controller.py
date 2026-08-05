@@ -451,14 +451,14 @@ class TestComputeMatched:
 
 # ------------------------------------------------------------- static mode
 class TestStaticBaseline:
-    def test_structurally_never_sees_feedback(self, runs):
+    def test_mask_never_sees_feedback_content(self, runs):
         _ctls, sums = runs
         s = sums[C.MODE_STATIC_LLM]
         assert s.feedback_citation_coverage == 0.0
         assert s.supported_retention_rate == 0.0
         assert s.refuted_retirement_rate == 0.0
         for w in s.windows:
-            assert w["feedback_view_label"] == "null"
+            assert w["feedback_view_label"] == "masked"
 
     def test_every_revision_is_exploration(self, runs):
         ctls, sums = runs
@@ -486,21 +486,22 @@ class TestStaticBaseline:
         assert statuses[C.HYPOTHESIS_SUPPORTED] == []
         assert statuses[C.HYPOTHESIS_REFUTED] == []
 
-    def test_assembled_board_context_carries_a_zero_feedback_payload(self,
-                                                                      runs):
-        """STATIC_FEEDBACK_STRUCTURALLY_HIDDEN: the store DOES accumulate
-        feedback in the static run (64 records per window), yet the board
-        context assembled by the SAME path run_review_board uses carries an
-        EMPTY feedback array under the null view. The isolation is
-        structural (the view holds nothing), not prompt discipline."""
+    def test_assembled_board_context_carries_a_shape_matched_masked_payload(
+            self, runs):
+        """STATIC_FEEDBACK_MASKED (P0-12): the store DOES accumulate
+        feedback in the static run (64 records per window), and the board
+        context assembled by the SAME path run_review_board uses carries
+        the SHAPE-MATCHED feedback array — the same 64 items, every value
+        a controlled NULL/MASK (no feedback CONTENT). The isolation is the
+        mask (content-free values), not prompt omission."""
         ctls, _sums = runs
         ctl = ctls[C.MODE_STATIC_LLM]
         assert len(list(ctl.store.ids())) == 64 * WINDOWS   # store NOT empty…
         for window in range(WINDOWS):
             view = ctl._feedback_view(window)
-            assert view.label == "null"
-            assert view.records() == []
-            assert view.to_prompt_payload() == []
+            assert view.label == "masked"
+            assert len(view.records()) == len(view.to_prompt_payload()) \
+                == len(view.behavior_evidence())
         # windows >= 1: rebuild the exact context run_review_board assembles
         # (CC3 C9 gate: assembly consumes the VIEW only — never the raw
         # store, which here is provably full)
@@ -513,14 +514,24 @@ class TestStaticBaseline:
                 board_context=board_context,
                 view=view,
                 hypotheses=normalize_hypothesis_inputs(ctl.ledger.all()))
-            assert context["feedback"] == []          # …but the board sees 0
-            assert context["feedback_view_label"] == "null"
-            # the whole evidence layer is structurally empty too: no
-            # behavior evidence, no pooled SR/CI, no candidate ids
-            assert board_context.behavior_evidence == []
-            assert board_context.pooled_episodes == 0
-            assert board_context.pooled_student_success_rate == 0.0
-            assert board_context.student_success_rate_ci == 1.0
+            # …but the board sees 64 MASKED items (shape-matched), none of
+            # them carrying real content
+            assert len(context["feedback"]) == 64
+            assert context["feedback_view_label"] == "masked"
+            for item in context["feedback"]:
+                assert item["candidate_id"] == "MASKED_IDENTITY"
+                assert item["expected_observed_match"] \
+                    == C.MATCH_DIRECTION_NEUTRAL
+                assert item["expected_signature"] == {}
+                assert item["axis_values"] == {}
+                assert item["student_success_rate"] == 0.0
+            # the evidence layer is masked too: controlled-null gaps and
+            # severity, no candidate ids
+            assert len(board_context.behavior_evidence) == 64
+            assert all(e.candidate_id == "MASKED_IDENTITY"
+                       and e.reference_gap == 0.0
+                       and e.severity == "none"
+                       for e in board_context.behavior_evidence)
 
 
 # ------------------------------------------------------------- normal mode

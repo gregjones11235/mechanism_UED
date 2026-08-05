@@ -52,8 +52,8 @@ from d052.feedback_llm_ued.env_coder import (
 )
 from d052.feedback_llm_ued.feedback_view import (
     MASKED_IDENTITY,
+    MaskedFeedbackView,
     NormalFeedbackView,
-    NullFeedbackView,
     PermutedFeedbackView,
 )
 from d052.feedback_llm_ued.llm_backend import DeterministicMockFeedbackBackend
@@ -594,25 +594,45 @@ def test_envcoder_wrong_reset_contract_fails_closed(evaluator):
 
 
 # ---------------------------------------------------------------------------
-# F. static mode (structural null view)
+# F. static mode (P0-12 shape-matched mask)
 # ---------------------------------------------------------------------------
-def test_static_null_view_compatible(evaluator):
+def test_static_mask_view_compatible(evaluator):
+    view = MaskedFeedbackView(_window_records(2), window_scope=2,
+                              board_window=3)
     surface = evaluator.check_feedback_view(
-        NullFeedbackView(), mode=C.MODE_STATIC_LLM, board_window=3)
+        view, mode=C.MODE_STATIC_LLM, board_window=3)
     assert surface.status == B.STATUS_COMPATIBLE
-    assert "static_structurally_null" in surface.checks_passed
-    assert "zero_feedback_payload" in surface.checks_passed
+    assert "shape_matched_mask" in surface.checks_passed
+    assert "controlled_null_values" in surface.checks_passed
+    assert "feedback_item_counts_match" in surface.checks_passed
     report = _evaluate_all(evaluator, mode=C.MODE_STATIC_LLM,
-                           board_window=1, view=NullFeedbackView())
+                           board_window=1,
+                           view=MaskedFeedbackView([], window_scope=0,
+                                                   board_window=1))
     assert report.overall_status == B.STATUS_COMPATIBLE
-    # static has no fed feedback: the lag is verified structurally
+    # static has no fed feedback content: the lag is verified structurally
     assert report.exact_feedback_lag_verified is True
 
 
 def test_static_rejects_fed_view(evaluator):
     view = NormalFeedbackView(_window_records(0), window_scope=0)
     with pytest.raises(B.StudentCompatibilityBlocked,
-                       match="STATIC_VIEW_MUST_BE_STRUCTURALLY_NULL"):
+                       match="STATIC_VIEW_MUST_BE_SHAPE_MATCHED_MASK"):
+        evaluator.check_feedback_view(
+            view, mode=C.MODE_STATIC_LLM, board_window=1)
+
+
+def test_static_mask_rejects_content_leak(evaluator):
+    """P0-12: a masked payload that leaks ANY content value fails closed
+    (identity side channel / non-null numeric / non-empty collections)."""
+    records = _window_records(0)
+    view = MaskedFeedbackView(records, window_scope=0, board_window=1)
+    #: simulate a leaky mask by patching one payload item with a real value
+    leaked = list(view.to_prompt_payload())
+    leaked[0]["candidate_id"] = "REAL_CANDIDATE_LEAK"
+    view._payloads = leaked
+    with pytest.raises(B.StudentCompatibilityBlocked,
+                       match="STATIC_VIEW_IDENTITY_SIDE_CHANNEL"):
         evaluator.check_feedback_view(
             view, mode=C.MODE_STATIC_LLM, board_window=1)
 
@@ -784,7 +804,10 @@ def test_controller_three_modes_same_evaluator(evaluator):
                 symbolic.parameter_tree_hash
             assert record.student_checkpoint_step == 0
         if mode == C.MODE_STATIC_LLM:
-            view = NullFeedbackView()
+            #: P0-12: the static control consumes the shape-matched mask
+            #: over the SAME window-0 records the normal mode presents
+            view = MaskedFeedbackView(controller.store.for_window(0),
+                                      window_scope=0, board_window=1)
         elif mode == C.MODE_NORMAL_FEEDBACK:
             view = NormalFeedbackView.from_store(
                 controller.store, evidence_window=0)

@@ -48,10 +48,11 @@ from d052.bagr_ued.soft_copeland import (
 from d052.feedback_llm_ued import constants as C
 from d052.feedback_llm_ued.anchor_manifest import AnchorManifestSource
 from d052.feedback_llm_ued.env_coder import EnvCoderOutput
+from d052.feedback_llm_ued.behavior_failure import SEVERITY_NONE
 from d052.feedback_llm_ued.feedback_view import (
     MASKED_IDENTITY,
+    MaskedFeedbackView,
     NormalFeedbackView,
-    NullFeedbackView,
     PermutedFeedbackView,
     family_level_metrics,
 )
@@ -1187,22 +1188,73 @@ class SlowgruStudentEvaluator:
             raise StudentCompatibilityBlocked(
                 f"ILLEGAL_BOARD_WINDOW: {board_window}")
         if mode == C.MODE_STATIC_LLM:
-            if not isinstance(view, NullFeedbackView):
+            #: P0-12: the no-feedback control is the SHAPE-MATCHED mask —
+            #: the same window k-1 record set the normal mode sees, every
+            #: value replaced by its controlled NULL/MASK value. The old
+            #: structurally-empty view changed the prompt shape and could
+            #: not isolate feedback's contribution.
+            if not isinstance(view, MaskedFeedbackView):
                 raise StudentCompatibilityBlocked(
-                    "STATIC_VIEW_MUST_BE_STRUCTURALLY_NULL: the static mode "
-                    f"received a {type(view).__name__}; only the store-less "
-                    "NullFeedbackView is consumable")
-            if view.records() or view.to_prompt_payload() or \
-                    view.behavior_evidence():
+                    "STATIC_VIEW_MUST_BE_SHAPE_MATCHED_MASK: the static "
+                    f"(no-feedback control) mode received a "
+                    f"{type(view).__name__}; only the shape-matched "
+                    "MaskedFeedbackView is consumable")
+            if view.window_scope != max(0, board_window - 1):
                 raise StudentCompatibilityBlocked(
-                    "STATIC_VIEW_PAYLOAD_NOT_EMPTY: the null view must "
-                    "present zero records/payload/evidence")
+                    "STATIC_VIEW_WINDOW_SCOPE_MISMATCH: masked view scope "
+                    f"{view.window_scope} != evidence window "
+                    f"{max(0, board_window - 1)} for board window "
+                    f"{board_window}")
+            payloads = view.to_prompt_payload()
+            evidence = view.behavior_evidence()
+            if len(payloads) != len(evidence) \
+                    or len(payloads) != len(view.records()):
+                raise StudentCompatibilityBlocked(
+                    "STATIC_VIEW_LAYER_COUNT_MISMATCH: the shape-matched "
+                    "mask must present the SAME item count at every layer "
+                    "(prompt payload, evidence, wrapped records)")
+            for payload in payloads:
+                if payload.get("candidate_id") != MASKED_IDENTITY or \
+                        payload.get("environment_family") != MASKED_IDENTITY:
+                    raise StudentCompatibilityBlocked(
+                        "STATIC_VIEW_IDENTITY_SIDE_CHANNEL: masked payload "
+                        "carries an unmasked identity")
+                if payload.get("mutation_axes") or \
+                        payload.get("axis_values") or \
+                        payload.get("held_constant_axes") or \
+                        payload.get("expected_signature") or \
+                        payload.get("distinguishes_hypothesis_ids"):
+                    raise StudentCompatibilityBlocked(
+                        "STATIC_VIEW_CONTENT_LEAK: masked payload carries "
+                        "non-empty content fields")
+                if payload.get("expected_observed_match") \
+                        != C.MATCH_DIRECTION_NEUTRAL or \
+                        payload.get("student_success_rate") != 0.0 or \
+                        payload.get("reference_success_rate") != 0.0:
+                    raise StudentCompatibilityBlocked(
+                        "STATIC_VIEW_CONTENT_LEAK: masked payload carries "
+                        "non-null match/rate content")
+            for item in evidence:
+                if item.candidate_id != MASKED_IDENTITY or \
+                        item.environment_family != MASKED_IDENTITY:
+                    raise StudentCompatibilityBlocked(
+                        "STATIC_VIEW_IDENTITY_SIDE_CHANNEL: masked evidence "
+                        "carries an unmasked identity")
+                if item.severity != SEVERITY_NONE or \
+                        item.reference_gap != 0.0 or \
+                        item.expected_observed_match \
+                        != C.MATCH_DIRECTION_NEUTRAL:
+                    raise StudentCompatibilityBlocked(
+                        "STATIC_VIEW_CONTENT_LEAK: masked evidence carries "
+                        "non-null content")
             return SurfaceCompatibility(
                 surface=SURFACE_FEEDBACK_VIEW, status=STATUS_COMPATIBLE,
                 baseline_candidate_id=self.baseline.candidate_id,
-                checks_passed=("static_structurally_null",
-                               "zero_feedback_payload"),
-                detail="mode=static_llm")
+                checks_passed=("shape_matched_mask",
+                               "controlled_null_values",
+                               "feedback_item_counts_match"),
+                detail=f"mode=static_llm window_scope="
+                       f"{view.window_scope} items={len(payloads)}")
 
         # exact k-1 lag, re-asserted at the evaluator surface
         if view.window_scope != board_window - 1:
