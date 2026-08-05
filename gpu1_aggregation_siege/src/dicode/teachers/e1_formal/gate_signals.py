@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from . import producer_seams as PS
 from .canonical import canonical_sha256
 from .evidence import EvidenceSnapshot
 from .schemas import E1SchemaError
@@ -39,6 +40,10 @@ SIGNAL_OK = "SIGNAL_OK"
 SIGNAL_NO_PRODUCER = "SIGNAL_NO_PRODUCER"
 SIGNAL_INSUFFICIENT_FACTS = "SIGNAL_INSUFFICIENT_FACTS"
 INVOCATION_THRESHOLD_MISSING = "INVOCATION_THRESHOLD_MISSING"
+# CC2 follow-up P0-14: explicit producer/threshold states
+INVOCATION_THRESHOLDS_UNFROZEN = "INVOCATION_THRESHOLDS_UNFROZEN"
+FAILURE_PATTERN_PRODUCER_UNBOUND = "FAILURE_PATTERN_PRODUCER_UNBOUND"
+CURRICULUM_DRIFT_PRODUCER_UNBOUND = "CURRICULUM_DRIFT_PRODUCER_UNBOUND"
 
 #: gate-state boolean field names produced by this module (exactly the
 #: invocation_gate trigger fields; kept in the gate's priority order)
@@ -302,6 +307,10 @@ def compute_gate_signals(
     thresholds: Optional[InvocationThresholds],
     threshold_version: str,
     consecutive_reuses: int,
+    failure_pattern_fingerprint: Any = None,
+    failure_pattern_novelty_threshold: Any = None,
+    curriculum_composition_history: Any = None,
+    curriculum_drift_threshold: Any = None,
 ) -> GateSignalReport:
     """Compute all eight signals honestly; never fabricate a trigger.
 
@@ -370,13 +379,36 @@ def compute_gate_signals(
             f"{len(sr_series)} facts",
         )
 
-    # 3. NEW_FAILURE_PATTERN — no fingerprint producer exists yet
-    _set(
-        "new_failure_pattern",
-        False,
-        SIGNAL_NO_PRODUCER,
-        "no failure-pattern fingerprint producer in this worktree",
-    )
+    # 3. NEW_FAILURE_PATTERN — the SIGNED fingerprint object only
+    #    (CC2 P0-14): a caller-built mapping is never consumed. Until
+    #    a producer is registered the state is
+    #    FAILURE_PATTERN_PRODUCER_UNBOUND; the derivation additionally
+    #    needs the supervisor-frozen novelty threshold
+    #    (INVOCATION_THRESHOLDS_UNFROZEN otherwise).
+    if failure_pattern_fingerprint is None:
+        _set(
+            "new_failure_pattern",
+            False,
+            FAILURE_PATTERN_PRODUCER_UNBOUND,
+            "no failure-pattern producer/fingerprint is bound in this "
+            "worktree",
+        )
+    else:
+        try:
+            derivation = PS.derive_failure_pattern_signal(
+                failure_pattern_fingerprint,
+                novelty_threshold=failure_pattern_novelty_threshold,
+            )
+        except PS.ProducerSeamError as e:
+            _set("new_failure_pattern", False, e.code, str(e))
+        else:
+            _set(
+                "new_failure_pattern",
+                derivation["triggered"],
+                SIGNAL_OK,
+                f"fingerprint {derivation['fingerprint_hash']} "
+                f"threshold {derivation['threshold']}",
+            )
 
     # 4. INTERVENTIONS_EXHAUSTED — consecutive windowless review cycles
     if thresholds is None:
@@ -469,13 +501,34 @@ def compute_gate_signals(
             f"{thresholds.exploration_slot_period}",
         )
 
-    # 8. CURRICULUM_DRIFT — no batch-composition history producer yet
-    _set(
-        "curriculum_drift",
-        False,
-        SIGNAL_NO_PRODUCER,
-        "no batch-composition history producer in this worktree",
-    )
+    # 8. CURRICULUM_DRIFT — the SIGNED composition history object only
+    #    (CC2 P0-14): until a producer is registered the state is
+    #    CURRICULUM_DRIFT_PRODUCER_UNBOUND; the derivation additionally
+    #    needs the supervisor-frozen drift threshold.
+    if curriculum_composition_history is None:
+        _set(
+            "curriculum_drift",
+            False,
+            CURRICULUM_DRIFT_PRODUCER_UNBOUND,
+            "no curriculum-drift producer/history is bound in this "
+            "worktree",
+        )
+    else:
+        try:
+            derivation = PS.derive_curriculum_drift_signal(
+                curriculum_composition_history,
+                drift_threshold=curriculum_drift_threshold,
+            )
+        except PS.ProducerSeamError as e:
+            _set("curriculum_drift", False, e.code, str(e))
+        else:
+            _set(
+                "curriculum_drift",
+                derivation["triggered"],
+                SIGNAL_OK,
+                f"history {derivation['history_hash']} "
+                f"threshold {derivation['threshold']}",
+            )
 
     prev_window_hash = getattr(prev_window, "window_hash", "") or ""
     binding_hash = canonical_sha256(
