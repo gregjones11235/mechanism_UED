@@ -465,11 +465,11 @@ def main(argv=None) -> int:
 
     # Cross-bindings: the restore request must describe THIS checkpoint and
     # THIS adapter identity; the memory artifact must bind THIS adapter.
-    if restore_request.checkpoint_sha256 != str(student_spec["checkpoint_sha256"]):
+    if restore_request.checkpoint_sha256 != str(student_spec["checkpoint_file_sha256"]):
         report["verdict"] = "FAIL"
         report["reason"] = (
             "RUNTIME_BUNDLE_CROSS_BINDING: restore request checkpoint_sha256 does "
-            "not equal the bundle's student.checkpoint_sha256 (fail closed)")
+            "not equal the bundle's student.checkpoint_file_sha256 (fail closed)")
         _finish(report, out_dir)
         return FAIL
     if restore_request.student_abi_identity_hash != str(identity.identity_hash()):

@@ -37,6 +37,7 @@ def _manifest():
         "memory_mode": "RESET128",
         "carry_mode": "RESET128",
     })
+    m["manifest_hash"] = rb.manifest_canonical_hash(m)
     return m
 
 

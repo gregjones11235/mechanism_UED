@@ -1,0 +1,36 @@
+{
+  "schema": "simulator_frontier.e3_persistent_runtime_repair_audit/v1",
+  "stage": "E3_PERSISTENT_OBJECT_CONSUMER_READY",
+  "manifest_hash_unified": {
+    "required_top_key": true,
+    "computed_over_all_fields_except_manifest_hash": true,
+    "verified_in": [
+      "validate_runtime_bundle_manifest",
+      "bundle verifier",
+      "entrypoint"
+    ],
+    "single_payload_hash": true,
+    "fixtures_updated": true
+  },
+  "signature_verification": {
+    "pseudo_crypto_removed": "signature_ref.split(':',1)[0] signer-extraction DELETED",
+    "director_verifier": "DirectorBundleVerifier now carries the director-injected verify_signature(signer_id, payload_hash, signature_ref) -> bool callable",
+    "production_order": [
+      "signer_id in TrustedSignerRegistry",
+      "payload hash recomputed",
+      "injected verify_signature EXECUTED and must return True",
+      "entrypoint allowlist",
+      "implementation hash"
+    ],
+    "unbound_state": "E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND -> BLOCKED (never self-issued crypto)"
+  },
+  "checkpoint_field_unified": "checkpoint_file_sha256 used in student + reference sections + entrypoint restore cross-binding; stale checkpoint_sha256 removed from the bundle schema",
+  "custom_loss_optimizer_path": "OriginalTrainingRuntime remains TEST_ONLY_LEGACY_ADAPTER only; production pipeline no longer calls loss_fn(batch,params)/optimizer_update_fn(params,batch) (delegation via CanonicalDiCodeOneUpdateRuntime) — full STEP09-13 rewiring and E3WindowConfig canonical fields are tracked as the next commit",
+  "persistent_object_level_check": "OBJECT_LEVEL_CHECK_BLOCKED: real CC2 checkpoint not mounted locally (server-side); bundle verifier unbound; no string semantics or Synthetic checkpoint claimed as pass",
+  "readiness_flags": {
+    "E3_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "E3_STUDENT_TRAINING_RUNTIME_READY": false,
+    "E3_REAL_SMOKE_READY": false
+  }
+}

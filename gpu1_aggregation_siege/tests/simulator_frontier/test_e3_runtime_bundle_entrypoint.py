@@ -33,7 +33,7 @@ SHA = "c" * 64
 
 
 def _manifest() -> dict:
-    return {
+    manifest = {
         "schema": rb.RUNTIME_BUNDLE_SCHEMA,
         "bundle_id": "bundle-001",
         "run_id": "run-001",
@@ -57,7 +57,7 @@ def _manifest() -> dict:
         },
         "reference": {"profile": "rmt16_reset128_98304",
                       "checkpoint_path": "/tmp/ref_ckpt",
-                      "checkpoint_sha256": SHA,
+                      "checkpoint_file_sha256": SHA,
                       "abi_identity_hash": "dd" * 32,
                       "adapter_entrypoint": "dicode.student_adapters.rmt16_adapter:RMT16StudentAdapter",
                       "adapter_hash": SHA,
@@ -119,6 +119,8 @@ def _manifest() -> dict:
                   "checkpoint_dir": "/tmp/ckpts",
                   "scratch_dir": "/tmp/scratch"},
     }
+    manifest["manifest_hash"] = rb.manifest_canonical_hash(manifest)
+    return manifest
 
 
 class TestManifestValidation:
@@ -203,7 +205,7 @@ class TestAssetFileResolution:
         ref_ckpt = tmp_path / "ref_ckpt.bin"
         ref_ckpt.write_bytes(b"SYNTHETIC_REFERENCE")
         manifest["reference"]["checkpoint_path"] = str(ref_ckpt)
-        manifest["reference"]["checkpoint_sha256"] = hashlib.sha256(
+        manifest["reference"]["checkpoint_file_sha256"] = hashlib.sha256(
             b"SYNTHETIC_REFERENCE").hexdigest()
         ref_mem = tmp_path / "ref_mem.npz"
         ref_mem.write_bytes(b"SYNTHETIC_REFERENCE_MEMORY")

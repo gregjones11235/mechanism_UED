@@ -23,7 +23,7 @@ SHA = "a" * 64
 
 
 def _manifest():
-    return {
+    manifest = {
         "schema": rb.RUNTIME_BUNDLE_SCHEMA,
         "bundle_id": "bundle-001", "run_id": "run-001",
         "controller_signature_ref": "controller-signature/abc",
@@ -39,7 +39,7 @@ def _manifest():
             "carry_mode": "PERSISTENT",
             "driver_source_path": "/tmp/driver.py", "driver_source_sha256": SHA},
         "reference": {"profile": "rmt16_reset128_98304",
-                      "checkpoint_path": "/tmp/ref", "checkpoint_sha256": SHA,
+                      "checkpoint_path": "/tmp/ref", "checkpoint_file_sha256": SHA,
                       "abi_identity_hash": "dd" * 32,
                       "adapter_entrypoint": "dicode.student_adapters.rmt16_adapter:RMT16StudentAdapter",
                       "adapter_hash": SHA, "memory_mode": "SAVED_POLICY_MEMORY",
@@ -81,6 +81,8 @@ def _manifest():
         "paths": {"archive_path": "/tmp/ar", "checkpoint_dir": "/tmp/ck",
                   "scratch_dir": "/tmp/sc"},
     }
+    manifest["manifest_hash"] = rb.manifest_canonical_hash(manifest)
+    return manifest
 
 
 def test_persistent_bundle_validates():

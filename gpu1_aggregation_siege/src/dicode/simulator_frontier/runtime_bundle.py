@@ -78,7 +78,7 @@ REQUIRED_TOP_KEYS = frozenset({
     "memory", "capture_provenance", "formal_asset_registry_payload_path",
     "restore_request_payload_path", "anchor_manifest_payload_path",
     "retention", "taskparam_apply_entrypoint", "predicates",
-    "two_llm_runtime", "search", "paths",
+    "two_llm_runtime", "search", "paths", "manifest_hash",
 })
 
 STUDENT_SECTION_KEYS = frozenset({
@@ -90,7 +90,7 @@ STUDENT_SECTION_KEYS = frozenset({
 })
 
 REFERENCE_SECTION_KEYS = frozenset({
-    "profile", "checkpoint_path", "checkpoint_sha256", "abi_identity_hash",
+    "profile", "checkpoint_path", "checkpoint_file_sha256", "abi_identity_hash",
     "adapter_entrypoint", "adapter_hash", "memory_mode",
     "memory_artifact_path", "memory_artifact_sha256", "memory_spec_hash",
     "memory_loader_entrypoint", "burn_in_executor_entrypoint",
@@ -102,6 +102,23 @@ _SYNTHETIC_SIGNATURE_PREFIX = "SYNTHETIC_SIGNATURE_"
 
 def _fail(message: str) -> None:
     raise InvalidEvidenceError(f"{_BLOCKER_PREFIX}: {message}")
+
+
+def manifest_canonical_hash(manifest: Mapping[str, Any]) -> str:
+    """The ONE canonical payload hash for a runtime bundle.
+
+    E3 (manifest-hash unification): the exact schema now REQUIRES
+    ``manifest_hash``, computed over every OTHER manifest field
+    (``manifest_hash`` excluded).  The schema validator and the bundle
+    verifier verify the SAME hash — never two overlapping payload hashes.
+    Every signature reference binds this hash.
+    """
+    if not isinstance(manifest, Mapping):
+        _fail("manifest must be a mapping")
+    payload = {k: v for k, v in manifest.items() if k != "manifest_hash"}
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _require_sha256(where: str, value: Any) -> str:
@@ -178,6 +195,13 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
     if manifest["schema"] != RUNTIME_BUNDLE_SCHEMA:
         _fail(f"manifest schema must be {RUNTIME_BUNDLE_SCHEMA!r}, "
               f"got {manifest['schema']!r}")
+    # E3: the exact schema REQUIRES manifest_hash and re-verifies it here —
+    # a tampered bundle never validates, and there is exactly ONE payload hash.
+    declared_hash = _require_sha256("manifest.manifest_hash",
+                                    manifest["manifest_hash"])
+    if manifest_canonical_hash(manifest) != declared_hash:
+        _fail("manifest_hash mismatch: the bundle does not recompute to its "
+              "declared manifest_hash (tamper rejected; fail closed)")
     _require_nonempty_str("bundle_id", manifest["bundle_id"])
     _require_nonempty_str("run_id", manifest["run_id"])
     signature = _require_nonempty_str(
@@ -243,7 +267,7 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
                                  REFERENCE_SECTION_KEYS)
     _require_nonempty_str("reference.profile", reference["profile"])
     _require_nonempty_str("reference.checkpoint_path", reference["checkpoint_path"])
-    _require_sha256("reference.checkpoint_sha256", reference["checkpoint_sha256"])
+    _require_sha256("reference.checkpoint_file_sha256", reference["checkpoint_file_sha256"])
     _require_sha256("reference.abi_identity_hash", reference["abi_identity_hash"])
     _require_entrypoint("reference.adapter_entrypoint",
                         reference["adapter_entrypoint"])
@@ -419,7 +443,7 @@ def resolve_bundle_asset_files(manifest: Mapping[str, Any]) -> dict[str, str]:
     if not os.path.isfile(path):
         _fail(f"reference.checkpoint file does not exist: {path}")
     _recompute_file_sha256("reference.checkpoint", path,
-                           str(reference["checkpoint_sha256"]))
+                           str(reference["checkpoint_file_sha256"]))
     resolved["reference.checkpoint"] = path
     path = str(reference["memory_artifact_path"])
     if not os.path.isfile(path):

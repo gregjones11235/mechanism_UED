@@ -87,21 +87,30 @@ class DirectorBundleVerifier:
     """
 
     verifier_id: str
+    registry_identity: str
     trusted_signer_registry: TrustedSignerRegistry
     allowlisted_entrypoints: tuple[str, ...]
+    verify_signature: Any
     verifier_hash: str = field(init=False)
     verifier_schema: str = BUNDLE_VERIFIER_SCHEMA
 
     def __post_init__(self) -> None:
         _require_nonempty_str("verifier_id", self.verifier_id)
+        _require_nonempty_str("registry_identity", self.registry_identity)
         if not isinstance(self.trusted_signer_registry, TrustedSignerRegistry):
             raise InvalidEvidenceError(
                 "DirectorBundleVerifier requires a minted TrustedSignerRegistry")
+        if not callable(self.verify_signature):
+            raise InvalidEvidenceError(
+                "DirectorBundleVerifier requires the director-injected "
+                "verify_signature callable — production code never implements "
+                "its own signature verification (no self-issued crypto)")
         object.__setattr__(self, "allowlisted_entrypoints",
                            tuple(str(e) for e in self.allowlisted_entrypoints))
         payload = {
             "schema": BUNDLE_VERIFIER_SCHEMA,
             "verifier_id": self.verifier_id,
+            "registry_identity": self.registry_identity,
             "trusted_signer_registry_hash": self.trusted_signer_registry.registry_hash,
             "allowlisted_entrypoints": sorted(self.allowlisted_entrypoints),
         }
@@ -136,11 +145,11 @@ def verify_production_bundle(manifest: Mapping[str, Any], *,
         raise ProvenanceViolationError(
             f"synthetic signature reference {reference!r} can never be admitted "
             "on the production path")
-    signer = str(reference).split(":", 1)[0]
-    if not verifier.trusted_signer_registry.is_trusted(signer):
-        raise ProvenanceViolationError(
-            f"signer identity {signer!r} is not in the trusted signer registry "
-            "(signature not issued by the director; fail closed)")
+    # E3-P0: extracting a signer by splitting a reference string and checking
+    # membership is NOT signature verification — that pseudo-crypto is
+    # DELETED.  The signer id is a manifest field, its trust is checked against
+    # the registry, the payload hash is recomputed, and THEN the director-
+    # injected verify_signature is EXECUTED and must return True.
     if not isinstance(manifest, Mapping):
         raise InvalidEvidenceError("manifest must be a JSON object")
     declared = manifest.get("manifest_hash", "")
@@ -154,6 +163,21 @@ def verify_production_bundle(manifest: Mapping[str, Any], *,
         raise ProvenanceViolationError(
             "manifest canonical payload hash mismatch: the signed bundle does "
             "not recompute to its declared manifest_hash (fail closed)")
+    signer = manifest.get("controller_identity", "")
+    if not signer or not verifier.trusted_signer_registry.is_trusted(signer):
+        raise ProvenanceViolationError(
+            f"signer identity {signer!r} is not in the trusted signer registry "
+            "(signature not issued by the director; fail closed)")
+    try:
+        ok = verifier.verify_signature(
+            signer_id=signer, payload_hash=canonical, signature_ref=reference)
+    except Exception as exc:
+        raise ProvenanceViolationError(
+            f"director verify_signature failed: {exc!r} (fail closed)") from exc
+    if not isinstance(ok, bool) or not ok:
+        raise ProvenanceViolationError(
+            "director verify_signature did not return True — the signature "
+            "reference is not accepted (fail closed)")
     for key in ("student", "reference", "training_runtime",
                 "training_surface_capability", "memory",
                 "two_llm_runtime", "taskparam_apply_entrypoint"):
