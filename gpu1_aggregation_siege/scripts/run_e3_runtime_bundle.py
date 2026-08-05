@@ -211,6 +211,67 @@ def main(argv=None) -> int:
     report["candidate_id"] = profile.candidate_id
 
     # ------------------------------------------------------------------
+    # 2b. mount the Reference runtime exactly as the bundle names it (P0-b2)
+    # ------------------------------------------------------------------
+    reference_spec = manifest["reference"]
+    try:
+        ref_profile = load_student_profile(
+            default_profile_dir() / f"{reference_spec['profile']}.yaml")
+        if ref_profile.architecture_family != "RMT16":
+            raise ValueError("reference profile must be RMT16")
+        ref_factory = rb.import_entrypoint(
+            str(reference_spec["adapter_entrypoint"]), "reference adapter factory")
+        if not callable(ref_factory):
+            raise ValueError("reference adapter entry point resolved to a non-callable")
+        if rb.callable_source_sha256(
+                "reference adapter", ref_factory) != str(reference_spec["adapter_hash"]):
+            raise ValueError("reference adapter implementation hash drift "
+                             "(substitution rejected fail closed)")
+        reference_student = ref_factory(ref_profile)
+        ref_loaded = reference_student.load_full_state(
+            str(reference_spec["checkpoint_path"]), ref_profile.expected_identity())
+        ref_identity = reference_student.identity()
+        if str(reference_spec["abi_identity_hash"]) != str(ref_identity.identity_hash()):
+            raise ValueError("reference abi_identity_hash does not match the "
+                             "mounted reference checkpoint identity")
+        reference_params = ref_loaded.get("params")
+        reference_checkpoint_id = str(ref_identity.params_sha256)
+        reference_memory_artifact = MemoryArtifactRef(
+            path=str(reference_spec["memory_artifact_path"]),
+            sha256=str(reference_spec["memory_artifact_sha256"]),
+            memory_spec_hash=str(reference_spec["memory_spec_hash"]),
+            student_identity_hash=str(reference_spec["abi_identity_hash"]))
+        # Cross-bindings: the Reference memory surface must be the REFERENCE's
+        # own — never the Student's.
+        if str(reference_memory_artifact.student_identity_hash) \
+                != str(ref_identity.identity_hash()):
+            raise ValueError("reference memory artifact identity != reference identity")
+        if str(reference_memory_artifact.memory_spec_hash) \
+                != str(reference_student.memory_spec().spec_hash()):
+            raise ValueError("reference memory artifact spec hash != reference "
+                             "memory spec (cross-policy memory rejected)")
+        reference_memory_loader = rb.import_entrypoint(
+            str(reference_spec["memory_loader_entrypoint"]),
+            "reference memory loader")
+        reference_history_artifact_ref = str(reference_spec["history_artifact_ref"])
+        reference_burn_in_executor = rb.import_entrypoint(
+            str(reference_spec["burn_in_executor_entrypoint"]),
+            "reference burn-in executor")
+    except Exception as exc:
+        report["verdict"] = "FAIL"
+        report["reason"] = f"RUNTIME_BUNDLE_REFERENCE_UNMOUNTABLE: {exc!r}"
+        _finish(report, out_dir)
+        return FAIL
+    report["reference_mounted"] = True
+    if str(reference_spec["abi_identity_hash"]) == str(identity.identity_hash()):
+        report["verdict"] = "FAIL"
+        report["reason"] = ("RUNTIME_BUNDLE_REFERENCE_EQUALS_STUDENT: the reference "
+                            "ABI identity equals the Student identity (a Reference "
+                            "is never the Student under another name; fail closed)")
+        _finish(report, out_dir)
+        return FAIL
+
+    # ------------------------------------------------------------------
     # 3. rebuild every typed asset from the bundle (nothing guessed)
     # ------------------------------------------------------------------
     def _read_json(name: str, path: str):
@@ -353,6 +414,13 @@ def main(argv=None) -> int:
         student=adapter,
         student_params=loaded.get("params"),
         loaded_state=loaded,
+        reference_student=reference_student,
+        reference_params=reference_params,
+        reference_checkpoint_id=reference_checkpoint_id,
+        reference_memory_artifact=reference_memory_artifact,
+        reference_memory_loader=reference_memory_loader,
+        reference_history_artifact_ref=reference_history_artifact_ref,
+        reference_burn_in_executor=reference_burn_in_executor,
         training_surface_capability=capability,
         max_timesteps=int(search["max_timesteps"]),
         reset_seed=int(search["reset_seed"]),

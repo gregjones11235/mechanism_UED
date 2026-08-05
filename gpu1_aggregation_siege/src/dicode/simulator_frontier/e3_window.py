@@ -309,6 +309,54 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     round_trip = surface
     gates["CHECKPOINT_ROUND_TRIP_CAPABILITY"] = bool(round_trip)
 
+    # Director handoff (P0-b2): the Reference runtime is a COMPLETE mount —
+    # adapter + params + checkpoint identity + its OWN memory surface.  The
+    # three gates below verify it mechanically:
+    #   * REFERENCE_RUNTIME_BOUND            — adapter mounted, params bound,
+    #     checkpoint identity non-empty;
+    #   * REFERENCE_IDENTITY_DISTINCT_FROM_STUDENT — a Reference is never the
+    #     Student under another name;
+    #   * REFERENCE_MEMORY_ISOLATED          — Reference memory is bound to the
+    #     REFERENCE adapter's own identity/spec (or its own burn-in), never
+    #     the Student memory surface.
+    ref = config.reference_student
+    ref_mounted = (isinstance(ref, StudentAdapter)
+                   and config.reference_params is not None
+                   and str(config.reference_checkpoint_id).strip() != "")
+    gates["REFERENCE_RUNTIME_BOUND"] = bool(ref_mounted)
+    if not ref_mounted:
+        blockers.append("BLOCKED_REFERENCE_RUNTIME_NOT_BOUND")
+
+    ref_distinct = (ref_mounted and mounted
+                    and str(ref.identity().identity_hash())
+                    != str(student.identity().identity_hash()))
+    gates["REFERENCE_IDENTITY_DISTINCT_FROM_STUDENT"] = bool(ref_distinct)
+    if ref_mounted and not ref_distinct:
+        blockers.append("BLOCKED_REFERENCE_IDENTITY_EQUALS_STUDENT")
+
+    ref_memory_ok = False
+    if ref_mounted:
+        try:
+            ref_mode = MemoryRestoreMode(str(config.memory_mode))
+        except ValueError:
+            ref_mode = None
+        if ref_mode is MemoryRestoreMode.SAVED_POLICY_MEMORY:
+            ref_artifact = config.reference_memory_artifact
+            ref_memory_ok = (
+                isinstance(ref_artifact, MemoryArtifactRef)
+                and str(ref_artifact.student_identity_hash)
+                == str(ref.identity().identity_hash())
+                and str(ref_artifact.memory_spec_hash)
+                == str(ref.memory_spec().spec_hash())
+                and callable(config.reference_memory_loader))
+        elif ref_mode is MemoryRestoreMode.HISTORY_BURN_IN:
+            ref_memory_ok = (
+                str(config.reference_history_artifact_ref).strip() != ""
+                and callable(config.reference_burn_in_executor))
+    gates["REFERENCE_MEMORY_ISOLATED"] = bool(ref_memory_ok)
+    if ref_mounted and not ref_memory_ok:
+        blockers.append("BLOCKED_REFERENCE_MEMORY_NOT_ISOLATED")
+
     request = config.restore_request
     bundle_ok = (
         request is not None

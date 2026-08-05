@@ -74,11 +74,19 @@ _BLOCKER_PREFIX = "RUNTIME_BUNDLE"
 
 REQUIRED_TOP_KEYS = frozenset({
     "schema", "bundle_id", "run_id", "controller_signature_ref",
-    "student", "training_runtime", "training_surface_capability", "memory",
-    "capture_provenance", "formal_asset_registry_payload_path",
+    "student", "reference", "training_runtime", "training_surface_capability",
+    "memory", "capture_provenance", "formal_asset_registry_payload_path",
     "restore_request_payload_path", "anchor_manifest_payload_path",
     "retention", "taskparam_apply_entrypoint", "predicates",
     "two_llm_runtime", "search", "paths",
+})
+
+REFERENCE_SECTION_KEYS = frozenset({
+    "profile", "checkpoint_path", "checkpoint_sha256", "abi_identity_hash",
+    "adapter_entrypoint", "adapter_hash", "memory_mode",
+    "memory_artifact_path", "memory_artifact_sha256", "memory_spec_hash",
+    "memory_loader_entrypoint", "burn_in_executor_entrypoint",
+    "history_artifact_ref", "reset_protocol_hash",
 })
 
 _SYNTHETIC_SIGNATURE_PREFIX = "SYNTHETIC_SIGNATURE_"
@@ -176,6 +184,39 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
     _require_nonempty_str("student.checkpoint_path", student["checkpoint_path"])
     _require_sha256("student.checkpoint_sha256", student["checkpoint_sha256"])
     _require_sha256("student.abi_identity_hash", student["abi_identity_hash"])
+
+    # Director handoff (P0-b2): the bundle names a COMPLETE Reference runtime.
+    # If the reference ABI identity equals the Student's, the run is refused
+    # (a Reference is never the Student under another name).
+    reference = _require_section("reference", manifest["reference"],
+                                 REFERENCE_SECTION_KEYS)
+    _require_nonempty_str("reference.profile", reference["profile"])
+    _require_nonempty_str("reference.checkpoint_path", reference["checkpoint_path"])
+    _require_sha256("reference.checkpoint_sha256", reference["checkpoint_sha256"])
+    _require_sha256("reference.abi_identity_hash", reference["abi_identity_hash"])
+    _require_entrypoint("reference.adapter_entrypoint",
+                        reference["adapter_entrypoint"])
+    _require_sha256("reference.adapter_hash", reference["adapter_hash"])
+    if reference["memory_mode"] not in ("SAVED_POLICY_MEMORY", "HISTORY_BURN_IN"):
+        _fail(f"reference.memory_mode must be SAVED_POLICY_MEMORY or "
+              f"HISTORY_BURN_IN, got {reference['memory_mode']!r}")
+    _require_nonempty_str("reference.memory_artifact_path",
+                          reference["memory_artifact_path"])
+    _require_sha256("reference.memory_artifact_sha256",
+                    reference["memory_artifact_sha256"])
+    _require_sha256("reference.memory_spec_hash", reference["memory_spec_hash"])
+    _require_entrypoint("reference.memory_loader_entrypoint",
+                        reference["memory_loader_entrypoint"])
+    _require_entrypoint("reference.burn_in_executor_entrypoint",
+                        reference["burn_in_executor_entrypoint"])
+    _require_nonempty_str("reference.history_artifact_ref",
+                          reference["history_artifact_ref"])
+    _require_sha256("reference.reset_protocol_hash",
+                    reference["reset_protocol_hash"])
+    if str(reference["abi_identity_hash"]) == str(student["abi_identity_hash"]):
+        _fail("reference.abi_identity_hash must differ from "
+              "student.abi_identity_hash — a Reference is never the Student "
+              "under another name (fail closed)")
 
     runtime = _require_section("training_runtime", manifest["training_runtime"],
                                frozenset({
@@ -322,6 +363,19 @@ def resolve_bundle_asset_files(manifest: Mapping[str, Any]) -> dict[str, str]:
         _fail(f"memory.artifact file does not exist: {path}")
     _recompute_file_sha256("memory.artifact", path, str(memory["artifact_sha256"]))
     resolved["memory.artifact"] = path
+    reference = manifest["reference"]
+    path = str(reference["checkpoint_path"])
+    if not os.path.isfile(path):
+        _fail(f"reference.checkpoint file does not exist: {path}")
+    _recompute_file_sha256("reference.checkpoint", path,
+                           str(reference["checkpoint_sha256"]))
+    resolved["reference.checkpoint"] = path
+    path = str(reference["memory_artifact_path"])
+    if not os.path.isfile(path):
+        _fail(f"reference.memory_artifact file does not exist: {path}")
+    _recompute_file_sha256("reference.memory_artifact", path,
+                           str(reference["memory_artifact_sha256"]))
+    resolved["reference.memory_artifact"] = path
     for name, key in (
             ("formal_asset_registry_payload", "formal_asset_registry_payload_path"),
             ("restore_request_payload", "restore_request_payload_path"),
@@ -342,6 +396,29 @@ def _recompute_file_sha256(name: str, path: str, expected: str) -> None:
     if actual != expected:
         _fail(f"{name} sha256 mismatch: file recomputes to {actual[:16]}…, "
               f"manifest declares {expected[:16]}… (fail closed)")
+
+
+def callable_source_sha256(name: str, fn: Any) -> str:
+    """sha256 of a callable's source file + text (EOL-normalized), fail-closed.
+
+    Used to bind adapter/factory entry points declared in the bundle to their
+    implementation — a substituted or drifted implementation never binds.
+    """
+    import inspect
+    if isinstance(fn, Mapping) or not callable(fn):
+        _fail(f"{name}: expected a callable, got {type(fn).__name__}")
+    try:
+        source = inspect.getsource(fn)
+    except (OSError, TypeError) as exc:
+        _fail(f"{name}: cannot bind the callable — its source text is "
+              f"unavailable ({exc!r}); fail closed")
+    try:
+        source_file = str(inspect.getsourcefile(fn) or "<unknown>")
+    except TypeError:
+        source_file = "<unknown>"
+    normalized = source.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(
+        f"{source_file}\n::\n{normalized}".encode("utf-8")).hexdigest()
 
 
 def import_entrypoint(entrypoint: str, purpose: str) -> Any:

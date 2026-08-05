@@ -42,6 +42,20 @@ def _manifest() -> dict:
                     "checkpoint_path": "/tmp/ckpt",
                     "checkpoint_sha256": SHA,
                     "abi_identity_hash": IDENT},
+        "reference": {"profile": "rmt16_reset128_98304",
+                      "checkpoint_path": "/tmp/ref_ckpt",
+                      "checkpoint_sha256": SHA,
+                      "abi_identity_hash": "dd" * 32,
+                      "adapter_entrypoint": "dicode.student_adapters.rmt16_adapter:RMT16StudentAdapter",
+                      "adapter_hash": SHA,
+                      "memory_mode": "SAVED_POLICY_MEMORY",
+                      "memory_artifact_path": "/tmp/ref_mem.npz",
+                      "memory_artifact_sha256": SHA,
+                      "memory_spec_hash": SHA,
+                      "memory_loader_entrypoint": "dicode.loaders:load_ref_memory",
+                      "burn_in_executor_entrypoint": "dicode.loaders:burn_in_ref",
+                      "history_artifact_ref": "controller-history/ref-001",
+                      "reset_protocol_hash": "ee" * 32},
         "training_runtime": {"runtime_id": "rt-001",
                              "loss_name": "PPO_ORIGINAL_VTRACE",
                              "optimizer_name": "ADAMW_ORIGINAL",
@@ -173,6 +187,16 @@ class TestAssetFileResolution:
         mem.write_bytes(b"SYNTHETIC_MEMORY")
         manifest["memory"]["artifact_path"] = str(mem)
         manifest["memory"]["artifact_sha256"] = hashlib.sha256(b"SYNTHETIC_MEMORY").hexdigest()
+        ref_ckpt = tmp_path / "ref_ckpt.bin"
+        ref_ckpt.write_bytes(b"SYNTHETIC_REFERENCE")
+        manifest["reference"]["checkpoint_path"] = str(ref_ckpt)
+        manifest["reference"]["checkpoint_sha256"] = hashlib.sha256(
+            b"SYNTHETIC_REFERENCE").hexdigest()
+        ref_mem = tmp_path / "ref_mem.npz"
+        ref_mem.write_bytes(b"SYNTHETIC_REFERENCE_MEMORY")
+        manifest["reference"]["memory_artifact_path"] = str(ref_mem)
+        manifest["reference"]["memory_artifact_sha256"] = hashlib.sha256(
+            b"SYNTHETIC_REFERENCE_MEMORY").hexdigest()
         for key in ("formal_asset_registry_payload_path",
                     "restore_request_payload_path",
                     "anchor_manifest_payload_path"):
@@ -181,6 +205,7 @@ class TestAssetFileResolution:
             manifest[key] = str(f)
         resolved = rb.resolve_bundle_asset_files(manifest)
         assert resolved["student.checkpoint"] == str(path)
+        assert resolved["reference.checkpoint"] == str(ref_ckpt)
 
 
 class TestEntryPointResolution:
