@@ -333,7 +333,8 @@ def build_window_real_feedback(*, window: int, plan, candidates, batch,
 def run_two_real_windows(*, bundle: SharedRuntimeBundle,
                          llm_transport, backend_id: str, model_id: str,
                          state_path: str, journal_path: str,
-                         student_init_contract=None) -> dict:
+                         student_init_contract=None,
+                         director_manifest=None) -> dict:
     """Execute windows k and k+1 against the real shared runtime.
 
     Preconditions (all fail closed BEFORE any LLM call): complete runtime
@@ -431,7 +432,17 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         #: that consumes feedback_k); window k trains nothing (delta=0).
         #: run() fails closed if the completed run deviates.
         two_window_smoke_policy=RealTwoWindowSmokePolicy(
-            updates_expected_total=1, update_window_index=1))
+            updates_expected_total=1, update_window_index=1),
+        #: P0-16 (DiCode 15+1): the director-declared batch binding — the
+        #: window k+1 update consumes the 15 curriculum ids and the
+        #: OriginalTask is appended once internally by the director's
+        #: CanonicalDiCodeOneUpdateRuntime (never a second optimizer here)
+        dicode_batch_binding=(
+            director_manifest.batch_binding
+            if director_manifest is not None else None),
+        dicode_runtime_identity=(
+            director_manifest.canonical_dicode_one_update_runtime
+            if director_manifest is not None else ""))
 
     summary = controller.run(max_windows=TWO_WINDOW_HORIZON)
 
@@ -621,10 +632,11 @@ def main(argv=None) -> int:
     try:
         outcome = run_two_real_windows(
             bundle=bundle, llm_transport=transport,
-            backend_id=args.backend_id, model_id=args.model_id,
+            backend_id=backend_id, model_id=model_id,
             state_path=args.state_path,
             journal_path=args.journal_path,
-            student_init_contract=student_init_contract)
+            student_init_contract=student_init_contract,
+            director_manifest=manifest)
     except (RuntimeAuthorizationBlocked, RealTwoWindowBlocked) as exc:
         print(f"\nREAL TWO-WINDOW RUN BLOCKED: {exc}", file=sys.stderr)
         return 1

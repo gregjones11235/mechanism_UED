@@ -388,11 +388,17 @@ class StudentTrainingSeam:
         return self._execute_one_update(window, batch_candidate_ids=())
 
     def execute_real_window_update(self, window: int, *,
-                                   batch_candidate_ids
-                                   ) -> TrainingStepRecord:
-        """Window k+1's single real optimizer update over the final batch
-        (12 dynamic + 4 anchors), wrapped in a checkpoint save/load
-        round-trip. Re-checks the gate; refuses without a contract."""
+                                   batch_candidate_ids,
+                                   batch_plan=None) -> TrainingStepRecord:
+        """Window k+1's single real optimizer update over the batch.
+
+        P0-16 (DiCode 15+1): with a :class:`CanonicalDiCodeTrainingBatchPlan`
+        the update is executed EXCLUSIVELY by the director-shared
+        CanonicalDiCodeOneUpdateRuntime over the 15 curriculum task ids
+        (the OriginalTask is appended internally once by that runtime —
+        direction two never implements a second optimizer). Re-checks the
+        gate; refuses without a contract.
+        """
         self._gate.assert_training_allowed()
         if self._training_contract is None:
             raise StudentBindingBlocked(
@@ -403,9 +409,49 @@ class StudentTrainingSeam:
                 f"REAL_TRAINING_BATCH_EMPTY: window={window} — the update "
                 "must consume the probe-selected final batch; an empty "
                 "batch is refused (NO_SILENT_FALLBACK)")
+        if batch_plan is not None:
+            return self._execute_one_dicode_update(window, batch_plan)
         return self._execute_one_update(window,
                                         batch_candidate_ids
                                         =tuple(batch_candidate_ids))
+
+    def _execute_one_dicode_update(self, window: int, batch_plan
+                                   ) -> TrainingStepRecord:
+        """EXACTLY ONE CanonicalDiCode optimizer update over the plan."""
+        contract = self._training_contract
+        run = getattr(contract, "run_one_dicode_update", None)
+        if not callable(run):
+            raise StudentBindingBlocked(
+                "REAL_DICODE_RUNTIME_MISSING: a DiCode batch plan requires "
+                "the director-shared CanonicalDiCodeOneUpdateRuntime "
+                "surface (run_one_dicode_update) — direction two never "
+                "implements a second PPO/optimizer")
+        result = run(batch_plan=batch_plan)
+        if int(getattr(result, "optimizer_steps", 0)) != 1:
+            raise StudentBindingBlocked(
+                "REAL_DICODE_STEP_COUNT_MISMATCH: window="
+                f"{window} requires EXACTLY ONE DiCode optimizer update, "
+                f"got {getattr(result, 'optimizer_steps', None)!r}")
+        if getattr(result, "window", None) != window:
+            raise StudentBindingBlocked(
+                f"REAL_DICODE_WINDOW_MISMATCH: update result window="
+                f"{getattr(result, 'window', None)!r} != {window}")
+        curriculum = list(getattr(batch_plan, "curriculum_task_ids", []))
+        if len(curriculum) != C.DICODE_CURRICULUM_TASK_COUNT:
+            raise StudentBindingBlocked(
+                "REAL_DICODE_CURRICULUM_COUNT_MISMATCH: the plan must carry "
+                f"15 curriculum task ids, got {len(curriculum)}")
+        return TrainingStepRecord(
+            status=EXECUTED_ONE_UPDATE_STATUS,
+            student_training_transitions=int(
+                getattr(result, "env_steps", 0)),
+            reason=(f"window={window}: EXACTLY ONE CanonicalDiCode optimizer "
+                    f"update over {len(curriculum)} curriculum task ids "
+                    "(12 dynamic + 3 non-target anchors); the OriginalTask "
+                    f"{getattr(batch_plan, 'original_task_id', '')!r} is "
+                    "appended ONCE internally by the shared DiCode runtime "
+                    "and never enters batch_candidate_ids"),
+            checkpoint_round_trip_pass=False)
 
     def _execute_one_update(self, window: int, *,
                             batch_candidate_ids) -> TrainingStepRecord:

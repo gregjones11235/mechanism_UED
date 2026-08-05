@@ -146,14 +146,31 @@ class AnchorManifestData(CanonicalModel):
 
 
 class DiCodeBatchBindingData(CanonicalModel):
-    """The DiCode 15+1 batch contract the director declares."""
+    """The DiCode 15+1 batch contract the director declares.
+
+    The director declares the 3 NON-TARGET anchor ids (the curriculum
+    anchors); the OriginalTask is appended once internally by DiCode and
+    never enters ``batch_candidate_ids``.
+    """
 
     dynamic_task_count: int = Field(ge=0)
     non_target_anchor_count: int = Field(ge=0)
     curriculum_task_count: int = Field(ge=0)
+    non_target_anchor_ids: List[str] = Field(default_factory=list)
     original_task_id: str = Field(min_length=1)
     original_task_proportion: float = Field(ge=0.0, le=1.0)
     total_task_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "DiCodeBatchBindingData":
+        if len(set(self.non_target_anchor_ids)) != \
+                len(self.non_target_anchor_ids):
+            raise ValueError("DICODE_DUPLICATE_NON_TARGET_ANCHOR")
+        if self.original_task_id in self.non_target_anchor_ids:
+            raise ValueError(
+                "DICODE_ORIGINAL_IS_A_CURRICULUM_TASK: the OriginalTask "
+                "must not be one of the curriculum (non-target) anchors")
+        return self
 
 
 class SmokeSemanticsData(CanonicalModel):
@@ -304,6 +321,15 @@ def runtime_bundle_binding_problems(manifest: DirectorRuntimeBundleManifest
             f"DICODE_ORIGINAL_PROPORTION_MISMATCH: "
             f"{bb.original_task_proportion} != "
             f"{C.DICODE_ORIGINAL_TASK_PROPORTION}")
+    if bb.original_task_id in bb.non_target_anchor_ids:
+        problems.append(
+            "DICODE_ORIGINAL_IS_A_CURRICULUM_TASK: the OriginalTask must "
+            "not be one of the curriculum (non-target) anchors")
+    if len(bb.non_target_anchor_ids) != bb.non_target_anchor_count:
+        problems.append(
+            "DICODE_NON_TARGET_ANCHOR_IDS_MISMATCH: declared "
+            f"{len(bb.non_target_anchor_ids)} non-target anchors != "
+            f"{bb.non_target_anchor_count}")
     if bb.original_task_id in manifest.shared_anchor_manifest.anchors:
         problems.append(
             "DICODE_ORIGINAL_TASK_IN_ANCHORS: the OriginalTask must NOT be "

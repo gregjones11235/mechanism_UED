@@ -295,7 +295,9 @@ class FeedbackUEDController:
                  probe_feedback_builder=None,
                  reference_identity_hash: str = "",
                  two_window_smoke_policy:
-                 Optional[RealTwoWindowSmokePolicy] = None) -> None:
+                 Optional[RealTwoWindowSmokePolicy] = None,
+                 dicode_batch_binding=None,
+                 dicode_runtime_identity: str = "") -> None:
         """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
         All default to None, which reproduces the historical mock/symbolic
         behavior byte for byte. With any real capability granted through
@@ -371,6 +373,13 @@ class FeedbackUEDController:
         #: None = historical behavior (every training-allowed window
         #: updates); the two-window real entrypoint injects the policy.
         self.two_window_smoke_policy = two_window_smoke_policy
+        #: P0-16 (DiCode 15+1): the director-declared batch binding
+        #: (non-target anchors + OriginalTask) and the CanonicalDiCodeOne-
+        #: UpdateRuntime identity. When present, the window k+1 update is
+        #: executed through the director's DiCode runtime over the 15
+        #: curriculum ids; the OriginalTask is appended internally once.
+        self.dicode_batch_binding = dicode_batch_binding
+        self.dicode_runtime_identity = dicode_runtime_identity
         #: P0-2 seam: the real EnvCoder execution chain (unique template +
         #: four-link verification + bounded repair). Injectable only when
         #: the runtime grants authorize it; the default symbolic path stays
@@ -682,8 +691,32 @@ class FeedbackUEDController:
                 #: P0-4: window k+1's single real optimizer update over the
                 #: probe-selected final batch (12 dynamic + 4 anchors),
                 #: wrapped in the checkpoint save/load round-trip
+                batch_plan = None
+                if self.dicode_batch_binding is not None:
+                    #: P0-16 (DiCode 15+1): convert the final selection into
+                    #: the canonical 15+1 batch — the update consumes the 15
+                    #: curriculum ids ONLY; the OriginalTask is appended once
+                    #: internally by the director's DiCode runtime
+                    from d052.feedback_llm_ued.dicode_batch_plan import (
+                        build_dicode_batch_plan,
+                    )
+                    batch_plan = build_dicode_batch_plan(
+                        window=window,
+                        final_batch_ids=batch.final_batch,
+                        anchor_ids=list(self.anchor_ids),
+                        non_target_anchor_ids=(
+                            self.dicode_batch_binding.non_target_anchor_ids),
+                        original_task_id=(
+                            self.dicode_batch_binding.original_task_id),
+                        original_appended_by=(
+                            self.dicode_runtime_identity
+                            or self.dicode_batch_binding.original_task_id))
                 training = self.training_seam.execute_real_window_update(
-                    window, batch_candidate_ids=batch.final_batch)
+                    window,
+                    batch_candidate_ids=(batch_plan.batch_candidate_ids
+                                         if batch_plan is not None
+                                         else batch.final_batch),
+                    batch_plan=batch_plan)
             self.training_log.append(training)
 
         # -- E. ATOMIC FREEZE: feedback_k + new hypotheses + FROZEN ---------
