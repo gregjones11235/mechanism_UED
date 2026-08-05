@@ -428,13 +428,34 @@ GLOBAL_CANONICAL_ANCHOR_IDS = (
 )
 
 # ---------------------------------------------------------------------------
-# Strong Student identity (director: fixed candidate). Direction two only
-# CONSUMES the CC4 shared StudentAdapter/StudentInitContract — it never builds
-# a second loader/registry/codec. The vocabulary below is the direction's own
-# bookkeeping; candidate id reused from
-# experiments/henry_dicode_student_upgrade/student_candidate_registry_v1.json.
+# Student identity (director-selected; NO default candidate). Direction two
+# only CONSUMES the CC4 shared StudentAdapter/StudentInitContract — it never
+# builds a second loader/registry/codec. The director's Runtime Bundle
+# selects ONE of the allowed candidates for the whole two-window smoke; the
+# loop never falls back to a default and never switches between windows.
 # ---------------------------------------------------------------------------
 STRONG_STUDENT_CANDIDATE_ID = "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+RESET128_STUDENT_CANDIDATE_ID = "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+ALLOWED_STUDENT_CANDIDATE_IDS = frozenset({
+    STRONG_STUDENT_CANDIDATE_ID,
+    RESET128_STUDENT_CANDIDATE_ID,
+})
+
+#: the legal profile -> (memory_mode, carry_mode) mapping
+STUDENT_MEMORY_MODE_PERSISTENT = "PERSISTENT"
+STUDENT_MEMORY_MODE_RESET128 = "RESET128"
+STUDENT_CARRY_MODE_PERSISTENT = "persistent"
+STUDENT_CARRY_MODE_RESET128 = "reset128"
+STUDENT_PROFILE_MEMORY_MAP = {
+    STRONG_STUDENT_CANDIDATE_ID: (
+        STUDENT_MEMORY_MODE_PERSISTENT, STUDENT_CARRY_MODE_PERSISTENT),
+    RESET128_STUDENT_CANDIDATE_ID: (
+        STUDENT_MEMORY_MODE_RESET128, STUDENT_CARRY_MODE_RESET128),
+}
+
+#: read-only-mount vs training-readiness status codes (P0-16, section 6)
+STUDENT_READ_ONLY_MOUNT_READY = "STUDENT_READ_ONLY_MOUNT_READY"
+STUDENT_TRAINING_RUNTIME_READY = "STUDENT_TRAINING_RUNTIME_READY"
 
 #: how a Student checkpoint is used inside a window (recorded per feedback)
 STUDENT_ROLE_CAPTURE = "capture"

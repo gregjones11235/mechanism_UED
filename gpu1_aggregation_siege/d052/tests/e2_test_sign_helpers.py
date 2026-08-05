@@ -30,26 +30,34 @@ from d052.feedback_llm_ued.student_binding import (
 
 
 def valid_director_bundle_payload(*, anchors=None,
-                                  original_task_id="DICODE_ORIGINAL_TASK_V1"):
+                                  original_task_id="DICODE_ORIGINAL_TASK_V1",
+                                  candidate_id=C.STRONG_STUDENT_CANDIDATE_ID):
     """A TEST_ONLY, fully-consistent director Runtime Bundle payload: all
     12 assets present, the smoke update contract, the DiCode 15+1 batch
     binding and the formal-start gate. The anchor hash is the recomputed
-    one (build_shared_bundle re-verifies it)."""
+    one (build_shared_bundle re-verifies it). The Student's memory/carry
+    follow the candidate's legal profile mapping."""
     anchor_manifest = SharedAnchorManifest(
         manifest_id="TEST_ONLY_SHARED_ANCHOR_MANIFEST",
         anchors=list(anchors if anchors is not None
                      else C.GLOBAL_CANONICAL_ANCHOR_IDS),
         frozen=True)
+    memory_mode, carry_mode = C.STUDENT_PROFILE_MEMORY_MAP[candidate_id]
     return dict(
-        registry_identity=text_sha256("TEST_ONLY_FORMAL_ASSET_REGISTRY"),
+        registry_identity=text_sha256("TEST_ONLY_RUNTIME_BUNDLE"),
         formal_asset_registry=text_sha256("TEST_ONLY_FORMAL_ASSET_REGISTRY"),
         student_init_contract=dict(
-            candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
+            candidate_id=candidate_id,
             architecture_family="RMT16",
             memory_family="RMT16_ORIGINAL",
-            carry_mode="PERSISTENT",
+            carry_mode=carry_mode,
             parameter_tree_hash=text_sha256("TEST_ONLY_STUDENT_PARAM_TREE"),
-            checkpoint_global_step=0),
+            checkpoint_global_step=0,
+            profile_hash=text_sha256("TEST_ONLY_PROFILE"),
+            memory_mode=memory_mode,
+            memory_spec_hash=text_sha256("TEST_ONLY_MEMORY_SPEC"),
+            adapter_identity_hash=text_sha256("TEST_ONLY_ADAPTER"),
+            runtime_bundle_hash=text_sha256("TEST_ONLY_RUNTIME_BUNDLE")),
         student_identity=text_sha256("TEST_ONLY_STUDENT_IDENTITY"),
         reference_identity=dict(
             candidate_id="TEST_ONLY_REFERENCE_CANDIDATE",
@@ -88,10 +96,13 @@ def valid_director_bundle_payload(*, anchors=None,
                                formal_start_requires_human=True))
 
 
-def valid_director_bundle(*, anchors=None) -> DirectorRuntimeBundleManifest:
+def valid_director_bundle(*, anchors=None,
+                          candidate_id=C.STRONG_STUDENT_CANDIDATE_ID
+                          ) -> DirectorRuntimeBundleManifest:
     """A signed, fully-valid TEST_ONLY director Runtime Bundle."""
     return sign_director_runtime_bundle(
-        valid_director_bundle_payload(anchors=anchors))
+        valid_director_bundle_payload(anchors=anchors,
+                                      candidate_id=candidate_id))
 
 
 def sign_director_runtime_bundle(
@@ -187,7 +198,27 @@ def director_round_trip_payload(window, checkpoint_hash,
         verified=verified)
 
 
+def student_contract(candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
+                     *, checkpoint_global_step=98304,
+                     runtime_bundle_hash=None):
+    """A valid TEST_ONLY StudentInitContract for the given allowed
+    candidate (memory/carry follow the legal profile mapping)."""
+    from types import SimpleNamespace
+    memory_mode, carry_mode = C.STUDENT_PROFILE_MEMORY_MAP[candidate_id]
+    return SimpleNamespace(
+        candidate_id=candidate_id, architecture_family="RMT16",
+        memory_family="RMT16_ORIGINAL", carry_mode=carry_mode,
+        parameter_tree_hash=text_sha256("TEST_ONLY_STUDENT_PARAM_TREE"),
+        checkpoint_global_step=checkpoint_global_step,
+        profile_hash=text_sha256("TEST_ONLY_PROFILE"),
+        memory_mode=memory_mode,
+        memory_spec_hash=text_sha256("TEST_ONLY_MEMORY_SPEC"),
+        adapter_identity_hash=text_sha256("TEST_ONLY_ADAPTER"),
+        runtime_bundle_hash=(runtime_bundle_hash
+                             or text_sha256("TEST_ONLY_RUNTIME_BUNDLE")))
+
+
 __all__ = ["sign_director_runtime_bundle", "sign_full_state_round_trip",
            "sign_director_verified_round_trip",
-           "director_round_trip_payload",
+           "director_round_trip_payload", "student_contract",
            "valid_director_bundle_payload", "valid_director_bundle"]

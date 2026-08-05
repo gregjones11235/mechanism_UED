@@ -83,7 +83,14 @@ class DirectorRuntimeBundleBlocked(RuntimeError):
 
 
 class StudentInitContractData(CanonicalModel):
-    """The StudentInitContract the director embedded in the bundle."""
+    """The StudentInitContract the director embedded in the bundle.
+
+    P0-16 (dual student): carries the FULL identity — candidate_id (one of
+    ALLOWED_STUDENT_CANDIDATE_IDS), architecture_family=RMT16,
+    parameter_tree_hash, checkpoint_global_step, profile_hash, memory_mode,
+    memory_spec_hash, carry_mode, adapter_identity_hash,
+    runtime_bundle_hash.
+    """
 
     candidate_id: str = Field(min_length=1)
     architecture_family: str = Field(min_length=1)
@@ -91,13 +98,35 @@ class StudentInitContractData(CanonicalModel):
     carry_mode: str = Field(min_length=1)
     parameter_tree_hash: str = Field(min_length=1)
     checkpoint_global_step: int = Field(ge=0)
+    profile_hash: str = Field(min_length=1)
+    memory_mode: str = Field(min_length=1)
+    memory_spec_hash: str = Field(min_length=1)
+    adapter_identity_hash: str = Field(min_length=1)
+    runtime_bundle_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate(self) -> "StudentInitContractData":
-        if not is_sha256_hex(self.parameter_tree_hash):
+        for field_name in ("parameter_tree_hash", "profile_hash",
+                           "memory_spec_hash", "adapter_identity_hash",
+                           "runtime_bundle_hash"):
+            value = getattr(self, field_name)
+            if not is_sha256_hex(value):
+                raise ValueError(
+                    "STUDENT_CONTRACT_HASH_NOT_SHA256: "
+                    f"{field_name}={value!r}")
+        if self.architecture_family != "RMT16":
             raise ValueError(
-                "STUDENT_PARAMETER_TREE_HASH_NOT_SHA256: "
-                f"{self.parameter_tree_hash!r}")
+                f"E2_STUDENT_PROFILE_MISMATCH: architecture_family must be "
+                f"RMT16, got {self.architecture_family!r}")
+        expected_mem, expected_carry = C.STUDENT_PROFILE_MEMORY_MAP.get(
+            self.candidate_id, (None, None))
+        if self.memory_mode != expected_mem or \
+                self.carry_mode != expected_carry:
+            raise ValueError(
+                f"E2_STUDENT_MEMORY_MODE_MISMATCH: candidate "
+                f"{self.candidate_id!r} requires memory_mode="
+                f"{expected_mem!r} / carry_mode={expected_carry!r}, got "
+                f"{self.memory_mode!r} / {self.carry_mode!r}")
         return self
 
 
@@ -268,13 +297,16 @@ def runtime_bundle_binding_problems(manifest: DirectorRuntimeBundleManifest
     """P0-16 check-only binding validation. Returns every problem; an
     empty list is the only passing state. NEVER invokes a callable."""
     problems: List[str] = []
-    #: 1. every asset present (not empty) — the "objects not empty" gate
+    #: 1. every asset present (not empty) — the "objects not empty" gate;
+    #:    the smoke origin is the DIRECTOR-SELECTED Student (any allowed
+    #:    candidate — PERSISTENT or RESET128), never an unknown one
     if manifest.student_init_contract.candidate_id \
-            != C.STRONG_STUDENT_CANDIDATE_ID:
+            not in C.ALLOWED_STUDENT_CANDIDATE_IDS:
         problems.append(
             "SMOKE_STUDENT_ORIGIN_MISMATCH: the bundle's StudentInitContract "
             f"candidate_id={manifest.student_init_contract.candidate_id!r} "
-            f"but the SMOKE origin is {C.STRONG_STUDENT_CANDIDATE_ID!r}")
+            "is not one of ALLOWED_STUDENT_CANDIDATE_IDS="
+            f"{sorted(C.ALLOWED_STUDENT_CANDIDATE_IDS)}")
     #: 2. formal-start gate: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 may
     #:    only ever initialize the SMOKE — the formal start needs a
     #:    human-approved Formal Manifest
@@ -368,7 +400,12 @@ def build_student_init_contract(manifest: DirectorRuntimeBundleManifest):
         memory_family=data.memory_family,
         carry_mode=data.carry_mode,
         parameter_tree_hash=data.parameter_tree_hash,
-        checkpoint_global_step=data.checkpoint_global_step)
+        checkpoint_global_step=data.checkpoint_global_step,
+        profile_hash=data.profile_hash,
+        memory_mode=data.memory_mode,
+        memory_spec_hash=data.memory_spec_hash,
+        adapter_identity_hash=data.adapter_identity_hash,
+        runtime_bundle_hash=data.runtime_bundle_hash)
 
 
 def build_shared_bundle(manifest: DirectorRuntimeBundleManifest
@@ -383,7 +420,10 @@ def build_shared_bundle(manifest: DirectorRuntimeBundleManifest
     """
     from d052.feedback_llm_ued.anchor_manifest import SharedAnchorManifest
     from types import SimpleNamespace
-    student = SharedStudentSlot().bind(build_student_init_contract(manifest))
+    student = SharedStudentSlot().bind(
+        build_student_init_contract(manifest),
+        director_selected_candidate_id=(
+            manifest.student_init_contract.candidate_id))
     #: the DIRECTOR-issued canonical Reference identity hash is declared
     #: (consume-only, authenticated by the signed bundle) while the
     #: fail-closed ladder still validates the identity fields

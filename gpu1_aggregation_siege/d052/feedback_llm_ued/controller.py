@@ -298,7 +298,8 @@ class FeedbackUEDController:
                  Optional[RealTwoWindowSmokePolicy] = None,
                  dicode_batch_binding=None,
                  dicode_runtime_identity: str = "",
-                 runtime_bundle_hash: str = "") -> None:
+                 runtime_bundle_hash: str = "",
+                 director_selected_candidate_id: str = "") -> None:
         """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
         All default to None, which reproduces the historical mock/symbolic
         behavior byte for byte. With any real capability granted through
@@ -360,10 +361,16 @@ class FeedbackUEDController:
         # symbolic binding — the shared StudentInitContract must be injected
         # explicitly (resolve_student_binding fails closed with
         # STUDENT_INIT_CONTRACT_MISSING otherwise).
+        #: P0-16 (dual student): the director must SELECT the Student — there
+        #: is NO default candidate; the symbolic binding is only ever used on
+        #: the non-real path
+        self.director_selected_candidate_id = director_selected_candidate_id
         if self.launch_decision.real_simulator_probe_allowed \
                 or self.launch_decision.training_allowed:
             self.student_binding = resolve_student_binding(
-                student_init_contract)
+                student_init_contract,
+                director_selected_candidate_id=(
+                    director_selected_candidate_id))
         else:
             self.student_binding = local_symbolic_binding()
         self.training_seam = StudentTrainingSeam(

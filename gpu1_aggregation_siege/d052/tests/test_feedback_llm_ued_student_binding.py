@@ -38,49 +38,111 @@ GOOD_HASH = "a" * 64
 
 @dataclass
 class FakeContract:
-    """Minimal stand-in for the CC4 shared StudentInitContract shape."""
+    """Minimal stand-in for the CC4 shared StudentInitContract shape
+    (PERSISTENT profile; the legal memory/carry mapping)."""
 
     candidate_id: str = C.STRONG_STUDENT_CANDIDATE_ID
     architecture_family: str = "RMT16"
     memory_family: str = "RMT16_ORIGINAL"
-    carry_mode: str = "PERSISTENT"
+    carry_mode: str = C.STUDENT_CARRY_MODE_PERSISTENT
     parameter_tree_hash: str = GOOD_HASH
     checkpoint_global_step: int = 98304
+    profile_hash: str = GOOD_HASH
+    memory_mode: str = C.STUDENT_MEMORY_MODE_PERSISTENT
+    memory_spec_hash: str = GOOD_HASH
+    adapter_identity_hash: str = GOOD_HASH
+    runtime_bundle_hash: str = GOOD_HASH
+
+
+SELECTED = C.STRONG_STUDENT_CANDIDATE_ID
 
 
 class TestResolveStudentBinding:
     def test_missing_contract_fails_closed(self):
         with pytest.raises(StudentBindingBlocked,
                            match="STUDENT_INIT_CONTRACT_MISSING"):
-            resolve_student_binding(None)
+            resolve_student_binding(None, director_selected_candidate_id=SELECTED)
+
+    def test_no_director_selection_fails_closed(self):
+        #: there is NO default candidate — the director must select one
+        with pytest.raises(StudentBindingBlocked,
+                           match="E2_STUDENT_NO_DIRECTOR_SELECTION"):
+            resolve_student_binding(FakeContract(),
+                                    director_selected_candidate_id="")
+
+    def test_unknown_selected_candidate_fails_closed(self):
+        with pytest.raises(StudentBindingBlocked,
+                           match="E2_STUDENT_UNKNOWN_CANDIDATE"):
+            resolve_student_binding(
+                FakeContract(candidate_id=C.RESET128_STUDENT_CANDIDATE_ID),
+                director_selected_candidate_id="SOME_OTHER_CANDIDATE")
 
     def test_wrong_candidate_id_fails_closed(self):
+        #: contract candidate != director-selected candidate
         with pytest.raises(StudentBindingBlocked,
-                           match="STUDENT_IDENTITY_MISMATCH"):
-            resolve_student_binding(FakeContract(candidate_id="SOME_OTHER"))
+                           match="E2_STUDENT_PROFILE_MISMATCH"):
+            resolve_student_binding(FakeContract(candidate_id="SOME_OTHER"),
+                                    director_selected_candidate_id=SELECTED)
 
     def test_bad_parameter_hash_fails_closed(self):
         with pytest.raises(StudentBindingBlocked,
-                           match="STUDENT_IDENTITY_INCOMPLETE"):
-            resolve_student_binding(FakeContract(parameter_tree_hash="xyz"))
+                           match="E2_STUDENT_PROFILE_MISMATCH"):
+            resolve_student_binding(FakeContract(parameter_tree_hash="xyz"),
+                                    director_selected_candidate_id=SELECTED)
 
     def test_bad_checkpoint_step_fails_closed(self):
         with pytest.raises(StudentBindingBlocked,
-                           match="STUDENT_IDENTITY_INCOMPLETE"):
-            resolve_student_binding(FakeContract(checkpoint_global_step=-1))
+                           match="E2_STUDENT_PROFILE_MISMATCH"):
+            resolve_student_binding(FakeContract(checkpoint_global_step=-1),
+                                    director_selected_candidate_id=SELECTED)
+
+    def test_non_rmt16_architecture_fails_closed(self):
+        with pytest.raises(StudentBindingBlocked,
+                           match="E2_STUDENT_PROFILE_MISMATCH"):
+            resolve_student_binding(FakeContract(architecture_family="GRU"),
+                                    director_selected_candidate_id=SELECTED)
+
+    def test_memory_mode_mismatch_fails_closed(self):
+        #: Persistent requires memory_mode=PERSISTENT / carry=persistent
+        with pytest.raises(StudentBindingBlocked,
+                           match="E2_STUDENT_MEMORY_MODE_MISMATCH"):
+            resolve_student_binding(
+                FakeContract(carry_mode=C.STUDENT_CARRY_MODE_RESET128),
+                director_selected_candidate_id=SELECTED)
+        with pytest.raises(StudentBindingBlocked,
+                           match="E2_STUDENT_MEMORY_MODE_MISMATCH"):
+            resolve_student_binding(
+                FakeContract(memory_mode=C.STUDENT_MEMORY_MODE_RESET128),
+                director_selected_candidate_id=SELECTED)
+
+    def test_adapter_identity_mismatch_fails_closed(self):
+        with pytest.raises(StudentBindingBlocked,
+                           match="E2_STUDENT_ADAPTER_IDENTITY_MISMATCH"):
+            resolve_student_binding(FakeContract(adapter_identity_hash="zz"),
+                                    director_selected_candidate_id=SELECTED)
 
     def test_valid_contract_resolves_real_checkpoint_identity(self):
-        identity = resolve_student_binding(FakeContract())
-        assert identity.candidate_id == C.STRONG_STUDENT_CANDIDATE_ID
+        identity = resolve_student_binding(FakeContract(),
+                                           director_selected_candidate_id=SELECTED)
+        assert identity.candidate_id == SELECTED
+        assert identity.architecture_family == "RMT16"
+        assert identity.memory_mode == C.STUDENT_MEMORY_MODE_PERSISTENT
+        assert identity.carry_mode == C.STUDENT_CARRY_MODE_PERSISTENT
+        assert identity.profile_hash == GOOD_HASH
+        assert identity.memory_spec_hash == GOOD_HASH
+        assert identity.adapter_identity_hash == GOOD_HASH
+        assert identity.runtime_bundle_hash == GOOD_HASH
         assert identity.weights_status == WEIGHTS_REAL_CHECKPOINT
         assert identity.provenance_label == "CC4_SHARED_STUDENT_INIT_CONTRACT"
         assert len(identity.identity_hash) == 64
         # deterministic: same contract -> same identity hash
-        assert identity.identity_hash == \
-            resolve_student_binding(FakeContract()).identity_hash
+        assert identity.identity_hash == resolve_student_binding(
+            FakeContract(), director_selected_candidate_id=SELECTED
+        ).identity_hash
         # identity hash is sensitive to every identity field
         altered = resolve_student_binding(
-            FakeContract(checkpoint_global_step=1))
+            FakeContract(checkpoint_global_step=1),
+            director_selected_candidate_id=SELECTED)
         assert altered.identity_hash != identity.identity_hash
 
 
@@ -96,8 +158,9 @@ class TestLocalSymbolicBinding:
         # determinism + honesty: recomputable, and NOT equal to a resolved
         # real-checkpoint identity
         assert binding.identity_hash == local_symbolic_binding().identity_hash
-        assert binding.identity_hash != \
-            resolve_student_binding(FakeContract()).identity_hash
+        assert binding.identity_hash != resolve_student_binding(
+            FakeContract(), director_selected_candidate_id=SELECTED
+        ).identity_hash
         assert C.REAL_CHECKPOINT_LOADED is False
 
 

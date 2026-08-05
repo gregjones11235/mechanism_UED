@@ -114,7 +114,8 @@ def make_controller(runtime=None, *,
         two_window_smoke_policy=RealTwoWindowSmokePolicy(),
         dicode_batch_binding=batch_binding,
         dicode_runtime_identity=DICODE_RUNTIME_ID,
-        runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+        runtime_bundle_hash=RUNTIME_BUNDLE_HASH,
+        director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
 
 
 class TestOneDiCodeUpdateWindow1Only:

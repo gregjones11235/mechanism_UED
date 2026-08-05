@@ -334,7 +334,8 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
                          llm_transport, backend_id: str, model_id: str,
                          state_path: str, journal_path: str,
                          student_init_contract=None,
-                         director_manifest=None) -> dict:
+                         director_manifest=None,
+                         director_selected_candidate_id: str = "") -> dict:
     """Execute windows k and k+1 against the real shared runtime.
 
     Preconditions (all fail closed BEFORE any LLM call): complete runtime
@@ -421,6 +422,7 @@ def run_two_real_windows(*, bundle: SharedRuntimeBundle,
         student_init_contract=student_init_contract,
         training_contract=bundle.training.contract,
         real_env_coder_callable=real_env_coder,
+        director_selected_candidate_id=director_selected_candidate_id,
         probe_feedback_builder=probe_feedback_builder,
         #: P0-1 (CC3 follow-up audit): the shared reference slot is BOUND
         #: on this path (resolve_shared_runtime above refused every empty
@@ -528,6 +530,13 @@ def parse_args(argv=None) -> argparse.Namespace:
              "(consume-only; without it the shared assets are absent and "
              "the path blocks on the empty bundle state)")
     parser.add_argument(
+        "--student-candidate-id", default="",
+        help="the director-selected Student candidate id (one of "
+             "ALLOWED_STUDENT_CANDIDATE_IDS; NO default candidate). When a "
+             "director Runtime Bundle is provided the bundle's signed "
+             "Student identity is authoritative — the CLI cannot override "
+             "it")
+    parser.add_argument(
         "--report-out", default="",
         help="optional path to ALSO write the JSON report to "
              "(in addition to stdout)")
@@ -579,11 +588,25 @@ def main(argv=None) -> int:
         _identity = bundle_backend_identity(manifest)
         backend_id = args.backend_id or _identity.get("backend_id", "")
         model_id = args.model_id or _identity.get("model_id", "")
+        #: P0-16 (dual student): the bundle's signed Student identity is
+        #: authoritative — the CLI candidate cannot override it
+        director_selected_candidate_id = (
+            manifest.student_init_contract.candidate_id)
+        if args.student_candidate_id \
+                and args.student_candidate_id \
+                != director_selected_candidate_id:
+            print(f"\nE2_STUDENT_CANDIDATE_CLI_OVERRIDE_FORBIDDEN: "
+                  f"--student-candidate-id={args.student_candidate_id!r} "
+                  f"conflicts with the director bundle's signed Student "
+                  f"{director_selected_candidate_id!r}",
+                  file=sys.stderr)
+            return 1
     else:
         bundle = SharedRuntimeBundle()
         student_init_contract = None
         backend_id = args.backend_id
         model_id = args.model_id
+        director_selected_candidate_id = args.student_candidate_id
     transport = _load_transport(args.transport)
     blockers = discover_blockers(
         bundle=bundle, llm_transport=transport,
@@ -636,7 +659,9 @@ def main(argv=None) -> int:
             state_path=args.state_path,
             journal_path=args.journal_path,
             student_init_contract=student_init_contract,
-            director_manifest=manifest)
+            director_manifest=manifest,
+            director_selected_candidate_id=(
+                director_selected_candidate_id))
     except (RuntimeAuthorizationBlocked, RealTwoWindowBlocked) as exc:
         print(f"\nREAL TWO-WINDOW RUN BLOCKED: {exc}", file=sys.stderr)
         return 1

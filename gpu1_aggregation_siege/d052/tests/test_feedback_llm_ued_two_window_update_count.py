@@ -144,13 +144,9 @@ class ScriptedRealProbeRunner:
 
 
 def student_contract():
-    return SimpleNamespace(
-        candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
-        architecture_family="RMT16",
-        memory_family="RMT16_ORIGINAL",
-        carry_mode="PERSISTENT",
-        parameter_tree_hash=text_sha256("TEST_ONLY_STUDENT_PARAM_TREE"),
-        checkpoint_global_step=98304)
+    from e2_test_sign_helpers import student_contract as _sc
+    return _sc(C.STRONG_STUDENT_CANDIDATE_ID,
+               runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
 
 def make_controller(*, policy=None, contract=None) -> FeedbackUEDController:
@@ -174,7 +170,8 @@ def make_controller(*, policy=None, contract=None) -> FeedbackUEDController:
         training_contract=contract,
         real_env_coder_callable=scripted_real_env_coder({}),
         two_window_smoke_policy=policy,
-        runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+        runtime_bundle_hash=RUNTIME_BUNDLE_HASH,
+        director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
 
 
 class TestExactlyOneUpdate:

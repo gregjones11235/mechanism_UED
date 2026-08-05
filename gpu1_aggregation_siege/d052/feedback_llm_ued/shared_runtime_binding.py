@@ -204,12 +204,15 @@ class SharedStudentSlot:
     detail: str = "shared StudentAdapter absent from this worktree"
     binding: Optional[StudentBindingIdentity] = None
 
-    def bind(self, contract: StudentInitContract) -> "SharedStudentSlot":
+    def bind(self, contract: StudentInitContract, *,
+             director_selected_candidate_id: str = "") -> "SharedStudentSlot":
         #: resolve_student_binding is the existing fail-closed ladder
-        #: (STUDENT_INIT_CONTRACT_MISSING / STUDENT_IDENTITY_MISMATCH /
-        #: STUDENT_IDENTITY_INCOMPLETE) — identity MUST be the fixed
-        #: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 candidate.
-        binding = resolve_student_binding(contract)
+        #: (STUDENT_INIT_CONTRACT_MISSING / E2_STUDENT_* / no default
+        #: candidate) — the director must select the Student; there is NO
+        #: default candidate.
+        binding = resolve_student_binding(
+            contract, director_selected_candidate_id=(
+                director_selected_candidate_id))
         return SharedStudentSlot(status=STATUS_BOUND,
                                  detail=binding.provenance_label,
                                  binding=binding)

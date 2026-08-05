@@ -40,16 +40,36 @@ class StudentBindingBlocked(RuntimeError):
 
 @runtime_checkable
 class StudentInitContract(Protocol):
-    """Read-only shape of the CC4 shared contract this direction consumes."""
+    """Read-only shape of the CC4 shared contract this direction consumes.
+
+    P0-16 (dual student): the contract carries the FULL Student identity —
+    candidate_id (director-selected, one of the allowed set), architecture_
+    family=RMT16, parameter_tree_hash, checkpoint_global_step, profile_hash,
+    memory_mode, memory_spec_hash, carry_mode, adapter_identity_hash,
+    runtime_bundle_hash. There is NO default candidate.
+    """
 
     candidate_id: str
+    architecture_family: str
+    memory_family: str
     parameter_tree_hash: str
     checkpoint_global_step: int
+    profile_hash: str
+    memory_mode: str
+    memory_spec_hash: str
+    carry_mode: str
+    adapter_identity_hash: str
+    runtime_bundle_hash: str
 
 
 @dataclass(frozen=True)
 class StudentBindingIdentity:
-    """Identity stamped onto every feedback record this loop produces."""
+    """Identity stamped onto every feedback record this loop produces.
+
+    P0-16 (dual student): the full director-selected Student identity —
+    memory_mode / memory_spec_hash / profile_hash / adapter_identity_hash /
+    runtime_bundle_hash all participate in the identity hash.
+    """
 
     candidate_id: str
     architecture_family: str
@@ -57,6 +77,11 @@ class StudentBindingIdentity:
     carry_mode: str
     parameter_tree_hash: str
     checkpoint_global_step: int
+    profile_hash: str
+    memory_mode: str
+    memory_spec_hash: str
+    adapter_identity_hash: str
+    runtime_bundle_hash: str
     weights_status: str
     provenance_label: str
 
@@ -69,18 +94,38 @@ class StudentBindingIdentity:
             carry_mode=self.carry_mode,
             parameter_tree_hash=self.parameter_tree_hash,
             checkpoint_global_step=self.checkpoint_global_step,
+            profile_hash=self.profile_hash,
+            memory_mode=self.memory_mode,
+            memory_spec_hash=self.memory_spec_hash,
+            adapter_identity_hash=self.adapter_identity_hash,
+            runtime_bundle_hash=self.runtime_bundle_hash,
             weights_status=self.weights_status,
             provenance_label=self.provenance_label))
 
 
+def _require_sha256(value, code: str, what: str) -> str:
+    value = str(value or "")
+    if not is_sha256_hex(value):
+        raise StudentBindingBlocked(
+            f"{code}: {what} must be a sha256 hex string, got {value!r}")
+    return value
+
+
 def resolve_student_binding(
-        contract: Optional[StudentInitContract]) -> StudentBindingIdentity:
-    """Validate an explicitly injected CC4 contract; never guess, never load.
+        contract: Optional[StudentInitContract], *,
+        director_selected_candidate_id: str) -> StudentBindingIdentity:
+    """Validate an explicitly injected CC4 contract against the DIRECTOR-
+    selected Student; never guess, never load, NO default candidate.
 
     Fail-closed ladder:
-      * no contract          -> STUDENT_INIT_CONTRACT_MISSING
-      * wrong candidate      -> STUDENT_IDENTITY_MISMATCH
-      * incomplete identity  -> STUDENT_IDENTITY_INCOMPLETE
+      * no contract               -> STUDENT_INIT_CONTRACT_MISSING
+      * no director selection     -> E2_STUDENT_NO_DIRECTOR_SELECTION
+      * unknown selected candidate-> E2_STUDENT_UNKNOWN_CANDIDATE
+      * contract candidate != selection -> E2_STUDENT_PROFILE_MISMATCH
+      * non-RMT16 / bad hashes     -> E2_STUDENT_PROFILE_MISMATCH
+      * memory/carry not the legal mapping -> E2_STUDENT_MEMORY_MODE_MISMATCH
+      * bad memory-spec hash       -> E2_STUDENT_MEMORY_MODE_MISMATCH
+      * bad adapter identity       -> E2_STUDENT_ADAPTER_IDENTITY_MISMATCH
     """
     if contract is None:
         raise StudentBindingBlocked(
@@ -88,30 +133,70 @@ def resolve_student_binding(
             "StudentInitContract/StudentAdapter is not present in this "
             "worktree; direction two consumes it only — no local loader, no "
             "guessing (REAL_CHECKPOINT_LOADED=false)")
+    if not director_selected_candidate_id:
+        raise StudentBindingBlocked(
+            "E2_STUDENT_NO_DIRECTOR_SELECTION: there is NO default Student "
+            "candidate — the director must select one of "
+            f"{sorted(C.ALLOWED_STUDENT_CANDIDATE_IDS)}")
+    if director_selected_candidate_id not in C.ALLOWED_STUDENT_CANDIDATE_IDS:
+        raise StudentBindingBlocked(
+            f"E2_STUDENT_UNKNOWN_CANDIDATE: "
+            f"{director_selected_candidate_id!r} is not in "
+            "ALLOWED_STUDENT_CANDIDATE_IDS="
+            f"{sorted(C.ALLOWED_STUDENT_CANDIDATE_IDS)}")
     candidate_id = getattr(contract, "candidate_id", None)
-    if candidate_id != C.STRONG_STUDENT_CANDIDATE_ID:
+    if candidate_id != director_selected_candidate_id:
         raise StudentBindingBlocked(
-            f"STUDENT_IDENTITY_MISMATCH: contract candidate_id="
-            f"{candidate_id!r} but direction two is bound to "
-            f"{C.STRONG_STUDENT_CANDIDATE_ID!r}")
-    param_hash = getattr(contract, "parameter_tree_hash", None) or ""
+            f"E2_STUDENT_PROFILE_MISMATCH: contract candidate_id="
+            f"{candidate_id!r} != director-selected "
+            f"{director_selected_candidate_id!r}")
+    if str(getattr(contract, "architecture_family", "")) != "RMT16":
+        raise StudentBindingBlocked(
+            f"E2_STUDENT_PROFILE_MISMATCH: architecture_family must be "
+            "RMT16, got "
+            f"{getattr(contract, 'architecture_family', None)!r}")
+    param_hash = _require_sha256(
+        getattr(contract, "parameter_tree_hash", ""),
+        "E2_STUDENT_PROFILE_MISMATCH", "parameter_tree_hash")
     step = getattr(contract, "checkpoint_global_step", None)
-    if not is_sha256_hex(param_hash):
+    if not isinstance(step, int) or isinstance(step, bool) or step < 0:
         raise StudentBindingBlocked(
-            f"STUDENT_IDENTITY_INCOMPLETE: parameter_tree_hash must be a "
-            f"sha256 hex string, got {param_hash!r}")
-    if not isinstance(step, int) or step < 0:
+            f"E2_STUDENT_PROFILE_MISMATCH: checkpoint_global_step must be "
+            f"a non-negative int, got {step!r}")
+    profile_hash = _require_sha256(
+        getattr(contract, "profile_hash", ""),
+        "E2_STUDENT_PROFILE_MISMATCH", "profile_hash")
+    runtime_bundle_hash = _require_sha256(
+        getattr(contract, "runtime_bundle_hash", ""),
+        "E2_STUDENT_PROFILE_MISMATCH", "runtime_bundle_hash")
+    memory_mode = str(getattr(contract, "memory_mode", "") or "")
+    carry_mode = str(getattr(contract, "carry_mode", "") or "")
+    expected_mem, expected_carry = C.STUDENT_PROFILE_MEMORY_MAP[
+        director_selected_candidate_id]
+    if memory_mode != expected_mem or carry_mode != expected_carry:
         raise StudentBindingBlocked(
-            f"STUDENT_IDENTITY_INCOMPLETE: checkpoint_global_step must be a "
-            f"non-negative int, got {step!r}")
+            f"E2_STUDENT_MEMORY_MODE_MISMATCH: candidate "
+            f"{candidate_id!r} requires memory_mode={expected_mem!r} / "
+            f"carry_mode={expected_carry!r}, got {memory_mode!r} / "
+            f"{carry_mode!r}")
+    memory_spec_hash = _require_sha256(
+        getattr(contract, "memory_spec_hash", ""),
+        "E2_STUDENT_MEMORY_MODE_MISMATCH", "memory_spec_hash")
+    adapter_identity_hash = _require_sha256(
+        getattr(contract, "adapter_identity_hash", ""),
+        "E2_STUDENT_ADAPTER_IDENTITY_MISMATCH", "adapter_identity_hash")
     return StudentBindingIdentity(
         candidate_id=candidate_id,
-        architecture_family=str(getattr(contract, "architecture_family",
-                                        "UNKNOWN")),
+        architecture_family="RMT16",
         memory_family=str(getattr(contract, "memory_family", "UNKNOWN")),
-        carry_mode=str(getattr(contract, "carry_mode", "UNKNOWN")),
+        carry_mode=carry_mode,
         parameter_tree_hash=param_hash,
         checkpoint_global_step=step,
+        profile_hash=profile_hash,
+        memory_mode=memory_mode,
+        memory_spec_hash=memory_spec_hash,
+        adapter_identity_hash=adapter_identity_hash,
+        runtime_bundle_hash=runtime_bundle_hash,
         weights_status=WEIGHTS_REAL_CHECKPOINT,
         provenance_label="CC4_SHARED_STUDENT_INIT_CONTRACT")
 
@@ -130,9 +215,16 @@ def local_symbolic_binding() -> StudentBindingIdentity:
         candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
         architecture_family="RMT16",
         memory_family="RMT16_ORIGINAL",
-        carry_mode="PERSISTENT",
+        carry_mode=C.STUDENT_CARRY_MODE_PERSISTENT,
         parameter_tree_hash=canonical_sha256(payload),
         checkpoint_global_step=0,
+        #: P0-16: the symbolic stand-in carries NO real profile/memory/
+        #: adapter/bundle identity (empty = NOT_LOADED_LOCAL, honest)
+        profile_hash="",
+        memory_mode="",
+        memory_spec_hash="",
+        adapter_identity_hash="",
+        runtime_bundle_hash="",
         weights_status=WEIGHTS_NOT_LOADED_LOCAL,
         provenance_label=C.ENGINEERING_SCAFFOLD)
 

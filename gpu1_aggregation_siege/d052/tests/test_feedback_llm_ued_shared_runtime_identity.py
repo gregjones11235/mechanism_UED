@@ -73,13 +73,10 @@ IDENTITY_SLOTS = ("student", "reference", "probe_runner", "anchor_manifest",
 
 
 def student_contract(parameter_tree_hash=STUDENT_PARAM_HASH_A):
-    return SimpleNamespace(
-        candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
-        architecture_family="RMT16",
-        memory_family="RMT16_ORIGINAL",
-        carry_mode="PERSISTENT",
-        parameter_tree_hash=parameter_tree_hash,
-        checkpoint_global_step=98304)
+    from e2_test_sign_helpers import student_contract as _sc
+    contract = _sc(C.STRONG_STUDENT_CANDIDATE_ID)
+    contract.parameter_tree_hash = parameter_tree_hash
+    return contract
 
 
 def reference_contract(parameter_tree_hash=REFERENCE_PARAM_HASH_A):
@@ -121,7 +118,9 @@ def alternate_anchor_manifest():
 def fully_bound_bundle(*, student=None, reference=None, runner=None,
                        manifest=None, training=None) -> SharedRuntimeBundle:
     return SharedRuntimeBundle(
-        student=SharedStudentSlot().bind(student or student_contract()),
+        student=SharedStudentSlot().bind(
+            student or student_contract(),
+            director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID),
         reference=SharedReferenceSlot().bind(
             reference or reference_contract()),
         probe_runner=SharedProbeRunnerSlot().bind(runner or probe_runner()),
@@ -320,13 +319,15 @@ class TestTamperAndWrongAssets:
             SharedAnchorManifestSlot().bind(tampered_dict)
 
     def test_wrong_student_candidate_rejected(self):
-        #: wrong-Student angle: identity must be the registry-issued
-        #: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304 candidate
+        #: wrong-Student angle: identity must equal the director-selected
+        #: candidate (one of the allowed set; no default)
         wrong = student_contract()
         wrong.candidate_id = "TEST_ONLY_WRONG_STUDENT_CANDIDATE"
         with pytest.raises(StudentBindingBlocked,
-                           match="STUDENT_IDENTITY_MISMATCH"):
-            SharedStudentSlot().bind(wrong)
+                           match="E2_STUDENT_PROFILE_MISMATCH"):
+            SharedStudentSlot().bind(
+                wrong,
+                director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
 
     def test_reference_incomplete_identity_rejected(self):
         bad = reference_contract(parameter_tree_hash="not-a-sha256")
@@ -392,7 +393,9 @@ class TestAbsenceStaysBlocked:
 
     def test_partial_binding_stays_blocked(self):
         bundle = SharedRuntimeBundle(
-            student=SharedStudentSlot().bind(student_contract()))
+            student=SharedStudentSlot().bind(
+                student_contract(),
+                director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID))
         with pytest.raises(SharedRuntimeBlocked,
                            match=C.BLOCKED_WAITING_SHARED_RUNTIME):
             resolve_shared_runtime(bundle)

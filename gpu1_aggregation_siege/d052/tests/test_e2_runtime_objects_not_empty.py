@@ -61,12 +61,20 @@ class TestObjectsNotEmpty:
             sign_director_runtime_bundle(payload)
 
     def test_smoke_origin_restricted(self):
+        #: an unknown Student candidate is rejected fail-closed (the
+        #: profile memory mapping is undefined for unknown candidates)
         payload = valid_director_bundle_payload()
         payload["student_init_contract"]["candidate_id"] = \
             "SOME_OTHER_STUDENT"
-        manifest = sign_director_runtime_bundle(payload)
-        problems = runtime_bundle_binding_problems(manifest)
-        assert any("SMOKE_STUDENT_ORIGIN_MISMATCH" in p for p in problems)
+        with pytest.raises(ValidationError,
+                           match="E2_STUDENT_MEMORY_MODE_MISMATCH"):
+            sign_director_runtime_bundle(payload)
+
+    def test_both_allowed_candidates_accepted(self):
+        for candidate in C.ALLOWED_STUDENT_CANDIDATE_IDS:
+            manifest = valid_director_bundle(candidate_id=candidate)
+            assert manifest.student_init_contract.candidate_id == candidate
+            assert runtime_bundle_binding_problems(manifest) == []
 
     def test_formal_start_requires_human(self):
         payload = valid_director_bundle_payload()

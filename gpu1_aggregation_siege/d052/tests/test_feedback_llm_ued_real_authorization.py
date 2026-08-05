@@ -53,6 +53,11 @@ def _scripted_transport(role, prompt):
         raw=raw, request_id=f"test-req-{role}")
 
 
+def student_contract():
+    from e2_test_sign_helpers import student_contract as _sc
+    return _sc(C.STRONG_STUDENT_CANDIDATE_ID)
+
+
 class TestGrantLadder:
     def test_all_grants_default_false(self):
         auth = empty_authorization()
@@ -142,11 +147,7 @@ class TestControllerPosture:
             C.MODE_NORMAL_FEEDBACK, backend=backend,
             probe_runner=ScriptedRealProbeRunner(),
             runtime_authorization=auth,
-            student_init_contract=SimpleNamespace(
-                candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
-                architecture_family="RMT16",
-                memory_family="RMT16_ORIGINAL", carry_mode="PERSISTENT",
-                parameter_tree_hash="ab" * 32, checkpoint_global_step=98304),
+            student_init_contract=student_contract(),
             training_contract=SimpleNamespace(
                 run_one_optimizer_update=lambda **kw: None,
                 save_checkpoint=lambda **kw: "hash",
@@ -156,7 +157,8 @@ class TestControllerPosture:
                 lambda **kw: __import__(
                     "test_feedback_llm_ued_envcoder_sequence",
                     fromlist=["passed_artifact"]).passed_artifact(
-                    kw["window"], kw["plan_id"], n_calls=1)))
+                    kw["window"], kw["plan_id"], n_calls=1)),
+            director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
         assert ctl.launch_decision.real_llm_calls_allowed is True
         assert ctl.launch_decision.training_allowed is True
 

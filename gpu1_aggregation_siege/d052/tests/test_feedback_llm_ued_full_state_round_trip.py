@@ -141,12 +141,11 @@ def make_seam(contract):
         real_training=True)
     gate = FeedbackLaunchGate(EXECUTION_MODE_REAL,
                               runtime_grants=authorization)
-    identity = resolve_student_binding(SimpleNamespace(
-        candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
-        architecture_family="RMT16", memory_family="RMT16_ORIGINAL",
-        carry_mode="PERSISTENT",
-        parameter_tree_hash=text_sha256("TEST_ONLY_STUDENT_PARAM_TREE"),
-        checkpoint_global_step=98304))
+    from e2_test_sign_helpers import student_contract as _sc
+    identity = resolve_student_binding(
+        _sc(C.STRONG_STUDENT_CANDIDATE_ID,
+            runtime_bundle_hash=RUNTIME_BUNDLE_HASH),
+        director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID)
     return StudentTrainingSeam(gate, identity, training_contract=contract,
                                runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
@@ -425,14 +424,12 @@ class TestSeamConsumesAttestationOnly:
         assert skipped.checkpoint_round_trip_pass is False
         #: a REAL-mode gate WITHOUT runtime grants never authorizes
         #: training — the seam records the skip with pass=False
+        from e2_test_sign_helpers import student_contract as _sc
         seam = StudentTrainingSeam(
             FeedbackLaunchGate(EXECUTION_MODE_REAL),
-            resolve_student_binding(SimpleNamespace(
-                candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
-                architecture_family="RMT16",
-                memory_family="RMT16_ORIGINAL", carry_mode="PERSISTENT",
-                parameter_tree_hash=text_sha256("TEST_ONLY_PARAM"),
-                checkpoint_global_step=0)))
+            resolve_student_binding(
+                _sc(C.STRONG_STUDENT_CANDIDATE_ID, checkpoint_global_step=0),
+                director_selected_candidate_id=C.STRONG_STUDENT_CANDIDATE_ID))
         record = seam.execute_training_step(0)
         assert record.status == "SKIPPED_UNAUTHORIZED"
         assert record.checkpoint_round_trip_pass is False
