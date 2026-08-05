@@ -523,5 +523,6 @@ class TestReadinessSplit:
             anchor_manifest_bound=True,
             probe_executed=True,
             update_executed=True,
+            smoke_attested=True,
             blockers=[],
         ) is False

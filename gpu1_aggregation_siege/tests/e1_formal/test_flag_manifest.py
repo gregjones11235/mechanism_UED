@@ -258,6 +258,11 @@ def _structural_pass() -> dict:
     computed value of dynamic_12_behaviorally_distinct_verified stays
     FALSE this round (no signed probe evidence exists — see
     scripts/e1_formal_readiness.py).
+
+    CC2 follow-up P0-13: ``smoke_attested`` is part of the
+    conjunction; the unit tests pass it EXPLICITLY (only after a
+    signed attestation verified — see the strengthened
+    TestRealSmokeReadinessGate).
     """
     return dict(
         sequential=True,
@@ -294,71 +299,172 @@ def _write_status(tmp_path, report: dict) -> str:
     return str(path)
 
 
+def _smoke_expected() -> dict:
+    """The live expected values a TEST_ONLY smoke attestation is issued
+    against (all conspicuously SYNTHETIC)."""
+    return {
+        "run_id": "TEST_ONLY_SYNTHETIC_RUN",
+        "branch": "test-branch",
+        "git_sha": "ab" * 32,
+        "runtime_bundle_hash": "01" * 32,
+        "student_identity_hash": "02" * 32,
+        "student_checkpoint_hash": "03" * 32,
+        "reference_identity_hash": "04" * 32,
+        "reference_checkpoint_hash": "05" * 32,
+        "board_journal_hash": "06" * 32,
+        "envcoder_artifact_pool_hash": "07" * 32,
+        "probe_pool_hash": "08" * 32,
+        "selection_attestation_hash": "09" * 32,
+        "verified_batch_hash": "10" * 32,
+        "update_attestation_hash": "11" * 32,
+        "roundtrip_attestation_hash": "12" * 32,
+        "formal_asset_registry_hash": "13" * 32,
+        "anchor_manifest_hash": "14" * 32,
+    }
+
+
+def _issue_test_only_attestation(expected: dict):
+    """Issue a TEST_ONLY / SYNTHETIC / NOT_REAL_EXECUTION smoke
+    attestation matching ``expected`` field-for-field."""
+    from dicode.teachers.e1_formal import smoke_attestation as SM
+
+    return SM.issue_e1_real_smoke_attestation(
+        run_id=expected["run_id"],
+        branch=expected["branch"],
+        git_sha=expected["git_sha"],
+        runtime_bundle_hash=expected["runtime_bundle_hash"],
+        student_identity_hash=expected["student_identity_hash"],
+        student_checkpoint_hash=expected["student_checkpoint_hash"],
+        reference_identity_hash=expected["reference_identity_hash"],
+        reference_checkpoint_hash=expected["reference_checkpoint_hash"],
+        board_journal_hash=expected["board_journal_hash"],
+        envcoder_artifact_pool_hash=expected["envcoder_artifact_pool_hash"],
+        probe_pool_hash=expected["probe_pool_hash"],
+        selection_attestation_hash=expected["selection_attestation_hash"],
+        verified_batch_hash=expected["verified_batch_hash"],
+        update_attestation_hash=expected["update_attestation_hash"],
+        roundtrip_attestation_hash=expected["roundtrip_attestation_hash"],
+        formal_asset_registry_hash=expected["formal_asset_registry_hash"],
+        anchor_manifest_hash=expected["anchor_manifest_hash"],
+        status="EXECUTED",
+        signer_id=SM.SYNTHETIC_TEST_ONLY_SMOKE_SIGNER,
+        test_only=True,
+        ctx="test",
+    )
+
+
 class TestRealSmokeReadinessGate:
     def test_structural_gates_alone_never_grant_readiness(self, tmp_path):
         # all structural gates pass but NO real execution report on disk
         missing = str(tmp_path / "no_such_report.json")
-        probe, update = RD._compute_real_execution_flags(missing)
-        assert (probe, update) == (False, False)
+        smoke = RD._compute_real_smoke_evidence(missing, expected={})
+        assert smoke["valid"] is False
+        assert (smoke["probe_executed"], smoke["update_executed"]) == (
+            False,
+            False,
+        )
         assert RD.decide_real_smoke_ready(
-            probe_executed=probe,
-            update_executed=update,
+            probe_executed=smoke["probe_executed"],
+            update_executed=smoke["update_executed"],
+            smoke_attested=smoke["valid"],
             **_structural_pass(),
         ) is False
 
     def test_status_missing_stays_false(self, tmp_path):
         report = _executed_report()  # flags forged true...
         del report["status"]         # ...but no EXECUTED status
-        probe, update = RD._compute_real_execution_flags(
-            _write_status(tmp_path, report)
+        smoke = RD._compute_real_smoke_evidence(
+            _write_status(tmp_path, report), expected={}
         )
-        assert (probe, update) == (False, False)
+        assert smoke["valid"] is False
+        assert smoke["detail"] == "status is not EXECUTED"
         assert RD.decide_real_smoke_ready(
-            probe_executed=probe,
-            update_executed=update,
+            probe_executed=smoke["probe_executed"],
+            update_executed=smoke["update_executed"],
+            smoke_attested=smoke["valid"],
             **_structural_pass(),
         ) is False
 
     def test_status_blocked_stays_false_even_with_forged_flags(self, tmp_path):
         report = _executed_report()  # flags stay forged true
         report["status"] = "BLOCKED"
-        probe, update = RD._compute_real_execution_flags(
-            _write_status(tmp_path, report)
+        smoke = RD._compute_real_smoke_evidence(
+            _write_status(tmp_path, report), expected={}
         )
-        assert (probe, update) == (False, False)
+        assert smoke["valid"] is False
         assert RD.decide_real_smoke_ready(
-            probe_executed=probe,
-            update_executed=update,
+            probe_executed=smoke["probe_executed"],
+            update_executed=smoke["update_executed"],
+            smoke_attested=smoke["valid"],
             **_structural_pass(),
         ) is False
 
-    def test_probe_true_but_update_false_stays_false(self, tmp_path):
-        probe, update = RD._compute_real_execution_flags(
-            _write_status(tmp_path, _executed_report(update=False))
+    def test_plain_json_executed_status_never_grants_readiness(self, tmp_path):
+        # STRENGTHENED pin (CC2 P0-13): a plain JSON report stamped
+        # EXECUTED with every flag forged true carries NO signed
+        # attestation — parse-level evidence only, never readiness
+        report = _executed_report()
+        smoke = RD._compute_real_smoke_evidence(
+            _write_status(tmp_path, report), expected={}
         )
-        assert (probe, update) == (True, False)
+        assert smoke["valid"] is False
+        assert "e1_real_smoke_attestation" in smoke["detail"]
         assert RD.decide_real_smoke_ready(
-            probe_executed=probe,
-            update_executed=update,
+            probe_executed=True,
+            update_executed=True,
+            smoke_attested=False,
             **_structural_pass(),
         ) is False
 
-    def test_executed_probe_and_update_grant_readiness(self, tmp_path):
-        # the ONLY true path: real EXECUTED evidence + all gates pass
-        probe, update = RD._compute_real_execution_flags(
-            _write_status(tmp_path, _executed_report())
+    def test_tampered_attestation_block_never_grants_readiness(self, tmp_path):
+        from dicode.teachers.e1_formal import smoke_attestation as SM
+
+        report = _executed_report()
+        expected = _smoke_expected()
+        attestation = _issue_test_only_attestation(expected)
+        block = dict(attestation.__dict__)
+        block["runtime_bundle_hash"] = "ff" * 32  # tamper one bound hash
+        report["e1_real_smoke_attestation"] = block
+        smoke = RD._compute_real_smoke_evidence(
+            _write_status(tmp_path, report), expected=expected
         )
-        assert (probe, update) == (True, True)
+        assert smoke["valid"] is False
         assert RD.decide_real_smoke_ready(
-            probe_executed=probe,
-            update_executed=update,
+            probe_executed=smoke["probe_executed"],
+            update_executed=smoke["update_executed"],
+            smoke_attested=smoke["valid"],
+            **_structural_pass(),
+        ) is False
+
+    def test_verified_signed_attestation_grants_readiness(self, tmp_path):
+        from dicode.teachers.e1_formal import smoke_attestation as SM
+
+        # the ONLY true path: a VERIFIED signed smoke attestation
+        # (hash + signer + every bound hash matching the live
+        # expected values) certifying EXECUTED, and all gates pass
+        report = _executed_report()
+        expected = _smoke_expected()
+        attestation = _issue_test_only_attestation(expected)
+        report["e1_real_smoke_attestation"] = dict(attestation.__dict__)
+        smoke = RD._compute_real_smoke_evidence(
+            _write_status(tmp_path, report), expected=expected
+        )
+        assert smoke["valid"] is True
+        assert (smoke["probe_executed"], smoke["update_executed"]) == (
+            True,
+            True,
+        )
+        assert smoke["attestation_signer"] == SM.SYNTHETIC_TEST_ONLY_SMOKE_SIGNER
+        assert RD.decide_real_smoke_ready(
+            probe_executed=smoke["probe_executed"],
+            update_executed=smoke["update_executed"],
+            smoke_attested=smoke["valid"],
             **_structural_pass(),
         ) is True
 
     def test_blockers_still_refuse_even_with_execution_evidence(self, tmp_path):
-        probe, update = RD._compute_real_execution_flags(
-            _write_status(tmp_path, _executed_report())
-        )
+        smoke = {"probe_executed": True, "update_executed": True,
+                 "valid": True}
         kwargs = _structural_pass()
         kwargs["blockers"] = [
             {
@@ -368,7 +474,8 @@ class TestRealSmokeReadinessGate:
             }
         ]
         assert RD.decide_real_smoke_ready(
-            probe_executed=probe,
-            update_executed=update,
+            probe_executed=smoke["probe_executed"],
+            update_executed=smoke["update_executed"],
+            smoke_attested=smoke["valid"],
             **kwargs,
         ) is False

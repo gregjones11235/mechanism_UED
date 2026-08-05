@@ -29,9 +29,14 @@ hand-written and no value is ever guessed:
   StudentAdapter / ReferenceAdapter / AnchorManifest (this round:
   all False — ``dicode.shared_runtime`` does not exist yet);
 * ``real_candidate_probe_executed`` / ``real_optimizer_update_executed``
-  — true ONLY if the one-update entrypoint's own status report on
-  disk records an EXECUTED run; absent / missing status / BLOCKED =>
-  false (never inferred from anything else);
+  — true ONLY when the one-update entrypoint's status report on disk
+  carries a VERIFIED SIGNED smoke attestation certifying EXECUTED;
+  absent report / missing status / BLOCKED / unsigned or forged
+  attestation => false (never inferred from anything else);
+* ``real_smoke_attestation_valid`` — a signed ``E1RealSmokeAttestation``
+  inside the report parsed, its hash + signer verified AND every
+  bound hash matched the live expected values (CC2 P0-13: plain JSON
+  status is parse-level evidence only, never readiness);
 * ``e1_real_smoke_ready`` — every capability flag true AND every
   shared contract bound AND the real dual probe AND the real single
   optimizer update actually EXECUTED (per the one-update entrypoint's
@@ -235,6 +240,75 @@ def _compute_real_execution_flags(report_path: str = None) -> tuple:
     return probe_executed, update_executed
 
 
+def _compute_real_smoke_evidence(
+    report_path: str = None, *, expected: dict = None
+) -> dict:
+    """The readiness execution evidence from a SIGNED smoke attestation.
+
+    Plain JSON status files are parse-level evidence ONLY. The
+    readiness evidence comes from the ``e1_real_smoke_attestation``
+    block inside the report: it must parse, its hash + signer must
+    verify (``consume_smoke_attestation_mapping``) and EVERY bound
+    hash must match the live ``expected`` values (fail-closed on any
+    claimed hash with no verifiable source). ``probe_executed`` /
+    ``update_executed`` are true ONLY when all of that holds AND the
+    status is EXECUTED.
+    """
+    from dicode.teachers.e1_formal import smoke_attestation as SM
+
+    path = (
+        report_path
+        if report_path is not None
+        else os.path.join(RT.SIEGE_ROOT, ONE_UPDATE_REPORT)
+    )
+    result = {
+        "valid": False,
+        "status": "",
+        "probe_executed": False,
+        "update_executed": False,
+        "attestation_signer": "",
+        "detail": "no report on disk",
+    }
+    if not os.path.isfile(path):
+        return result
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            report = json.load(handle)
+    except (OSError, ValueError):
+        result["detail"] = "unparseable report"
+        return result
+    result["status"] = report.get("status", "")
+    if report.get("status") != "EXECUTED":
+        result["detail"] = "status is not EXECUTED"
+        return result
+    block = report.get("e1_real_smoke_attestation")
+    if not isinstance(block, dict):
+        result["detail"] = (
+            "no e1_real_smoke_attestation block; a plain JSON status "
+            "never grants readiness"
+        )
+        return result
+    try:
+        attested = SM.consume_smoke_attestation_mapping(
+            block, "e1_formal_readiness.smoke"
+        )
+        SM.verify_e1_real_smoke_attestation(
+            attested, expected=expected or {}, ctx="e1_formal_readiness"
+        )
+    except SM.SmokeAttestationError as e:
+        result["detail"] = str(e)
+        return result
+    if attested.status != SM.SMOKE_STATUS_EXECUTED:
+        result["detail"] = "attestation does not certify EXECUTED"
+        return result
+    result["valid"] = True
+    result["probe_executed"] = True
+    result["update_executed"] = True
+    result["attestation_signer"] = attested.signer_id
+    result["detail"] = "signed smoke attestation verified"
+    return result
+
+
 def decide_real_smoke_ready(
     *,
     sequential: bool,
@@ -248,23 +322,29 @@ def decide_real_smoke_ready(
     anchor_manifest_bound: bool,
     probe_executed: bool,
     update_executed: bool,
+    smoke_attested: bool,
     blockers: list,
 ) -> bool:
     """The FINAL readiness conjunction — strictly fail-closed.
 
     Structural capability gates are necessary but NEVER sufficient:
     readiness additionally requires REAL EXECUTION evidence — both
-    the real dual probe and the real single optimizer update recorded
-    EXECUTED by the one-update entrypoint's own status report — and
-    zero live production-gate blockers. (fix(e1): the probe/update
-    execution evidence was missing from this conjunction; structural
-    gates alone could have granted the E1 Pilot prematurely.)
+    the real dual probe and the real single optimizer update attested
+    EXECUTED by a VERIFIED SIGNED smoke attestation — and zero live
+    production-gate blockers. (fix(e1): the probe/update execution
+    evidence was missing from this conjunction; structural gates alone
+    could have granted the E1 Pilot prematurely.)
 
     CC2 follow-up P0-6: the single ``dynamic_12`` gate is split into
     three — logical specs reachable, executable candidates reachable,
     and behaviorally-distinct VERIFIED. The third is false until real
     signed probe evidence exists, so readiness stays fail-closed even
     when both reachability gates pass.
+
+    CC2 follow-up P0-13: the execution evidence must come from a
+    VERIFIED signed smoke attestation (``smoke_attested``). A plain
+    JSON status file — even one stamped EXECUTED with forged flags —
+    never grants readiness on its own.
     """
     return bool(
         sequential
@@ -278,6 +358,7 @@ def decide_real_smoke_ready(
         and anchor_manifest_bound
         and probe_executed
         and update_executed
+        and smoke_attested
         and not blockers
     )
 
@@ -320,7 +401,21 @@ def main(argv=None) -> int:
     anchor_manifest_bound = bool(
         shared.get("AnchorManifest", {}).get("bound")
     )
-    probe_executed, update_executed = _compute_real_execution_flags()
+    # CC2 follow-up P0-13: execution evidence comes ONLY from a
+    # verified signed smoke attestation. The expected live values this
+    # round: branch + git SHA are real; every shared-runtime-derived
+    # hash is "" (absent shared runtime), so any claimed non-empty hash
+    # fails closed — no TEST_ONLY or forged report can grant readiness.
+    smoke_expected = {
+        "branch": RT.git_branch(),
+        "git_sha": RT.git_head_sha(),
+        "run_id": "",
+    }
+    smoke = _compute_real_smoke_evidence(expected=smoke_expected)
+    smoke_attested = smoke["valid"]
+    probe_executed = smoke["probe_executed"]
+    update_executed = smoke["update_executed"]
+    smoke_evidence_detail = smoke["detail"]
 
     blockers = list(gates["blockers"])
     e1_real_smoke_ready = decide_real_smoke_ready(
@@ -335,6 +430,7 @@ def main(argv=None) -> int:
         anchor_manifest_bound=anchor_manifest_bound,
         probe_executed=probe_executed,
         update_executed=update_executed,
+        smoke_attested=smoke_attested,
         blockers=blockers,
     )
 
@@ -363,6 +459,8 @@ def main(argv=None) -> int:
         "shared_anchor_manifest_bound": anchor_manifest_bound,
         "real_candidate_probe_executed": probe_executed,
         "real_optimizer_update_executed": update_executed,
+        "real_smoke_attestation_valid": smoke_attested,
+        "real_smoke_evidence_detail": smoke_evidence_detail,
         "e1_real_smoke_ready": e1_real_smoke_ready,
         "blockers": blockers,
         # provenance only — never a source of truth for the booleans
@@ -389,6 +487,7 @@ def main(argv=None) -> int:
         "shared_anchor_manifest_bound",
         "real_candidate_probe_executed",
         "real_optimizer_update_executed",
+        "real_smoke_attestation_valid",
         "e1_real_smoke_ready",
     ):
         print(f"  {key} = {report[key]}")
