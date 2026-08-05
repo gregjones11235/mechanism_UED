@@ -86,6 +86,7 @@ def _test_only_manifest() -> dict:
         "signer_id": bundle.signer_id,
         "authorization_grant_hash": bundle.authorization_grant_hash,
         "object_identity_hashes": dict(bundle.object_identity_hashes),
+        "student_selection": bundle.student_selection_mapping,
         "bundle_hash": bundle.bundle_hash,
     }
 
@@ -334,7 +335,7 @@ class TestEntrypointCheckOnly:
         )
         assert rc == 0
         report = _read_report(report_path)
-        assert report["status"] == ENT.E1_CHECK_ONLY_OK
+        assert report["status"] == ENT.E1_TEST_ONLY_CONTRACT_OK
         assert report["check_only"] is True
         assert report["executed"] is False  # NEVER EXECUTED
         checks = report["checks"]

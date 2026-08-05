@@ -100,6 +100,7 @@ def _test_only_manifest_path(tmp_path):
         "signer_id": bundle.signer_id,
         "authorization_grant_hash": bundle.authorization_grant_hash,
         "object_identity_hashes": dict(bundle.object_identity_hashes),
+        "student_selection": bundle.student_selection_mapping,
         "bundle_hash": bundle.bundle_hash,
     }
     path = tmp_path / "test_only_director_bundle.json"
@@ -160,7 +161,7 @@ class TestEntrypoint:
         )
         assert rc == 0
         report = _read(report_path)
-        assert report["status"] == ENT.E1_CHECK_ONLY_OK
+        assert report["status"] == ENT.E1_TEST_ONLY_CONTRACT_OK
         assert report["executed"] is False  # NEVER executes
         checks = report["checks"]
         assert checks["bundle_manifest_verified"] is True

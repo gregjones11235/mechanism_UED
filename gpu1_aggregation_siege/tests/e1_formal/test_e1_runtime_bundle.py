@@ -74,6 +74,7 @@ def _manifest_from_bundle(bundle) -> dict:
         "signer_id": bundle.signer_id,
         "authorization_grant_hash": bundle.authorization_grant_hash,
         "object_identity_hashes": dict(bundle.object_identity_hashes),
+        "student_selection": bundle.student_selection_mapping,
         "bundle_hash": bundle.bundle_hash,
     }
 
@@ -98,6 +99,7 @@ class TestTestOnlyBundleAssembly:
     def test_bundle_hash_binds_every_identity_field(self):
         bundle = _test_only_bundle()
         base = dict(bundle.object_identity_hashes)
+        sel_hash = bundle.student_selection.descriptor_hash
         same = RB.compute_bundle_hash(
             bundle_id=bundle.bundle_id,
             mode=bundle.mode,
@@ -105,6 +107,7 @@ class TestTestOnlyBundleAssembly:
             signer_id=bundle.signer_id,
             authorization_grant_hash=bundle.authorization_grant_hash,
             object_identity_hashes=base,
+            student_selection_hash=sel_hash,
         )
         assert same == bundle.bundle_hash
         for field, value in (
@@ -120,6 +123,7 @@ class TestTestOnlyBundleAssembly:
                 signer_id=bundle.signer_id,
                 authorization_grant_hash=bundle.authorization_grant_hash,
                 object_identity_hashes=base,
+                student_selection_hash=sel_hash,
             )
             kwargs[field] = value
             assert RB.compute_bundle_hash(**kwargs) != bundle.bundle_hash
@@ -133,6 +137,21 @@ class TestTestOnlyBundleAssembly:
                 signer_id=bundle.signer_id,
                 authorization_grant_hash=bundle.authorization_grant_hash,
                 object_identity_hashes=tampered,
+                student_selection_hash=sel_hash,
+            )
+            != bundle.bundle_hash
+        )
+        # CC2-Student repair: a different Student selection yields a
+        # different bundle hash (student_selection is in the identity)
+        assert (
+            RB.compute_bundle_hash(
+                bundle_id=bundle.bundle_id,
+                mode=bundle.mode,
+                source_commit=bundle.source_commit,
+                signer_id=bundle.signer_id,
+                authorization_grant_hash=bundle.authorization_grant_hash,
+                object_identity_hashes=base,
+                student_selection_hash="f" * 64,
             )
             != bundle.bundle_hash
         )
@@ -331,6 +350,7 @@ class TestSignerGating:
             signer_id=mapping["signer_id"],
             authorization_grant_hash=mapping["authorization_grant_hash"],
             object_identity_hashes=mapping["object_identity_hashes"],
+            student_selection_hash=bundle.student_selection.descriptor_hash,
         )
         with pytest.raises(RB.RuntimeBundleError) as excinfo:
             RB.load_verified_runtime_bundle(mapping, "test")
@@ -347,6 +367,7 @@ class TestSignerGating:
             signer_id=mapping["signer_id"],
             authorization_grant_hash=mapping["authorization_grant_hash"],
             object_identity_hashes=mapping["object_identity_hashes"],
+            student_selection_hash=bundle.student_selection.descriptor_hash,
         )
         with pytest.raises(RB.RuntimeBundleError) as excinfo:
             RB.load_verified_runtime_bundle(mapping, "test")

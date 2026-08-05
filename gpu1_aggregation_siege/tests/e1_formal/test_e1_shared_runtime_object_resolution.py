@@ -238,6 +238,7 @@ class TestBundleBoundResolution:
             "signer_id": source.signer_id,
             "authorization_grant_hash": source.authorization_grant_hash,
             "object_identity_hashes": dict(source.object_identity_hashes),
+            "student_selection": source.student_selection_mapping,
             "bundle_hash": source.bundle_hash,
         }
         loaded = RB.load_verified_runtime_bundle(manifest, "test")

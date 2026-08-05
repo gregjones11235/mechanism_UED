@@ -35,17 +35,18 @@ class TestNoDefaultStudentCandidate:
         assert excinfo.value.code == SC.STUDENT_SELECTION_REQUIRED
 
     def test_cli_cannot_override_bundle_selection(self):
-        bundle = SimpleNamespace(
-            bundle_hash="c0" * 32,
-            student={
-                "candidate_id": (
-                    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
-                ),
-                "profile": "rmt16_persistent_98304",
-                "memory_mode": "PERSISTENT",
-                "expected_params_sha256": "aa" * 32,
+        from dicode.teachers.e1_formal import runtime_bundle as RB
+        from types import SimpleNamespace
+
+        bundle = RB.build_test_only_runtime_bundle(
+            source_commit="TEST_ONLY_SYNTHETIC_SOURCE_COMMIT",
+            capabilities={
+                c: SimpleNamespace(kind=c, identity_id=f"t-{c}")
+                for c in RB.RUNTIME_CAPABILITY_CONTRACTS
             },
         )
+        # the bundle issues Persistent; the CLI asks for RESET128 =>
+        # the CLI can never override the director-issued identity
         with pytest.raises(SC.StudentSelectionError) as excinfo:
             SC.mount_student_from_director_bundle(
                 bundle=bundle,

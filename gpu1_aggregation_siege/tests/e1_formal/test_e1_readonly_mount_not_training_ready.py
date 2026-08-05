@@ -16,15 +16,13 @@ _PERSISTENT = SC.PERSISTENT_STUDENT_CANDIDATE_ID
 
 
 def _bundle(candidate_id=_PERSISTENT):
-    return SimpleNamespace(
-        bundle_hash="c0" * 32,
-        student={
-            "candidate_id": candidate_id,
-            "profile": SC.STUDENT_PROFILE_BY_CANDIDATE[candidate_id],
-            "memory_mode": (
-                SC.STUDENT_MEMORY_MODE_BY_CANDIDATE[candidate_id]
-            ),
-            "expected_params_sha256": "aa" * 32,
+    from dicode.teachers.e1_formal import runtime_bundle as RB
+
+    return RB.build_test_only_runtime_bundle(
+        source_commit="TEST_ONLY_SYNTHETIC_SOURCE_COMMIT",
+        capabilities={
+            c: SimpleNamespace(kind=c, identity_id=f"t-{c}")
+            for c in RB.RUNTIME_CAPABILITY_CONTRACTS
         },
     )
 

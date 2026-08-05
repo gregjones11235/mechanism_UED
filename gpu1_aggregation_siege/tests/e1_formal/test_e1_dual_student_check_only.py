@@ -64,6 +64,7 @@ class TestDualStudentCheckOnly:
             "object_identity_hashes": dict(
                 bundle.object_identity_hashes
             ),
+            "student_selection": bundle.student_selection_mapping,
             "bundle_hash": bundle.bundle_hash,
         }
         path = tmp_path / "test_only_bundle.json"
@@ -80,14 +81,14 @@ class TestDualStudentCheckOnly:
         )
         assert rc == 0
         report = json.load(open(report_path, encoding="utf-8"))
-        assert report["status"] == ENT.E1_CHECK_ONLY_OK
+        assert report["status"] == ENT.E1_TEST_ONLY_CONTRACT_OK
         assert report["executed"] is False
         dual = report["checks"]["dual_student_mount_ready"]
         assert dual["mountable"] is True
         assert dual["distinct_memory_modes"] is True
         # no real action ever happens in check-only
         codes = [b["code"] for b in report["production_blockers"]]
-        assert SC.STUDENT_SELECTION_REQUIRED in codes
+        assert RB.RUNTIME_BUNDLE_TEST_ONLY_REJECTED in codes
 
     def test_check_only_never_executes_any_real_action(self):
         # the check-only report structurally forbids EXECUTED and every
