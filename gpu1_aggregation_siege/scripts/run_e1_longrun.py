@@ -163,15 +163,39 @@ def build_frozen_manifest(
                 }
             )
 
-    # ---- Student identity (pinned; CC4 owns the checkpoint) ----------
-    fields["student_candidate_id"] = _field(
-        RT.PINNED_STUDENT_CANDIDATE_ID, True
-    )
-
-    # ---- Reference identity (G1 contract; must be FROZEN) ------------
+    # ---- Student identity (director-selected among the allowed set) ---
+    # CC2-Student: the formal manifest declares the teacher config's
+    # strong-student candidate id; it must be in the director-frozen
+    # ALLOWED_STUDENT_CANDIDATE_IDS (never defaulted to the first)
     teacher_config = RT.load_yaml(
         os.path.join(RT.SIEGE_ROOT, teacher_config_path)
     )
+    from dicode.teachers.e1_formal.student_contract import (
+        ALLOWED_STUDENT_CANDIDATE_IDS,
+    )
+
+    selected_student = teacher_config["teacher"]["strong_student"].get(
+        "candidate_id"
+    )
+    if selected_student not in ALLOWED_STUDENT_CANDIDATE_IDS:
+        fields["student_candidate_id"] = _field(
+            None,
+            False,
+            "STUDENT_SELECTION_REQUIRED",
+            "the manifest's strong-student candidate id is not in the "
+            "director-frozen allowed set; E1 never defaults a Student "
+            "selection",
+        )
+        blockers.append(
+            {
+                "field": "student_candidate_id",
+                "code": "STUDENT_SELECTION_REQUIRED",
+                "detail": "no valid director-selected Student in the "
+                "manifest",
+            }
+        )
+    else:
+        fields["student_candidate_id"] = _field(selected_student, True)
     from dicode.teachers.e1_formal.reference_contract import (
         ReferenceContractError,
         consume_reference_identity_contract,
@@ -429,7 +453,9 @@ def main(argv=None) -> int:
         # CC2-Director: the formal experiment always waits for HUMAN
         # approval; 98304 is not a formal budget
         "formal_experiment_authorized": False,
-        "student_candidate_id": RT.PINNED_STUDENT_CANDIDATE_ID,
+        "student_candidate_id": manifest["fields"]
+        .get("student_candidate_id", {})
+        .get("value"),
         "fields": manifest["fields"],
         "blockers": unfrozen,
     }

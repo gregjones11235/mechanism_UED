@@ -40,7 +40,7 @@ from dicode.teachers.e1_formal.reference_contract import (
     reference_identity_sha256,
 )
 from dicode.teachers.e1_formal.student_contract import (
-    PINNED_STUDENT_CANDIDATE_ID,
+    PERSISTENT_STUDENT_CANDIDATE_ID,
 )
 
 from test_gen_manager_duck import _frozen_manifest, _manager, _teacher_config
@@ -185,7 +185,7 @@ def _result_kwargs(
     ids = list(task_ids or DYNAMIC_IDS)
     kwargs = {
         "adapter_id": ADAPTER_ID,
-        "student_candidate_id": PINNED_STUDENT_CANDIDATE_ID,
+        "student_candidate_id": PERSISTENT_STUDENT_CANDIDATE_ID,
         "student_checkpoint_hash": STUDENT_CHECKPOINT_HASH,
         "student_probe_id": "fixture-student-probe-0001",
         "student_probe_hash": "d1" * 32,
@@ -235,7 +235,7 @@ def _dual_probe(**overrides):
     fixture: no real probe rollout happened this round.
     """
     probe = {
-        "student_candidate_id": PINNED_STUDENT_CANDIDATE_ID,
+        "student_candidate_id": PERSISTENT_STUDENT_CANDIDATE_ID,
         "student_probe_id": "fixture-student-probe-0001",
         "student_probe_hash": "d1" * 32,
         "reference_probe_id": "fixture-reference-probe-0001",
@@ -981,7 +981,7 @@ class TestLegitimateVerifiedReuseTrains:
         assert evidence["dual_probe"] == _dual_probe()
         assert (
             evidence["dual_probe"]["student_candidate_id"]
-            == PINNED_STUDENT_CANDIDATE_ID
+            == PERSISTENT_STUDENT_CANDIDATE_ID
         )
         assert len(evidence["dynamic_tasks"]) == 12
         for entry in evidence["dynamic_tasks"]:
@@ -1933,7 +1933,7 @@ class TestC15AdapterIssuedPositivePath:
         )
         assert (
             evidence["dual_probe"]["student_candidate_id"]
-            == PINNED_STUDENT_CANDIDATE_ID
+            == PERSISTENT_STUDENT_CANDIDATE_ID
         )
         # 5. re-validated on EVERY reuse: the bindings still hold, so
         # the next session reuses the same verified window

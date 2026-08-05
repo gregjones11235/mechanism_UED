@@ -188,7 +188,9 @@ def _formal_manifest_preview() -> dict:
         "training_budget_semantics": "director decision on the DiCode "
         "timeline (BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION until "
         "decided)",
-        "student_candidate_id": RT.PINNED_STUDENT_CANDIDATE_ID,
+        "allowed_student_candidate_ids": sorted(
+            RT.ALLOWED_STUDENT_CANDIDATE_IDS
+        ),
         "reference_identity": "G1 contract; UNFROZEN => refused",
         "anchor_manifest": "G3 shared manifest; DRAFT => refused",
         "note": "this entrypoint NEVER starts training; a human must "

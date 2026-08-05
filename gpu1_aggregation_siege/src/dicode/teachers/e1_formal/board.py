@@ -42,7 +42,10 @@ from .json_parse import extract_json_block
 from .llm_client import make_replay_key
 from .manifest import BOARD_PROMPT_VERSION, BOARD_ROLE_ORDER, ROLE_OUTPUT_SCHEMA_VERSION
 from .schemas import E1Code, E1SchemaError
-from .student_contract import PINNED_STUDENT_CANDIDATE_ID
+from .student_contract import (
+    ALLOWED_STUDENT_CANDIDATE_IDS,
+    PERSISTENT_STUDENT_CANDIDATE_ID,
+)
 
 WINDOW_STATUS_COMPLETE = "COMPLETE"
 WINDOW_STATUS_VOID = "VOID"
@@ -167,15 +170,28 @@ class UpstreamOutput:
 
 def make_board_context(
     *, window_id: str, session_idx: int, trigger_code: str,
-    evidence_hash: str,
+    evidence_hash: str, student_candidate_id: str = PERSISTENT_STUDENT_CANDIDATE_ID,
 ) -> BoardContext:
-    """Build the board context with the pinned Student identity."""
+    """Build the board context for the window's Student identity.
+
+    CC2-Student: the parameter defaults to the Persistent candidate
+    ONLY as a lower-level backward-compat default for the replay-key
+    builders; the E1 flow binds the DIRECTOR-SELECTED Student via the
+    SelectedStudentMount continuity (never a silent re-selection).
+    """
+    if student_candidate_id not in ALLOWED_STUDENT_CANDIDATE_IDS:
+        raise BoardError(
+            _BCode.UNKNOWN_FIELD,
+            f"board_context: student_candidate_id "
+            f"{student_candidate_id!r} is not in the allowed set "
+            f"{sorted(ALLOWED_STUDENT_CANDIDATE_IDS)}",
+        )
     return BoardContext(
         window_id=window_id,
         session_idx=session_idx,
         trigger_code=trigger_code,
         evidence_hash=evidence_hash,
-        student_candidate_id=PINNED_STUDENT_CANDIDATE_ID,
+        student_candidate_id=student_candidate_id,
     )
 
 

@@ -120,7 +120,7 @@ from .reference_contract import (
     reference_identity_sha256,
 )
 from .schemas import E1Code, E1SchemaError, assert_llm_role_admissible
-from .student_contract import PINNED_STUDENT_CANDIDATE_ID
+from .student_contract import ALLOWED_STUDENT_CANDIDATE_IDS
 from .task_specs import compile_task_specs
 from .training_gate import TRAINING_BLOCKED_NO_VERIFIED_BATCH
 
@@ -227,11 +227,12 @@ def _validate_dual_probe(raw: Any, ctx: str) -> Dict[str, str]:
                 f"{ctx}: dual_probe missing field {name!r}",
             )
     student_candidate_id = raw["student_candidate_id"]
-    if student_candidate_id != PINNED_STUDENT_CANDIDATE_ID:
+    if student_candidate_id not in ALLOWED_STUDENT_CANDIDATE_IDS:
         raise GenManagerError(
             GEN_MANAGER_SNAPSHOT_MISMATCH,
-            f"{ctx}: dual probes must run on the pinned strong Student "
-            f"{PINNED_STUDENT_CANDIDATE_ID!r}, got "
+            f"{ctx}: dual probes must run on a director-selected strong "
+            f"Student in the allowed set "
+            f"{sorted(ALLOWED_STUDENT_CANDIDATE_IDS)}, got "
             f"{student_candidate_id!r}",
         )
     for name in ("student_probe_id", "reference_probe_id"):
@@ -670,11 +671,12 @@ class E1FormalGenManager:
             )
 
         student = _require_block(manifest, "strong_student", f"{ctx}.manifest")
-        if student.get("candidate_id") != PINNED_STUDENT_CANDIDATE_ID:
+        if student.get("candidate_id") not in ALLOWED_STUDENT_CANDIDATE_IDS:
             raise GenManagerError(
                 GEN_MANAGER_MANIFEST_MISMATCH,
-                f"{ctx}.manifest.strong_student: candidate_id must be "
-                f"{PINNED_STUDENT_CANDIDATE_ID!r}, got "
+                f"{ctx}.manifest.strong_student: candidate_id must be in "
+                f"the director-frozen allowed set "
+                f"{sorted(ALLOWED_STUDENT_CANDIDATE_IDS)}, got "
                 f"{student.get('candidate_id')!r}",
             )
 
@@ -1409,11 +1411,12 @@ class E1FormalGenManager:
                 "never certifies REUSE",
             )
         contracted = self._reference_contract
-        if result.student_candidate_id != PINNED_STUDENT_CANDIDATE_ID:
+        if result.student_candidate_id not in ALLOWED_STUDENT_CANDIDATE_IDS:
             raise GenManagerError(
                 GEN_MANAGER_SNAPSHOT_MISMATCH,
-                f"{ctx}: dual probes must run on the pinned strong "
-                f"Student {PINNED_STUDENT_CANDIDATE_ID!r}, got "
+                f"{ctx}: dual probes must run on a director-selected "
+                f"strong Student in the allowed set "
+                f"{sorted(ALLOWED_STUDENT_CANDIDATE_IDS)}, got "
                 f"{result.student_candidate_id!r}",
             )
         if result.reference_candidate_id != contracted.candidate_id:

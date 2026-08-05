@@ -109,6 +109,37 @@ def _resolve_director_bundle(args, blockers: list):
         return None
 
 
+def _dual_student_mount_check() -> dict:
+    """EITHER allowed Student must mount (distinct memory modes, no
+    silent fallback to Persistent). TEST_ONLY / SYNTHETIC contracts;
+    no LLM / probe / training / checkpoint writes."""
+    from dicode.teachers.e1_formal import student_contract as SC
+
+    results = {}
+    for cid in sorted(SC.ALLOWED_STUDENT_CANDIDATE_IDS):
+        contract = SC.build_synthetic_student_contract(
+            cid, "check-only.dual-student"
+        )
+        mount = SC.consume_e1_student_contract(
+            contract,
+            director_selected_candidate_id=cid,
+            runtime_bundle_hash="c0" * 32,
+            ctx="check-only.dual-student",
+        )
+        results[cid] = {
+            "profile_id": mount.profile_id,
+            "memory_mode": mount.memory_mode,
+            "mountable": True,
+            "capability_state": mount.capability_state,
+        }
+    modes = {entry["memory_mode"] for entry in results.values()}
+    return {
+        "mountable": len(results) == 2,
+        "distinct_memory_modes": len(modes) == 2,
+        "per_student": results,
+    }
+
+
 def _check_only_report(bundle, gates: dict) -> dict:
     """``--check-only``: bundle + bindability + constructibility +
     15+1 batch semantics. NO LLM, NO probe, NO training, NEVER
@@ -133,6 +164,10 @@ def _check_only_report(bundle, gates: dict) -> dict:
     objects_bound = {
         contract: state["bound"] for contract, state in shared.items()
     }
+
+    # CC2-Student: EITHER allowed Student must mount (distinct memory
+    # modes, no silent fallback to Persistent)
+    dual_student_mount = _dual_student_mount_check()
 
     driver_constructible = all(
         hasattr(DRV, name)
@@ -196,6 +231,7 @@ def _check_only_report(bundle, gates: dict) -> dict:
         and driver_constructible
         and dataflow_complete
         and fifteen_plus_one_ready
+        and dual_student_mount["mountable"]
     )
     production_blockers = list(gates["blockers"])
     if bundle is not None and bundle.mode == RB.BUNDLE_MODE_TEST_ONLY:
@@ -226,6 +262,7 @@ def _check_only_report(bundle, gates: dict) -> dict:
             "driver_dataflow_constructible": driver_constructible,
             "driver_dataflow_fields_complete": dataflow_complete,
             "fifteen_plus_one_batch_ready": fifteen_plus_one_ready,
+            "dual_student_mount_ready": dual_student_mount,
         },
         "production_blockers": production_blockers,
         "note": (
@@ -416,6 +453,13 @@ def main(argv=None) -> int:
         help="teacher config path relative to gpu1_aggregation_siege/",
     )
     parser.add_argument(
+        "--student-candidate-id",
+        default="",
+        help="the director-selected Student candidate id (must equal "
+        "the Runtime Bundle's issued value; NEVER defaulted to the "
+        "first allowed candidate)",
+    )
+    parser.add_argument(
         "--llm-provider",
         default="",
         help="real LLM provider identity (must be on the "
@@ -450,6 +494,24 @@ def main(argv=None) -> int:
     # ---- the director-signed runtime bundle (REQUIRED) ---------------
     gates["gates_checked"].append("director_runtime_bundle")
     bundle = _resolve_director_bundle(args, gates["blockers"])
+
+    # ---- the director-selected Student (never defaulted) -------------
+    gates["gates_checked"].append("student_selection")
+    if bundle is not None:
+        try:
+            from dicode.teachers.e1_formal import student_contract as SC
+
+            SC.mount_student_from_director_bundle(
+                bundle=bundle,
+                director_selected_candidate_id=(
+                    args.student_candidate_id or None
+                ),
+                ctx="run_e1_real_one_update.student_selection",
+            )
+        except SC.StudentSelectionError as e:
+            gates["blockers"].append(
+                _blocker("student_selection", e.code, str(e))
+            )
 
     if args.check_only:
         report = _check_only_report(bundle, gates)

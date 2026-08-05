@@ -47,7 +47,7 @@ from dicode.teachers.e1_formal.reference_contract import (  # noqa: E402
     consume_reference_identity_contract,
 )
 from dicode.teachers.e1_formal.student_contract import (  # noqa: E402
-    PINNED_STUDENT_CANDIDATE_ID,
+    ALLOWED_STUDENT_CANDIDATE_IDS,
 )
 
 #: the frozen DiCode resolved training config (the ONLY formal timeline)
@@ -307,7 +307,9 @@ def blocked_status_report(
             "real_training_update_executed": False,
         },
         "real_one_update_executed": False,
-        "student_candidate_id": PINNED_STUDENT_CANDIDATE_ID,
+        "allowed_student_candidate_ids": sorted(
+            ALLOWED_STUDENT_CANDIDATE_IDS
+        ),
     }
     if extra:
         report.update(extra)

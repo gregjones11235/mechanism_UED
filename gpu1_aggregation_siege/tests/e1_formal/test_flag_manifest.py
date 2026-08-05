@@ -23,7 +23,7 @@ from dicode.teachers.e1_formal.flags import (
     parse_flags,
 )
 from dicode.teachers.e1_formal.student_contract import (
-    PINNED_STUDENT_CANDIDATE_ID,
+    PERSISTENT_STUDENT_CANDIDATE_ID,
 )
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -100,11 +100,11 @@ class TestCommittedConfigConsistency:
         manifest = _frozen_manifest()
         assert (
             config["teacher"]["strong_student"]["candidate_id"]
-            == PINNED_STUDENT_CANDIDATE_ID
+            == PERSISTENT_STUDENT_CANDIDATE_ID
         )
         assert (
             manifest["strong_student"]["candidate_id"]
-            == PINNED_STUDENT_CANDIDATE_ID
+            == PERSISTENT_STUDENT_CANDIDATE_ID
         )
 
     def test_selection_pins_match_the_dynamic_slot_count(self):
