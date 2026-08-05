@@ -96,35 +96,57 @@ class TestLedgerBuild:
             == COMPUTE_MATCH_EXECUTION_INCOMPLETE
 
 
+def _budget_config(windows, longrun_cfg):
+    """A per-window audit budget for ``windows`` executed windows, built
+    from the E2 launcher's shared per-window fields (the formal timeline
+    is the DiCode clock — the audit compares the executed compute)."""
+    return dict(
+        windows=windows,
+        board_llm_calls_per_window=C.BOARD_CALLS_PER_WINDOW,
+        envcoder_calls_per_window=1,
+        llm_calls_per_window=longrun_cfg["llm_calls_per_window"],
+        probe_transitions_total=(
+            int(longrun_cfg["probe_transitions_per_window"]) * windows),
+        anchor_slots=C.GLOBAL_ANCHOR_SLOTS)
+
+
 class TestVerifyAgainstConfig:
-    def test_completed_run_verifies_against_frozen_budget(self):
-        ctl = _run(C.MODE_NORMAL_FEEDBACK, C.MAX_WINDOWS)
-        ledger = build_real_compute_ledger(ctl, expected_windows=C.MAX_WINDOWS)
-        config = LONGRUN.longrun_config("normal_feedback")
+    def test_completed_run_verifies_against_audit_budget(self):
+        windows = 2
+        ctl = _run(C.MODE_NORMAL_FEEDBACK, windows)
+        ledger = build_real_compute_ledger(ctl, expected_windows=windows)
+        config = _budget_config(windows, LONGRUN.dicode_launch_config(
+            "normal_feedback", LONGRUN.load_dicode_resolved_config()))
         assert ledger.computation_match_status == COMPUTE_MATCH_PASS
         assert ledger.verify_against_config(config) == []
 
     def test_cut_short_run_reports_execution_incomplete(self):
+        #: a run halted after TWO of the expected THREE windows can never
+        #: attest compute match
         ctl = _run(C.MODE_NORMAL_FEEDBACK, 2)
-        ledger = build_real_compute_ledger(ctl, expected_windows=C.MAX_WINDOWS)
-        config = LONGRUN.longrun_config("normal_feedback")
+        ledger = build_real_compute_ledger(ctl, expected_windows=3)
+        config = _budget_config(3, LONGRUN.dicode_launch_config(
+            "normal_feedback", LONGRUN.load_dicode_resolved_config()))
         problems = ledger.verify_against_config(config)
         assert any("COMPUTE_MATCH_EXECUTION_INCOMPLETE" in p
                    for p in problems)
 
     def test_config_drift_reports_compute_match_broken(self):
-        ctl = _run(C.MODE_NORMAL_FEEDBACK, C.MAX_WINDOWS)
-        ledger = build_real_compute_ledger(ctl, expected_windows=C.MAX_WINDOWS)
-        config = LONGRUN.longrun_config("normal_feedback")
+        windows = 2
+        ctl = _run(C.MODE_NORMAL_FEEDBACK, windows)
+        ledger = build_real_compute_ledger(ctl, expected_windows=windows)
+        config = _budget_config(windows, LONGRUN.dicode_launch_config(
+            "normal_feedback", LONGRUN.load_dicode_resolved_config()))
         config["probe_transitions_total"] = \
             int(config["probe_transitions_total"]) + 1
         problems = ledger.verify_against_config(config)
         assert any("COMPUTE_MATCH_BROKEN" in p for p in problems)
 
     def test_cross_mode_ledgers_agree(self):
+        windows = 2
         ledgers = {
             mode: build_real_compute_ledger(
-                _run(mode, C.MAX_WINDOWS), expected_windows=C.MAX_WINDOWS)
+                _run(mode, windows), expected_windows=windows)
             for mode in (C.MODE_NORMAL_FEEDBACK, C.MODE_STATIC_LLM,
                          C.MODE_SHUFFLED_FEEDBACK)}
         for mode, ledger in ledgers.items():
@@ -141,27 +163,24 @@ class TestBudgetSemantics:
         assert TRAINING_BUDGET_SEMANTICS == {
             C.TRAINING_BUDGET_TOTAL_FROM_COMMON_INITIALIZATION,
             C.TRAINING_BUDGET_ADDITIONAL_FROM_PRETRAINED_CHECKPOINT}
-        #: the launcher's selected semantics is the blocked default
-        assert LONGRUN.TRAINING_BUDGET_SEMANTICS_SELECTED \
-            == C.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION
 
-    def test_check_only_reports_blocked_semantics(self, capsys):
+    def test_check_only_reports_dicode_clock(self, capsys):
         code = LONGRUN.main(["--mode", "normal_feedback", "--check-only"])
         assert code == 0
         out = capsys.readouterr().out
-        assert C.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION in out
-        assert "TOTAL_FROM_COMMON_INITIALIZATION" in out
+        #: the formal timeline is the frozen DiCode clock
+        assert '"clock_field": "global_env_steps"' in out
+        assert '"total_timesteps"' in out
+        assert LONGRUN.load_dicode_resolved_config()["training"][
+            "total_timesteps"] > 0
 
-    def test_launch_refused_while_budget_semantics_blocked(self, monkeypatch,
-                                                           capsys):
-        #: with the pilot flag granted, the P0-14 gate still refuses the
-        #: launch: the 98304-step budget's meaning is undecided
-        monkeypatch.setattr(C, "E2_PILOT_AUTHORIZED", True)
+    def test_launch_refused_until_human_approval(self, capsys):
+        #: the formal launch gate is FORMAL_EXPERIMENT_AUTHORIZED=false —
+        #: the formal experiment start waits for a human-approved Manifest
         code = LONGRUN.main(["--mode", "normal_feedback"])
         assert code == 1
         err = capsys.readouterr().err
-        assert "training_budget_semantics" in err
-        assert "BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION" in err
+        assert "FORMAL_EXPERIMENT_AUTHORIZED=false" in err
 
 
 class TestPosture:

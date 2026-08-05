@@ -1,224 +1,259 @@
 #!/usr/bin/env python
-"""P0-5 entrypoint: direction two's compute-matched LONG-RUN launchers.
+"""P0-16 entrypoint: the DiCode-clock E2 launcher (director smoke handoff).
 
-Three configurations, ONE frozen architecture (no mode forks):
+The historical 98304 / 8-window / 12288-steps-per-update long-run protocol
+is GONE. The FORMAL training timeline is the frozen DiCode resolved
+config's ``training.total_timesteps``, clocked by ``global_env_steps`` —
+E2 mode changes ONLY the Feedback View, never the training clock.
 
-* ``normal_feedback``      -> ``MODE_NORMAL_FEEDBACK`` (honest
-                              candidate<->feedback binding);
-* ``no_feedback_control``  -> ``MODE_STATIC_LLM``: the board reads the
-                              P0-12 shape-matched MaskedFeedbackView — the
-                              same feedback item count / prompt field set,
-                              every value a controlled NULL/MASK value (no
-                              feedback content);
-* ``shuffled_feedback``    -> ``MODE_SHUFFLED_FEEDBACK``: the honest store
-                              stays untouched; the board reads a frozen,
-                              recomputable permutation under anonymized ids
-                              with identity side channels masked.
+* the three E2 configurations (normal / no-feedback / shuffled) SHARE the
+  SAME frozen DiCode config — only ``feedback_view_label`` differs;
+* probe + LLM overhead is tracked separately in the AuxiliaryComputeLedger
+  (a director Runtime Bundle asset) — it is never mixed into the training
+  timestep budget;
+* the FORMAL entry ONLY PREPARES the Formal Manifest
+  (``--formal-manifest-only``) and NEVER launches: the formal experiment
+  start requires a HUMAN-approved Formal Manifest, and
+  ``FORMAL_EXPERIMENT_AUTHORIZED`` is False this round.
 
-Compute-match contract (fail closed as ``COMPUTE_MATCH_BROKEN``):
-
-* every mode runs the SAME six-role board (6 logical LLM calls per window),
-  the SAME EnvCoder budget (1 unique-template call per window + repair cap
-  ``ENVCODER_MAX_REPAIR_ATTEMPTS``), the SAME funnel (64 -> 24 -> 12
-  dynamic + 4 anchors), the SAME per-stage Student/Reference episode
-  counts, the SAME seed schedule, the SAME anchor-slot count and the SAME
-  checkpoint cadence;
-* probe transitions per window are therefore IDENTICAL across modes
-  (64*(2+1)*128 + 24*(8+4)*128 = 61440) and are accounted as UED overhead;
-* ``total_env_steps`` counts STUDENT TRAINING environment steps and must
-  equal ``TOTAL_ENV_STEPS_LONG_RUN`` (98304) in every mode — the same
-  budget the strong-Student baseline consumed to produce
-  PERSISTENT_RMT16_ORIGINAL_VTRACE_98304; the budget is spread as exactly
-  one optimizer update per window (98304 / 8 = 12288 steps each).
-
-THIS ROUND THE LONG RUN IS NOT STARTED: ``E2_PILOT_AUTHORIZED`` is False
-and the launcher refuses before touching anything. Even with the pilot
-flag set, the fail-closed asset gate of the two-window entrypoint applies
-unchanged (no real transport, no shared runtime assets locally).
+The E2 smoke itself (two windows, window0 delta=0 / window1 delta=1,
+total=1) is the DIRECTOR's job — this launcher validates the DiCode clock
+consumption and prepares the handoff.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+from pathlib import Path
 from typing import Dict, List
 
+import yaml
+
 from d052.feedback_llm_ued import constants as C
-from d052.feedback_llm_ued.real_compute_ledger import (
-    TRAINING_BUDGET_SEMANTICS,
+from d052.feedback_llm_ued.auxiliary_compute_ledger import (
+    AuxiliaryComputeLedger,
 )
-from d052.feedback_llm_ued.shared_runtime_binding import SharedRuntimeBundle
 
-#: P0-14: the long-run training-budget SEMANTICS is a DIRECTOR decision
-#: (TOTAL_FROM_COMMON_INITIALIZATION | ADDITIONAL_FROM_PRETRAINED_-
-#: CHECKPOINT). Direction two consumes the shared runtime and cannot
-#: decide it itself; until the director decides, the budget is blocked
-#: and no long run may launch.
-TRAINING_BUDGET_SEMANTICS_SELECTED = C.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION
+#: the frozen DiCode resolved config (repo-relative; the formal timeline)
+DICODE_TRAINING_YAML = "gpu1_aggregation_siege/conf/training/default.yaml"
+DICODE_MANAGER_YAML = \
+    "gpu1_aggregation_siege/conf/dicode_manager/default.yaml"
+DICODE_CLOCK_FIELD = "global_env_steps"
 
-#: CLI mode name -> frozen loop mode (NO new modes are forked)
+#: repo root = worktree containing gpu1_aggregation_siege/
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: CLI mode name -> frozen loop mode (NO new modes are forked); the E2
+#: mode changes ONLY the Feedback View
 MODE_TO_LOOP_MODE = {
     "normal_feedback": C.MODE_NORMAL_FEEDBACK,
-    #: the no-feedback control is the static mode: the shape-matched
-    #: MaskedFeedbackView masks every feedback value (controlled NULL/MASK
-    #: values, same item count / field set as the normal mode)
     "no_feedback_control": C.MODE_STATIC_LLM,
     "shuffled_feedback": C.MODE_SHUFFLED_FEEDBACK,
 }
 
-#: probe transitions per window, derived from the frozen funnel constants:
-#: 64 raw * (2 student + 1 reference) fast episodes
-#: + 24 stage-1 survivors * (8 student + 4 reference) full episodes,
-#: each episode ROLLOUT_LENGTH transitions — identical in every mode
-PROBE_TRANSITIONS_PER_WINDOW = (
-    (C.RAW_CANDIDATES
-     * (C.STAGE1_STUDENT_EPISODES + C.STAGE1_REFERENCE_EPISODES)
-     + C.STAGE1_KEEP
-     * (C.STAGE2_STUDENT_EPISODES_MAX + C.STAGE2_REFERENCE_EPISODES_MAX))
-    * C.ROLLOUT_LENGTH)
+#: feedback-view label per E2 mode (the ONLY thing that differs)
+MODE_TO_FEEDBACK_VIEW = {
+    "normal_feedback": "normal",
+    "no_feedback_control": "masked",
+    "shuffled_feedback": "permuted",
+}
 
 
-def longrun_config(cli_mode: str) -> Dict[str, object]:
-    """The compute-match budget of one longrun configuration. Every field
-    except ``cli_mode`` / ``loop_mode`` MUST be identical across modes."""
-    loop_mode = MODE_TO_LOOP_MODE[cli_mode]
-    windows = C.MAX_WINDOWS
-    training_env_steps_per_update = C.TOTAL_ENV_STEPS_LONG_RUN // windows
+class DiCodeConfigBlocked(RuntimeError):
+    """Fail-closed refusal of the DiCode resolved-config consumption."""
+
+
+def load_dicode_resolved_config() -> Dict[str, object]:
+    """Consume the FROZEN DiCode resolved config (read-only).
+
+    The formal training timeline is ``training.total_timesteps`` clocked
+    by ``global_env_steps``; the manager section declares the DiCode 15+1
+    batch semantics (original_task_proportion / active_task_capacity /
+    training_sample_size_n). A fingerprint over the two files' bytes is
+    carried so any drift in the frozen config fails loudly.
+    """
+    training_path = REPO_ROOT / DICODE_TRAINING_YAML
+    manager_path = REPO_ROOT / DICODE_MANAGER_YAML
+    try:
+        training = yaml.safe_load(training_path.read_text(encoding="utf-8"))
+        manager = yaml.safe_load(manager_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise DiCodeConfigBlocked(
+            f"DICODE_RESOLVED_CONFIG_UNREADABLE: {exc}") from exc
+    total_timesteps = int(training.get("total_timesteps", 0))
+    if total_timesteps <= 0:
+        raise DiCodeConfigBlocked(
+            "DICODE_TOTAL_TIMESTEPS_MISSING: the frozen DiCode training "
+            f"config must declare a positive training.total_timesteps "
+            f"(got {total_timesteps!r}) — the formal timeline is the DiCode "
+            "clock, not a direction-two window budget")
+    manager_keys = ("original_task_proportion", "active_task_capacity",
+                    "training_sample_size_n")
+    manager_cfg = {k: manager.get(k) for k in manager_keys}
+    fingerprint = hashlib.sha256(
+        training_path.read_bytes() + b"::" + manager_path.read_bytes()
+    ).hexdigest()
+    return dict(
+        training=dict(total_timesteps=total_timesteps,
+                      clock_field=DICODE_CLOCK_FIELD),
+        manager=manager_cfg,
+        resolved_config_hash=fingerprint,
+        training_yaml=DICODE_TRAINING_YAML,
+        manager_yaml=DICODE_MANAGER_YAML)
+
+
+def dicode_launch_config(cli_mode: str,
+                        dicode_config: Dict[str, object]) -> Dict[str, object]:
+    """One E2 launch configuration. The DiCode config is SHARED (identical
+    across the three modes); only ``feedback_view_label`` differs."""
     return dict(
         cli_mode=cli_mode,
-        loop_mode=loop_mode,
-        windows=windows,
-        board_llm_calls_per_window=C.BOARD_CALLS_PER_WINDOW,
-        envcoder_calls_per_window=1,
-        envcoder_template_id=C.ENVCODER_UNIQUE_TEMPLATE_ID,
-        envcoder_repair_cap=C.ENVCODER_MAX_REPAIR_ATTEMPTS,
-        llm_calls_per_window=C.LLM_CALLS_PER_WINDOW,
-        raw_candidates=C.RAW_CANDIDATES,
-        stage1_keep=C.STAGE1_KEEP,
-        stage2_keep=C.STAGE2_KEEP,
-        dynamic_selected=C.DYNAMIC_UED_SLOTS,
-        anchor_slots=C.GLOBAL_ANCHOR_SLOTS,
-        stage1_student_episodes=C.STAGE1_STUDENT_EPISODES,
-        stage1_reference_episodes=C.STAGE1_REFERENCE_EPISODES,
-        stage2_student_episodes=C.STAGE2_STUDENT_EPISODES_MAX,
-        stage2_reference_episodes=C.STAGE2_REFERENCE_EPISODES_MAX,
-        rollout_length=C.ROLLOUT_LENGTH,
-        probe_transitions_per_window=PROBE_TRANSITIONS_PER_WINDOW,
-        probe_transitions_total=PROBE_TRANSITIONS_PER_WINDOW * windows,
-        optimizer_updates_per_window=1,
-        training_env_steps_per_update=training_env_steps_per_update,
-        training_env_steps_total=(training_env_steps_per_update * windows),
-        total_env_steps=training_env_steps_per_update * windows,
-        seed_schedule_hash=C.SEED_SCHEDULE_HASH,
-        checkpoint_cadence_windows=1)
+        loop_mode=MODE_TO_LOOP_MODE[cli_mode],
+        feedback_view_label=MODE_TO_FEEDBACK_VIEW[cli_mode],
+        dicode_config=dict(dicode_config),
+        #: auxiliary (non-training-clock) compute per window — recorded in
+        #: the AuxiliaryComputeLedger, never in the training budget
+        llm_calls_per_window=C.BOARD_CALLS_PER_WINDOW + 1,
+        probe_transitions_per_window=(
+            (C.RAW_CANDIDATES
+             * (C.STAGE1_STUDENT_EPISODES + C.STAGE1_REFERENCE_EPISODES)
+             + C.STAGE1_KEEP
+             * (C.STAGE2_STUDENT_EPISODES_MAX
+                + C.STAGE2_REFERENCE_EPISODES_MAX)) * C.ROLLOUT_LENGTH))
 
 
-def assert_compute_match(configs: List[Dict[str, object]]) -> List[str]:
-    """Fail closed on ANY compute mismatch. Returns the problem list; an
-    empty list is the only passing state."""
+def assert_modes_share_dicode_clock(
+        configs: List[Dict[str, object]]) -> List[str]:
+    """P0-16: the three E2 modes SHARE the same frozen DiCode config and
+    the same training clock; only the Feedback View differs. Fail closed
+    on ANY drift. Returns the problem list (empty = passing)."""
     problems: List[str] = []
-    #: 1. every configuration must reconcile to the frozen total budget
-    for cfg in configs:
-        if cfg["total_env_steps"] != C.TOTAL_ENV_STEPS_LONG_RUN:
-            problems.append(
-                f"COMPUTE_MATCH_BROKEN: {cfg['cli_mode']} total_env_steps="
-                f"{cfg['total_env_steps']} != TOTAL_ENV_STEPS_LONG_RUN="
-                f"{C.TOTAL_ENV_STEPS_LONG_RUN}")
-        if cfg["training_env_steps_total"] != cfg["total_env_steps"]:
-            problems.append(
-                f"COMPUTE_MATCH_BROKEN: {cfg['cli_mode']} training budget "
-                f"sum {cfg['training_env_steps_total']} != declared total "
-                f"{cfg['total_env_steps']}")
-    #: 2. every compute field except the mode labels must be IDENTICAL
-    #:    across configurations (compute-matched, fail closed)
-    comparable_keys = sorted(
-        k for k in configs[0] if k not in ("cli_mode", "loop_mode"))
-    for key in comparable_keys:
-        values = {cfg[key] for cfg in configs}
+    shared_keys = ("dicode_config", "llm_calls_per_window",
+                   "probe_transitions_per_window")
+    for key in shared_keys:
+        values = {hashlib.sha256(
+            json.dumps(cfg[key], sort_keys=True).encode()).hexdigest()[:16]
+            for cfg in configs}
         if len(values) != 1:
             problems.append(
-                f"COMPUTE_MATCH_BROKEN: field {key!r} differs across "
-                f"modes: {sorted(map(str, values))}")
+                f"E2_MODES_DICODE_CLOCK_DIVERGED: field {key!r} differs "
+                f"across modes: {sorted(values)}")
+    views = {cfg["feedback_view_label"] for cfg in configs}
+    if views != {"normal", "masked", "permuted"}:
+        problems.append(
+            f"E2_FEEDBACK_VIEW_SET_INVALID: expected {{normal, masked, "
+            f"permuted}}, got {sorted(views)}")
     return problems
+
+
+def prepare_formal_manifest(cli_mode: str,
+                            dicode_config: Dict[str, object]
+                            ) -> Dict[str, object]:
+    """The FORMAL entry prepares ONLY the Formal Manifest (a preview);
+    it NEVER launches. The formal experiment start requires a human-
+    approved Formal Manifest; FORMAL_EXPERIMENT_AUTHORIZED is False."""
+    return dict(
+        kind="DICODE_FORMAL_MANIFEST_PREVIEW",
+        prepared_at_entrypoint="scripts/run_e2_longrun.py",
+        requested_mode=cli_mode,
+        dicode_config=dicode_config,
+        formal_experiment_authorized=C.FORMAL_EXPERIMENT_AUTHORIZED,
+        status="PREPARED_ONLY_NOT_AUTHORIZED",
+        note="the formal experiment start comes ONLY from a HUMAN-approved "
+             "Formal Manifest; direction two never auto-starts a formal run")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Direction two: compute-matched longrun launcher "
-                    "(NOT started this round: E2_PILOT_AUTHORIZED=false)")
+        description="Direction two: DiCode-clock E2 launcher (formal "
+                    "launch waits for a human-approved Formal Manifest; "
+                    "FORMAL_EXPERIMENT_AUTHORIZED=false this round)")
     parser.add_argument("--mode", required=True,
                         choices=sorted(MODE_TO_LOOP_MODE),
-                        help="which longrun configuration to validate/"
-                             "launch")
+                        help="which E2 configuration to validate / prepare")
     parser.add_argument("--check-only", action="store_true",
-                        help="validate the compute-match contract and "
-                             "report; never attempt a launch")
+                        help="validate the DiCode clock consumption and "
+                             "the shared-clock contract; never launch")
+    parser.add_argument("--formal-manifest-only", action="store_true",
+                        help="prepare ONLY the Formal Manifest preview "
+                             "(never launch)")
+    parser.add_argument("--manifest-out", default="",
+                        help="where to write the Formal Manifest preview")
+    parser.add_argument("--report-out", default="",
+                        help="optional path to ALSO write the JSON report")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    all_configs = [longrun_config(name) for name in sorted(MODE_TO_LOOP_MODE)]
-    problems = assert_compute_match(all_configs)
-    selected = longrun_config(args.mode)
+    try:
+        dicode_config = load_dicode_resolved_config()
+    except DiCodeConfigBlocked as exc:
+        print(f"\nDICODE CLOCK CONSUMPTION FAILED: {exc}", file=sys.stderr)
+        return 1
+    all_configs = [dicode_launch_config(name, dicode_config)
+                   for name in sorted(MODE_TO_LOOP_MODE)]
+    problems = assert_modes_share_dicode_clock(all_configs)
+    selected = dicode_launch_config(args.mode, dicode_config)
+
     report = dict(
         entrypoint="scripts/run_e2_longrun.py",
         requested_mode=args.mode,
         loop_mode=selected["loop_mode"],
-        compute_match_problems=problems,
-        config=selected,
-        all_modes_compute_fields_identical=not problems,
-        total_env_steps_required=C.TOTAL_ENV_STEPS_LONG_RUN,
-        #: P0-13/P0-14 audit surface: the executed compute must be
-        #: reconciled by the RealComputeLedger after every completed run,
-        #: and the training-budget SEMANTICS is a director decision —
-        #: blocked until decided
-        training_budget_semantics=TRAINING_BUDGET_SEMANTICS_SELECTED,
-        training_budget_semantics_legal_values=sorted(
-            TRAINING_BUDGET_SEMANTICS),
-        e2_pilot_authorized=C.E2_PILOT_AUTHORIZED)
+        feedback_view_label=selected["feedback_view_label"],
+        #: P0-16: the formal timeline is the frozen DiCode clock
+        dicode_config=selected["dicode_config"],
+        timeline=dict(clock_field=DICODE_CLOCK_FIELD,
+                      total_timesteps=(
+                          selected["dicode_config"]["training"]
+                          ["total_timesteps"])),
+        modes_share_dicode_clock=not problems,
+        modes_share_dicode_clock_problems=problems,
+        #: the 98304 / 8-window / 12288 protocol is REMOVED
+        legacy_98304_budget_removed=True,
+        formal_experiment_authorized=C.FORMAL_EXPERIMENT_AUTHORIZED,
+        e2_real_smoke_authorized=C.E2_REAL_SMOKE_AUTHORIZED)
+    if args.manifest_out or args.formal_manifest_only:
+        manifest = prepare_formal_manifest(args.mode, dicode_config)
+        report["formal_manifest"] = manifest
+        if args.manifest_out:
+            Path(args.manifest_out).write_text(
+                json.dumps(manifest, indent=2, sort_keys=True,
+                           ensure_ascii=False, default=str),
+                encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False,
                      default=str))
+    if args.report_out:
+        Path(args.report_out).write_text(
+            json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False,
+                       default=str), encoding="utf-8")
     if problems:
-        print("\nLONGRUN REFUSED: compute-match contract is broken; no "
-              "mode may launch until every configuration reconciles to "
-              f"total_env_steps={C.TOTAL_ENV_STEPS_LONG_RUN} with identical"
-              " compute fields", file=sys.stderr)
+        print("\nE2 LAUNCH REFUSED: the three modes do not share the DiCode "
+              "clock (only the Feedback View may differ); no mode may "
+              "launch until the contract holds", file=sys.stderr)
         return 1
     if args.check_only:
-        print("\ncompute-match contract holds; --check-only stops here")
+        print("\nDiCode clock consumption validated; --check-only stops "
+              "here (no launch)")
         return 0
-    if not C.E2_PILOT_AUTHORIZED:
-        print("\nLONGRUN REFUSED: E2_PILOT_AUTHORIZED=false this round — "
-              "the long run is NOT started; starting it requires the "
-              "explicit pilot authorization plus the shared runtime assets "
-              "(see scripts/run_e2_real_two_window.py blocker gate)",
+    if args.formal_manifest_only:
+        print("\nFORMAL MANIFEST PREPARED (preview only); launch waits for "
+              f"a HUMAN-approved Formal Manifest — "
+              f"FORMAL_EXPERIMENT_AUTHORIZED="
+              f"{C.FORMAL_EXPERIMENT_AUTHORIZED}", file=sys.stderr)
+        return 0
+    if not C.FORMAL_EXPERIMENT_AUTHORIZED:
+        print("\nE2 LAUNCH REFUSED: FORMAL_EXPERIMENT_AUTHORIZED=false — the "
+              "formal experiment start requires a human-approved Formal "
+              "Manifest; direction two never auto-starts a formal run",
               file=sys.stderr)
         return 1
-    if TRAINING_BUDGET_SEMANTICS_SELECTED \
-            not in TRAINING_BUDGET_SEMANTICS:
-        #: P0-14: the 98304-step budget's meaning is a director decision;
-        #: a launch under an undecided budget semantics is refused
-        print("\nLONGRUN REFUSED: training_budget_semantics="
-              f"{TRAINING_BUDGET_SEMANTICS_SELECTED!r} is not a decided "
-              f"semantics (legal: {sorted(TRAINING_BUDGET_SEMANTICS)}) — "
-              "the director must decide whether the 98304 environment "
-              "steps are a TOTAL budget from common initialization or "
-              "ADDITIONAL from a pretrained checkpoint before any long "
-              "run may launch",
-              file=sys.stderr)
-        return 1
-    #: beyond this point the launch would reuse the SAME fail-closed asset
-    #: gate as the two-window entrypoint (real transport + the five shared
-    #: assets); this round never reaches it
-    missing = SharedRuntimeBundle().missing_assets()
-    if missing:
-        print(f"\nLONGRUN REFUSED: {C.BLOCKED_WAITING_SHARED_RUNTIME}: "
-              f"missing shared assets: {missing}", file=sys.stderr)
-        return 1
-    print("\nLONGRUN_LAUNCH_NOT_IMPLEMENTED_THIS_ROUND: pilot authorized "
-          "and assets present is a state this worktree cannot reach; the "
-          "launcher refuses instead of improvising", file=sys.stderr)
+    print("\nE2_LAUNCH_NOT_IMPLEMENTED_THIS_ROUND: even with formal "
+          "authorization the launch would require the director's shared "
+          "DiCode runtime + assets (see run_e2_real_two_window.py gate); "
+          "this round refuses instead of improvising", file=sys.stderr)
     return 1
 
 
