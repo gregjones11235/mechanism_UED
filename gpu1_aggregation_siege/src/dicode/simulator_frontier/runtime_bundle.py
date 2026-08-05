@@ -81,6 +81,14 @@ REQUIRED_TOP_KEYS = frozenset({
     "two_llm_runtime", "search", "paths",
 })
 
+STUDENT_SECTION_KEYS = frozenset({
+    "selected_candidate_id", "profile_name", "profile_hash",
+    "checkpoint_path", "checkpoint_file_sha256", "params_sha256",
+    "source_commit", "adapter_entrypoint", "adapter_implementation_hash",
+    "adapter_identity_hash", "memory_mode", "memory_spec_hash", "carry_mode",
+    "driver_source_path", "driver_source_sha256",
+})
+
 REFERENCE_SECTION_KEYS = frozenset({
     "profile", "checkpoint_path", "checkpoint_sha256", "abi_identity_hash",
     "adapter_entrypoint", "adapter_hash", "memory_mode",
@@ -178,12 +186,55 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
         _fail(f"controller_signature_ref {signature!r} is synthetic — a self-signed "
               "runtime bundle is never production evidence (fail closed)")
 
-    student = _require_section("student", manifest["student"], frozenset({
-        "profile", "checkpoint_path", "checkpoint_sha256", "abi_identity_hash"}))
-    _require_nonempty_str("student.profile", student["profile"])
+    # Director handoff (E3-DS section 2): the student section explicitly
+    # SELECTS one frozen dual-student candidate and binds the full identity
+    # chain (profile, checkpoint, params, adapter, memory carry, driver).
+    student = _require_section("student", manifest["student"],
+                               STUDENT_SECTION_KEYS)
+    _require_nonempty_str("student.selected_candidate_id",
+                          student["selected_candidate_id"])
+    _require_nonempty_str("student.profile_name", student["profile_name"])
+    _require_sha256("student.profile_hash", student["profile_hash"])
     _require_nonempty_str("student.checkpoint_path", student["checkpoint_path"])
-    _require_sha256("student.checkpoint_sha256", student["checkpoint_sha256"])
-    _require_sha256("student.abi_identity_hash", student["abi_identity_hash"])
+    _require_sha256("student.checkpoint_file_sha256",
+                    student["checkpoint_file_sha256"])
+    _require_sha256("student.params_sha256", student["params_sha256"])
+    _require_nonempty_str("student.source_commit", student["source_commit"])
+    _require_entrypoint("student.adapter_entrypoint",
+                        student["adapter_entrypoint"])
+    _require_sha256("student.adapter_implementation_hash",
+                    student["adapter_implementation_hash"])
+    _require_sha256("student.adapter_identity_hash",
+                    student["adapter_identity_hash"])
+    if student["memory_mode"] not in ("PERSISTENT", "RESET128"):
+        _fail(f"student.memory_mode must be PERSISTENT or RESET128, got "
+              f"{student['memory_mode']!r}")
+    if student["carry_mode"] != student["memory_mode"]:
+        _fail("student.carry_mode must equal student.memory_mode (carry "
+              "semantics are frozen per candidate)")
+    _require_sha256("student.memory_spec_hash", student["memory_spec_hash"])
+    _require_nonempty_str("student.driver_source_path",
+                          student["driver_source_path"])
+    _require_sha256("student.driver_source_sha256",
+                    student["driver_source_sha256"])
+    from .dual_student import (
+        candidate_from_profile_name,
+        carry_mode_for_candidate,
+        memory_mode_for_candidate,
+        validate_primary_student_candidate,
+    )
+    selected = validate_primary_student_candidate(
+        student["selected_candidate_id"])
+    if candidate_from_profile_name(student["profile_name"]) != selected:
+        _fail("student.selected_candidate_id must equal the frozen candidate "
+              "for student.profile_name (profile/candidate mismatch, fail "
+              "closed)")
+    if memory_mode_for_candidate(selected) != student["memory_mode"]:
+        _fail(f"student.memory_mode {student['memory_mode']!r} does not match "
+              f"the frozen memory mode for {selected}")
+    if carry_mode_for_candidate(selected) != student["carry_mode"]:
+        _fail(f"student.carry_mode {student['carry_mode']!r} does not match "
+              f"the frozen carry mode for {selected}")
 
     # Director handoff (P0-b2): the bundle names a COMPLETE Reference runtime.
     # If the reference ABI identity equals the Student's, the run is refused
@@ -213,9 +264,9 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
                           reference["history_artifact_ref"])
     _require_sha256("reference.reset_protocol_hash",
                     reference["reset_protocol_hash"])
-    if str(reference["abi_identity_hash"]) == str(student["abi_identity_hash"]):
+    if str(reference["abi_identity_hash"]) == str(student["adapter_identity_hash"]):
         _fail("reference.abi_identity_hash must differ from "
-              "student.abi_identity_hash — a Reference is never the Student "
+              "student.adapter_identity_hash — a Reference is never the Student "
               "under another name (fail closed)")
 
     runtime = _require_section("training_runtime", manifest["training_runtime"],
@@ -351,7 +402,7 @@ def resolve_bundle_asset_files(manifest: Mapping[str, Any]) -> dict[str, str]:
     resolved: dict[str, str] = {}
     student = manifest["student"]
     for name, path_key, sha_key in (
-            ("student.checkpoint", "checkpoint_path", "checkpoint_sha256"),):
+            ("student.checkpoint", "checkpoint_path", "checkpoint_file_sha256"),):
         path = str(student[path_key])
         if not os.path.isfile(path):
             _fail(f"{name} file does not exist: {path}")

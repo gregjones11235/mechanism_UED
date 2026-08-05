@@ -38,10 +38,23 @@ def _manifest() -> dict:
         "bundle_id": "bundle-001",
         "run_id": "run-001",
         "controller_signature_ref": "controller-signature/abc",
-        "student": {"profile": "rmt16_persistent_98304",
-                    "checkpoint_path": "/tmp/ckpt",
-                    "checkpoint_sha256": SHA,
-                    "abi_identity_hash": IDENT},
+        "student": {
+            "selected_candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+            "profile_name": "rmt16_persistent_98304",
+            "profile_hash": SHA,
+            "checkpoint_path": "/tmp/ckpt",
+            "checkpoint_file_sha256": SHA,
+            "params_sha256": SHA,
+            "source_commit": "src-sha256:453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+            "adapter_entrypoint": "dicode.student_adapters.rmt16_adapter:RMT16StudentAdapter",
+            "adapter_implementation_hash": SHA,
+            "adapter_identity_hash": IDENT,
+            "memory_mode": "PERSISTENT",
+            "memory_spec_hash": SHA,
+            "carry_mode": "PERSISTENT",
+            "driver_source_path": "/tmp/driver.py",
+            "driver_source_sha256": SHA,
+        },
         "reference": {"profile": "rmt16_reset128_98304",
                       "checkpoint_path": "/tmp/ref_ckpt",
                       "checkpoint_sha256": SHA,
@@ -180,7 +193,7 @@ class TestAssetFileResolution:
         sha = hashlib.sha256(b"SYNTHETIC_CONTENT").hexdigest()
         manifest = _manifest()
         manifest["student"]["checkpoint_path"] = str(path)
-        manifest["student"]["checkpoint_sha256"] = sha
+        manifest["student"]["checkpoint_file_sha256"] = sha
         # Every referenced file must exist (the memory artifact has a sha
         # check; the payloads are existence-checked).
         mem = tmp_path / "mem.npz"

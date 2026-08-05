@@ -43,13 +43,18 @@ def _log(msg: str) -> None:
 
 def parse_args(argv):
     bundle_path = None
+    student_candidate_id = None
     check_only = False
     out_dir = str(DEFAULT_OUT_DIR)
     for arg in argv:
         if arg.startswith("--runtime-bundle="):
             bundle_path = arg.split("=", 1)[1]
+        elif arg.startswith("--student-candidate-id="):
+            student_candidate_id = arg.split("=", 1)[1]
         elif arg == "--check-only":
             check_only = True
+        elif arg.startswith("--report-out="):
+            out_dir = arg.split("=", 1)[1]
         elif arg.startswith("--out="):
             out_dir = arg.split("=", 1)[1]
         else:
@@ -58,7 +63,7 @@ def parse_args(argv):
                 "injection channel — no ad-hoc overrides, no env-var guessing")
     if not bundle_path:
         raise ValueError("--runtime-bundle=<signed manifest path> is required")
-    return bundle_path, check_only, out_dir
+    return bundle_path, student_candidate_id, check_only, out_dir
 
 
 def _finish(report: dict, out_dir: str) -> None:
@@ -96,7 +101,7 @@ def main(argv=None) -> int:
         ],
     }
     try:
-        bundle_path, check_only, out_dir = parse_args(argv)
+        bundle_path, student_candidate_id, check_only, out_dir = parse_args(argv)
     except ValueError as exc:
         report["verdict"] = "FAIL"
         report["reason"] = f"RUNTIME_BUNDLE_USAGE: {exc}"
@@ -104,6 +109,7 @@ def main(argv=None) -> int:
         return FAIL
     report["runtime_bundle_path"] = bundle_path
     report["check_only"] = bool(check_only)
+    report["student_candidate_id_arg"] = student_candidate_id
 
     try:
         from dicode.simulator_frontier import runtime_bundle as rb
@@ -174,8 +180,59 @@ def main(argv=None) -> int:
 
     student_spec = manifest["student"]
     try:
+        from dicode.simulator_frontier.dual_student import (
+            assert_memory_binding_for_student,
+            assert_same_run_student,
+            carry_mode_for_candidate,
+            memory_mode_for_candidate,
+            validate_primary_student_candidate,
+        )
+        selected = validate_primary_student_candidate(
+            student_spec["selected_candidate_id"])
+        if student_candidate_id is not None \
+                and str(student_candidate_id) != selected:
+            report["verdict"] = "FAIL"
+            report["reason"] = (
+                "RUNTIME_BUNDLE_STUDENT_ARG_MISMATCH: --student-candidate-id "
+                f"{student_candidate_id!r} != bundle selected_candidate_id "
+                f"{selected!r} (the run never mixes two Students; fail closed)")
+            _finish(report, out_dir)
+            return FAIL
+    except Exception as exc:
+        report["verdict"] = "FAIL"
+        report["reason"] = f"RUNTIME_BUNDLE_STUDENT_SELECTION: {exc!r}"
+        _finish(report, out_dir)
+        return FAIL
+    try:
         profile = load_student_profile(
-            default_profile_dir() / f"{student_spec['profile']}.yaml")
+            default_profile_dir() / f"{student_spec['profile_name']}.yaml")
+        if str(profile.candidate_id) != selected:
+            report["verdict"] = "FAIL"
+            report["reason"] = (
+                "RUNTIME_BUNDLE_PROFILE_CANDIDATE_MISMATCH: profile "
+                f"candidate_id {profile.candidate_id!r} != selected "
+                f"{selected!r} (fail closed)")
+            _finish(report, out_dir)
+            return FAIL
+        if str(profile.params_sha256) != str(student_spec["params_sha256"]):
+            report["verdict"] = "FAIL"
+            report["reason"] = (
+                "RUNTIME_BUNDLE_PARAMS_MISMATCH: profile params_sha256 does not "
+                "match the bundle student.params_sha256 (fail closed)")
+            _finish(report, out_dir)
+            return FAIL
+        if str(profile.memory_spec().spec_hash()) != str(student_spec["memory_spec_hash"]):
+            report["verdict"] = "FAIL"
+            report["reason"] = "RUNTIME_BUNDLE_MEMORY_SPEC_MISMATCH (fail closed)"
+            _finish(report, out_dir)
+            return FAIL
+        if str(student_spec["memory_mode"]) != memory_mode_for_candidate(selected):
+            report["verdict"] = "FAIL"
+            report["reason"] = (
+                "RUNTIME_BUNDLE_MEMORY_MODE_MISMATCH: bundle memory_mode does not "
+                "match the frozen mode for the selected candidate")
+            _finish(report, out_dir)
+            return FAIL
     except Exception as exc:
         report["verdict"] = "FAIL"
         report["reason"] = f"profile load failed (fail closed): {exc!r}"
@@ -199,16 +256,45 @@ def main(argv=None) -> int:
         _finish(report, out_dir)
         return FAIL
     identity = adapter.identity()
-    if str(student_spec["abi_identity_hash"]) != str(identity.identity_hash()):
+    if str(identity.candidate_id) != selected:
         report["verdict"] = "FAIL"
         report["reason"] = (
-            "RUNTIME_BUNDLE_IDENTITY_MISMATCH: bundle declares abi_identity_hash "
-            f"{str(student_spec['abi_identity_hash'])[:16]}… but the mounted "
-            f"checkpoint identity is {str(identity.identity_hash())[:16]}… "
-            "(fail closed)")
+            "RUNTIME_BUNDLE_CHECKPOINT_CANDIDATE_MISMATCH: the mounted checkpoint "
+            f"identity candidate {identity.candidate_id!r} != selected "
+            f"{selected!r} (a checkpoint from the other arm can never back this "
+            "run; fail closed)")
+        _finish(report, out_dir)
+        return FAIL
+    if str(student_spec["adapter_identity_hash"]) != str(identity.identity_hash()):
+        report["verdict"] = "FAIL"
+        report["reason"] = (
+            "RUNTIME_BUNDLE_IDENTITY_MISMATCH: bundle adapter_identity_hash "
+            f"{str(student_spec['adapter_identity_hash'])[:16]}… != mounted "
+            f"{str(identity.identity_hash())[:16]}… (fail closed)")
+        _finish(report, out_dir)
+        return FAIL
+    try:
+        assert_memory_binding_for_student(
+            candidate_id=selected,
+            memory_mode=student_spec["memory_mode"],
+            carry_mode=student_spec["carry_mode"],
+            memory_spec_hash=student_spec["memory_spec_hash"],
+            expected_memory_spec_hash=identity.memory_spec_hash,
+        )
+        assert_same_run_student(
+            selected_candidate_id=selected,
+            capture_student_id=selected,
+            search_student_id=selected,
+            train_student_id=selected,
+        )
+    except Exception as exc:
+        report["verdict"] = "FAIL"
+        report["reason"] = f"RUNTIME_BUNDLE_STUDENT_BINDING: {exc!r}"
         _finish(report, out_dir)
         return FAIL
     report["candidate_id"] = profile.candidate_id
+    report["selected_candidate_id"] = selected
+    report["selected_carry_mode"] = carry_mode_for_candidate(selected)
 
     # ------------------------------------------------------------------
     # 2b. mount the Reference runtime exactly as the bundle names it (P0-b2)

@@ -33,6 +33,11 @@ class FrontierArchiveEntry:
     source_memory_spec_hash: str = ""
     capture_student_id: str = ""
     discovery_provenance: str = ""
+    # Director handoff (E3-DS section 3): a frontier entry is bound to the
+    # selected Student's memory mode and the runtime bundle that captured it —
+    # a state captured by one arm can never be handed to the other's training.
+    source_memory_mode: str = ""
+    runtime_bundle_hash: str = ""
 
     def bucket(self) -> tuple[Any, ...]:
         return (self.floor, self.health_band, self.threat_band, self.resource_band,
