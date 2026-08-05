@@ -1,0 +1,38 @@
+{
+  "allowed_student_candidate_ids": [
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+  ],
+  "audit": "cc2_student_dual_consumer",
+  "branch": "henry/static-llm-ued-v1",
+  "capability_states": {
+    "read_only": "STUDENT_READ_ONLY_MOUNT_READY",
+    "training": "STUDENT_TRAINING_RUNTIME_READY",
+    "unbound": "STUDENT_SHARED_REGISTRY_UNBOUND"
+  },
+  "head_after": "b50927bc6db356d2e21415946cb1b4f9bc9d3769",
+  "head_before": "2a2d5a79bea5e5981a83a0f9f774521a2380adef",
+  "note": "E1 consumes the shared student registry (dicode.student_adapters) \u2014 it never constructs a second loader / registry / checkpoint codec. The shared registry is absent in this worktree, so every mount stays honestly STUDENT_SHARED_REGISTRY_UNBOUND and no real Smoke / probe / update runs.",
+  "profile_map": {
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": {
+      "memory_mode": "PERSISTENT",
+      "profile_id": "rmt16_persistent_98304"
+    },
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": {
+      "memory_mode": "RESET128",
+      "profile_id": "rmt16_reset128_98304"
+    }
+  },
+  "real_and_authorization_flags": {
+    "E1_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "REAL_CANDIDATE_PROBE_EXECUTED": false,
+    "REAL_ENVCODER_EXECUTED": false,
+    "REAL_FULL_STATE_ROUND_TRIP": false,
+    "REAL_LLM_EXECUTED": false,
+    "REAL_OPTIMIZER_UPDATE_EXECUTED": false
+  },
+  "selection_rule": "the director-selected candidate id is REQUIRED (no default); the CLI can never override the Runtime Bundle's issued identity; one Student per run only",
+  "stage": "E1_DUAL_STUDENT_CONSUMER_READY",
+  "training_rule": "training flows ONLY through the director-injected CanonicalDiCodeOneUpdateRuntime + CanonicalDiCodeRunStateCheckpoint; the read-only RMT16 adapter can never impersonate a training runtime"
+}

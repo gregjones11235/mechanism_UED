@@ -1,0 +1,23 @@
+{
+  "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": {
+    "carry_mode": "persistent-memory-progression",
+    "memory_mode": "PERSISTENT",
+    "profile_id": "rmt16_persistent_98304",
+    "read_only_mount": "checkpoint loadable / forward executable / memory progression verifiable / probe executable",
+    "training_runtime": "NOT available via the read-only adapter; requires the director-injected canonical DiCode runtimes"
+  },
+  "RESET128_RMT16_ORIGINAL_VTRACE_98304": {
+    "carry_mode": "reset-to-128-window-memory",
+    "memory_mode": "RESET128",
+    "profile_id": "rmt16_reset128_98304",
+    "read_only_mount": "checkpoint loadable / forward executable / memory progression verifiable / probe executable",
+    "training_runtime": "NOT available via the read-only adapter; requires the director-injected canonical DiCode runtimes"
+  },
+  "memory_modes_distinct": true,
+  "rules": [
+    "one Student per run only (never both mixed)",
+    "no silent fallback to Persistent",
+    "no profile guessing from the name",
+    "params-only checkpoint is never called full-state"
+  ]
+}
