@@ -1,0 +1,13 @@
+{
+  "anchor_manifest": "G3 shared manifest; DRAFT => refused",
+  "entrypoint": "scripts/run_e1_longrun.py",
+  "formal_experiment_authorized": false,
+  "launch_granted": false,
+  "note": "this entrypoint NEVER starts training; a human must approve the formal experiment",
+  "prepare_only": true,
+  "reference_identity": "G1 contract; UNFROZEN => refused",
+  "student_candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "total_timesteps": 2005401600,
+  "total_timesteps_source": "conf/training/default.yaml (frozen DiCode resolved config)",
+  "training_budget_semantics": "director decision on the DiCode timeline (BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION until decided)"
+}
