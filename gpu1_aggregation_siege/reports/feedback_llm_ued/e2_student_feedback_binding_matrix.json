@@ -1,0 +1,53 @@
+{
+  "matrix": "Student -> feedback binding matrix (dual Student round)",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "c7cdcad",
+  "rows": [
+    {"student": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+     "memory_mode": "PERSISTENT", "carry_mode": "persistent",
+     "check_only_consumed": true,
+     "records_stamp": ["student_candidate_id=PERSISTENT...",
+                       "student_memory_mode=PERSISTENT",
+                       "student_identity_hash=matching binding",
+                       "runtime_bundle_hash=matching binding"],
+     "cross_student_feedback": "REFUSED",
+     "two_window_continuity": "BOUND (same Student both windows)"},
+    {"student": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+     "memory_mode": "RESET128", "carry_mode": "reset128",
+     "check_only_consumed": true,
+     "records_stamp": ["student_candidate_id=RESET128...",
+                       "student_memory_mode=RESET128",
+                       "student_identity_hash=matching binding",
+                       "runtime_bundle_hash=matching binding"],
+     "cross_student_feedback": "REFUSED",
+     "two_window_continuity": "BOUND (same Student both windows)"},
+    {"student": "UNKNOWN_CANDIDATE",
+     "check_only_consumed": false,
+     "failure": "E2_STUDENT_UNKNOWN_CANDIDATE / E2_STUDENT_MEMORY_MODE_MISMATCH"},
+    {"student": "<none selected>",
+     "check_only_consumed": false,
+     "failure": "E2_STUDENT_NO_DIRECTOR_SELECTION (no default)"}
+  ],
+  "invariants": [
+    "window k and window k+1 share the SAME Student (no switching)",
+    "a Student switch is E2_TWO_WINDOW_STUDENT_CONTINUITY_VIOLATION -> stop, no feedback, no training",
+    "feedback produced under one Student is NEVER reused by the other",
+    "every real SimulatorFeedback stamps student_candidate_id / student_identity_hash / student_checkpoint_hash / student_memory_mode / student_memory_spec_hash / source_window / runtime_bundle_hash",
+    "CLI --student-candidate-id cannot override the bundle's signed identity",
+    "read-only mount (true) is SEPARATE from training-runtime readiness (false without the object)"
+  ],
+  "test_modules": [
+    "test_e2_accepts_persistent_student.py",
+    "test_e2_accepts_reset128_student.py",
+    "test_e2_rejects_unknown_student.py",
+    "test_e2_no_default_student.py",
+    "test_e2_two_window_same_student.py",
+    "test_e2_rejects_student_switch_between_windows.py",
+    "test_e2_feedback_bound_to_student_identity.py",
+    "test_e2_rejects_cross_student_feedback.py",
+    "test_e2_memory_mode_binding.py",
+    "test_e2_readonly_mount_not_training_ready.py"
+  ],
+  "new_tests": 35,
+  "all_passing": true
+}
