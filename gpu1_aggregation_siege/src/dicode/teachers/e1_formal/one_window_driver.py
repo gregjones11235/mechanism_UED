@@ -35,10 +35,14 @@ from __future__ import annotations
 from dataclasses import dataclass, fields as dataclass_fields
 from typing import Any, Tuple
 
+from . import dicode_protocol as DP
 from . import probe_result_binding as PRB
+from . import roundtrip_attestation as RA
 from . import selection_attestation as SA
 from . import shared_runtime_seam as SRS
+from . import smoke_attestation as SM
 from . import teacher_continuity as TC
+from . import update_attestation as UA
 from . import variant_binding as VB
 from .board import ReviewWindow, WINDOW_STATUS_COMPLETE
 from .canonical import canonical_sha256
@@ -662,4 +666,161 @@ def execute_real_criterion_selection(
         family_cap=family_cap,
         weights=weights,
         allow_test_only=allow_test_only,
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage 6: 12 dynamic -> CanonicalDiCodeTrainingBatchPlan (15 + 1)
+# ---------------------------------------------------------------------------
+def execute_real_batch_certification(
+    *,
+    selection_attestation: Any,
+    anchor_manifest_hash: str,
+    ctx: str = "e1_driver.batch_certification",
+) -> DP.CanonicalDiCodeTrainingBatchPlan:
+    """Certify the attested selection into the shared 15+1 plan.
+
+    The ONLY translation 12 dynamic + 3 non-target anchors = 15
+    curriculum ids + DiCode-appended OriginalTask; the plan binds the
+    selection attestation + anchor manifest and is hash-verified.
+    """
+    return DP.build_canonical_dicode_training_batch_plan(
+        selection_attestation=selection_attestation,
+        anchor_manifest_hash=anchor_manifest_hash,
+        ctx=ctx,
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage 7: canonical DiCode one update (counts come from DiCode)
+# ---------------------------------------------------------------------------
+def execute_canonical_dicode_one_update(
+    *,
+    plan: Any,
+    selection_attestation: Any,
+    one_update_runtime: Any,
+    update_record: Any,
+    anchor_manifest_hash: str,
+    signer_id: str,
+    test_only: bool = False,
+    ctx: str = "e1_driver.canonical_dicode_one_update",
+) -> UA.OptimizerUpdateAttestation:
+    """Consume ONE DiCode update bound to the certified 15+1 plan.
+
+    Verifies the plan against its attestation, verifies the update
+    record's DiCode timeline consistency (before/after counts from the
+    DiCode timeline, never self-reported), and attests exactly one
+    update with ``verified_batch_hash = plan.plan_hash``.
+    """
+    DP.verify_canonical_dicode_training_batch_plan(
+        plan,
+        selection_attestation=selection_attestation,
+        anchor_manifest_hash=anchor_manifest_hash,
+        ctx=ctx,
+    )
+    DP.assert_update_matches_timeline(one_update_runtime, update_record, ctx)
+    UA.verify_update_execution_record(update_record, ctx)
+    return UA.attest_exactly_one_update(
+        one_update_runtime.training_runtime,
+        update_record,
+        verified_batch_hash=plan.plan_hash,
+        signer_id=signer_id,
+        test_only=test_only,
+        ctx=ctx,
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage 8: consume the full run-state round trip (shared checkpoint)
+# ---------------------------------------------------------------------------
+def consume_full_runstate_roundtrip(
+    *,
+    checkpoint: Any,
+    update_attestation: Any,
+    runtime_bundle_hash: str,
+    roundtrip_evidence: Any,
+    ctx: str = "e1_driver.runstate_roundtrip",
+) -> RA.FullStateRoundTripAttestation:
+    """Consume the shared CanonicalDiCodeRunStateCheckpoint's full-state
+    restore evidence.
+
+    The checkpoint must equal the update's OUTPUT state and bind the
+    same runtime bundle; the round-trip evidence must prove a fresh
+    subprocess restore, a leaf comparison and an identical
+    next-policy-step replay. Params-only / plain JSON is never
+    full-state.
+    """
+    DP.verify_runstate_checkpoint_binds_update(
+        checkpoint,
+        update_attestation=update_attestation,
+        runtime_bundle_hash=runtime_bundle_hash,
+        ctx=ctx,
+    )
+    evidence = roundtrip_evidence  # (identity, attestation) pair
+    identity, attestation = evidence
+    # the restored identity must equal the shared canonical checkpoint
+    DP.assert_roundtrip_identity_matches_checkpoint(identity, checkpoint, ctx)
+    RA.verify_full_state_round_trip(attestation, identity)
+    return attestation
+
+
+# ---------------------------------------------------------------------------
+# stage 9: build the signed E1 real-smoke attestation (whole chain)
+# ---------------------------------------------------------------------------
+def build_e1_smoke_attestation(
+    *,
+    run_id: str,
+    branch: str,
+    git_sha: str,
+    window_result: Any,
+    candidate_materials: Any,
+    probe_pool: Any,
+    plan: Any,
+    update_attestation: Any,
+    roundtrip_attestation: Any,
+    runtime: Any,
+    student_checkpoint_identity: str,
+    reference_checkpoint_identity: str,
+    formal_asset_registry_hash: str,
+    anchor_manifest_hash: str,
+    signer_id: str,
+    test_only: bool = False,
+    ctx: str = "e1_driver.smoke_attestation",
+) -> SM.E1RealSmokeAttestation:
+    """Fold the WHOLE one-window chain into the signed smoke attestation.
+
+    Every stage hash (window, materials, probe pool, signals pool, the
+    15+1 plan, the update, the round trip) is bound; consumers
+    re-verify each against the live expected values.
+    """
+    return SM.issue_e1_real_smoke_attestation(
+        run_id=run_id,
+        branch=branch,
+        git_sha=git_sha,
+        runtime_bundle_hash=runtime.bundle_hash,
+        student_identity_hash=runtime.object_identity_hash(
+            "student_identity"
+        ),
+        student_checkpoint_hash=student_checkpoint_identity,
+        reference_identity_hash=runtime.object_identity_hash(
+            "reference_identity"
+        ),
+        reference_checkpoint_hash=reference_checkpoint_identity,
+        board_journal_hash=window_result.window_result_hash,
+        envcoder_artifact_pool_hash=candidate_materials.materials_hash,
+        probe_pool_hash=canonical_sha256(
+            [probe.attestation_hash for probe in probe_pool]
+        ),
+        selection_attestation_hash=plan.selection_attestation_hash,
+        verified_batch_hash=plan.plan_hash,
+        update_attestation_hash=update_attestation.attestation_hash,
+        roundtrip_attestation_hash=(
+            roundtrip_attestation.attestation_hash
+        ),
+        formal_asset_registry_hash=formal_asset_registry_hash,
+        anchor_manifest_hash=anchor_manifest_hash,
+        status=SM.SMOKE_STATUS_EXECUTED,
+        signer_id=signer_id,
+        test_only=test_only,
+        ctx=ctx,
     )

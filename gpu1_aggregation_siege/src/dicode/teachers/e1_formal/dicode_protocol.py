@@ -323,3 +323,316 @@ def verify_canonical_dicode_training_batch_plan(
             f"{ctx}: plan_hash {plan.plan_hash!r} != recomputed "
             f"{recomputed!r} (tampered plan)",
         )
+
+
+# ---------------------------------------------------------------------------
+# CanonicalDiCodeOneUpdateRuntime — the shared single-update timeline.
+# The ONLY training time axis is the DiCode timeline
+# (config.training.total_timesteps, global_env_steps,
+# global_update_step, session index); 方向一 never defines a fixed
+# longrun horizon of its own.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CanonicalDiCodeOneUpdateRuntime:
+    """The shared DiCode one-update runtime identity (immutable)."""
+
+    training_runtime: Any  # update_attestation.OriginalTrainingRuntime
+    total_timesteps: int
+    session_idx: int
+    global_env_steps: int
+    global_update_step: int
+    runtime_hash: str
+
+
+def authorize_canonical_dicode_one_update_runtime(
+    *,
+    training_runtime: Any,
+    total_timesteps: int,
+    session_idx: int,
+    global_env_steps: int,
+    global_update_step: int,
+    ctx: str,
+) -> CanonicalDiCodeOneUpdateRuntime:
+    """Authorize the shared one-update runtime fail-closed.
+
+    ``total_timesteps`` must equal the FROZEN DiCode resolved config
+    value (conf/training/default.yaml) — a fixed local horizon is
+    never accepted.
+    """
+    from .update_attestation import OriginalTrainingRuntime
+
+    if not isinstance(training_runtime, OriginalTrainingRuntime):
+        raise DiCodePlanError(
+            PLAN_BAD_TYPE,
+            f"{ctx}: training_runtime must be an OriginalTrainingRuntime, "
+            f"got {type(training_runtime).__name__}",
+        )
+    for name, value in (
+        ("total_timesteps", total_timesteps),
+        ("session_idx", session_idx),
+        ("global_env_steps", global_env_steps),
+        ("global_update_step", global_update_step),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise DiCodePlanError(
+                PLAN_BAD_TYPE,
+                f"{ctx}: {name} must be a non-negative int, got "
+                f"{value!r}",
+            )
+    if total_timesteps <= 0:
+        raise DiCodePlanError(
+            PLAN_COUNT,
+            f"{ctx}: total_timesteps must be > 0 (the DiCode frozen "
+            "timeline); a fixed local horizon is never a substitute",
+        )
+    runtime_hash = canonical_sha256(
+        {
+            "training_runtime_hash": training_runtime.runtime_hash,
+            "total_timesteps": total_timesteps,
+            "session_idx": session_idx,
+            "global_env_steps": global_env_steps,
+            "global_update_step": global_update_step,
+        }
+    )
+    return CanonicalDiCodeOneUpdateRuntime(
+        training_runtime=training_runtime,
+        total_timesteps=total_timesteps,
+        session_idx=session_idx,
+        global_env_steps=global_env_steps,
+        global_update_step=global_update_step,
+        runtime_hash=runtime_hash,
+    )
+
+
+def assert_update_matches_timeline(
+    one_update_runtime: Any, record: Any, ctx: str
+) -> None:
+    """The update's before/after counts must come from the DiCode
+    timeline (mechanical; never self-reported out of context)."""
+    from .update_attestation import UpdateExecutionRecord
+
+    if not isinstance(one_update_runtime, CanonicalDiCodeOneUpdateRuntime):
+        raise DiCodePlanError(
+            PLAN_BAD_TYPE,
+            f"{ctx}: expected a CanonicalDiCodeOneUpdateRuntime, got "
+            f"{type(one_update_runtime).__name__}",
+        )
+    if not isinstance(record, UpdateExecutionRecord):
+        raise DiCodePlanError(
+            PLAN_BAD_TYPE,
+            f"{ctx}: expected an UpdateExecutionRecord, got "
+            f"{type(record).__name__}",
+        )
+    if record.update_step_after != (
+        one_update_runtime.global_update_step + record.update_count
+    ):
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: update update_step_after "
+            f"{record.update_step_after} != timeline "
+            f"{one_update_runtime.global_update_step} + "
+            f"{record.update_count}",
+        )
+    if record.global_env_steps_after != (
+        one_update_runtime.global_env_steps
+        + record.transitions_consumed
+    ):
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: update global_env_steps_after "
+            f"{record.global_env_steps_after} != timeline "
+            f"{one_update_runtime.global_env_steps} + "
+            f"{record.transitions_consumed}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# CanonicalDiCodeRunStateCheckpoint — the shared full-state contract.
+# 方向一 consumes this; params-only or plain JSON is never full-state.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CanonicalDiCodeRunStateCheckpoint:
+    """The shared full run-state checkpoint (immutable, hash-bound)."""
+
+    params_hash: str
+    optimizer_state_hash: str
+    optimizer_step: int
+    global_update_step: int
+    global_env_steps: int
+    rng_hash: str
+    session_index: int
+    gen_manager_archive_hash: str
+    e1_ledger_hash: str
+    pending_worker_policy_hash: str
+    config_hash: str
+    runtime_bundle_hash: str
+    checkpoint_hash: str
+
+
+def build_canonical_runstate_checkpoint(
+    *,
+    params_hash: str,
+    optimizer_state_hash: str,
+    optimizer_step: int,
+    global_update_step: int,
+    global_env_steps: int,
+    rng_hash: str,
+    session_index: int,
+    gen_manager_archive_hash: str,
+    e1_ledger_hash: str,
+    pending_worker_policy_hash: str,
+    config_hash: str,
+    runtime_bundle_hash: str,
+    ctx: str,
+) -> CanonicalDiCodeRunStateCheckpoint:
+    """Build the full run-state checkpoint fail-closed on every field."""
+    fields: dict = {}
+    for name in (
+        "params_hash",
+        "optimizer_state_hash",
+        "rng_hash",
+        "gen_manager_archive_hash",
+        "e1_ledger_hash",
+        "pending_worker_policy_hash",
+        "config_hash",
+        "runtime_bundle_hash",
+    ):
+        value = locals()[name]
+        if not isinstance(value, str) or len(value) != 64:
+            raise DiCodePlanError(
+                PLAN_BAD_TYPE,
+                f"{ctx}: {name} must be a 64-hex hash, got {value!r}",
+            )
+        fields[name] = value
+    for name in (
+        "optimizer_step",
+        "global_update_step",
+        "global_env_steps",
+        "session_index",
+    ):
+        value = locals()[name]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise DiCodePlanError(
+                PLAN_BAD_TYPE,
+                f"{ctx}: {name} must be a non-negative int, got "
+                f"{value!r}",
+            )
+        fields[name] = value
+    checkpoint_hash = canonical_sha256(
+        {
+            "kind": "CanonicalDiCodeRunStateCheckpoint",
+            **fields,
+        }
+    )
+    return CanonicalDiCodeRunStateCheckpoint(
+        params_hash=fields["params_hash"],
+        optimizer_state_hash=fields["optimizer_state_hash"],
+        optimizer_step=fields["optimizer_step"],
+        global_update_step=fields["global_update_step"],
+        global_env_steps=fields["global_env_steps"],
+        rng_hash=fields["rng_hash"],
+        session_index=fields["session_index"],
+        gen_manager_archive_hash=fields["gen_manager_archive_hash"],
+        e1_ledger_hash=fields["e1_ledger_hash"],
+        pending_worker_policy_hash=fields["pending_worker_policy_hash"],
+        config_hash=fields["config_hash"],
+        runtime_bundle_hash=fields["runtime_bundle_hash"],
+        checkpoint_hash=checkpoint_hash,
+    )
+
+
+def verify_runstate_checkpoint_binds_update(
+    checkpoint: Any,
+    *,
+    update_attestation: Any,
+    runtime_bundle_hash: str,
+    ctx: str,
+) -> None:
+    """The run-state checkpoint MUST equal the update's output state
+    (the update produced this checkpoint)."""
+    if not isinstance(checkpoint, CanonicalDiCodeRunStateCheckpoint):
+        raise DiCodePlanError(
+            PLAN_BAD_TYPE,
+            f"{ctx}: expected a CanonicalDiCodeRunStateCheckpoint, got "
+            f"{type(checkpoint).__name__}",
+        )
+    if checkpoint.runtime_bundle_hash != runtime_bundle_hash:
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: checkpoint runtime bundle "
+            f"{checkpoint.runtime_bundle_hash!r} != "
+            f"{runtime_bundle_hash!r}",
+        )
+    if checkpoint.params_hash != update_attestation.params_hash_after:
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: checkpoint params "
+            f"{checkpoint.params_hash!r} != update output "
+            f"{update_attestation.params_hash_after!r}",
+        )
+    if checkpoint.optimizer_step != update_attestation.optimizer_step_after:
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: checkpoint optimizer step "
+            f"{checkpoint.optimizer_step} != update output "
+            f"{update_attestation.optimizer_step_after}",
+        )
+    if (
+        checkpoint.global_update_step
+        != update_attestation.update_step_after
+    ):
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: checkpoint global_update_step "
+            f"{checkpoint.global_update_step} != update output "
+            f"{update_attestation.update_step_after}",
+        )
+    if (
+        checkpoint.global_env_steps
+        != update_attestation.global_env_steps_after
+    ):
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: checkpoint global_env_steps "
+            f"{checkpoint.global_env_steps} != update output "
+            f"{update_attestation.global_env_steps_after}",
+        )
+
+
+def assert_roundtrip_identity_matches_checkpoint(
+    identity: Any, checkpoint: Any, ctx: str
+) -> None:
+    """The full-state round-trip identity must EQUAL the shared
+    canonical checkpoint (the same state, restored and replayed)."""
+    from .roundtrip_attestation import FullStateCheckpointIdentity
+
+    if not isinstance(identity, FullStateCheckpointIdentity):
+        raise DiCodePlanError(
+            PLAN_BAD_TYPE,
+            f"{ctx}: identity must be a FullStateCheckpointIdentity, "
+            f"got {type(identity).__name__}",
+        )
+    if not isinstance(checkpoint, CanonicalDiCodeRunStateCheckpoint):
+        raise DiCodePlanError(
+            PLAN_BAD_TYPE,
+            f"{ctx}: checkpoint must be a CanonicalDiCodeRunStateCheckpoint, "
+            f"got {type(checkpoint).__name__}",
+        )
+    mismatches = []
+    if identity.params_hash != checkpoint.params_hash:
+        mismatches.append("params_hash")
+    if identity.optimizer_state_hash != checkpoint.optimizer_state_hash:
+        mismatches.append("optimizer_state_hash")
+    if identity.global_env_steps != checkpoint.global_env_steps:
+        mismatches.append("global_env_steps")
+    if identity.optimizer_step != checkpoint.optimizer_step:
+        mismatches.append("optimizer_step")
+    if identity.update_step != checkpoint.global_update_step:
+        mismatches.append("update_step")
+    if mismatches:
+        raise DiCodePlanError(
+            PLAN_BINDING_MISMATCH,
+            f"{ctx}: round-trip identity differs from the canonical "
+            f"checkpoint on {sorted(mismatches)}; params-only or plain "
+            "JSON is never full-state",
+        )
