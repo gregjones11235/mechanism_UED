@@ -250,6 +250,14 @@ from .training_runtime import (
     runtime_binding_summary,
     verify_original_training_runtime,
 )
+from .two_llm_descriptor import (
+    TWO_LLM_DESCRIPTOR_SCHEMA,
+    TWO_LLM_DESCRIPTOR_VERSION,
+    AuthorizedTwoLLMRuntimeDescriptor,
+    build_authorized_two_llm_runtime,
+    mint_two_llm_runtime_descriptor,
+    verify_two_llm_runtime_descriptor,
+)
 from .optimizer_attestation import (
     BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED,
     OPTIMIZER_ATTESTATION_VERSION,
@@ -424,6 +432,9 @@ __all__ = [
     "BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME", "TRAINING_RUNTIME_VERSION",
     "OriginalTrainingRuntime", "mint_original_training_runtime",
     "runtime_binding_summary", "verify_original_training_runtime",
+    "TWO_LLM_DESCRIPTOR_SCHEMA", "TWO_LLM_DESCRIPTOR_VERSION",
+    "AuthorizedTwoLLMRuntimeDescriptor", "build_authorized_two_llm_runtime",
+    "mint_two_llm_runtime_descriptor", "verify_two_llm_runtime_descriptor",
     "BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED", "OPTIMIZER_ATTESTATION_VERSION",
     "OptimizerUpdateAttestation", "attestation_fields",
     "mint_optimizer_update_attestation", "verify_optimizer_update_attestation",

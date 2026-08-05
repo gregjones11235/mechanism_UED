@@ -129,6 +129,9 @@ def main(argv=None) -> int:
         from dicode.simulator_frontier.training_runtime import (
             mint_original_training_runtime,
         )
+        from dicode.simulator_frontier.two_llm_descriptor import (
+            build_authorized_two_llm_runtime,
+        )
     except Exception as exc:
         report["verdict"] = "BLOCKED"
         report["reason"] = f"BLOCKED_ENVIRONMENT: {exc!r}"
@@ -255,6 +258,13 @@ def main(argv=None) -> int:
             str(manifest["predicates"]["progress_entrypoint"]), "progress function")
         memory_loader = rb.import_entrypoint(
             str(manifest["memory"]["loader_entrypoint"]), "memory loader")
+        # Director handoff (P0-b1): build the REAL two-LLM runtime from the
+        # signed descriptor.  Building verifies the descriptor and the client
+        # factory implementation hash but NEVER calls any LLM — a --check-only
+        # run stops here.
+        two_llm_descriptor = rb.two_llm_descriptor_from_bundle(
+            manifest["two_llm_runtime"])
+        two_llm_runtime = build_authorized_two_llm_runtime(two_llm_descriptor)
     except InvalidEvidenceError as exc:
         report["verdict"] = "FAIL"
         report["reason"] = f"RUNTIME_BUNDLE_ASSET_INVALID: {exc}"
@@ -359,7 +369,7 @@ def main(argv=None) -> int:
         seed_base=int(search["seed_base"]),
         restore_request=restore_request,
         scratch_dir=str(paths["scratch_dir"]),
-        two_llm_runtime=None,  # the bundle schema enforces null this round
+        two_llm_runtime=two_llm_runtime,
         anchor_manifest=anchor_manifest,
         retention=retention,
         mixed_episodes=int(search["mixed_episodes"]),

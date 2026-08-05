@@ -60,6 +60,12 @@ from .surface_capability import (
     TrainingSurfaceCapability,
     mint_training_surface_capability,
 )
+from .two_llm_descriptor import (
+    DESCRIPTOR_BUNDLE_KEYS,
+    AuthorizedTwoLLMRuntimeDescriptor,
+    mint_two_llm_runtime_descriptor,
+    verify_two_llm_runtime_descriptor,
+)
 
 RUNTIME_BUNDLE_SCHEMA = "simulator_frontier.e3-runtime-bundle/v1"
 RUNTIME_BUNDLE_VERSION = "e3-runtime-bundle/v1"
@@ -259,12 +265,25 @@ def validate_runtime_bundle_manifest(manifest: Mapping[str, Any]) -> None:
     _require_entrypoint("predicates.progress_entrypoint",
                         predicates["progress_entrypoint"])
 
-    # THIS ROUND: no LLM client is authorized anywhere; the only admissible
-    # value for the channel is null (present-but-empty keeps the schema exact
-    # while honestly advertising that nothing is bound).
-    if manifest["two_llm_runtime"] is not None:
-        _fail("two_llm_runtime must be null — no LLM runtime is authorized this "
-              "round; a non-null value is never accepted on faith")
+    # Director handoff (P0-b1): the channel carries a REAL authorized
+    # two-LLM runtime descriptor — the previous "must be null" contradiction
+    # is gone.  The section is validated strictly (exact keys, non-empty
+    # fields, a 64-hex implementation hash, non-synthetic trusted signer);
+    # unknown or malformed content is rejected fail closed.
+    two_llm = _require_section("two_llm_runtime", manifest["two_llm_runtime"],
+                               DESCRIPTOR_BUNDLE_KEYS)
+    for key in ("descriptor_id", "authorization_id", "provider", "model",
+                "client_factory_entrypoint", "journal_sink", "trusted_signer"):
+        _require_nonempty_str(f"two_llm_runtime.{key}", two_llm[key])
+    _require_entrypoint("two_llm_runtime.client_factory_entrypoint",
+                        two_llm["client_factory_entrypoint"])
+    _require_sha256("two_llm_runtime.client_factory_implementation_hash",
+                    two_llm["client_factory_implementation_hash"])
+    if str(two_llm["trusted_signer"]).startswith(_SYNTHETIC_SIGNATURE_PREFIX):
+        _fail("two_llm_runtime.trusted_signer is synthetic — a self-signed "
+              "LLM authorization is never production evidence")
+    _require_nonneg_int("two_llm_runtime.token_cap", two_llm["token_cap"])
+    _require_nonneg_int("two_llm_runtime.retry_cap", two_llm["retry_cap"])
 
     search = _require_section("search", manifest["search"], frozenset({
         "requested_n", "horizon", "seed_base", "mixed_episodes",
@@ -419,6 +438,31 @@ def retention_from_payload(payload: Mapping[str, Any]) -> RetentionContract:
         formal_banks_in_online_curriculum=bool(
             payload["formal_banks_in_online_curriculum"]),
     )
+
+
+def two_llm_descriptor_from_bundle(
+        section: Mapping[str, Any]) -> AuthorizedTwoLLMRuntimeDescriptor:
+    """Mint + verify the two-LLM runtime descriptor from the bundle section.
+
+    The descriptor's ``client_factory_implementation_hash`` is recomputed
+    from the RESOLVED entry point callable and must equal the bundle-declared
+    value — a drifted factory never binds.  Building does not call any LLM.
+    """
+    descriptor = mint_two_llm_runtime_descriptor(
+        descriptor_id=str(section["descriptor_id"]),
+        authorization_id=str(section["authorization_id"]),
+        provider=str(section["provider"]),
+        model=str(section["model"]),
+        client_factory_entrypoint=str(section["client_factory_entrypoint"]),
+        client_factory_implementation_hash=str(
+            section["client_factory_implementation_hash"]),
+        token_cap=int(section["token_cap"]),
+        retry_cap=int(section["retry_cap"]),
+        journal_sink=str(section["journal_sink"]),
+        trusted_signer=str(section["trusted_signer"]),
+    )
+    verify_two_llm_runtime_descriptor(descriptor)
+    return descriptor
 
 
 def capability_from_payload(payload: Mapping[str, Any], *,
