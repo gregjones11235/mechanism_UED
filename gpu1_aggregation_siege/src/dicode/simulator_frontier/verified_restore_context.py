@@ -41,7 +41,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Mapping
 
 from .combined_restore_contract import (
@@ -277,10 +277,23 @@ class VerifiedRestoreContext:
 
 
 def compute_context_hash(context: VerifiedRestoreContext) -> str:
-    """Canonical hash over every field EXCEPT context_hash itself."""
+    """Canonical hash over every field EXCEPT context_hash itself.
+
+    The payload is built from the dataclass fields directly (NOT via
+    ``to_payload``): ``to_payload`` reads ``context_hash``, which does not
+    exist yet while the minter is computing it — hashing the fields
+    themselves keeps the mint path functional and yields the same digest for
+    an already-minted context (``to_payload`` excludes ``context_hash``
+    anyway).
+    """
     if not isinstance(context, VerifiedRestoreContext):
         raise InvalidEvidenceError("compute_context_hash requires VerifiedRestoreContext")
-    payload = {k: v for k, v in context.to_payload().items() if k != "context_hash"}
+    payload = {
+        f.name: getattr(context, f.name)
+        for f in fields(context)
+        if f.name != "context_hash"
+    }
+    payload["component_digests"] = dict(payload["component_digests"])
     return _canonical_sha256(payload)
 
 
