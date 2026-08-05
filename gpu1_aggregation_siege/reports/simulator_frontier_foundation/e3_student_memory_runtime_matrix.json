@@ -1,0 +1,42 @@
+{
+  "schema": "simulator_frontier.e3_student_memory_runtime_matrix/v1",
+  "note": "the two RMT16 arms share the network family and the memory TREE; ONLY the carry policy differs.  Same-shape is never the semantics — the carry rules execute differently by construction and are enforced separately per Student.",
+  "students": [
+    {
+      "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+      "profile": "rmt16_persistent_98304",
+      "network_family": "RMT16",
+      "memory_mode": "PERSISTENT",
+      "carry_mode": "persistent",
+      "carry_rule": "PERSISTENT_CARRY",
+      "segment_boundary": "rmt.mem_tokens PRESERVED across the 128-step boundary; segment counter keeps progressing",
+      "restore_rule": "Persistent restore rules only — never Reset128 rules",
+      "checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723"
+    },
+    {
+      "candidate_id": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+      "profile": "rmt16_reset128_98304",
+      "network_family": "RMT16",
+      "memory_mode": "RESET128",
+      "carry_mode": "reset128",
+      "carry_rule": "RESET128_CARRY",
+      "segment_boundary": "rmt.mem_tokens CLEARED to zero at every 128-step boundary (real segment reset)",
+      "restore_rule": "Reset128 restore rules only — never Persistent rules",
+      "checkpoint_file_sha256": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638"
+    }
+  ],
+  "cross_student_prohibitions": {
+    "persistent_memory_for_reset128_state": "E3_FRONTIER_CARRY_MODE_MISMATCH / E3_FRONTIER_MEMORY_SPEC_MISMATCH (fail closed)",
+    "reset128_memory_for_persistent_state": "E3_FRONTIER_CARRY_MODE_MISMATCH / E3_FRONTIER_MEMORY_SPEC_MISMATCH (fail closed)",
+    "capture_by_one_arm_trained_by_other": "E3_FRONTIER_STUDENT_IDENTITY_MISMATCH (fail closed)"
+  },
+  "training_runtime_separation": {
+    "rmt16_student_adapter": "READ-ONLY mount only (load / identity / policy_step / memory validation / probe); save_full_state and restore_full_state are NotImplementedError",
+    "training_runtime": "director-shared CanonicalDiCodeOneUpdateRuntime bound to the SELECTED candidate id; CanonicalDiCodeRunStateCheckpoint for continued training",
+    "if_readonly_mount_passes_but_runtime_unbound": {
+      "E3_STUDENT_READ_ONLY_MOUNT_READY": true,
+      "E3_STUDENT_TRAINING_RUNTIME_READY": false,
+      "E3_REAL_SMOKE_READY": false
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema": "simulator_frontier.e3_cross_student_isolation_audit/v1",
+  "isolation_contract": {
+    "one_run_one_student": true,
+    "same_run_identity": "capture_student_id == search_student_id == train_student_id == director_selected_candidate_id",
+    "reference_excluded": true,
+    "reference_marked_as_reference_source": true,
+    "two_students_are_not_a_pair": "PERSISTENT and RESET128 are two independent experiment starting points, never a Student/Reference pair",
+    "cross_student_frontier_handoff": "a state captured by one arm is never handed to the other arm's training",
+    "cross_student_memory_restore": "Persistent memory never restores a Reset128 state and vice versa"
+  },
+  "enforced_errors": {
+    "E3_FRONTIER_STUDENT_IDENTITY_MISMATCH": "capture/search/train identity drifts from the selected candidate",
+    "E3_FRONTIER_MEMORY_SPEC_MISMATCH": "a memory spec that is not the selected Student's own",
+    "E3_FRONTIER_CARRY_MODE_MISMATCH": "carry mode contradicts the selected candidate (cross-arm memory)"
+  },
+  "enforced_by": {
+    "dual_student.assert_same_run_student": "one-run-one-student identity chain",
+    "dual_student.assert_memory_binding_for_student": "per-Student memory spec + carry binding",
+    "dual_student.assert_reference_is_not_a_primary_student": "a primary Student is never the Reference",
+    "runtime_bundle student section": "selected == profile == adapter identity == checkpoint semantics",
+    "frontier archive entry fields": "source_memory_mode + runtime_bundle_hash bound per entry"
+  },
+  "readiness": {
+    "E3_DUAL_STUDENT_CONSUMER_READY": true,
+    "E3_STUDENT_TRAINING_RUNTIME_READY": false,
+    "E3_REAL_SMOKE_READY": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false
+  }
+}

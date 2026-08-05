@@ -1,0 +1,61 @@
+{
+  "schema": "simulator_frontier.e3_dual_student_binding_audit/v1",
+  "stage": "E3_DUAL_STUDENT_CONSUMER_READY",
+  "note": "the E3 consumer can mount ONE of the two frozen primary Students per run.  One run = one Student; the two arms are two independent experiment starting points, never a Student/Reference pair.",
+  "allowed_primary_student_ids": [
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+  ],
+  "profile_to_candidate": {
+    "rmt16_persistent_98304": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "rmt16_reset128_98304": "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+  },
+  "candidate_carry_mode": {
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": "PERSISTENT",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": "RESET128"
+  },
+  "memory_carry_rules": {
+    "PERSISTENT": "PERSISTENT_CARRY (rmt.mem_tokens PRESERVED across the 128-step segment boundary; segment counter keeps progressing)",
+    "RESET128": "RESET128_CARRY (rmt.mem_tokens CLEARED to zero at every 128-step segment boundary — a real segment reset)"
+  },
+  "bundle_student_section_binds": [
+    "selected_candidate_id == profile.candidate_id == adapter.identity().candidate_id == checkpoint candidate/carry semantics",
+    "no defaulting to the first candidate; unknown candidates fail closed",
+    "memory_mode/carry_mode cross-checked against the frozen maps",
+    "adapter implementation hash + driver source hash bound"
+  ],
+  "archive_binding": {
+    "per_entry": ["capture_student_id", "source_student_identity_hash", "source_parameter_hash", "source_memory_spec_hash", "source_checkpoint_id", "source_memory_mode", "runtime_bundle_hash"],
+    "same_run": "capture_student_id == search_student_id == train_student_id == director_selected_candidate_id (Reference excluded but explicitly marked)"
+  },
+  "new_errors": [
+    "E3_FRONTIER_STUDENT_IDENTITY_MISMATCH",
+    "E3_FRONTIER_MEMORY_SPEC_MISMATCH",
+    "E3_FRONTIER_CARRY_MODE_MISMATCH"
+  ],
+  "readiness_flags": {
+    "E3_STUDENT_READ_ONLY_MOUNT_READY": false,
+    "E3_STUDENT_TRAINING_RUNTIME_READY": false,
+    "E3_REAL_SMOKE_READY": false,
+    "REAL_ACTUAL_N_EXECUTED": false,
+    "REAL_TWO_LLM_EXECUTED": false,
+    "REAL_ONE_UPDATE_EXECUTED": false,
+    "CHECKPOINT_RELOAD": false,
+    "E3_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false
+  },
+  "test_files": [
+    "test_e3_persistent_runtime_bundle.py",
+    "test_e3_reset128_runtime_bundle.py",
+    "test_e3_no_default_student.py",
+    "test_e3_rejects_profile_candidate_mismatch.py",
+    "test_e3_rejects_checkpoint_candidate_mismatch.py",
+    "test_e3_persistent_memory_carry.py",
+    "test_e3_reset128_memory_carry.py",
+    "test_e3_rejects_cross_student_frontier_entry.py",
+    "test_e3_actual_n_same_selected_student.py",
+    "test_e3_mixed_start_same_selected_student.py",
+    "test_e3_readonly_adapter_not_training_runtime.py",
+    "test_e3_dual_student_check_only.py"
+  ]
+}
