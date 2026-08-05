@@ -166,12 +166,21 @@ def compute_student_selection_hash(descriptor: Any) -> str:
     )
 
 
+_HEX_CHARS = frozenset("0123456789abcdef")
+
+
 def _require_sha64(value: Any, name: str, ctx: str) -> str:
+    """STRICT 64-lowercase-hex validation (§九)."""
     if not isinstance(value, str) or len(value) != 64:
         raise RuntimeBundleError(
             RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
-            f"{ctx}: student_selection.{name} must be a 64-hex hash, "
-            f"got {value!r}",
+            f"{ctx}: {name} must be a 64-hex hash, got {value!r}",
+        )
+    if any(c not in _HEX_CHARS for c in value):
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
+            f"{ctx}: {name} must be LOWERCASE hexadecimal "
+            f"(0123456789abcdef), got {value!r}",
         )
     return value
 
@@ -224,6 +233,15 @@ def parse_student_selection(
             RUNTIME_BUNDLE_STUDENT_IDENTITY_MISMATCH,
             f"{ctx}: profile_id {profile_id!r} != the frozen profile "
             f"{expected_profile!r} for {selected!r}",
+        )
+    architecture_family = _require_non_empty_str(
+        mapping.get("architecture_family"), "architecture_family", ctx
+    )
+    if architecture_family.upper() != "RMT16":
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
+            f"{ctx}: architecture_family must be RMT16, got "
+            f"{architecture_family!r}",
         )
     expected_memory = STUDENT_MEMORY_MODE_BY_CANDIDATE[selected]
     memory_mode = _require_non_empty_str(

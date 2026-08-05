@@ -9,7 +9,9 @@ class TestMainReachesPipeline:
     def test_no_hardcoded_unreachable_raise(self):
         source = open(SRC, encoding="utf-8").read()
         assert "unreachable this round" not in source
-        assert "raise RuntimeError" not in source
+        # the pipeline path must resolve objects and CALL the pipeline,
+        # never return a fixed pending/handoff
+        assert "run_director_one_window_pipeline(" in source
 
     def test_pipeline_call_surface_is_wired(self):
         source = open(SRC, encoding="utf-8").read()

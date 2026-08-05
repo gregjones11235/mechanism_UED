@@ -1,29 +1,21 @@
-"""CC2-Student repair: resolve the REAL shared runtime objects.
+"""CC2-Repair-2: resolve the REAL shared runtime objects (strict).
 
-The runtime bundle MANIFEST only describes object identities. The real
-objects are resolved by the director's shared FormalAssetRegistry::
+The runtime bundle MANIFEST declares an identity for EVERY required
+runtime object. The real objects are resolved ONLY from the director's
+injected ``FormalAssetRegistry`` (a real object implementing the
+Protocol — never a dict / JSON mapping / string path / None / a local
+un-issued registry).
 
-    resolution = resolve_e1_runtime_objects(
-        verified_manifest, formal_asset_registry, ctx)
-
-Every resolved object must satisfy::
-
-    actual_object_identity_hash(obj) == manifest.object_identity_hashes[contract]
-
-Forbidden:
-* a string object name impersonating a real object;
-* a plain Mapping impersonating an issued object;
-* None marked as BOUND;
-* E1 constructing a second loader / checkpoint codec / trainer.
-
-Returns a per-contract report {contract: {bound, code, object}} plus an
-all_bound flag. This round the shared registry is absent, so every
-object resolves honestly UNBOUND.
+Strict identity rule (§四): every REQUIRED object must have a DECLARED
+identity in the manifest; missing declaration => fail closed
+(``OBJ_RESOLUTION_DECLARED_IDENTITY_MISSING``), and a mismatch =>
+``OBJ_RESOLUTION_IDENTITY_MISMATCH``. There is NO "declared empty =>
+skip verification" path.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 from .runtime_bundle import (
     E1RuntimeBundle,
@@ -31,13 +23,50 @@ from .runtime_bundle import (
     object_identity_hash,
 )
 
-#: contracts resolved from the shared FormalAssetRegistry in addition
-#: to the nine bundle capabilities
-EXTRA_RUNTIME_CONTRACTS = (
+#: the unified REQUIRED runtime object set (§四, 方案A)
+REQUIRED_RUNTIME_OBJECTS = (
     "student_init_contract",
+    "student_identity",
+    "student_adapter",
+    "reference_identity",
+    "reference_adapter",
+    "anchor_manifest",
+    "formal_asset_registry",
+    "probe_runner",
     "canonical_dicode_one_update_runtime",
     "canonical_dicode_runstate_checkpoint",
+    "authorized_six_role_llm_runtime",
+    "auxiliary_compute_ledger",
 )
+
+#: objects NOT among the nine bundle capabilities (they need a
+#: declaration in the manifest's ``declared_runtime_objects`` block)
+EXTRA_RUNTIME_CONTRACTS = tuple(
+    c
+    for c in REQUIRED_RUNTIME_OBJECTS
+    if c not in RUNTIME_CAPABILITY_CONTRACTS
+)
+
+
+@runtime_checkable
+class FormalAssetRegistry(Protocol):
+    """The director's shared asset registry (real object only)."""
+
+    registry_identity: str
+    registry_hash: str
+
+    def resolve_asset(
+        self, *, contract: str, expected_identity: str
+    ) -> object: ...
+
+    def verify_implementation(
+        self,
+        *,
+        contract: str,
+        obj: object,
+        expected_implementation_hash: str,
+    ) -> bool: ...
+
 
 # fail-closed codes (greppable)
 OBJ_RESOLUTION_BAD_TYPE = "OBJ_RESOLUTION_BAD_TYPE"
@@ -46,6 +75,12 @@ OBJ_RESOLUTION_STRING_PLACEHOLDER = "OBJ_RESOLUTION_STRING_PLACEHOLDER"
 OBJ_RESOLUTION_MAPPING_IMPERSONATION = "OBJ_RESOLUTION_MAPPING_IMPERSONATION"
 OBJ_RESOLUTION_NONE_AS_BOUND = "OBJ_RESOLUTION_NONE_AS_BOUND"
 OBJ_RESOLUTION_IDENTITY_MISMATCH = "OBJ_RESOLUTION_IDENTITY_MISMATCH"
+OBJ_RESOLUTION_DECLARED_IDENTITY_MISSING = (
+    "OBJ_RESOLUTION_DECLARED_IDENTITY_MISSING"
+)
+OBJ_RESOLUTION_REGISTRY_UNBOUND = "FORMAL_ASSET_REGISTRY_UNBOUND"
+OBJ_RESOLUTION_REGISTRY_NOT_PROTOCOL = "OBJ_RESOLUTION_REGISTRY_NOT_PROTOCOL"
+OBJ_RESOLUTION_TEST_ONLY_REGISTRY = "OBJ_RESOLUTION_TEST_ONLY_REGISTRY"
 
 
 class RuntimeObjectResolutionError(Exception):
@@ -56,31 +91,73 @@ class RuntimeObjectResolutionError(Exception):
         super().__init__(f"[{code}] {message}")
 
 
-def _require_real_object(obj: Any, contract: str, ctx: str) -> Any:
-    if obj is None:
+def require_real_registry(formal_asset_registry: Any, ctx: str) -> Any:
+    """The registry must be a REAL object implementing the Protocol."""
+    if formal_asset_registry is None:
         raise RuntimeObjectResolutionError(
-            OBJ_RESOLUTION_NONE_AS_BOUND,
-            f"{ctx}: {contract!r} is None — None is never marked BOUND",
+            OBJ_RESOLUTION_REGISTRY_UNBOUND,
+            f"{ctx}: FORMAL_ASSET_REGISTRY_UNBOUND — no director-"
+            "injected shared FormalAssetRegistry; the object-level "
+            "check honestly BLOCKS",
         )
-    if isinstance(obj, str):
+    if isinstance(formal_asset_registry, str):
         raise RuntimeObjectResolutionError(
             OBJ_RESOLUTION_STRING_PLACEHOLDER,
-            f"{ctx}: {contract!r} resolved to the bare string {obj!r}; "
-            "a string object name never stands in for a real object",
+            f"{ctx}: the registry must be a real object, never a "
+            "string path / JSON file",
         )
-    if isinstance(obj, Mapping):
+    if isinstance(formal_asset_registry, Mapping):
         raise RuntimeObjectResolutionError(
             OBJ_RESOLUTION_MAPPING_IMPERSONATION,
-            f"{ctx}: {contract!r} resolved to a plain Mapping; an "
-            "issued shared object is never a dict",
+            f"{ctx}: a plain Mapping / JSON Mapping is never a "
+            "FormalAssetRegistry (JSON cannot carry real Python "
+            "runtime objects)",
         )
-    return obj
+    if not isinstance(formal_asset_registry, FormalAssetRegistry):
+        raise RuntimeObjectResolutionError(
+            OBJ_RESOLUTION_REGISTRY_NOT_PROTOCOL,
+            f"{ctx}: the injected registry does not implement the "
+            "FormalAssetRegistry Protocol (registry_identity / "
+            "registry_hash / resolve_asset / verify_implementation)",
+        )
+    return formal_asset_registry
+
+
+def require_authorized_registry(
+    formal_asset_registry: Any, ctx: str
+) -> Any:
+    """Production rejects synthetic / local un-issued registries."""
+    if getattr(formal_asset_registry, "test_only", False):
+        raise RuntimeObjectResolutionError(
+            OBJ_RESOLUTION_TEST_ONLY_REGISTRY,
+            f"{ctx}: a TEST_ONLY / SYNTHETIC / NOT_REAL_EXECUTION / "
+            "NOT_OBJECT_LEVEL_CHECK registry never passes an object-"
+            "level check",
+        )
+    return formal_asset_registry
+
+
+def _declared_identity(
+    bundle: E1RuntimeBundle, contract: str, ctx: str
+) -> str:
+    """The manifest-declared identity for one REQUIRED object (strict)."""
+    if contract in RUNTIME_CAPABILITY_CONTRACTS:
+        declared = bundle.object_identity_hash(contract)
+    else:
+        extra = getattr(bundle, "declared_runtime_objects", None) or {}
+        declared = extra.get(contract, "")
+    if not isinstance(declared, str) or len(declared) != 64:
+        raise RuntimeObjectResolutionError(
+            OBJ_RESOLUTION_DECLARED_IDENTITY_MISSING,
+            f"{ctx}: required object {contract!r} has NO declared "
+            "identity in the manifest; a missing declaration fails "
+            "closed (never skipped)",
+        )
+    return declared
 
 
 @dataclass(frozen=True)
 class RuntimeObjectResolution:
-    """One contract's resolution state (real object or honest unbound)."""
-
     contract: str
     bound: bool
     code: str
@@ -93,76 +170,72 @@ def resolve_e1_runtime_objects(
     formal_asset_registry: Any,
     ctx: str,
 ) -> dict:
-    """Resolve every required runtime object from the shared registry,
-    verifying each identity hash against the manifest fail-closed.
-
-    ``formal_asset_registry`` is the director's shared registry (a
-    Mapping contract -> object); absent/None => every contract honestly
-    UNBOUND (this round).
-    """
+    """Resolve every REQUIRED object from the REAL registry, verifying
+    each declared identity + implementation hash fail-closed."""
     if not isinstance(verified_manifest, E1RuntimeBundle):
         raise RuntimeObjectResolutionError(
             OBJ_RESOLUTION_BAD_TYPE,
             f"{ctx}: verified_manifest must be an E1RuntimeBundle, got "
             f"{type(verified_manifest).__name__}",
         )
-    if formal_asset_registry is None:
-        formal_asset_registry = {}
-    if not isinstance(formal_asset_registry, Mapping):
-        raise RuntimeObjectResolutionError(
-            OBJ_RESOLUTION_BAD_TYPE,
-            f"{ctx}: formal_asset_registry must be a Mapping (the "
-            "director's shared registry), got "
-            f"{type(formal_asset_registry).__name__}",
-        )
-    all_contracts = list(RUNTIME_CAPABILITY_CONTRACTS) + list(
-        EXTRA_RUNTIME_CONTRACTS
-    )
+    require_real_registry(formal_asset_registry, ctx)
+    require_authorized_registry(formal_asset_registry, ctx)
     resolved = {}
     missing = []
-    for contract in all_contracts:
-        if contract not in formal_asset_registry:
-            resolved[contract] = RuntimeObjectResolution(
-                contract=contract,
-                bound=False,
-                code=OBJ_RESOLUTION_MISSING,
-                object=None,
-                identity_hash="",
-            )
-            missing.append(contract)
-            continue
-        obj = formal_asset_registry[contract]
+    for contract in REQUIRED_RUNTIME_OBJECTS:
         try:
-            obj = _require_real_object(obj, contract, ctx)
+            declared = _declared_identity(
+                verified_manifest, contract, ctx
+            )
         except RuntimeObjectResolutionError as e:
             resolved[contract] = RuntimeObjectResolution(
-                contract=contract,
-                bound=False,
-                code=e.code,
-                object=None,
-                identity_hash="",
+                contract=contract, bound=False, code=e.code,
+                object=None, identity_hash="")
+            missing.append(contract)
+            continue
+        try:
+            obj = formal_asset_registry.resolve_asset(
+                contract=contract, expected_identity=declared
             )
+        except Exception as e:
+            resolved[contract] = RuntimeObjectResolution(
+                contract=contract, bound=False,
+                code=getattr(e, "code", OBJ_RESOLUTION_MISSING),
+                object=None, identity_hash="")
+            missing.append(contract)
+            continue
+        if obj is None:
+            resolved[contract] = RuntimeObjectResolution(
+                contract=contract, bound=False,
+                code=OBJ_RESOLUTION_NONE_AS_BOUND,
+                object=None, identity_hash="")
+            missing.append(contract)
+            continue
+        if isinstance(obj, str):
+            resolved[contract] = RuntimeObjectResolution(
+                contract=contract, bound=False,
+                code=OBJ_RESOLUTION_STRING_PLACEHOLDER,
+                object=None, identity_hash="")
+            missing.append(contract)
+            continue
+        if isinstance(obj, Mapping):
+            resolved[contract] = RuntimeObjectResolution(
+                contract=contract, bound=False,
+                code=OBJ_RESOLUTION_MAPPING_IMPERSONATION,
+                object=None, identity_hash="")
             missing.append(contract)
             continue
         actual = object_identity_hash(obj)
-        declared = verified_manifest.object_identity_hash(contract)
-        if declared and actual != declared:
+        if actual != declared:
             resolved[contract] = RuntimeObjectResolution(
-                contract=contract,
-                bound=False,
+                contract=contract, bound=False,
                 code=OBJ_RESOLUTION_IDENTITY_MISMATCH,
-                object=None,
-                identity_hash=actual,
-            )
+                object=None, identity_hash=actual)
             missing.append(contract)
             continue
         resolved[contract] = RuntimeObjectResolution(
-            contract=contract,
-            bound=True,
-            code="",
-            object=obj,
-            identity_hash=actual,
-        )
+            contract=contract, bound=True, code="",
+            object=obj, identity_hash=actual)
     return {
         "resolutions": resolved,
         "all_bound": not missing,

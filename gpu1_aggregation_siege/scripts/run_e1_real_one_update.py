@@ -143,7 +143,11 @@ def _dual_student_mount_check() -> dict:
     }
 
 
-def _check_only_report(bundle, gates: dict) -> dict:
+def _check_only_report(
+    bundle, gates: dict, *,
+    formal_asset_registry=None,
+    director_bundle_verifier=None,
+) -> dict:
     """``--check-only``: bundle + bindability + constructibility +
     15+1 batch semantics. NO LLM, NO probe, NO training, NEVER
     EXECUTED, NEVER flips a REAL flag."""
@@ -266,8 +270,9 @@ def _check_only_report(bundle, gates: dict) -> dict:
         from dicode.teachers.e1_formal import runtime_object_resolution as ROR
 
         try:
+            ROR.require_real_registry(formal_asset_registry, "check-only")
             resolution = ROR.resolve_e1_runtime_objects(
-                bundle, None, "check-only.object-level"
+                bundle, formal_asset_registry, "check-only.object-level"
             )
         except ROR.RuntimeObjectResolutionError as e:
             resolution = {
@@ -354,6 +359,9 @@ def run_director_one_window_pipeline(
     update_signer_id: str,
     roundtrip_signer_id: str,
     allow_test_only: bool = False,
+    llm_call_attestation: Any = None,
+    envcoder_execution_attestation: Any = None,
+    probe_coverage_proof: Any = None,
 ) -> dict:
     """The FULL one-window pipeline under the director's bundle.
 
@@ -475,9 +483,9 @@ def run_director_one_window_pipeline(
         "FORMAL_EXPERIMENT_AUTHORIZED": False,
     }
     if not allow_test_only:
-        # production path: each flag is true ONLY when the
-        # corresponding attestation is present and signed by an
-        # authorized production signer
+        # CC2-Repair-2 (§八): each REAL flag derives ONLY from its own
+        # immutable evidence — never from an allowlist being non-empty,
+        # a function being called, a local boolean or an object existing.
         from dicode.teachers.e1_formal import (
             roundtrip_attestation as _RA,
         )
@@ -485,7 +493,18 @@ def run_director_one_window_pipeline(
         from dicode.teachers.e1_formal import update_attestation as _UA
 
         real_flags["REAL_LLM_EXECUTED"] = bool(
-            _UA.AUTHORIZED_TRAINING_RUNTIMES
+            llm_call_attestation is not None
+            and not getattr(llm_call_attestation, "test_only", False)
+        )
+        real_flags["REAL_ENVCODER_EXECUTED"] = bool(
+            envcoder_execution_attestation is not None
+            and not getattr(
+                envcoder_execution_attestation, "test_only", False
+            )
+        )
+        real_flags["REAL_CANDIDATE_PROBE_EXECUTED"] = bool(
+            probe_coverage_proof is not None
+            and not getattr(probe_coverage_proof, "test_only", False)
         )
         real_flags["REAL_OPTIMIZER_UPDATE_EXECUTED"] = bool(
             _UA.AUTHORIZED_TRAINING_RUNTIMES
@@ -523,7 +542,58 @@ def run_director_one_window_pipeline(
     }
 
 
-def main(argv=None) -> int:
+def run_e1_object_level_check(
+    *,
+    bundle_manifest: Any,
+    director_bundle_verifier: Any,
+    formal_asset_registry: Any,
+    selected_candidate_id: str,
+) -> dict:
+    """OBJECT_LEVEL check-only against the director-injected registry.
+
+    The real Python objects are injected by the director process ONLY —
+    never restored from JSON, never imported from arbitrary module.attr.
+    Without the registry => FORMAL_ASSET_REGISTRY_UNBOUND and the check
+    honestly BLOCKs.
+    """
+    from dicode.teachers.e1_formal import runtime_bundle as RB
+    from dicode.teachers.e1_formal import (
+        runtime_object_resolution as ROR,
+    )
+
+    ctx = "run_e1_real_one_update.object_level"
+    bundle = RB.load_verified_runtime_bundle(bundle_manifest, ctx)
+    if bundle.student_selection.selected_candidate_id != (
+        selected_candidate_id
+    ):
+        raise RuntimeError(
+            f"{ctx}: object-level check pinned to {selected_candidate_id!r} "
+            f"but the bundle selects {bundle.student_selection.selected_candidate_id!r}"
+        )
+    try:
+        ROR.require_real_registry(formal_asset_registry, ctx)
+    except ROR.RuntimeObjectResolutionError as e:
+        return {"status": "OBJECT_LEVEL_BLOCKED", "code": e.code,
+                "detail": str(e)}
+    resolution = ROR.resolve_e1_runtime_objects(
+        bundle, formal_asset_registry, ctx)
+    return {
+        "status": (
+            "OBJECT_LEVEL_OK" if resolution["all_bound"]
+            else "OBJECT_LEVEL_BLOCKED"
+        ),
+        "all_bound": resolution["all_bound"],
+        "missing": resolution["missing"],
+    }
+
+
+def main(
+    argv=None,
+    *,
+    director_bundle_verifier=None,
+    formal_asset_registry=None,
+    authorized_llm_runtime=None,
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--director-runtime-bundle",
@@ -543,13 +613,6 @@ def main(argv=None) -> int:
         help="the director-selected Student candidate id (must equal "
         "the Runtime Bundle's issued value; NEVER defaulted to the "
         "first allowed candidate)",
-    )
-    parser.add_argument(
-        "--object-registry",
-        default="",
-        help="path to the director's shared FormalAssetRegistry JSON "
-        "(contract -> object identity claims); ABSENT this round => "
-        "the pipeline stays BLOCKED before any LLM",
     )
     parser.add_argument(
         "--llm-provider",
@@ -606,7 +669,11 @@ def main(argv=None) -> int:
             )
 
     if args.check_only:
-        report = _check_only_report(bundle, gates)
+        report = _check_only_report(
+            bundle, gates,
+            formal_asset_registry=formal_asset_registry,
+            director_bundle_verifier=director_bundle_verifier,
+        )
         path = RT.write_json_report(report, args.report_out)
         print(
             f"E1 REAL ONE UPDATE CHECK-ONLY [{report['status']}] -> "
@@ -678,12 +745,13 @@ def main(argv=None) -> int:
     from dicode.teachers.e1_formal import runtime_object_resolution as ROR
 
     try:
+        ROR.require_real_registry(formal_asset_registry, "pipeline")
         resolution = ROR.resolve_e1_runtime_objects(
-            bundle, args.object_registry, "run_e1_real_one_update.pipeline"
+            bundle, formal_asset_registry, "run_e1_real_one_update.pipeline"
         )
     except ROR.RuntimeObjectResolutionError as e:
         gates["blockers"].append(
-            _blocker("object_registry", e.code, str(e))
+            _blocker("formal_asset_registry", e.code, str(e))
         )
         resolution = {"all_bound": False, "missing": [e.code]}
     if not resolution["all_bound"]:
@@ -708,28 +776,69 @@ def main(argv=None) -> int:
         )
         return 2
 
-    # Every real object is injected: build the teacher, inject the
-    # authorized six-role runtime, and run the FULL pipeline (the
-    # director handoff surface). This round the Signer Registry is
-    # empty, so a valid PRODUCTION bundle cannot exist yet — reaching
-    # here is the reachable code path the director will exercise.
-    report = RT.blocked_status_report(
-        ENTRYPOINT,
-        gates,
-        extra_blockers=[
-            _blocker(
-                "pipeline",
-                "E1_DIRECTOR_HANDOFF_PENDING",
-                "the real object set is injected; the pipeline call "
-                "surface (run_director_one_window_pipeline) is ready "
-                "and reachable. A real Smoke requires the director's "
-                "signature + approval — not executed this round.",
-            )
-        ],
+    # Every real object is injected. Human/authorization gate FIRST:
+    # without the authorized six-role runtime the pipeline BLOCKs
+    # BEFORE any LLM call.
+    if authorized_llm_runtime is None:
+        report = RT.blocked_status_report(
+            ENTRYPOINT,
+            gates,
+            extra_blockers=[
+                _blocker(
+                    "pipeline",
+                    "E1_SMOKE_NOT_AUTHORIZED",
+                    "the real object set is resolved but no authorized "
+                    "six-role LLM runtime / human approval is injected; "
+                    "the pipeline BLOCKs before any LLM call",
+                )
+            ],
+        )
+        path = RT.write_json_report(report, args.report_out)
+        print(f"E1 REAL ONE UPDATE BLOCKED (not authorized); report at {path}")
+        return 2
+
+    # REAL pipeline call: pull the resolved objects out of the registry
+    # and invoke the full one-window pipeline. This is the reachable
+    # director handoff surface — not a fixed pending report.
+    _resolved = resolution["resolutions"]
+    _objects = {
+        contract: res.object
+        for contract, res in _resolved.items()
+        if res.bound
+    }
+    pipeline_report = run_director_one_window_pipeline(
+        teacher=_objects.get("student_identity"),
+        bundle=bundle,
+        run_id="director-smoke",
+        branch=RT.git_branch(),
+        git_sha=RT.git_head_sha(),
+        probe_issuer=lambda candidates, bundle: _objects.get("probe_runner"),
+        signal_issuer=lambda candidates, probes: (),
+        one_update_runtime=_objects.get(
+            "canonical_dicode_one_update_runtime"
+        ),
+        student_checkpoint_identity=(
+            bundle.student_selection.checkpoint_file_sha256
+        ),
+        reference_checkpoint_identity="",
+        anchor_manifest_hash=bundle.object_identity_hash("anchor_manifest"),
+        formal_asset_registry_hash=(
+            bundle.object_identity_hash("formal_asset_registry")
+        ),
+        update_record=None,
+        checkpoint=None,
+        roundtrip_evidence=None,
+        k=12,
+        seed=7,
+        critic_policy="hard_veto",
+        family_cap=6,
+        smoke_signer_id="",
+        update_signer_id="",
+        roundtrip_signer_id="",
     )
-    path = RT.write_json_report(report, args.report_out)
-    print(f"E1 REAL ONE UPDATE handoff pending; report at {path}")
-    return 2
+    path = RT.write_json_report(pipeline_report, args.report_out)
+    print(f"E1 REAL ONE UPDATE pipeline report at {path}")
+    return 0
 
 
 if __name__ == "__main__":

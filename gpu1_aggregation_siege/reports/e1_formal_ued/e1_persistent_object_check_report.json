@@ -1,0 +1,27 @@
+{
+  "forbidden": [
+    "synthetic objects passing the object-level check",
+    "JSON mapping impersonating a real registry",
+    "path-string registry injection"
+  ],
+  "required": [
+    "PRODUCTION bundle",
+    "director bundle verifier",
+    "Persistent StudentSelectionDescriptor",
+    "all real objects from the FormalAssetRegistry",
+    "identity + implementation hash matches",
+    "real StudentInitContract consumed",
+    "real profile/checkpoint/adapter mounted",
+    "Reference mounted",
+    "ProbeRunner callable",
+    "one-update runtime callable",
+    "runstate checkpoint runtime callable",
+    "anchor manifest frozen",
+    "authorized six-role runtime parsed (not called)",
+    "15+1 contract",
+    "pipeline deps constructible",
+    "no LLM/EnvCoder/probe/training/checkpoint writes"
+  ],
+  "target": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "this_round_status": "OBJECT_LEVEL_BLOCKED (honest: no director registry / Persistent checkpoint injected)"
+}

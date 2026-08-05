@@ -1,0 +1,17 @@
+{
+  "REAL_CANDIDATE_PROBE_EXECUTED": "CandidateProbeResult coverage proof",
+  "REAL_ENVCODER_EXECUTED": "EnvCoder execution attestation",
+  "REAL_FULL_STATE_ROUND_TRIP": "fresh-process RunState roundtrip attestation",
+  "REAL_LLM_EXECUTED": "six-role LLM CallJournal/attestation",
+  "REAL_OPTIMIZER_UPDATE_EXECUTED": "Canonical DiCode OneUpdateReceipt/attestation",
+  "rule": "never from an allowlist being non-empty / a function being called / a local boolean / an object existing; TEST_ONLY keeps every flag false",
+  "values_this_round": {
+    "E1_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "REAL_CANDIDATE_PROBE_EXECUTED": false,
+    "REAL_ENVCODER_EXECUTED": false,
+    "REAL_FULL_STATE_ROUND_TRIP": false,
+    "REAL_LLM_EXECUTED": false,
+    "REAL_OPTIMIZER_UPDATE_EXECUTED": false
+  }
+}

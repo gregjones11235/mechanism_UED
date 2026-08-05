@@ -1,0 +1,29 @@
+{
+  "call_order": [
+    "load + verify bundle manifest",
+    "verify Persistent StudentSelectionDescriptor",
+    "resolve ALL real objects from the injected registry",
+    "obtain the real StudentInitContract",
+    "mount with the real StudentInitContract",
+    "verify profile / checkpoint / adapter / memory identity",
+    "complete all object-level gates",
+    "check-only stops, or enters the real pipeline"
+  ],
+  "main_calls_pipeline": true,
+  "pipeline_required_inputs": [
+    "teacher",
+    "verified bundle",
+    "CandidateProbeRunner",
+    "criterion signal issuer",
+    "CanonicalDiCodeOneUpdateRuntime",
+    "CanonicalDiCodeRunStateCheckpoint",
+    "Student checkpoint identity",
+    "Reference checkpoint identity",
+    "anchor manifest hash",
+    "FormalAssetRegistry hash",
+    "update receipt/context",
+    "fresh-process roundtrip evidence",
+    "authorized six-role LLM runtime"
+  ],
+  "registry_injection": "dependency-injection only; never a JSON path / module.attr import"
+}
