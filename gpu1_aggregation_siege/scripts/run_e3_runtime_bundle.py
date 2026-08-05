@@ -163,6 +163,34 @@ def main(argv=None) -> int:
     _log(f"bundle {manifest['bundle_id']} manifest validated; "
          f"{len(resolved)} file assets resolved")
 
+    # E3-P0-1: the director-injected bundle verifier is REQUIRED.  A
+    # signature_reference that is merely non-empty / non-SYNTHETIC proves
+    # nothing.  When the shared verifier is unbound, every production bundle
+    # is BLOCKED with E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND — direction 三
+    # never invents its own cryptographic protocol.
+    try:
+        from dicode.simulator_frontier.bundle_verifier import (
+            E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND,
+            production_verifier_bound,
+            verify_production_bundle_with_slot,
+        )
+        if not production_verifier_bound():
+            report["verdict"] = "BLOCKED"
+            report["reason"] = (
+                f"{E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND}: the director-injected "
+                "bundle verifier is not bound; production bundles are blocked "
+                "fail closed (a signature_ref string is never signature "
+                "verification)")
+            _finish(report, out_dir)
+            return BLOCKED
+        report["manifest_canonical_hash"] = verify_production_bundle_with_slot(
+            manifest)
+    except Exception as exc:
+        report["verdict"] = "BLOCKED"
+        report["reason"] = f"E3_PRODUCTION_BUNDLE_VERIFIER: {exc!r}"
+        _finish(report, out_dir)
+        return BLOCKED
+
     # ------------------------------------------------------------------
     # 2. mount the Student exactly as the bundle names it
     # ------------------------------------------------------------------

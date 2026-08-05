@@ -208,6 +208,57 @@ class CanonicalDiCodeTrainingBatchPlan:
 
 
 @dataclass(frozen=True)
+class DiCodeOneUpdateContext:
+    """The immutable context DiCode's ``run_session_training`` consumes.
+
+    E3-P0-2: the real DiCode entry point is
+    ``dicode.training.run_session_training(config, rng, rl_train_state,
+    gen_manager, global_update_step, global_env_steps, current_session_idx,
+    sampled_task_ids, original_return_prev_session)``.  Direction 三 never
+    invents a parallel loop — it assembles THIS context (plus the sampled
+    task ids from the batch plan) and delegates.  Mint-only: ``context_hash``
+    is derived in ``__post_init__``.
+    """
+
+    config: Any
+    rng: Any
+    rl_train_state: Any
+    gen_manager: Any
+    global_update_step: int
+    global_env_steps: int
+    current_session_idx: int
+    original_return_prev_session: Any
+    selected_candidate_id: str
+    runtime_bundle_hash: str
+    formal_asset_registry_hash: str
+    context_hash: str = field(init=False)
+    context_schema: str = "simulator_frontier.dicode-one-update-context/v1"
+
+    def __post_init__(self) -> None:
+        for label, value in (("global_update_step", self.global_update_step),
+                             ("global_env_steps", self.global_env_steps),
+                             ("current_session_idx", self.current_session_idx)):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise InvalidEvidenceError(
+                    f"DiCodeOneUpdateContext.{label} must be a non-negative int, "
+                    f"got {value!r}")
+        _require_nonempty_str("selected_candidate_id", self.selected_candidate_id)
+        _require_sha256("runtime_bundle_hash", self.runtime_bundle_hash)
+        _require_sha256("formal_asset_registry_hash", self.formal_asset_registry_hash)
+        payload = {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name != "context_hash"
+        }
+        payload["config"] = "BOUND"
+        payload["rng"] = "BOUND"
+        payload["rl_train_state"] = "BOUND"
+        payload["gen_manager"] = "BOUND"
+        payload["original_return_prev_session"] = "BOUND"
+        object.__setattr__(self, "context_hash", _canonical_sha256(payload))
+
+
+@dataclass(frozen=True)
 class FrontierDistributionEnvironmentAdapter:
     """The environment/task adapter direction 三 builds for the DiCode runtime.
 
@@ -268,6 +319,53 @@ def mint_frontier_distribution_environment_adapter(
         taskparam_apply_entrypoint=str(taskparam_apply_entrypoint),
         taskparam_implementation_hash=str(taskparam_implementation_hash),
     )
+
+
+def materialize_and_register(adapter: Any, plan: Any,
+                             gen_manager_archive: Any) -> tuple[str, ...]:
+    """Register the 15 curriculum tasks into the GenManager archive.
+
+    E3-P0-3: ``run_session_training`` only receives ``sampled_task_ids`` and
+    loads tasks through the GenManager archive.  This contract method
+    materializes the 12 dynamic frontier distributions + 3 non-target anchors
+    as 15 real loadable tasks (consumable by DiCode's
+    ``load_tasks_from_env_codes``), each bound to the distribution hash,
+    source frontier, Student identity and memory binding.  Registration
+    failure fails closed; no second training loop is constructed.  Returns
+    the 15 registered task ids (== plan.curriculum_slots).
+    """
+    verify_frontier_distribution_environment_adapter(adapter)
+    if not isinstance(plan, CanonicalDiCodeTrainingBatchPlan):
+        raise InvalidEvidenceError(
+            "materialize_and_register requires a minted "
+            "CanonicalDiCodeTrainingBatchPlan")
+    if gen_manager_archive is None:
+        raise ProductionBlockedError(
+            "materialize_and_register requires the GenManager archive — "
+            "frontier tasks are never invented outside the archive "
+            "(fail closed)")
+    registered = []
+    for slot in plan.curriculum_slots:
+        distribution = plan.slot_distributions.get(slot)
+        if distribution is None:
+            raise ProductionBlockedError(
+                f"task registration failed: slot {slot!r} has no distribution "
+                "binding (fail closed)")
+        try:
+            task_id = gen_manager_archive.register_task(
+                task_id=slot,
+                distribution_hash=plan.plan_hash,
+                source_frontier="FRONTIER_DYNAMIC" if "::" in slot
+                else "NON_TARGET_ANCHOR",
+                student_identity=plan.env_adapter_id,
+                memory_binding=plan.memory_bindings.get(slot, {}),
+            )
+        except Exception as exc:
+            raise ProductionBlockedError(
+                f"GenManager archive refused task registration for {slot!r}: "
+                f"{exc!r} (fail closed)") from exc
+        registered.append(str(task_id))
+    return tuple(registered)
 
 
 def verify_frontier_distribution_environment_adapter(adapter: Any) -> None:
@@ -410,22 +508,30 @@ def verify_canonical_dicode_one_update_runtime(runtime: Any) -> None:
 
 
 def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
-                                anchor_ids: Any, env_adapter_id: Any,
+                                non_target_anchor_ids: Any,
+                                original_task_anchor_id: Any,
+                                original_task_id: Any,
+                                env_adapter_id: Any,
                                 memory_bindings: Any,
                                 anchor_memory_binding: Any = None
                                 ) -> CanonicalDiCodeTrainingBatchPlan:
-    """Compile the 15+1 curriculum plan from 12 dynamic distributions + 4 anchors.
+    """Compile the 15+1 curriculum plan with EXPLICIT anchor identities.
 
-    * Exactly 12 dynamic ``FrontierDistribution`` objects (unique ids) and
-      exactly 4 anchor ids are required.
-    * The curriculum slots are the 12 dynamic ids + the FIRST 3 anchor ids
-      (non-target standard-reset anchors) = 15.
-    * The FOURTH anchor is the semantic counterpart of DiCode's
-      ORIGINAL_TASK: it is NOT duplicated as a regular distribution — it is
-      mapped to the single OriginalTask slot at proportion 0.20.  The 15
-      curriculum slots share the remaining 0.80 (equal share per slot).
-    * ``compose_12_plus_4`` may keep its scientific-report semantics; this
-      conversion is what enters the training runtime.
+    E3-P0-3: anchor semantics are identity-based, never position-based.  The
+    Anchor Manifest must explicitly declare the three non-target anchors, the
+    single OriginalTask anchor and the OriginalTask id (``original_craftax``).
+    Arbitrary four unique strings never pass automatically.
+
+    * Exactly 12 dynamic ``FrontierDistribution`` objects (unique ids).
+    * ``non_target_anchor_ids`` must be EXACTLY 3 unique ids.
+    * ``original_task_anchor_id`` must be EXACTLY 1 id and
+      ``original_task_id`` must be ``original_craftax`` (the OriginalTask is
+      appended by DiCode exactly once and NEVER enters ``sampled_task_ids``).
+    * The curriculum slots are the 12 dynamic ids + the 3 explicit
+      non-target anchors = 15; they share 0.80 (equal share per slot); the
+      OriginalTask occupies the remaining 0.20.
+    * Anchor ORDER never changes the semantics — the three non-target ids and
+      the single OriginalTask id are named, not sliced.
     """
     from .frontier_distributions import FrontierDistribution
     if isinstance(distributions, Mapping) or not isinstance(
@@ -439,21 +545,35 @@ def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
         raise InvalidEvidenceError(
             "exactly 12 unique typed FrontierDistribution objects are required "
             "(hand-built mappings are never accepted)")
-    anchors = tuple(str(a) for a in anchor_ids)
-    if len(anchors) != 4 or len(set(anchors)) != 4:
-        raise InvalidEvidenceError("exactly 4 unique anchor ids are required")
-    curriculum_slots = tuple(d.distribution_id for d in dists) + anchors[:3]
+    non_targets = tuple(str(a) for a in non_target_anchor_ids)
+    if len(non_targets) != 3 or len(set(non_targets)) != 3:
+        raise InvalidEvidenceError(
+            "exactly 3 unique non_target_anchor_ids are required (anchor "
+            "identity is explicit, never position-based)")
+    original_anchor = str(original_task_anchor_id)
+    if not original_anchor:
+        raise InvalidEvidenceError(
+            "original_task_anchor_id must be explicitly declared")
+    if original_anchor in non_targets:
+        raise InvalidEvidenceError(
+            "original_task_anchor_id must differ from the non-target anchors")
+    if str(original_task_id) != "original_craftax":
+        raise InvalidEvidenceError(
+            f"original_task_id must be 'original_craftax', got "
+            f"{original_task_id!r} — the OriginalTask identity is explicit")
+    curriculum_slots = tuple(d.distribution_id for d in dists) + non_targets
     if len(curriculum_slots) != CURRICULUM_SLOT_COUNT:
         raise InvalidEvidenceError(
             f"expected {CURRICULUM_SLOT_COUNT} curriculum slots, got "
             f"{len(curriculum_slots)}")
     per_slot = CURRICULUM_PROPORTION_TOTAL / CURRICULUM_SLOT_COUNT
     curriculum_weights = {slot: per_slot for slot in curriculum_slots}
-    slot_distributions = {d.distribution_id: dict(asdict(d))
-                          for d in dists}
-    for anchor in anchors[:3]:
+    slot_distributions = {d.distribution_id: dict(asdict(d)) for d in dists}
+    for anchor in non_targets:
         slot_distributions[anchor] = {"anchor_id": anchor,
-                                      "kind": "NON_TARGET_STANDARD_RESET_ANCHOR"}
+                                      "kind": "NON_TARGET_STANDARD_RESET_ANCHOR",
+                                      "original_task_anchor_id": original_anchor,
+                                      "original_task_id": str(original_task_id)}
     if isinstance(memory_bindings, Mapping):
         bindings = dict(memory_bindings)
     else:
@@ -476,18 +596,30 @@ def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
     )
 
 
-def execute_one_update(runtime: Any, *, plan: Any, adapter: Any, params: Any,
-                       run_state: Mapping[str, Any] | None,
-                       budget: Mapping[str, Any] | None) -> Mapping[str, Any]:
-    """Delegate ONE update to the bound DiCode run_session_training chain.
+def execute_one_update(runtime: Any, *, context: Any, plan: Any,
+                       adapter: Any) -> Mapping[str, Any]:
+    """Delegate ONE update with DiCode's EXACT ``run_session_training`` ABI.
 
-    Direction 三 NEVER updates params itself: the update is executed by the
-    director-shared DiCode runtime (original PPO-GTrXL).  The returned
-    receipt must be a mapping carrying new ``params``; direction 三 only
-    verifies the contract-level invariants (a real params change, no
-    self-invented counters).
+    E3-P0-2: the real entry point is
+    ``dicode.training.run_session_training(config, rng, rl_train_state,
+    gen_manager, global_update_step, global_env_steps, current_session_idx,
+    sampled_task_ids, original_return_prev_session)``.  Direction 三 NEVER
+    updates params itself and NEVER builds a second training loop: it
+    assembles a minted ``DiCodeOneUpdateContext``, registers the 15
+    curriculum tasks via the environment adapter, passes
+    ``sampled_task_ids = list(plan.curriculum_slots)`` (the OriginalTask is
+    appended by DiCode exactly once and is NEVER in ``sampled_task_ids``),
+    and verifies the returned ``OneUpdateReceipt`` at the contract level.
     """
     verify_canonical_dicode_one_update_runtime(runtime)
+    if not isinstance(context, DiCodeOneUpdateContext):
+        raise InvalidEvidenceError(
+            "execute_one_update requires a minted DiCodeOneUpdateContext")
+    if str(context.selected_candidate_id) != str(runtime.selected_candidate_id):
+        raise InvalidEvidenceError(
+            "execute_one_update: the context selected_candidate_id must equal "
+            "the runtime selected_candidate_id (training binds the SELECTED "
+            "Student; fail closed)")
     if not isinstance(plan, CanonicalDiCodeTrainingBatchPlan):
         raise InvalidEvidenceError(
             "execute_one_update requires a minted CanonicalDiCodeTrainingBatchPlan")
@@ -497,13 +629,28 @@ def execute_one_update(runtime: Any, *, plan: Any, adapter: Any, params: Any,
             "FrontierDistributionEnvironmentAdapter")
     session = _import_entrypoint(runtime.run_session_training_entrypoint,
                                  "run_session_training")
+    sampled_task_ids = list(plan.curriculum_slots)
+    if ORIGINAL_TASK_SLOT in sampled_task_ids:
+        raise InvalidEvidenceError(
+            "OriginalTask must never enter sampled_task_ids — DiCode appends "
+            "it exactly once (fail closed)")
     try:
-        receipt = session(plan, adapter, params, run_state, budget)
+        receipt = session(
+            context.config,
+            context.rng,
+            context.rl_train_state,
+            context.gen_manager,
+            int(context.global_update_step),
+            int(context.global_env_steps),
+            int(context.current_session_idx),
+            sampled_task_ids,
+            context.original_return_prev_session,
+        )
     except Exception as exc:
         raise ProductionBlockedError(
-            f"CanonicalDiCodeOneUpdateRuntime rejected the batch plan: {exc!r}") from exc
-    if not isinstance(receipt, Mapping) or "params" not in receipt:
+            f"run_session_training rejected the one-update request: {exc!r}") from exc
+    if not isinstance(receipt, Mapping):
         raise ProductionBlockedError(
-            "CanonicalDiCodeOneUpdateRuntime receipt must be a mapping carrying "
-            "'params' (fail closed)")
+            "run_session_training must return a mapping OneUpdateReceipt "
+            "(fail closed)")
     return receipt

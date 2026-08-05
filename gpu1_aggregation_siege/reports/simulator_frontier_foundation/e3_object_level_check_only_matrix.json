@@ -1,0 +1,20 @@
+{
+  "schema": "simulator_frontier.e3_object_level_check_only_matrix/v1",
+  "required_objects": [
+    "trusted bundle verifier",
+    "student (real profile + checkpoint hash + params hash + adapter)",
+    "reference mount",
+    "training runtime ABI (run_session_training / run_training_session importable)",
+    "frontier task registration interface",
+    "explicit anchor identity",
+    "formal asset registry",
+    "full-state checkpoint runtime",
+    "two-llm runtime"
+  ],
+  "both_students": [
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+  ],
+  "current_state": "OBJECT_LEVEL_CHECK_BLOCKED: the director-injected bundle verifier is unbound and the real CC2 checkpoints are not mounted locally; check-only fails closed on the first missing object",
+  "never_claims": "DIRECTOR_SMOKE_HANDOFF_READY is NOT set"
+}

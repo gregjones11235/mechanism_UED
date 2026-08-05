@@ -1,0 +1,17 @@
+{
+  "schema": "simulator_frontier.e3_real_memory_boundary_matrix/v1",
+  "note": "the two arms share the memory TREE; ONLY the carry policy differs.  Real 129-step boundary execution requires the real CC2 checkpoints (server-side); until mounted locally the boundary tests honestly BLOCK (OBJECT_LEVEL_CHECK_BLOCKED) instead of claiming string-only semantics.",
+  "persistent": {
+    "candidate": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "carry_rule": "PERSISTENT_CARRY",
+    "boundary_behavior": "real adapter evidence required at steps 127/128/129",
+    "local_checkpoint": "absent -> BLOCKED"
+  },
+  "reset128": {
+    "candidate": "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+    "carry_rule": "RESET128_CARRY",
+    "boundary_behavior": "real reset128 rule at the 128-step boundary",
+    "local_checkpoint": "absent -> BLOCKED"
+  },
+  "documentation_rule": "no documentation may claim 'segment counter keeps progressing' in a way that conflicts with real adapter evidence"
+}

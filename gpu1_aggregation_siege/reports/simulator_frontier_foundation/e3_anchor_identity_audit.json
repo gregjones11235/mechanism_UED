@@ -1,0 +1,15 @@
+{
+  "schema": "simulator_frontier.e3_anchor_identity_audit/v1",
+  "explicit_identity": {
+    "non_target_anchor_ids": "exactly 3, explicitly declared",
+    "original_task_anchor_id": "exactly 1, explicitly declared",
+    "original_task_id": "original_craftax",
+    "manifest_hash": "binds the declared anchor identities"
+  },
+  "compile_15_plus_1": [
+    "12 dynamic tasks + 3 non-target anchors = 15 curriculum slots",
+    "original_task_anchor maps to original_craftax; OriginalTask NEVER in curriculum slots / sampled_task_ids",
+    "anchor ORDER does not change semantics (identity-based, not position-based)",
+    "arbitrary four unique strings never pass automatically"
+  ]
+}

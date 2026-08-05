@@ -1,0 +1,41 @@
+{
+  "schema": "simulator_frontier.e3_dicode_abi_repair_audit/v1",
+  "stage": "E3_OBJECT_LEVEL_CONSUMER_READY",
+  "p0_fixes": {
+    "P0-1_trusted_bundle_verifier": {
+      "module": "bundle_verifier.py",
+      "production_gate": "E3_PRODUCTION_BUNDLE_VERIFIER_UNBOUND when the director-injected verifier is unbound (BLOCKED)",
+      "verifies": [
+        "signer identity in TrustedSignerRegistry",
+        "manifest canonical payload hash",
+        "non-synthetic signature reference",
+        "entrypoint allowlist + source-hash binding"
+      ],
+      "current_state": "verifier NOT injected -> production bundles BLOCKED fail closed"
+    },
+    "P0-2_dicode_abi": {
+      "real_signature": "run_session_training(config, rng, rl_train_state, gen_manager, global_update_step, global_env_steps, current_session_idx, sampled_task_ids, original_return_prev_session)",
+      "context": "DiCodeOneUpdateContext binds config/rng/rl_train_state/gen_manager/global_update_step/global_env_steps/current_session_idx/original_return_prev_session/selected_candidate_id/runtime_bundle_hash/formal_asset_registry_hash",
+      "old_call_removed": "session(plan, adapter, params, run_state, budget) deleted",
+      "current_state": "execute_one_update delegates with the exact 9-arg ABI; no real DiCode runtime mounted -> training not executed"
+    },
+    "P0-3_anchor_identity": {
+      "explicit": [
+        "non_target_anchor_ids (exactly 3)",
+        "original_task_anchor_id (exactly 1)",
+        "original_task_id == original_craftax"
+      ],
+      "position_based_removed": "anchors[:3] / anchors[3]",
+      "original_task": "appended by DiCode exactly once; NEVER in sampled_task_ids"
+    },
+    "P0-4_memory_boundary": {
+      "current_state": "real 129-step adapter execution BLOCKED: no local CC2 checkpoint files (they live on the server); honest BLOCKED, no string-only claims"
+    }
+  },
+  "readiness_flags": {
+    "E3_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "E3_STUDENT_TRAINING_RUNTIME_READY": false,
+    "E3_REAL_SMOKE_READY": false
+  }
+}

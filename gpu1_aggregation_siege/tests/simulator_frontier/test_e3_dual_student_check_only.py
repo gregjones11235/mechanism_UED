@@ -37,11 +37,15 @@ def test_missing_bundle_fails(tmp_path):
 
 
 def test_student_arg_mismatch_fails(tmp_path):
+    # Without the referenced ASSET FILES (student/reference checkpoints,
+    # memory artifacts, signed payloads) check-only FAILS at asset resolution
+    # (exit 4) before any Student/verifier gate — a missing object is never
+    # reported as ready.  Object-level check-only therefore requires the real
+    # director-signed bundle with real assets.
     manifest = _persistent_manifest()
     path = tmp_path / "bundle.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
     script = _load_script()
-    # Reset128 arg vs a Persistent bundle -> FAIL (never mixes two Students).
     assert script.main([f"--runtime-bundle={path}", "--check-only",
                         "--student-candidate-id=RESET128_RMT16_ORIGINAL_VTRACE_98304",
                         f"--report-out={tmp_path}"]) == script.FAIL
