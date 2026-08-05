@@ -50,11 +50,34 @@ from dicode.teachers.e1_formal.student_contract import (  # noqa: E402
     PINNED_STUDENT_CANDIDATE_ID,
 )
 
-#: the INTENDED longrun total horizon. CC2 follow-up P0-15: this is
-#: NOT auto-applied — it only takes effect inside an explicit director
-#: training-budget decision (budget_semantics); an unresolved 98304 is
-#: BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION and a longrun never starts.
-LONGRUN_TOTAL_ENV_STEPS = 98304
+#: the frozen DiCode resolved training config (the ONLY formal timeline)
+DICODE_TRAINING_CONFIG_PATH = "conf/training/default.yaml"
+
+
+def resolve_dicode_total_timesteps(siege_root: str = SIEGE_ROOT) -> int:
+    """The frozen DiCode resolved ``total_timesteps``.
+
+    CC2-Director: the ONLY formal training timeline is the DiCode
+    native protocol (conf/training/default.yaml); 98304 is gone as a
+    formal budget and may appear ONLY in checkpoint paths / checkpoint
+    steps / Student candidate identity. Absent/unparseable => 0 (the
+    caller records an honest blocker).
+    """
+    import yaml
+
+    try:
+        with open(
+            os.path.join(siege_root, DICODE_TRAINING_CONFIG_PATH),
+            "r",
+            encoding="utf-8",
+        ) as handle:
+            config = yaml.safe_load(handle)
+    except (OSError, ValueError):
+        return 0
+    value = (config or {}).get("total_timesteps", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return 0
+    return value
 
 #: production gate stages, in the order the entrypoints audit them
 GATE_SHARED_RUNTIME = "shared_runtime_resolution"

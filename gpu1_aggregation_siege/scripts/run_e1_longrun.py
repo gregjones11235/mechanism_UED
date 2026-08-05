@@ -1,28 +1,30 @@
-"""E1 round-3 P0-6: the longrun entrypoint — PREPARE ONLY, never start.
+"""E1 CC2-Director: the FORMAL experiment manifest entrypoint —
+PREPARE ONLY, never start, always waiting for human approval.
 
-This script freezes the COMPLETE run identity into a manifest:
+This script freezes the COMPLETE formal experiment identity into a
+manifest:
 
-* ``total_env_steps``       — the pinned horizon 98304;
+* ``total_timesteps``       — the FROZEN DiCode resolved config value
+                              (conf/training/default.yaml); the ONLY
+                              formal training timeline. 98304 is NOT a
+                              formal budget — it may appear ONLY in
+                              checkpoint paths / checkpoint steps /
+                              Student candidate identity;
 * Student identity          — the pinned strong-Student candidate id
                               (CC4 owns the real checkpoint);
 * Reference identity        — the G1 contract; UNFROZEN => refused;
 * seed                      — the teacher ``selection.seed`` pin;
 * anchor manifest           — the G3 shared manifest; DRAFT => refused;
-* Git SHA                   — the LIVE ``git rev-parse HEAD``; an
-                              unresolvable SHA is refused, never guessed;
+* Git SHA                   — the LIVE ``git rev-parse HEAD``;
 * config hash               — sha256 over the teacher config bytes;
 * checkpoint hash           — via the shared FullStateCheckpoint
                               contract (duck-typed); unbound => refused;
 * output directory          — derived deterministically from the SHA.
 
-ANY unfrozen field => the run is REFUSED (exit non-zero) and every
-unfrozen field is listed with its blocker code. Default semantics are
-``--prepare-only``: print the frozen manifest, write the JSON, and
-exit WITHOUT entering any training loop. ``--launch`` additionally
-requires every production gate (shared runtime bound, real EnvCoder
-backend authorized, real LLM provider authorized) — this round none
-of those holds, so launch is honestly refused; the script NEVER
-starts the run on its own.
+ANY unfrozen field => the run is REFUSED (exit non-zero). The script
+NEVER starts training: ``FORMAL_EXPERIMENT_AUTHORIZED`` stays false
+until a HUMAN approves the formal experiment. ``--launch`` is not a
+training launcher — it is still gated and refused this round.
 """
 from __future__ import annotations
 
@@ -62,65 +64,104 @@ def build_frozen_manifest(
 ) -> dict:
     """Compute every manifest field from REAL state — never guess.
 
-    CC2 follow-up P0-15: the 98304 total is NOT a supervisor constant
-    anymore — it must come from an explicit director budget decision
-    with semantics. Absent/unfrozen => the budget fields are unfrozen
-    with BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION and the run REFUSES
-    (never starts).
+    CC2-Director: the only formal timeline is the frozen DiCode
+    resolved config's total_timesteps (98304 is NOT a formal budget —
+    it may appear only in checkpoint paths/steps/Student identity).
+    The budget must come from an explicit director decision on that
+    timeline; absent/unfrozen => BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION
+    and the run REFUSES (never starts).
     """
     fields = {}
     blockers = []
 
-    # ---- training-budget semantics (director decision ONLY) ----------
+    # ---- training budget on the DiCode timeline (director decision) ---
     from dicode.teachers.e1_formal import budget_semantics as BS
 
-    try:
-        budget = BS.resolve_training_budget(
-            budget_block, "e1_longrun.budget"
+    frozen_total_timesteps = RT.resolve_dicode_total_timesteps()
+    if frozen_total_timesteps <= 0:
+        detail = (
+            "the frozen DiCode resolved config "
+            "(conf/training/default.yaml) provides no positive "
+            "total_timesteps; the formal manifest cannot be built "
+            "without the DiCode timeline"
         )
-        fields["training_budget_semantics"] = _field(
-            budget.semantics, True
+        fields["total_timesteps"] = _field(
+            None, False, "DICODE_TOTAL_TIMESTEPS_UNRESOLVED", detail
         )
-        fields["initial_checkpoint_env_steps"] = _field(
-            budget.initial_checkpoint_env_steps, True
-        )
-        fields["additional_training_env_steps"] = _field(
-            budget.additional_training_env_steps, True
-        )
-        fields["final_total_env_steps"] = _field(
-            budget.final_total_env_steps, True
-        )
-        fields["total_env_steps"] = _field(
-            budget.final_total_env_steps, True
-        )
-    except BS.BudgetError as e:
-        detail = str(e)
         fields["training_budget_semantics"] = _field(
             None,
             False,
             BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
             detail,
         )
-        fields["initial_checkpoint_env_steps"] = _field(
-            None, False, e.code, detail
+        fields["initial_checkpoint_timesteps"] = _field(
+            None, False, "DICODE_TOTAL_TIMESTEPS_UNRESOLVED", detail
         )
-        fields["additional_training_env_steps"] = _field(
-            None, False, e.code, detail
+        fields["additional_training_timesteps"] = _field(
+            None, False, "DICODE_TOTAL_TIMESTEPS_UNRESOLVED", detail
         )
-        fields["final_total_env_steps"] = _field(
-            None, False, e.code, detail
-        )
-        fields["total_env_steps"] = _field(
-            None, False, BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
-            detail,
+        fields["final_total_timesteps"] = _field(
+            None, False, "DICODE_TOTAL_TIMESTEPS_UNRESOLVED", detail
         )
         blockers.append(
             {
                 "field": "training_budget",
-                "code": BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+                "code": "DICODE_TOTAL_TIMESTEPS_UNRESOLVED",
                 "detail": detail,
             }
         )
+    else:
+        try:
+            budget = BS.resolve_training_budget(
+                budget_block,
+                frozen_total_timesteps=frozen_total_timesteps,
+                ctx="e1_longrun.budget",
+            )
+            fields["total_timesteps"] = _field(
+                budget.total_timesteps, True
+            )
+            fields["training_budget_semantics"] = _field(
+                budget.semantics, True
+            )
+            fields["initial_checkpoint_timesteps"] = _field(
+                budget.initial_checkpoint_timesteps, True
+            )
+            fields["additional_training_timesteps"] = _field(
+                budget.additional_training_timesteps, True
+            )
+            fields["final_total_timesteps"] = _field(
+                budget.final_total_timesteps, True
+            )
+        except BS.BudgetError as e:
+            detail = str(e)
+            fields["total_timesteps"] = _field(
+                None,
+                False,
+                BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+                detail,
+            )
+            fields["training_budget_semantics"] = _field(
+                None,
+                False,
+                BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+                detail,
+            )
+            fields["initial_checkpoint_timesteps"] = _field(
+                None, False, e.code, detail
+            )
+            fields["additional_training_timesteps"] = _field(
+                None, False, e.code, detail
+            )
+            fields["final_total_timesteps"] = _field(
+                None, False, e.code, detail
+            )
+            blockers.append(
+                {
+                    "field": "training_budget",
+                    "code": BS.BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION,
+                    "detail": detail,
+                }
+            )
 
     # ---- Student identity (pinned; CC4 owns the checkpoint) ----------
     fields["student_candidate_id"] = _field(
@@ -385,7 +426,9 @@ def main(argv=None) -> int:
         "prepare_only": True,  # this script NEVER starts the run
         "launch_requested": bool(args.launch),
         "launch_granted": False,  # unauthorized this round, always
-        "total_env_steps": RT.LONGRUN_TOTAL_ENV_STEPS,
+        # CC2-Director: the formal experiment always waits for HUMAN
+        # approval; 98304 is not a formal budget
+        "formal_experiment_authorized": False,
         "student_candidate_id": RT.PINNED_STUDENT_CANDIDATE_ID,
         "fields": manifest["fields"],
         "blockers": unfrozen,
