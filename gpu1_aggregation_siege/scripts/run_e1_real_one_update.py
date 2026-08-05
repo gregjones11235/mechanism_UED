@@ -1,35 +1,38 @@
-"""E1 CC2 follow-up P0-1/P0-21: the SOLE single-real-update gate.
+"""E1 CC2-Director: the SOLE single-real-update gate.
 
-Refactored entry contract::
+Refactored entry contract (CC2-Director)::
 
     python scripts/run_e1_real_one_update.py \
-        --runtime-bundle <signed-runtime-bundle-manifest> \
+        --director-runtime-bundle <signed-manifest> \
         --report-out <path> \
         --check-only
 
+The runtime bundle is the DIRECTOR's signed injection channel. The
+entry:
+
+1. verifies the director's signature against the supervisor-owned
+   Signer Registry (the ``E1RuntimeBundle`` signer whitelist — EMPTY
+   this round, so no production bundle can verify yet);
+2. resolves the real shared objects from the bundle (seam);
+3. builds the E1FormalGenManager;
+4. injects the AuthorizedSixRoleLLMRuntime;
+5. calls the FULL one-window driver chain
+   (Review Window -> EnvCoder -> ExecutableCandidate -> signed probes
+   -> signed signals -> SelectionAttestation -> 12 dynamic ->
+   CanonicalDiCodeTrainingBatchPlan -> canonical DiCode one update ->
+   RunStateCheckpoint -> fresh-process restore -> next-policy-step
+   equivalence -> signed smoke attestation);
+6. outputs the Smoke handoff report.
+
 ``--check-only``
-    verifies the bundle MANIFEST, verifies every capability contract
-    declaration, verifies the one-window driver data flow is
-    constructible — and does NOT call any LLM, does NOT probe, does
-    NOT train and NEVER writes ``status=EXECUTED``;
-full run
-    additionally requires EVERY production gate clear AND a
-    PRODUCTION bundle signed on the supervisor-owned whitelist AND an
-    authorized real LLM provider. This round none of those holds, so
-    the full run is honestly BLOCKED (exit non-zero).
+    verifies the bundle, verifies every capability is really bindable,
+    verifies the pipeline is constructible, verifies the 15+1 batch
+    semantics — and does NOT call any LLM, does NOT probe, does NOT
+    train and NEVER writes ``status=EXECUTED`` / NEVER flips a REAL_*
+    flag.
 
-CC2 follow-up removals (P0-1): this entrypoint NO LONGER contains
-``teacher.evolve()`` (nonexistent), ``stage_real_probe(())`` (empty
-candidate set), ``gen_manager=None``, ``rl_train_state=None``, fake
-seed banks, fake reset protocols or string adapters. Stage boundaries
-carry the REAL objects defined by
-``dicode.teachers.e1_formal.one_window_driver``; a bundle capability
-is a REAL object or the pipeline stays blocked.
-
-Production hygiene: no tests, no fixtures, no mock defaults, no paid
-calls without explicit authorization, no training while any gate is
-blocked. Honesty contract: ``real_one_update_executed`` is only true
-after the complete pipeline actually ran; it is never hand-set.
+This round: only ``--check-only`` and tests run. No real Smoke, no
+real LLM / EnvCoder / probe / training.
 """
 from __future__ import annotations
 
@@ -46,47 +49,40 @@ DEFAULT_REPORT = os.path.join(
     "reports", "e1_formal_ued", "real_one_update_status.json"
 )
 
-#: CC2 follow-up stage codes (greppable)
-E1_RUNTIME_BUNDLE_MISSING = "E1_RUNTIME_BUNDLE_MISSING"
-E1_RUNTIME_BUNDLE_FILE_MISSING = "E1_RUNTIME_BUNDLE_FILE_MISSING"
+#: CC2-Director stage codes (greppable)
+E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED = "E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED"
 E1_CHECK_ONLY_OK = "CHECK_ONLY_OK"
 E1_CHECK_ONLY_BLOCKED = "CHECK_ONLY_BLOCKED"
-E1_PRODUCTION_PIPELINE_UNAUTHORIZED = "E1_PRODUCTION_PIPELINE_UNAUTHORIZED"
 
 
 def _blocker(stage: str, code: str, detail: str) -> dict:
     return {"stage": stage, "code": code, "detail": detail}
 
 
-def _resolve_bundle_manifest(args, blockers: list):
-    """Load + verify the signed runtime bundle manifest (fail-closed).
-
-    Returns the manifest-level ``E1RuntimeBundle`` record or None with
-    an honest blocker appended. The manifest is REQUIRED: the pipeline
-    never runs (and never checks) without a signed carrier.
-    """
+def _resolve_director_bundle(args, blockers: list):
+    """Load + verify the director's signed runtime bundle manifest."""
     from dicode.teachers.e1_formal import runtime_bundle as RB
 
-    if not args.runtime_bundle:
+    if not args.director_runtime_bundle:
         blockers.append(
             _blocker(
-                "runtime_bundle",
-                E1_RUNTIME_BUNDLE_MISSING,
-                "no --runtime-bundle manifest supplied; the one-window "
-                "pipeline consumes shared runtime objects ONLY through "
-                "a signed bundle (never string contract names)",
+                "director_runtime_bundle",
+                E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED,
+                "no --director-runtime-bundle supplied; the one-window "
+                "pipeline runs ONLY under a director-signed runtime "
+                "bundle (never on string contract names)",
             )
         )
         return None
-    path = args.runtime_bundle
+    path = args.director_runtime_bundle
     if not os.path.isabs(path):
         path = os.path.join(RT.SIEGE_ROOT, path)
     if not os.path.isfile(path):
         blockers.append(
             _blocker(
-                "runtime_bundle",
-                E1_RUNTIME_BUNDLE_FILE_MISSING,
-                f"runtime bundle manifest not found: {path}",
+                "director_runtime_bundle",
+                "E1_DIRECTOR_RUNTIME_BUNDLE_FILE_MISSING",
+                f"director runtime bundle manifest not found: {path}",
             )
         )
         return None
@@ -96,29 +92,30 @@ def _resolve_bundle_manifest(args, blockers: list):
     except (OSError, ValueError) as e:
         blockers.append(
             _blocker(
-                "runtime_bundle",
-                "E1_RUNTIME_BUNDLE_PARSE_FAILED",
-                f"cannot parse runtime bundle manifest {path}: {e}",
+                "director_runtime_bundle",
+                "E1_DIRECTOR_RUNTIME_BUNDLE_PARSE_FAILED",
+                f"cannot parse director runtime bundle manifest {path}: {e}",
             )
         )
         return None
     try:
         return RB.load_verified_runtime_bundle(
-            mapping, "run_e1_real_one_update.runtime_bundle"
+            mapping, "run_e1_real_one_update.director_bundle"
         )
     except RB.RuntimeBundleError as e:
         blockers.append(
-            _blocker("runtime_bundle", e.code, str(e))
+            _blocker("director_runtime_bundle", e.code, str(e))
         )
         return None
 
 
 def _check_only_report(bundle, gates: dict) -> dict:
-    """``--check-only``: verify manifest, capabilities, data flow.
+    """``--check-only``: bundle + bindability + constructibility +
+    15+1 batch semantics. NO LLM, NO probe, NO training, NEVER
+    EXECUTED, NEVER flips a REAL flag."""
+    from dataclasses import fields as dataclass_fields
 
-    NO LLM call, NO probe, NO training, and the report NEVER carries
-    ``status=EXECUTED`` — check-only is a verification surface only.
-    """
+    from dicode.teachers.e1_formal import dicode_protocol as DP
     from dicode.teachers.e1_formal import one_window_driver as DRV
     from dicode.teachers.e1_formal import runtime_bundle as RB
 
@@ -132,26 +129,23 @@ def _check_only_report(bundle, gates: dict) -> dict:
         )
         bundle_mode = bundle.mode
 
-    # shared runtime object binding (honest per-contract state)
     shared = gates["shared_runtime"]
     objects_bound = {
         contract: state["bound"] for contract, state in shared.items()
     }
 
-    # data-flow constructibility: the driver surface exists and the
-    # full window record declares every required field
-    from dataclasses import fields as dataclass_fields
-
     driver_constructible = all(
         hasattr(DRV, name)
         for name in (
-            "E1OneWindowArtifacts",
-            "E1WindowResult",
-            "E1CandidateMaterials",
             "execute_real_review_window",
             "execute_real_envcoder_and_compile",
-            "validate_one_window_artifacts",
-            "validate_runtime_surface",
+            "execute_real_candidate_binding",
+            "execute_real_candidate_probes",
+            "execute_real_criterion_selection",
+            "execute_real_batch_certification",
+            "execute_canonical_dicode_one_update",
+            "consume_full_runstate_roundtrip",
+            "build_e1_smoke_attestation",
         )
     )
     artifact_fields = [
@@ -183,17 +177,31 @@ def _check_only_report(bundle, gates: dict) -> dict:
         name in artifact_fields for name in required_fields
     )
 
+    # CC2-Director: the 15+1 batch semantics must be constructible
+    fifteen_plus_one_ready = bool(
+        DP.DICODE_NUM_DYNAMIC == 12
+        and DP.DICODE_NUM_NON_TARGET_ANCHORS == 3
+        and DP.DICODE_NUM_CURRICULUM == 15
+        and DP.DICODE_TARGET_PROBABILITY == 0.20
+        and DP.DICODE_TARGET_TASK_ID == "original_craftax"
+        and hasattr(DP, "CanonicalDiCodeTrainingBatchPlan")
+        and hasattr(DP, "build_canonical_dicode_training_batch_plan")
+        and hasattr(DP, "CanonicalDiCodeRunStateCheckpoint")
+        and hasattr(DP, "CanonicalDiCodeOneUpdateRuntime")
+    )
+
     ok = bool(
         bundle is not None
         and capability_contracts_declared
         and driver_constructible
         and dataflow_complete
+        and fifteen_plus_one_ready
     )
     production_blockers = list(gates["blockers"])
     if bundle is not None and bundle.mode == RB.BUNDLE_MODE_TEST_ONLY:
         production_blockers.append(
             _blocker(
-                "runtime_bundle",
+                "director_runtime_bundle",
                 RB.RUNTIME_BUNDLE_TEST_ONLY_REJECTED,
                 "check-only ran against a TEST_ONLY bundle: it proves "
                 "contract connectivity only and is NEVER admissible on "
@@ -217,23 +225,190 @@ def _check_only_report(bundle, gates: dict) -> dict:
             "shared_runtime_objects_bound": objects_bound,
             "driver_dataflow_constructible": driver_constructible,
             "driver_dataflow_fields_complete": dataflow_complete,
+            "fifteen_plus_one_batch_ready": fifteen_plus_one_ready,
         },
         "production_blockers": production_blockers,
         "note": (
-            "check-only verifies manifest + capabilities + data-flow "
-            "constructibility; it never calls an LLM, never probes, "
-            "never trains and never writes EXECUTED"
+            "check-only verifies the director bundle, capability "
+            "bindability, pipeline constructibility and the 15+1 batch "
+            "semantics; it never calls an LLM, never probes, never "
+            "trains and never writes EXECUTED"
         ),
+    }
+
+
+def run_director_one_window_pipeline(
+    *,
+    teacher: Any,
+    bundle: Any,
+    run_id: str,
+    branch: str,
+    git_sha: str,
+    probe_issuer: Any,          # (candidates, bundle) -> probe results
+    signal_issuer: Any,         # (candidates, probe_pool) -> signals
+    one_update_runtime: Any,
+    student_checkpoint_identity: str,
+    reference_checkpoint_identity: str,
+    anchor_manifest_hash: str,
+    formal_asset_registry_hash: str,
+    update_record: Any,
+    checkpoint: Any,
+    roundtrip_evidence: Any,
+    k: int,
+    seed: int,
+    critic_policy: str,
+    family_cap: int,
+    smoke_signer_id: str,
+    update_signer_id: str,
+    roundtrip_signer_id: str,
+    allow_test_only: bool = False,
+) -> dict:
+    """The FULL one-window pipeline under the director's bundle.
+
+    This is the real call surface that runs when the external gates
+    clear AND a director-signed bundle is injected. Returns the Smoke
+    handoff report (the signed E1RealSmokeAttestation plus the bound
+    stage hashes). CC2-Director: no fixed E1_PRODUCTION_PIPELINE_
+    UNAUTHORIZED — reaching here is the pipeline.
+    """
+    from dicode.teachers.e1_formal import one_window_driver as DRV
+    from dicode.teachers.e1_formal import selection_attestation as SA
+
+    # 1) window -> EnvCoder -> executable candidates -> probes ->
+    #    signed signals -> criterion selection
+    window_result = DRV.execute_real_review_window(teacher, bundle)
+    materials = DRV.execute_real_envcoder_and_compile(
+        teacher, window_result, bundle
+    )
+    candidates = DRV.execute_real_candidate_binding(
+        teacher,
+        window_result,
+        materials,
+        bundle,
+        allow_test_only=allow_test_only,
+    )
+    # the shared probe runner issues; the driver consumes fail-closed
+    probe_results = probe_issuer(candidates, bundle)
+    probe_pool = DRV.execute_real_candidate_probes(
+        teacher,
+        candidates,
+        bundle,
+        probe_results=probe_results,
+        student_checkpoint_identity=student_checkpoint_identity,
+        reference_checkpoint_identity=reference_checkpoint_identity,
+        window_result=window_result,
+        allow_test_only=allow_test_only,
+    )
+    # the shared runner derives one signed signal per candidate; the
+    # driver's selection stage re-checks full coverage fail-closed
+    signed_signals = signal_issuer(candidates, probe_pool)
+    outcome, attestation = DRV.execute_real_criterion_selection(
+        teacher,
+        window_result,
+        candidates,
+        probe_pool,
+        signed_signals,
+        bundle,
+        k=k,
+        seed=seed,
+        critic_policy=critic_policy,
+        family_cap=family_cap,
+        allow_test_only=allow_test_only,
+    )
+    SA.verify_selection_attestation(
+        attestation,
+        candidates=candidates,
+        probe_results=probe_pool,
+        signed_signals=signed_signals,
+        window_hash=window_result.window.window_hash,
+        ctx="e1_entry.selection",
+    )
+
+    # 2) 12 dynamic -> CanonicalDiCodeTrainingBatchPlan (15+1)
+    plan = DRV.execute_real_batch_certification(
+        selection_attestation=attestation,
+        anchor_manifest_hash=anchor_manifest_hash,
+    )
+
+    # 3) canonical DiCode one update (counts from the DiCode timeline)
+    update_attestation = DRV.execute_canonical_dicode_one_update(
+        plan=plan,
+        selection_attestation=attestation,
+        one_update_runtime=one_update_runtime,
+        update_record=update_record,
+        anchor_manifest_hash=anchor_manifest_hash,
+        signer_id=update_signer_id,
+        test_only=allow_test_only,
+    )
+
+    # 4) full run-state round trip (shared canonical checkpoint)
+    roundtrip_attestation = DRV.consume_full_runstate_roundtrip(
+        checkpoint=checkpoint,
+        update_attestation=update_attestation,
+        runtime_bundle_hash=bundle.bundle_hash,
+        roundtrip_evidence=roundtrip_evidence,
+    )
+
+    # 5) signed smoke attestation over the WHOLE chain
+    smoke = DRV.build_e1_smoke_attestation(
+        run_id=run_id,
+        branch=branch,
+        git_sha=git_sha,
+        window_result=window_result,
+        candidate_materials=materials,
+        probe_pool=probe_pool,
+        plan=plan,
+        update_attestation=update_attestation,
+        roundtrip_attestation=roundtrip_attestation,
+        runtime=bundle,
+        student_checkpoint_identity=student_checkpoint_identity,
+        reference_checkpoint_identity=reference_checkpoint_identity,
+        formal_asset_registry_hash=formal_asset_registry_hash,
+        anchor_manifest_hash=anchor_manifest_hash,
+        signer_id=smoke_signer_id,
+        test_only=allow_test_only,
+    )
+
+    return {
+        "entrypoint": ENTRYPOINT,
+        "run_id": run_id,
+        "branch": branch,
+        "head_sha": git_sha,
+        "status": "SMOKE_HANDOFF" if not allow_test_only else "TEST_ONLY_SMOKE_HANDOFF",
+        "executed": True,
+        "real_flags": {
+            "REAL_LLM_EXECUTED": False,
+            "REAL_ENVCODER_EXECUTED": False,
+            "REAL_CANDIDATE_PROBE_EXECUTED": False,
+            "REAL_OPTIMIZER_UPDATE_EXECUTED": False,
+            "REAL_FULL_STATE_ROUND_TRIP": False,
+            "E1_REAL_SMOKE_AUTHORIZED": False,
+            "FORMAL_EXPERIMENT_AUTHORIZED": False,
+        },
+        "window_hash": window_result.window.window_hash,
+        "window_status": window_result.window.status,
+        "selected_count": len(outcome.selected_ids),
+        "curriculum_task_ids": list(plan.curriculum_task_ids),
+        "target_task_id": plan.target_task_id,
+        "target_probability": plan.target_probability,
+        "plan_hash": plan.plan_hash,
+        "update_attestation_hash": update_attestation.attestation_hash,
+        "roundtrip_attestation_hash": (
+            roundtrip_attestation.attestation_hash
+        ),
+        "smoke_attestation_hash": smoke.attestation_hash,
+        "smoke_attestation_signer": smoke.signer_id,
     }
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--runtime-bundle",
+        "--director-runtime-bundle",
         default="",
-        help="path to the signed runtime bundle manifest (REQUIRED for "
-        "any execution; absolute or relative to gpu1_aggregation_siege/)",
+        help="path to the DIRECTOR-signed runtime bundle manifest "
+        "(REQUIRED for any execution; absolute or relative to "
+        "gpu1_aggregation_siege/)",
     )
     parser.add_argument(
         "--teacher-config",
@@ -250,8 +425,9 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--check-only",
         action="store_true",
-        help="verify bundle + capabilities + data-flow constructibility "
-        "ONLY (no LLM, no probe, no training, never EXECUTED)",
+        help="verify bundle + capabilities + pipeline constructibility "
+        "+ 15+1 batch semantics ONLY (no LLM, no probe, no training, "
+        "never EXECUTED)",
     )
     args = parser.parse_args(argv)
 
@@ -271,9 +447,9 @@ def main(argv=None) -> int:
             )
         )
 
-    # ---- the signed runtime bundle manifest (REQUIRED) ---------------
-    gates["gates_checked"].append("runtime_bundle")
-    bundle = _resolve_bundle_manifest(args, gates["blockers"])
+    # ---- the director-signed runtime bundle (REQUIRED) ---------------
+    gates["gates_checked"].append("director_runtime_bundle")
+    bundle = _resolve_director_bundle(args, gates["blockers"])
 
     if args.check_only:
         report = _check_only_report(bundle, gates)
@@ -290,7 +466,7 @@ def main(argv=None) -> int:
         )
         return 0 if report["status"] == E1_CHECK_ONLY_OK else 2
 
-    # ---- full run: every gate + a PRODUCTION bundle ------------------
+    # ---- full run: every gate + a PRODUCTION director bundle ---------
     from dicode.teachers.e1_formal import runtime_bundle as RB
 
     if bundle is not None:
@@ -300,7 +476,7 @@ def main(argv=None) -> int:
             )
         except RB.RuntimeBundleError as e:
             gates["blockers"].append(
-                _blocker("runtime_bundle", e.code, str(e))
+                _blocker("director_runtime_bundle", e.code, str(e))
             )
 
     if gates["blockers"]:
@@ -311,14 +487,14 @@ def main(argv=None) -> int:
                 "llm_provider_requested": args.llm_provider,
                 "runtime_bundle_verified": bundle is not None,
                 "note": (
-                    "every blocker above must clear (signed PRODUCTION "
-                    "runtime bundle, shared runtime objects bound, real "
-                    "EnvCoder backend authorized, frozen Reference "
-                    "contract, frozen anchor manifest, authorized real "
-                    "LLM provider) before the single-update pipeline "
-                    "may run; stage boundaries then carry the real "
-                    "one_window_driver objects — never None, never "
-                    "string placeholders, never summary dicts"
+                    "every blocker above must clear (a director-signed "
+                    "PRODUCTION runtime bundle, shared runtime objects "
+                    "bound, real EnvCoder backend authorized, frozen "
+                    "Reference contract, frozen anchor manifest, "
+                    "authorized real LLM provider) before the "
+                    "one-window pipeline may run; the pipeline then "
+                    "runs the FULL driver chain — there is no fixed "
+                    "pipeline-unauthorized gate"
                 ),
             },
         )
@@ -334,28 +510,21 @@ def main(argv=None) -> int:
             )
         return 2
 
-    # All gates clear + PRODUCTION bundle verified: the driver's real
-    # object flow runs here (board authorization + seam-bound objects
-    # land with the CC2 follow-up wiring commits). Reaching this point
-    # this round is impossible (the shared runtime is absent and the
-    # production signer whitelist is empty), and the driver refuses to
-    # continue on any placeholder — fail closed, never fabricated.
-    report = RT.blocked_status_report(
-        ENTRYPOINT,
-        gates,
-        extra_blockers=[
-            _blocker(
-                "pipeline",
-                E1_PRODUCTION_PIPELINE_UNAUTHORIZED,
-                "all external gates cleared but the authorized six-role "
-                "runtime injection is not wired yet (CC2 follow-up); "
-                "the pipeline never falls back to a null LLM client",
-            )
-        ],
+    # ---- all gates clear + a valid PRODUCTION director bundle ---------
+    # Building the E1FormalGenManager and injecting the authorized
+    # six-role runtime here is the director handoff surface; the
+    # concrete pipeline inputs (probe results, update record, run-state
+    # checkpoint, round-trip evidence) arrive from the shared runtime /
+    # DiCode once the director executes the Smoke. This round the
+    # whitelist is empty, so reaching here is impossible — the caller
+    # runs --check-only and the tests exercise the pipeline function
+    # directly under TEST_ONLY.
+    raise RuntimeError(
+        "unreachable this round: the director-signed production runtime "
+        "bundle cannot verify while the Signer Registry is empty; run "
+        "--check-only or exercise run_director_one_window_pipeline "
+        "under TEST_ONLY"
     )
-    path = RT.write_json_report(report, args.report_out)
-    print(f"E1 REAL ONE UPDATE BLOCKED mid-pipeline; report at {path}")
-    return 2
 
 
 if __name__ == "__main__":

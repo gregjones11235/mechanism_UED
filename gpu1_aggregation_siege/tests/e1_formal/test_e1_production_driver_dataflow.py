@@ -300,7 +300,7 @@ class TestEntrypointCheckOnly:
         assert report["executed"] is False  # check-only NEVER executes
         assert report["checks"]["bundle_manifest_verified"] is False
         codes = [b["code"] for b in report["production_blockers"]]
-        assert ENT.E1_RUNTIME_BUNDLE_MISSING in codes
+        assert ENT.E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED in codes
         # no real LLM provider is authorized this round
         assert RT.E1_REAL_LLM_NOT_AUTHORIZED in codes
 
@@ -309,7 +309,7 @@ class TestEntrypointCheckOnly:
         rc = ENT.main(
             [
                 "--check-only",
-                "--runtime-bundle",
+                "--director-runtime-bundle",
                 str(tmp_path / "no_such_manifest.json"),
                 "--report-out",
                 report_path,
@@ -326,7 +326,7 @@ class TestEntrypointCheckOnly:
         rc = ENT.main(
             [
                 "--check-only",
-                "--runtime-bundle",
+                "--director-runtime-bundle",
                 manifest_path,
                 "--report-out",
                 report_path,
@@ -368,14 +368,14 @@ class TestEntrypointFullRunStaysBlocked:
             "real_training_update_executed": False,
         }
         codes = [b["code"] for b in report["blockers"]]
-        assert ENT.E1_RUNTIME_BUNDLE_MISSING in codes
+        assert ENT.E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED in codes
 
     def test_full_run_with_test_only_bundle_refused(self, tmp_path):
         manifest_path = _write_test_only_manifest(tmp_path)
         report_path = str(tmp_path / "full_run_test_only.json")
         rc = ENT.main(
             [
-                "--runtime-bundle",
+                "--director-runtime-bundle",
                 manifest_path,
                 "--report-out",
                 report_path,
@@ -431,5 +431,5 @@ class TestForbiddenHardcodesRemoved:
             )
 
     def test_entrypoint_requires_the_runtime_bundle_flag(self):
-        assert "--runtime-bundle" in ENT.__doc__
+        assert "--director-runtime-bundle" in ENT.__doc__
         assert "--check-only" in ENT.__doc__
