@@ -43,6 +43,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e1_production_runtime as RT  # noqa: E402
+from dicode.teachers.e1_formal import (  # noqa: E402
+    runtime_bundle as RB,
+    student_contract as SC,
+)
 
 ENTRYPOINT = "scripts/run_e1_real_one_update.py"
 DEFAULT_REPORT = os.path.join(
@@ -272,7 +276,8 @@ def _check_only_report(
         try:
             ROR.require_real_registry(formal_asset_registry, "check-only")
             resolution = ROR.resolve_e1_runtime_objects(
-                bundle, formal_asset_registry, "check-only.object-level"
+                bundle, formal_asset_registry, "check-only.object-level",
+                strict=True,
             )
         except ROR.RuntimeObjectResolutionError as e:
             resolution = {
@@ -576,7 +581,7 @@ def run_e1_object_level_check(
         return {"status": "OBJECT_LEVEL_BLOCKED", "code": e.code,
                 "detail": str(e)}
     resolution = ROR.resolve_e1_runtime_objects(
-        bundle, formal_asset_registry, ctx)
+        bundle, formal_asset_registry, ctx, strict=True)
     return {
         "status": (
             "OBJECT_LEVEL_OK" if resolution["all_bound"]
@@ -650,26 +655,27 @@ def main(
                 gates["blockers"].append(
                     _blocker("director_bundle_verifier", e.code, str(e))
                 )
-            gates["blockers"].append(
-                _blocker("director_bundle_verifier", e.code, str(e))
-            )
 
     # ---- the director-selected Student (never defaulted) -------------
+    # CC2-Repair (BUG-E1-01): the REAL mount happens AFTER the registry
+    # resolves the real StudentInitContract (below). Here we only fail
+    # fast when a CLI candidate contradicts the director-issued identity.
     gates["gates_checked"].append("student_selection")
     if bundle is not None:
-        try:
-            from dicode.teachers.e1_formal import student_contract as SC
+        from dicode.teachers.e1_formal import student_contract as SC
 
-            SC.mount_student_from_director_bundle(
-                bundle=bundle,
-                director_selected_candidate_id=(
-                    args.student_candidate_id or None
-                ),
-                ctx="run_e1_real_one_update.student_selection",
-            )
-        except SC.StudentSelectionError as e:
+        bundle_candidate = bundle.student_selection.selected_candidate_id
+        if (args.student_candidate_id or None) is not None and (
+            args.student_candidate_id != bundle_candidate
+        ):
             gates["blockers"].append(
-                _blocker("student_selection", e.code, str(e))
+                _blocker(
+                    "student_selection",
+                    SC.STUDENT_CONTRACT_MISMATCH,
+                    f"CLI candidate {args.student_candidate_id!r} != the "
+                    f"director-issued candidate {bundle_candidate!r} (the "
+                    "CLI can never override the director identity)",
+                )
             )
 
     if args.check_only:
@@ -750,7 +756,8 @@ def main(
     try:
         ROR.require_real_registry(formal_asset_registry, "pipeline")
         resolution = ROR.resolve_e1_runtime_objects(
-            bundle, formal_asset_registry, "run_e1_real_one_update.pipeline"
+            bundle, formal_asset_registry, "run_e1_real_one_update.pipeline",
+            strict=True,
         )
     except ROR.RuntimeObjectResolutionError as e:
         gates["blockers"].append(
@@ -779,6 +786,45 @@ def main(
         )
         return 2
 
+    # ---- the REAL Student mount (BUG-E1-01): registry resolved the
+    #      real StudentInitContract; ONLY now is the Student mounted.
+    #      A missing / non-matching real Persistent contract refuses.
+    #      ------------------------------------------------------------
+    _contract = resolution["resolutions"].get("student_init_contract")
+    try:
+        student_mount = SC.mount_student_from_director_bundle(
+            bundle=bundle,
+            director_selected_candidate_id=(args.student_candidate_id or None),
+            ctx="run_e1_real_one_update.student_mount",
+            contract=(_contract.object if _contract is not None else None),
+        )
+    except SC.StudentSelectionError as e:
+        report = RT.blocked_status_report(
+            ENTRYPOINT,
+            gates,
+            extra_blockers=[
+                _blocker(
+                    "student_selection",
+                    e.code,
+                    "the real Persistent Student did not mount from the "
+                    f"resolved contract: {e}",
+                )
+            ],
+        )
+        path = RT.write_json_report(report, args.report_out)
+        print(
+            f"E1 REAL ONE UPDATE BLOCKED (student mount); report at {path}"
+        )
+        return 2
+    # ---- BUG-E1-04: the BOUND runtime holds the ONE real object set
+    #      (Manifest + Registry + real objects + student mount). The
+    #      pipeline consumes exactly these instances — nothing is
+    #      re-derived from strings / paths / JSON after this point.
+    resolved_runtime = RB.bind_runtime_objects(
+        bundle, resolution, student_mount=student_mount
+    )
+    _objects = dict(resolved_runtime.objects)
+
     # Every real object is injected. Human/authorization gate FIRST:
     # without the authorized six-role runtime the pipeline BLOCKs
     # BEFORE any LLM call.
@@ -802,28 +848,51 @@ def main(
 
     # REAL pipeline call: pull the resolved objects out of the registry
     # and invoke the full one-window pipeline. This is the reachable
-    # director handoff surface — not a fixed pending report.
-    _resolved = resolution["resolutions"]
-    _objects = {
-        contract: res.object
-        for contract, res in _resolved.items()
-        if res.bound
-    }
+    # director handoff surface — not a fixed pending report. The probe /
+    # signal issuers are the RESOLVED real objects (BUG-E1-05), never
+    # empty lambdas.
+    probe_runner = _objects.get("candidate_probe_runner")
+    signal_issuer_obj = _objects.get("criterion_signal_issuer")
+
+    def _real_probe_issuer(candidates, _bundle):
+        run_probes = getattr(probe_runner, "run_probes", None)
+        if not callable(run_probes):
+            raise RuntimeError(
+                "E1_PIPELINE_PROBE_RUNNER_UNBOUND: the resolved "
+                "candidate_probe_runner exposes no callable run_probes"
+            )
+        return run_probes(candidates, _bundle)
+
+    def _real_signal_issuer(candidates, probe_pool):
+        issue_signals = getattr(signal_issuer_obj, "issue_signals", None)
+        if not callable(issue_signals):
+            raise RuntimeError(
+                "E1_PIPELINE_SIGNAL_ISSUER_UNBOUND: the resolved "
+                "criterion_signal_issuer exposes no callable issue_signals"
+            )
+        return issue_signals(candidates, probe_pool)
+
     pipeline_report = run_director_one_window_pipeline(
         teacher=_objects.get("student_identity"),
         bundle=bundle,
         run_id="director-smoke",
         branch=RT.git_branch(),
         git_sha=RT.git_head_sha(),
-        probe_issuer=lambda candidates, bundle: _objects.get("probe_runner"),
-        signal_issuer=lambda candidates, probes: (),
+        probe_issuer=_real_probe_issuer,
+        signal_issuer=_real_signal_issuer,
         one_update_runtime=_objects.get(
             "canonical_dicode_one_update_runtime"
         ),
         student_checkpoint_identity=(
             bundle.student_selection.checkpoint_file_sha256
         ),
-        reference_checkpoint_identity="",
+        reference_checkpoint_identity=(
+            getattr(
+                _objects.get("reference_identity"),
+                "checkpoint_file_sha256",
+                "",
+            )
+        ),
         anchor_manifest_hash=bundle.object_identity_hash("anchor_manifest"),
         formal_asset_registry_hash=(
             bundle.object_identity_hash("formal_asset_registry")
@@ -839,6 +908,16 @@ def main(
         update_signer_id="",
         roundtrip_signer_id="",
     )
+    pipeline_report["resolved_runtime_hash"] = resolved_runtime.resolved_runtime_hash
+    pipeline_report["student_mount"] = {
+        "candidate_id": student_mount.candidate_id,
+        "profile_id": student_mount.profile_id,
+        "memory_mode": student_mount.memory_mode,
+        "params_sha256": student_mount.params_sha256,
+        "read_only_ready": student_mount.read_only_ready,
+        "training_ready": student_mount.training_ready,
+        "mount_hash": student_mount.mount_hash,
+    }
     path = RT.write_json_report(pipeline_report, args.report_out)
     print(f"E1 REAL ONE UPDATE pipeline report at {path}")
     return 0

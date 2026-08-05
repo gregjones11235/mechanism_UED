@@ -1,0 +1,10 @@
+{
+  "architecture_family": "RMT16",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "memory_mode": "PERSISTENT",
+  "mounted": false,
+  "real_adapter": "NOT_INJECTED",
+  "real_checkpoint_sha256": "NOT_INJECTED",
+  "real_profile": "NOT_INJECTED",
+  "reason": "no real FormalAssetRegistry / persistent checkpoint injected (external missing)"
+}

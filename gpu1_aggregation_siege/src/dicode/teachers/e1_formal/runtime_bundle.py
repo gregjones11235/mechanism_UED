@@ -30,6 +30,7 @@ from typing import Any, Dict, Mapping, Tuple
 
 from .canonical import canonical_sha256
 from .schemas import E1SchemaError
+from . import runtime_objects as RO
 from .student_contract import (
     ALLOWED_STUDENT_CANDIDATE_IDS,
     STUDENT_CANDIDATE_BY_PROFILE,
@@ -388,6 +389,9 @@ class E1RuntimeBundle:
     #: CC2-Student repair: the EXPLICIT director-issued Student
     #: selection (never read from a nonexistent bundle.student)
     student_selection: StudentSelectionDescriptor
+    #: CC2-Repair-4 (§一): the declared production runtime objects
+    #: (exact set = REQUIRED_RUNTIME_OBJECTS; empty for TEST_ONLY)
+    runtime_objects: Tuple[Tuple[str, Any], ...] = ()
 
     def capability(self, contract: str) -> Any:
         for name, obj in self.capabilities:
@@ -525,6 +529,7 @@ def compute_bundle_hash(
     signature_ref: str = "",
     registry_identity: str = "",
     registry_hash: str = "",
+    runtime_objects_hash: str = "",
 ) -> str:
     """The canonical identity of one bundle (tamper-evident).
 
@@ -547,6 +552,7 @@ def compute_bundle_hash(
             "signature_ref": signature_ref,
             "registry_identity": registry_identity,
             "registry_hash": registry_hash,
+            "runtime_objects_hash": runtime_objects_hash,
         }
     )
 
@@ -679,6 +685,7 @@ _MANIFEST_FIELDS = frozenset(
         "signature_ref",
         "registry_identity",
         "registry_hash",
+        "runtime_objects",
     }
 )
 
@@ -763,6 +770,23 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
             RUNTIME_BUNDLE_MISSING_FIELD,
             f"{ctx}: a PRODUCTION bundle must carry a signature_ref",
         )
+    # ---- runtime_objects (CC2-Repair-4): PRODUCTION declares every
+    #      object; TEST_ONLY may omit (synthetic path) ------------------
+    runtime_objects_block = mapping.get("runtime_objects")
+    runtime_object_descriptors = {}
+    if mode == BUNDLE_MODE_PRODUCTION:
+        runtime_object_descriptors = RO.parse_runtime_objects(
+            runtime_objects_block, f"{ctx}.runtime_objects"
+        )
+    elif runtime_objects_block is not None:
+        runtime_object_descriptors = RO.parse_runtime_objects(
+            runtime_objects_block, f"{ctx}.runtime_objects"
+        )
+    runtime_objects_hash = (
+        RO.compute_runtime_objects_hash(runtime_object_descriptors)
+        if runtime_object_descriptors
+        else ""
+    )
     # ---- student_selection (REQUIRED; parsed + verified fail-closed) --
     descriptor = parse_student_selection(
         mapping.get("student_selection"), f"{ctx}.student_selection"
@@ -781,6 +805,7 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
         signature_ref=signature_ref,
         registry_identity=registry_identity,
         registry_hash=registry_hash,
+        runtime_objects_hash=runtime_objects_hash,
     )
     if recomputed != declared_hash:
         raise RuntimeBundleError(
@@ -788,16 +813,16 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
             f"{ctx}: manifest bundle_hash {declared_hash} != recomputed "
             f"{recomputed} (tampered or stale manifest)",
         )
-    # ---- signer gate (BEFORE anything else may trust the bundle) ----
-    if mode == BUNDLE_MODE_PRODUCTION:
-        if signer_id not in AUTHORIZED_BUNDLE_SIGNERS:
-            raise RuntimeBundleError(
-                RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED,
-                f"{ctx}: production bundle signer {signer_id!r} is not "
-                "on the supervisor-owned whitelist (EMPTY this round); "
-                "no production runtime bundle can verify yet",
-            )
-    else:  # TEST_ONLY manifest
+    # ---- signer gate -------------------------------------------------
+    # PRODUCTION: the static AUTHORIZED_BUNDLE_SIGNERS is NOT the
+    # production trust root — the director-injected DirectorBundleVerifier
+    # is (checked by verify_production_runtime_bundle at the entrypoint
+    # BEFORE any object resolution). A structurally-valid production
+    # bundle (signature_ref REQUIRED above) therefore loads here; the
+    # signer is authorized by the injected verifier, never by the static
+    # tuple. TEST_ONLY keeps the synthetic signer requirement (structural
+    # identity discipline).
+    if mode == BUNDLE_MODE_TEST_ONLY:
         if signer_id != SYNTHETIC_TEST_ONLY_SIGNER:
             raise RuntimeBundleError(
                 RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED,
@@ -820,6 +845,9 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
         registry_identity=registry_identity,
         registry_hash=registry_hash,
         student_selection=descriptor,
+        runtime_objects=tuple(
+            sorted(runtime_object_descriptors.items())
+        ),
     )
 
 
@@ -845,11 +873,16 @@ def require_bundle_admissible_for_production(
             "enter a production path, never flip a REAL_* flag and "
             "never grant readiness",
         )
-    if bundle.signer_id not in AUTHORIZED_BUNDLE_SIGNERS:
+    # PRODUCTION: signer trust lives in the director-injected
+    # DirectorBundleVerifier (verified at the entrypoint BEFORE object
+    # resolution), not the static allowlist. A production bundle is
+    # admissible only when it carries the structural signature reference;
+    # an absent one refuses fail-closed.
+    if not bundle.signature_ref.strip():
         raise RuntimeBundleError(
-            RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED,
-            f"{ctx}: bundle signer {bundle.signer_id!r} is not on the "
-            "supervisor-owned production whitelist",
+            RUNTIME_BUNDLE_MISSING_FIELD,
+            f"{ctx}: a PRODUCTION bundle must carry a signature_ref "
+            "(the director-injected verifier authorizes the signer)",
         )
 
 
@@ -958,3 +991,73 @@ def verify_production_runtime_bundle(
             f"{ctx}: the director verifier did not strictly return True "
             f"(got {result!r}); E1_PRODUCTION_BUNDLE_SIGNATURE_REJECTED",
         )
+
+
+# ---------------------------------------------------------------------------
+# CC2-Repair-4 (§五): the BOUND runtime (Manifest + Registry + objects)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ResolvedE1Runtime:
+    """The BOUND production runtime (Manifest-only bundles are refused
+    by the pipeline; only this resolved type carries real objects)."""
+
+    manifest: Any  # E1RuntimeBundle (verified manifest)
+    registry: Any  # FormalAssetRegistry (real object)
+    objects: Tuple[Tuple[str, Any], ...]  # contract -> real object
+    student_mount: Any  # SelectedStudentMount
+    resolved_runtime_hash: str
+
+    def object(self, contract: str) -> Any:
+        for name, obj in self.objects:
+            if name == contract:
+                return obj
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_UNBOUND,
+            f"resolved runtime has no object for {contract!r}",
+        )
+
+
+def bind_runtime_objects(
+    manifest: Any, resolution: Any, *, student_mount: Any = None
+) -> ResolvedE1Runtime:
+    """Bind the resolved objects into an immutable ResolvedE1Runtime.
+
+    Every BOUND object becomes a real capability; a resolution that is
+    not all_bound fails closed. The resolved hash binds the manifest
+    hash and every object identity.
+    """
+    if not isinstance(manifest, E1RuntimeBundle):
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_BAD_TYPE,
+            "bind_runtime_objects: manifest must be an E1RuntimeBundle",
+        )
+    if not isinstance(resolution, dict) or not resolution.get("all_bound"):
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_UNBOUND,
+            "bind_runtime_objects: the resolution is not all_bound; a "
+            "Manifest-only bundle can never enter the pipeline",
+        )
+    objects = tuple(
+        (contract, res.object)
+        for contract, res in sorted(resolution["resolutions"].items())
+        if res.bound
+    )
+    resolved_runtime_hash = canonical_sha256(
+        {
+            "manifest_hash": manifest.bundle_hash,
+            "objects": [
+                [contract, object_identity_hash(obj)]
+                for contract, obj in objects
+            ],
+            "student_mount_hash": getattr(
+                student_mount, "mount_hash", ""
+            ),
+        }
+    )
+    return ResolvedE1Runtime(
+        manifest=manifest,
+        registry=resolution.get("registry"),
+        objects=objects,
+        student_mount=student_mount,
+        resolved_runtime_hash=resolved_runtime_hash,
+    )

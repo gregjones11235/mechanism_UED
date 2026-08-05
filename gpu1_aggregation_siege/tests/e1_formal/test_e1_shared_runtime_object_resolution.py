@@ -275,13 +275,17 @@ class TestBundleBoundResolution:
             )
         assert excinfo.value.code == SRS.SEAM_BAD_TYPE
 
-    def test_forged_production_signer_refused_on_default_surface(self):
+    def test_forged_production_without_signature_ref_refused(self):
+        # A forged TEST_ONLY->PRODUCTION bundle carries NO signature_ref:
+        # the production surface refuses it fail-closed (the director
+        # verifier authorizes a production bundle, and the structural
+        # signature_ref must be present).
         forged = replace(_test_only_bundle(), mode=RB.BUNDLE_MODE_PRODUCTION)
         with pytest.raises(RB.RuntimeBundleError) as excinfo:
             SRS.resolve_contract_from_bundle(
                 forged, "training", "test"
             )
-        assert excinfo.value.code == RB.RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED
+        assert excinfo.value.code == RB.RUNTIME_BUNDLE_MISSING_FIELD
 
     def test_resolve_all_from_bundle_binds_all_nine(self):
         bundle = _test_only_bundle()

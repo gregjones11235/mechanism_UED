@@ -23,20 +23,13 @@ from .runtime_bundle import (
     object_identity_hash,
 )
 
-#: the unified REQUIRED runtime object set (§四, 方案A)
-REQUIRED_RUNTIME_OBJECTS = (
-    "student_init_contract",
-    "student_identity",
-    "student_adapter",
-    "reference_identity",
-    "reference_adapter",
-    "anchor_manifest",
-    "formal_asset_registry",
-    "probe_runner",
-    "canonical_dicode_one_update_runtime",
-    "canonical_dicode_runstate_checkpoint",
-    "authorized_six_role_llm_runtime",
-    "auxiliary_compute_ledger",
+#: the SINGLE unified REQUIRED runtime object set. The runtime-object
+#: manifest schema (runtime_objects.REQUIRED_RUNTIME_OBJECTS) is the ONE
+#: canonical set — the resolver iterates exactly that set so the
+#: Manifest-declared objects, the Registry-resolved objects and the
+#: Pipeline-consumed objects are THE SAME 13 objects (BUG-E1-03).
+from .runtime_objects import (  # noqa: E402  (single source of truth)
+    REQUIRED_RUNTIME_OBJECTS,
 )
 
 #: objects NOT among the nine bundle capabilities (they need a
@@ -81,6 +74,18 @@ OBJ_RESOLUTION_DECLARED_IDENTITY_MISSING = (
 OBJ_RESOLUTION_REGISTRY_UNBOUND = "FORMAL_ASSET_REGISTRY_UNBOUND"
 OBJ_RESOLUTION_REGISTRY_NOT_PROTOCOL = "OBJ_RESOLUTION_REGISTRY_NOT_PROTOCOL"
 OBJ_RESOLUTION_TEST_ONLY_REGISTRY = "OBJ_RESOLUTION_TEST_ONLY_REGISTRY"
+OBJ_RESOLUTION_IMPLEMENTATION_MISMATCH = (
+    "OBJ_RESOLUTION_IMPLEMENTATION_MISMATCH"
+)
+OBJ_RESOLUTION_REGISTRY_IDENTITY_MISMATCH = (
+    "OBJ_RESOLUTION_REGISTRY_IDENTITY_MISMATCH"
+)
+OBJ_RESOLUTION_REGISTRY_HASH_MISMATCH = (
+    "OBJ_RESOLUTION_REGISTRY_HASH_MISMATCH"
+)
+OBJ_RESOLUTION_REQUIRED_METHOD_MISSING = (
+    "OBJ_RESOLUTION_REQUIRED_METHOD_MISSING"
+)
 
 
 class RuntimeObjectResolutionError(Exception):
@@ -165,13 +170,89 @@ class RuntimeObjectResolution:
     identity_hash: str
 
 
+def require_registry_matches_manifest(
+    formal_asset_registry: Any,
+    verified_manifest: Any,
+    ctx: str,
+) -> None:
+    """Verify the registry identity/hash against the manifest (§四)."""
+    expected_identity = getattr(
+        verified_manifest, "registry_identity", ""
+    )
+    expected_hash = getattr(verified_manifest, "registry_hash", "")
+    if expected_identity and getattr(
+        formal_asset_registry, "registry_identity", ""
+    ) != expected_identity:
+        raise RuntimeObjectResolutionError(
+            OBJ_RESOLUTION_REGISTRY_IDENTITY_MISMATCH,
+            f"{ctx}: registry identity "
+            f"{getattr(formal_asset_registry, 'registry_identity', '')!r} "
+            f"!= manifest {expected_identity!r}",
+        )
+    if expected_hash and getattr(
+        formal_asset_registry, "registry_hash", ""
+    ) != expected_hash:
+        raise RuntimeObjectResolutionError(
+            OBJ_RESOLUTION_REGISTRY_HASH_MISMATCH,
+            f"{ctx}: registry hash "
+            f"{getattr(formal_asset_registry, 'registry_hash', '')!r} "
+            f"!= manifest {expected_hash!r}",
+        )
+
+
+def _check_identity_protocol(obj: Any, expected: str, ctx: str) -> str:
+    """PRODUCTION identity: the object's OWN identity protocol value.
+
+    Never repr(obj), never arbitrary __dict__, never an unattested
+    self-report fallback — the object must expose ``object_identity_hash``
+    (or ``identity_hash``) as a 64-lowercase str equal to ``expected``.
+    """
+    for attr in ("object_identity_hash", "identity_hash"):
+        value = getattr(obj, attr, None)
+        if isinstance(value, str) and len(value) == 64:
+            if value != expected:
+                raise RuntimeObjectResolutionError(
+                    OBJ_RESOLUTION_IDENTITY_MISMATCH,
+                    f"{ctx}: object identity {value!r} != declared "
+                    f"{expected!r}",
+                )
+            return value
+    raise RuntimeObjectResolutionError(
+        OBJ_RESOLUTION_REQUIRED_METHOD_MISSING,
+        f"{ctx}: the object exposes no identity protocol "
+        "(object_identity_hash/identity_hash); a production object "
+        "identity can never fall back to repr/__dict__",
+    )
+
+
+def _check_required_methods(obj: Any, contract: str, ctx: str) -> None:
+    from .runtime_objects import REQUIRED_METHODS
+
+    for method in REQUIRED_METHODS.get(contract, ()):
+        if not callable(getattr(obj, method, None)):
+            raise RuntimeObjectResolutionError(
+                OBJ_RESOLUTION_REQUIRED_METHOD_MISSING,
+                f"{ctx}: object for {contract!r} lacks required method "
+                f"{method!r}",
+            )
+
+
 def resolve_e1_runtime_objects(
     verified_manifest: Any,
     formal_asset_registry: Any,
     ctx: str,
+    *,
+    strict: bool = False,
 ) -> dict:
-    """Resolve every REQUIRED object from the REAL registry, verifying
-    each declared identity + implementation hash fail-closed."""
+    """Resolve every REQUIRED object from the REAL registry.
+
+    Verifies each declared identity, CALLS verify_implementation for
+    every object, and checks required methods/ABI fail-closed.
+    ``strict=True`` (production) requires the object's OWN identity
+    protocol value — no repr/__dict__ fallback; ``strict=False``
+    (TEST_ONLY) may compare the declared identity against the fixture
+    hash, but TEST_ONLY results never enter a production path.
+    """
     if not isinstance(verified_manifest, E1RuntimeBundle):
         raise RuntimeObjectResolutionError(
             OBJ_RESOLUTION_BAD_TYPE,
@@ -180,22 +261,32 @@ def resolve_e1_runtime_objects(
         )
     require_real_registry(formal_asset_registry, ctx)
     require_authorized_registry(formal_asset_registry, ctx)
+    require_registry_matches_manifest(
+        formal_asset_registry, verified_manifest, ctx
+    )
+    declared_objects = dict(getattr(verified_manifest, "runtime_objects", ()))
     resolved = {}
     missing = []
     for contract in REQUIRED_RUNTIME_OBJECTS:
-        try:
-            declared = _declared_identity(
-                verified_manifest, contract, ctx
-            )
-        except RuntimeObjectResolutionError as e:
-            resolved[contract] = RuntimeObjectResolution(
-                contract=contract, bound=False, code=e.code,
-                object=None, identity_hash="")
-            missing.append(contract)
-            continue
+        descriptor = declared_objects.get(contract)
+        if descriptor is not None:
+            expected_identity = descriptor.identity_hash
+            expected_implementation = descriptor.implementation_hash
+        else:
+            try:
+                expected_identity = _declared_identity(
+                    verified_manifest, contract, ctx
+                )
+            except RuntimeObjectResolutionError as e:
+                resolved[contract] = RuntimeObjectResolution(
+                    contract=contract, bound=False, code=e.code,
+                    object=None, identity_hash="")
+                missing.append(contract)
+                continue
+            expected_implementation = ""
         try:
             obj = formal_asset_registry.resolve_asset(
-                contract=contract, expected_identity=declared
+                contract=contract, expected_identity=expected_identity
             )
         except Exception as e:
             resolved[contract] = RuntimeObjectResolution(
@@ -225,11 +316,38 @@ def resolve_e1_runtime_objects(
                 object=None, identity_hash="")
             missing.append(contract)
             continue
-        actual = object_identity_hash(obj)
-        if actual != declared:
+        actual = ""
+        try:
+            if strict:
+                actual = _check_identity_protocol(
+                    obj, expected_identity, f"{ctx}.{contract}"
+                )
+            else:
+                actual = object_identity_hash(obj)
+                if actual != expected_identity:
+                    raise RuntimeObjectResolutionError(
+                        OBJ_RESOLUTION_IDENTITY_MISMATCH,
+                        f"{ctx}: object identity {actual!r} != declared "
+                        f"{expected_identity!r}",
+                    )
+            _check_required_methods(obj, contract, f"{ctx}.{contract}")
+            if callable(
+                getattr(formal_asset_registry, "verify_implementation", None)
+            ):
+                ok = formal_asset_registry.verify_implementation(
+                    contract=contract,
+                    obj=obj,
+                    expected_implementation_hash=expected_implementation,
+                )
+                if ok is not True:
+                    raise RuntimeObjectResolutionError(
+                        OBJ_RESOLUTION_IMPLEMENTATION_MISMATCH,
+                        f"{ctx}: verify_implementation({contract!r}) did "
+                        f"not strictly return True (got {ok!r})",
+                    )
+        except RuntimeObjectResolutionError as e:
             resolved[contract] = RuntimeObjectResolution(
-                contract=contract, bound=False,
-                code=OBJ_RESOLUTION_IDENTITY_MISMATCH,
+                contract=contract, bound=False, code=e.code,
                 object=None, identity_hash=actual)
             missing.append(contract)
             continue

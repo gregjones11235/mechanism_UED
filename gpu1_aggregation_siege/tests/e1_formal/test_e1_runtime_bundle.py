@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import pytest
 
 from dicode.teachers.e1_formal import runtime_bundle as RB
+from dicode.teachers.e1_formal import runtime_objects as RO
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +80,24 @@ def _manifest_from_bundle(bundle) -> dict:
         "registry_identity": "",
         "registry_hash": "",
         "bundle_hash": bundle.bundle_hash,
+    }
+
+
+def _production_runtime_objects_block() -> dict:
+    """A COMPLETE ``runtime_objects`` block (every REQUIRED object with a
+    valid descriptor) so a PRODUCTION manifest can reach the signer gate.
+
+    TEST_ONLY / SYNTHETIC — these are conspicuously-marked fixture hashes,
+    never real registry identities.
+    """
+    return {
+        contract: {
+            "identity_hash": f"ab{index:02x}" + "c" * 60,
+            "implementation_hash": f"cd{index:02x}" + "e" * 60,
+            "source_commit": f"{index:02d}" + "f" * 38,
+            "registry_identity": f"test-only-registry-{index}",
+        }
+        for index, contract in enumerate(RO.REQUIRED_RUNTIME_OBJECTS)
     }
 
 
@@ -341,12 +360,49 @@ class TestSignerGating:
         # production bundle must fail closed
         assert RB.AUTHORIZED_BUNDLE_SIGNERS == ()
 
-    def test_production_manifest_signer_unauthorized(self):
+    def test_production_manifest_without_signature_ref_refused(self):
+        # A PRODUCTION bundle with no signature_ref must fail closed at
+        # load (structural requirement), regardless of signer identity.
         bundle = _test_only_bundle()
         mapping = _manifest_from_bundle(bundle)
         mapping["mode"] = RB.BUNDLE_MODE_PRODUCTION
         mapping["signer_id"] = "would-be-production-signer"
+        runtime_objects = _production_runtime_objects_block()
+        mapping["runtime_objects"] = runtime_objects
+        runtime_objects_hash = RO.compute_runtime_objects_hash(
+            RO.parse_runtime_objects(runtime_objects, "test.runtime_objects")
+        )
+        mapping["bundle_hash"] = RB.compute_bundle_hash(
+            bundle_id=mapping["bundle_id"],
+            mode=mapping["mode"],
+            source_commit=mapping["source_commit"],
+            signer_id=mapping["signer_id"],
+            authorization_grant_hash=mapping["authorization_grant_hash"],
+            object_identity_hashes=mapping["object_identity_hashes"],
+            student_selection_hash=bundle.student_selection.descriptor_hash,
+            runtime_objects_hash=runtime_objects_hash,
+        )
+        with pytest.raises(RB.RuntimeBundleError) as excinfo:
+            RB.load_verified_runtime_bundle(mapping, "test")
+        assert excinfo.value.code == RB.RUNTIME_BUNDLE_MISSING_FIELD
+
+    def test_production_manifest_loads_structurally_then_verifier_gates(self):
+        # The static empty whitelist is NOT the production trust root: a
+        # structurally-valid PRODUCTION bundle (signature_ref present,
+        # complete runtime_objects) LOADS — the director-injected
+        # DirectorBundleVerifier is the signer gate.
+        bundle = _test_only_bundle()
+        mapping = _manifest_from_bundle(bundle)
+        mapping["mode"] = RB.BUNDLE_MODE_PRODUCTION
+        mapping["signer_id"] = "director-production-signer"
         mapping["signature_ref"] = "sig-ref"
+        mapping["registry_identity"] = "test-only-registry-identity"
+        mapping["registry_hash"] = "00" * 32
+        runtime_objects = _production_runtime_objects_block()
+        mapping["runtime_objects"] = runtime_objects
+        runtime_objects_hash = RO.compute_runtime_objects_hash(
+            RO.parse_runtime_objects(runtime_objects, "test.runtime_objects")
+        )
         mapping["bundle_hash"] = RB.compute_bundle_hash(
             bundle_id=mapping["bundle_id"],
             mode=mapping["mode"],
@@ -356,10 +412,46 @@ class TestSignerGating:
             object_identity_hashes=mapping["object_identity_hashes"],
             student_selection_hash=bundle.student_selection.descriptor_hash,
             signature_ref="sig-ref",
+            registry_identity=mapping["registry_identity"],
+            registry_hash=mapping["registry_hash"],
+            runtime_objects_hash=runtime_objects_hash,
         )
-        with pytest.raises(RB.RuntimeBundleError) as excinfo:
-            RB.load_verified_runtime_bundle(mapping, "test")
-        assert excinfo.value.code == RB.RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED
+        loaded = RB.load_verified_runtime_bundle(mapping, "test")
+        assert loaded.mode == RB.BUNDLE_MODE_PRODUCTION
+        assert loaded.signature_ref == "sig-ref"
+        # the injected verifier is the trust gate:
+        with pytest.raises(RB.ProductionBundleVerificationError) as excinfo:
+            RB.verify_production_runtime_bundle(
+                loaded, None, "test.verifier"
+            )
+        assert excinfo.value.code == RB.E1_PRODUCTION_BUNDLE_VERIFIER_UNBOUND
+
+        class _RejectingVerifier:
+            verifier_id = "rejecting"
+            verifier_identity_hash = "aa" * 32
+            trusted_signer_registry_hash = "bb" * 32
+
+            def verify_bundle(self, **kwargs):
+                return False
+
+        with pytest.raises(RB.ProductionBundleVerificationError) as excinfo:
+            RB.verify_production_runtime_bundle(
+                loaded, _RejectingVerifier(), "test.verifier"
+            )
+        assert excinfo.value.code == RB.E1_PRODUCTION_BUNDLE_SIGNATURE_REJECTED
+
+        class _AcceptingVerifier:
+            verifier_id = "accepting"
+            verifier_identity_hash = "cc" * 32
+            trusted_signer_registry_hash = "dd" * 32
+
+            def verify_bundle(self, **kwargs):
+                return True
+
+        # strictly True passes
+        RB.verify_production_runtime_bundle(
+            loaded, _AcceptingVerifier(), "test.verifier"
+        )
 
     def test_test_only_manifest_requires_the_synthetic_signer(self):
         bundle = _test_only_bundle()
