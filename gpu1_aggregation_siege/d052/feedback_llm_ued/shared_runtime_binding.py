@@ -43,7 +43,7 @@ from d052.feedback_llm_ued.anchor_manifest import (
     SharedAnchorManifest,
 )
 from d052.feedback_llm_ued.student_binding import (
-    FullStateRoundTripResult,
+    DirectorVerifiedRunStateRoundTrip,
     StudentBindingIdentity,
     StudentInitContract,
     resolve_student_binding,
@@ -190,9 +190,9 @@ class SharedTrainingContract(Protocol):
 
     def load_checkpoint(self, *, checkpoint_hash: str) -> None: ...
 
-    def verify_full_state_round_trip(self, *, window: int,
-                                     checkpoint_hash: str
-                                     ) -> FullStateRoundTripResult: ...
+    def verify_director_round_trip(self, *, window: int,
+                                   checkpoint_hash: str
+                                   ) -> DirectorVerifiedRunStateRoundTrip: ...
 
 
 # ---------------------------------------------------------------------------
@@ -391,11 +391,11 @@ class SharedTrainingSlot:
     registry_identity: str = ""
 
     def bind(self, contract: SharedTrainingContract) -> "SharedTrainingSlot":
-        #: P0-11: the director-verifier attestation surface is part of the
-        #: contract — a training surface without it cannot prove a
-        #: checkpoint round-trip and is refused
+        #: P0-16 (section 6): the director-runtime attestation surface is
+        #: part of the contract — a training surface without it cannot
+        #: prove a checkpoint round-trip and is refused
         for method in ("run_one_optimizer_update", "save_checkpoint",
-                       "load_checkpoint", "verify_full_state_round_trip"):
+                       "load_checkpoint", "verify_director_round_trip"):
             if not callable(getattr(contract, method, None)):
                 raise SharedBindingRejected(
                     f"SHARED_TRAINING_CONTRACT_INCOMPLETE: missing callable "

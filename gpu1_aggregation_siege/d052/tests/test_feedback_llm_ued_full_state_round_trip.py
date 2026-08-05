@@ -1,28 +1,31 @@
-"""P0-11 (§19 seam coverage): the training seam consumes ONLY the
-director-verifier's immutable FullStateRoundTripResult attestation.
+"""P0-11 / P0-16 (§19 seam coverage): the training seam consumes ONLY the
+director-runtime's UNFORGEABLE DirectorVerifiedRunStateRoundTrip.
 
 Contract under test:
 
 * "the save hash differs and load_checkpoint was called" is NOT a
-  round-trip — the ONLY acceptable proof is the signed attestation whose
-  reloaded full-state hash reproduces the pre-save full-state hash;
-* the attestation is frozen, signed (unsigned / tampered fail closed),
-  passing-only (verified=True, state hashes equal), and bound to the
-  exact window + checkpoint of the update;
-* a training contract without the attestation surface fails closed
-  (REAL_TRAINING_ROUND_TRIP_NOT_ATTESTED); duck-typed attestations are
-  refused (REAL_TRAINING_ROUND_TRIP_NOT_SIGNED);
-* CHECKPOINT_ROUND_TRIP_PASS semantics: True only on the executed
-  record with a verified attestation — every skipped/deferred record
-  carries False, and pre-P0-11 snapshots restore False;
-* the shared training slot refuses contracts lacking the attestation
-  surface (SHARED_TRAINING_CONTRACT_INCOMPLETE).
+  round-trip — the ONLY acceptable proof is the director-runtime's signed
+  DirectorVerifiedRunStateRoundTrip (verifier registered in the Formal
+  Asset Registry + implementation hash, runtime bundle hash, Student
+  checkpoint, optimizer state, global_update_step/global_env_steps, RNG,
+  controller/feedback store, next-policy-step equivalence);
+* a plain Mapping NEVER enters the production consumption surface
+  (REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED); locally-signed
+  shapes (FullStateRoundTripResult) and duck-typed objects are refused
+  (REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED);
+* the legacy FullStateRoundTripResult remains as the TEST_ONLY local
+  self-signature shape — its model + consume_full_state_round_trip tests
+  document the rejected shape;
+* CHECKPOINT_ROUND_TRIP_PASS semantics: True only on the executed record
+  with a verified director attestation — every skipped/deferred record
+  carries False;
+* the shared training slot refuses contracts lacking the
+  verify_director_round_trip surface (SHARED_TRAINING_CONTRACT_INCOMPLETE).
 
 Fixtures are TEST_ONLY / SYNTHETIC / NOT_REAL_EXECUTION: the scripted
-contract plays the director-verifier and signs attestations over
+contract emulates the director-runtime and signs attestations over
 pre-built hashes — NO checkpoint is saved, NO optimizer runs, and NO
-passing test flips a REAL_* flag. Retry/repair exhaustion is scoped out
-(this seam has no retry budget).
+passing test flips a REAL_* flag.
 """
 from __future__ import annotations
 
@@ -45,12 +48,19 @@ from d052.feedback_llm_ued.shared_runtime_binding import (
 )
 from d052.feedback_llm_ued.student_binding import (
     EXECUTED_ONE_UPDATE_STATUS,
+    DirectorVerifiedRunStateRoundTrip,
     FullStateRoundTripResult,
     StudentBindingBlocked,
     StudentTrainingSeam,
     TrainingStepRecord,
+    consume_director_verified_round_trip,
     consume_full_state_round_trip,
     resolve_student_binding,
+)
+
+from e2_test_sign_helpers import (
+    director_round_trip_payload,
+    sign_director_verified_round_trip,
     sign_full_state_round_trip,
 )
 
@@ -59,6 +69,7 @@ CHECKPOINT = text_sha256("TEST_ONLY_POST_UPDATE_CHECKPOINT")
 STATE_HASH = text_sha256("TEST_ONLY_FULL_STATE_IDENTITY")
 VERIFIER_ID = text_sha256("TEST_ONLY_DIRECTOR_VERIFIER_IDENTITY")
 TRAINEE_REGISTRY_ID = text_sha256("TEST_ONLY_TRAINING_CONTRACT_IDENTITY")
+RUNTIME_BUNDLE_HASH = text_sha256("TEST_ONLY_RUNTIME_BUNDLE")
 
 
 def attestation_payload(*, window=WINDOW, checkpoint_hash=CHECKPOINT,
@@ -105,26 +116,23 @@ class AttestingTrainingContract:
     def load_checkpoint(self, *, checkpoint_hash):
         self.load_calls.append(checkpoint_hash)
 
-    def verify_full_state_round_trip(self, *, window, checkpoint_hash):
+    def verify_director_round_trip(self, *, window, checkpoint_hash):
         self.round_trip_verifications.append((window, checkpoint_hash))
         if not self._attest:
             raise AssertionError("test fixture must not be called")
         if self._result is not None:
             return self._result
-        state_hash = text_sha256(
-            f"TEST_ONLY_FULL_STATE_{checkpoint_hash}")
-        return sign_full_state_round_trip(dict(
-            window=window, checkpoint_hash=checkpoint_hash,
-            state_hash_before_save=state_hash,
-            state_hash_after_reload=state_hash,
-            verifier_id=VERIFIER_ID, verified=True))
+        return sign_director_verified_round_trip(
+            director_round_trip_payload(
+                window, checkpoint_hash, RUNTIME_BUNDLE_HASH,
+                verifier_id=VERIFIER_ID))
 
 
 class ContractWithoutVerifier(AttestingTrainingContract):
-    """A pre-P0-11 training surface: the attestation surface is not a
-    callable — the seam and the shared slot must both refuse it."""
+    """A training surface with NO director-runtime attestation surface —
+    the seam and the shared slot must both refuse it."""
 
-    verify_full_state_round_trip = None
+    verify_director_round_trip = None
 
 
 def make_seam(contract):
@@ -139,7 +147,8 @@ def make_seam(contract):
         carry_mode="PERSISTENT",
         parameter_tree_hash=text_sha256("TEST_ONLY_STUDENT_PARAM_TREE"),
         checkpoint_global_step=98304))
-    return StudentTrainingSeam(gate, identity, training_contract=contract)
+    return StudentTrainingSeam(gate, identity, training_contract=contract,
+                               runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
 
 class TestAttestationContract:
@@ -271,6 +280,73 @@ class TestConsumeGate:
         assert "FULL_STATE_ROUND_TRIP_STATE_MISMATCH" in str(exc.value)
 
 
+class TestDirectorVerifiedConsumeGate:
+    """P0-16 (section 6): the PRODUCTION round-trip consumer accepts ONLY
+    the director-runtime's DirectorVerifiedRunStateRoundTrip — plain
+    mappings and locally-signed shapes are refused."""
+
+    def _valid(self):
+        return sign_director_verified_round_trip(
+            director_round_trip_payload(WINDOW, CHECKPOINT,
+                                        RUNTIME_BUNDLE_HASH))
+
+    def test_accepts_director_verified_attestation(self):
+        attestation = self._valid()
+        consumed = consume_director_verified_round_trip(
+            attestation, window=WINDOW, checkpoint_hash=CHECKPOINT,
+            expected_runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+        assert consumed is attestation
+        assert consumed.verifier_implementation_hash
+        assert consumed.global_env_steps > 0
+        assert consumed.next_policy_step_equivalent is True
+
+    def test_plain_mapping_rejected(self):
+        payload = director_round_trip_payload(
+            WINDOW, CHECKPOINT, RUNTIME_BUNDLE_HASH)
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED"):
+            consume_director_verified_round_trip(
+                payload, window=WINDOW, checkpoint_hash=CHECKPOINT,
+                expected_runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+
+    def test_locally_signed_shape_rejected(self):
+        local = sign_full_state_round_trip(attestation_payload())
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED"):
+            consume_director_verified_round_trip(
+                local, window=WINDOW, checkpoint_hash=CHECKPOINT,
+                expected_runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+
+    def test_duck_typed_object_rejected(self):
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED"):
+            consume_director_verified_round_trip(
+                SimpleNamespace(verified=True), window=WINDOW,
+                checkpoint_hash=CHECKPOINT,
+                expected_runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+
+    def test_wrong_runtime_bundle_rejected(self):
+        attestation = self._valid()
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_RUNTIME_BUNDLE_MISMATCH"):
+            consume_director_verified_round_trip(
+                attestation, window=WINDOW, checkpoint_hash=CHECKPOINT,
+                expected_runtime_bundle_hash=text_sha256("OTHER_BUNDLE"))
+
+    def test_wrong_window_rejected(self):
+        attestation = self._valid()
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_WINDOW_MISMATCH"):
+            consume_director_verified_round_trip(
+                attestation, window=WINDOW + 1, checkpoint_hash=CHECKPOINT,
+                expected_runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
+
+
 class TestSeamConsumesAttestationOnly:
     def test_executed_update_carries_verified_round_trip_pass(self):
         contract = AttestingTrainingContract()
@@ -298,14 +374,17 @@ class TestSeamConsumesAttestationOnly:
         contract = AttestingTrainingContract(
             result=SimpleNamespace(verified=True))
         seam = make_seam(contract)
-        with pytest.raises(StudentBindingBlocked,
-                           match="REAL_TRAINING_ROUND_TRIP_NOT_SIGNED"):
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED"):
             seam.execute_real_window_update(
                 WINDOW, batch_candidate_ids=["cand-a"])
 
     def test_attestation_for_wrong_checkpoint_refused_by_seam(self):
-        foreign = sign_full_state_round_trip(attestation_payload(
-            checkpoint_hash=text_sha256("TEST_ONLY_FOREIGN_CHECKPOINT")))
+        foreign = sign_director_verified_round_trip(
+            director_round_trip_payload(
+                WINDOW, text_sha256("TEST_ONLY_FOREIGN_CHECKPOINT"),
+                RUNTIME_BUNDLE_HASH))
         contract = AttestingTrainingContract(result=foreign)
         seam = make_seam(contract)
         with pytest.raises(
@@ -314,12 +393,26 @@ class TestSeamConsumesAttestationOnly:
             seam.execute_real_window_update(
                 WINDOW, batch_candidate_ids=["cand-a"])
 
-    def test_unverified_mapping_attestation_refused_by_seam(self):
-        contract = AttestingTrainingContract(
-            result=attestation_payload(verified=False))
+    def test_plain_mapping_attestation_refused_by_seam(self):
+        #: a plain Mapping may never enter the production consumption
+        #: surface (REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED)
+        contract = AttestingTrainingContract(result=dict(verified=True))
         seam = make_seam(contract)
-        with pytest.raises(StudentBindingBlocked,
-                           match="REAL_TRAINING_ROUND_TRIP_ILLEGAL"):
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED"):
+            seam.execute_real_window_update(
+                WINDOW, batch_candidate_ids=["cand-a"])
+
+    def test_locally_signed_attestation_refused_by_seam(self):
+        #: a locally-signed FullStateRoundTripResult is NOT the director's
+        #: unforgeable attestation — refused
+        local = sign_full_state_round_trip(attestation_payload())
+        contract = AttestingTrainingContract(result=local)
+        seam = make_seam(contract)
+        with pytest.raises(
+                StudentBindingBlocked,
+                match="REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED"):
             seam.execute_real_window_update(
                 WINDOW, batch_candidate_ids=["cand-a"])
 
@@ -358,7 +451,7 @@ class TestTrainingSlotRequiresVerifierSurface:
         )
         with pytest.raises(SharedBindingRejected,
                            match="SHARED_TRAINING_CONTRACT_INCOMPLETE.*"
-                                 "verify_full_state_round_trip"):
+                                 "verify_director_round_trip"):
             SharedTrainingSlot().bind(ContractWithoutVerifier())
 
 

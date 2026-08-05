@@ -46,9 +46,12 @@ from d052.feedback_llm_ued.shared_runtime_binding import (
 from d052.feedback_llm_ued.student_binding import (
     EXECUTED_ONE_UPDATE_STATUS,
     RealTwoWindowSmokePolicy,
-    sign_full_state_round_trip,
 )
 
+from e2_test_sign_helpers import (
+    director_round_trip_payload,
+    sign_director_verified_round_trip,
+)
 from test_feedback_llm_ued_envcoder_sequence import (
     TEST_BACKEND_ID,
     TEST_MODEL_ID,
@@ -57,6 +60,7 @@ from test_feedback_llm_ued_envcoder_sequence import (
 )
 
 SKIPPED_STATUS = "SKIPPED_SMOKE_POLICY_UPDATE_WINDOW"
+RUNTIME_BUNDLE_HASH = text_sha256("TEST_ONLY_RUNTIME_BUNDLE")
 
 
 class ScriptedTrainingContract:
@@ -98,16 +102,13 @@ class ScriptedTrainingContract:
     def load_checkpoint(self, *, checkpoint_hash: str) -> None:
         self.load_calls.append(checkpoint_hash)
 
-    def verify_full_state_round_trip(self, *, window: int,
-                                     checkpoint_hash: str):
+    def verify_director_round_trip(self, *, window: int,
+                                   checkpoint_hash: str):
         self.round_trip_verifications.append((window, checkpoint_hash))
-        state_hash = text_sha256(
-            f"TEST_ONLY_FULL_STATE_{checkpoint_hash}")
-        return sign_full_state_round_trip(dict(
-            window=window, checkpoint_hash=checkpoint_hash,
-            state_hash_before_save=state_hash,
-            state_hash_after_reload=state_hash,
-            verifier_id=self.verifier_id, verified=True))
+        return sign_director_verified_round_trip(
+            director_round_trip_payload(
+                window, checkpoint_hash, RUNTIME_BUNDLE_HASH,
+                verifier_id=self.verifier_id))
 
 
 class ScriptedRealProbeRunner:
@@ -172,7 +173,8 @@ def make_controller(*, policy=None, contract=None) -> FeedbackUEDController:
         student_init_contract=student_contract(),
         training_contract=contract,
         real_env_coder_callable=scripted_real_env_coder({}),
-        two_window_smoke_policy=policy)
+        two_window_smoke_policy=policy,
+        runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
 
 class TestExactlyOneUpdate:

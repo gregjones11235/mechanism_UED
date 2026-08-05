@@ -52,22 +52,37 @@ from test_feedback_llm_ued_two_window_update_count import (
 
 SKIPPED_STATUS = "SKIPPED_SMOKE_POLICY_UPDATE_WINDOW"
 DICODE_RUNTIME_ID = text_sha256("TEST_ONLY_DICODE_ONE_UPDATE_RUNTIME")
+RUNTIME_BUNDLE_HASH = text_sha256("TEST_ONLY_RUNTIME_BUNDLE")
 
 
 class ScriptedDiCodeOneUpdateRuntime:
     """TEST_ONLY / SYNTHETIC stand-in for the director-shared
     CanonicalDiCodeOneUpdateRuntime: records every plan, reports one
-    optimizer update (NO real optimizer involved)."""
+    optimizer update and signs a director-verified round-trip (NO real
+    optimizer involved)."""
 
     registry_identity = DICODE_RUNTIME_ID
+    verifier_id = text_sha256("TEST_ONLY_DIRECTOR_VERIFIER_IDENTITY")
 
     def __init__(self):
         self.plans = []
 
     def run_one_dicode_update(self, *, batch_plan):
         self.plans.append(batch_plan)
-        return SimpleNamespace(window=batch_plan.window, optimizer_steps=1,
-                               env_steps=8)
+        return SimpleNamespace(
+            window=batch_plan.window, optimizer_steps=1, env_steps=8,
+            checkpoint_hash_after=text_sha256(
+                f"TEST_ONLY_DICODE_CKPT_{batch_plan.window}"))
+
+    def verify_director_round_trip(self, *, window, checkpoint_hash):
+        from e2_test_sign_helpers import (
+            director_round_trip_payload,
+            sign_director_verified_round_trip,
+        )
+        return sign_director_verified_round_trip(
+            director_round_trip_payload(
+                window, checkpoint_hash, RUNTIME_BUNDLE_HASH,
+                verifier_id=self.verifier_id))
 
 
 def binding(original_task_id="DICODE_ORIGINAL_TASK_V1"):
@@ -98,7 +113,8 @@ def make_controller(runtime=None, *,
         real_env_coder_callable=scripted_real_env_coder({}),
         two_window_smoke_policy=RealTwoWindowSmokePolicy(),
         dicode_batch_binding=batch_binding,
-        dicode_runtime_identity=DICODE_RUNTIME_ID)
+        dicode_runtime_identity=DICODE_RUNTIME_ID,
+        runtime_bundle_hash=RUNTIME_BUNDLE_HASH)
 
 
 class TestOneDiCodeUpdateWindow1Only:
@@ -140,7 +156,7 @@ class TestOneDiCodeUpdateWindow1Only:
             run_one_optimizer_update=lambda **kw: None,
             save_checkpoint=lambda **kw: "hash",
             load_checkpoint=lambda **kw: None,
-            verify_full_state_round_trip=lambda **kw: None)
+            verify_director_round_trip=lambda **kw: None)
         controller = make_controller(legacy, batch_binding=binding())
         with pytest.raises(Exception,
                            match="REAL_DICODE_RUNTIME_MISSING"):
@@ -149,7 +165,10 @@ class TestOneDiCodeUpdateWindow1Only:
     def test_no_binding_keeps_legacy_final_batch(self):
         #: without the director batch binding the update consumes the
         #: historical final batch (16) through the legacy surface
-        from e2_test_sign_helpers import sign_full_state_round_trip
+        from e2_test_sign_helpers import (
+            director_round_trip_payload,
+            sign_director_verified_round_trip,
+        )
 
         class LegacyScriptedContract:
             def __init__(self):
@@ -171,15 +190,11 @@ class TestOneDiCodeUpdateWindow1Only:
             def load_checkpoint(self, *, checkpoint_hash):
                 pass
 
-            def verify_full_state_round_trip(self, *, window,
-                                             checkpoint_hash):
-                state = text_sha256(f"TEST_ONLY_FULL_STATE_{checkpoint_hash}")
-                return sign_full_state_round_trip(dict(
-                    window=window, checkpoint_hash=checkpoint_hash,
-                    state_hash_before_save=state,
-                    state_hash_after_reload=state,
-                    verifier_id=text_sha256("TEST_ONLY_VERIFIER"),
-                    verified=True))
+            def verify_director_round_trip(self, *, window,
+                                           checkpoint_hash):
+                return sign_director_verified_round_trip(
+                    director_round_trip_payload(
+                        window, checkpoint_hash, RUNTIME_BUNDLE_HASH))
 
         controller = make_controller(LegacyScriptedContract(),
                                      batch_binding=None)

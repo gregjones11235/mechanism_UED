@@ -197,32 +197,22 @@ class RealTwoWindowSmokePolicy:
 
 
 # ---------------------------------------------------------------------------
-# P0-11: the director-verifier's full-state round-trip attestation
+# P0-11/P0-16: the director-runtime's UNFORGEABLE round-trip attestation
 # ---------------------------------------------------------------------------
 class FullStateRoundTripResult(CanonicalModel):
-    """P0-11: the ONLY proof that a checkpoint save/load round-trip
-    actually reproduced the COMPLETE training state.
+    """TEST_ONLY legacy shape: a LOCALLY-SIGNED round-trip attestation.
 
-    "The save hash differs and load_checkpoint was called" is NOT a
-    round-trip — an independent director-verifier must attest that the
-    RELOADED full state (parameters AND optimizer state) reproduces the
-    pre-save full-state identity:
-
-    * frozen: post-construction mutation is refused;
-    * signed: ``round_trip_hash`` is mandatory and recomputed-and-
-      compared (unsigned / tampered attestations fail closed);
-    * passing only: ``verified`` must be True and
-      ``state_hash_before_save == state_hash_after_reload`` — anything
-      else is refused at construction;
-    * registry-issued verifier identity: ``verifier_id`` must be a sha256
-      hex identity (the director-verifier is registered in the formal
-      asset registry; direction two never derives one).
+    The production seam REFUSES this shape (see
+    :func:`consume_director_verified_round_trip`) — it exists only so the
+    rejection tests can prove that "save hash differs + load called" and
+    local self-signatures are never accepted as a round-trip. The signing
+    helper lives in the tests directory (e2_test_sign_helpers), never in
+    production.
     """
 
     model_config = ConfigDict(frozen=True)
 
     window: int = Field(ge=0)
-    #: the checkpoint that was reloaded for the round-trip
     checkpoint_hash: str = Field(min_length=1)
     state_hash_before_save: str = Field(min_length=1)
     state_hash_after_reload: str = Field(min_length=1)
@@ -242,24 +232,21 @@ class FullStateRoundTripResult(CanonicalModel):
         if not is_sha256_hex(self.verifier_id):
             raise ValueError(
                 "FULL_STATE_ROUND_TRIP_VERIFIER_IDENTITY_INVALID: "
-                f"verifier_id={self.verifier_id!r} — the director-verifier "
-                "identity is registry-issued sha256")
+                f"verifier_id={self.verifier_id!r}")
         if not self.verified:
             raise ValueError(
                 "FULL_STATE_ROUND_TRIP_NOT_VERIFIED: only a PASSING "
-                "director-verifier attestation may be consumed")
+                "attestation may be consumed")
         if self.state_hash_before_save != self.state_hash_after_reload:
             raise ValueError(
                 "FULL_STATE_ROUND_TRIP_STATE_MISMATCH: reloaded full-state "
                 f"hash {self.state_hash_after_reload!r} does not reproduce "
                 f"the pre-save full-state hash "
-                f"{self.state_hash_before_save!r} — the round-trip did NOT "
-                "reproduce the training state")
+                f"{self.state_hash_before_save!r}")
         if not self.round_trip_hash:
             raise ValueError(
                 "FULL_STATE_ROUND_TRIP_UNSIGNED: the attestation must carry "
-                "the registry-issued round_trip_hash computed over its "
-                "content")
+                "the recomputable round_trip_hash")
         computed = verify_content_hash(self.model_dump(),
                                        hash_field="round_trip_hash",
                                        carried=self.round_trip_hash,
@@ -268,18 +255,77 @@ class FullStateRoundTripResult(CanonicalModel):
         return self
 
 
-def sign_full_state_round_trip(payload: Mapping[str, object]
-                               ) -> FullStateRoundTripResult:
-    """Director-verifier-side helper: build and SIGN one immutable
-    attestation (TEST_ONLY in this worktree — in production the shared
-    runtime's director-verifier signs)."""
-    body = dict(payload)
-    body.pop("round_trip_hash", None)
-    body.setdefault(
-        "protocol_version",
-        FullStateRoundTripResult.model_fields["protocol_version"].default)
-    signature = canonical_sha256(body)
-    return FullStateRoundTripResult(**body, round_trip_hash=signature)
+class DirectorVerifiedRunStateRoundTrip(CanonicalModel):
+    """P0-16 (section 6): the director-runtime's UNFORGEABLE full-state
+    round-trip attestation — the ONLY proof the production seam accepts.
+
+    The director-runtime (CanonicalDiCodeRunStateCheckpoint) verifies that
+    the reloaded FULL training state reproduces the pre-update state and
+    attests:
+
+    * ``verifier_id`` — a verifier REGISTERED in the FormalAssetRegistry,
+      plus its ``verifier_implementation_hash``;
+    * ``runtime_bundle_hash`` — the signed Runtime Bundle this run
+      consumed;
+    * the Student checkpoint and the optimizer state hashes;
+    * the DiCode training clock (``global_update_step`` /
+      ``global_env_steps``);
+    * the RNG state hash;
+    * the controller / feedback store identity hash;
+    * ``next_policy_step_equivalent`` — the reloaded policy reproduces the
+      next update's step.
+
+    Direction two NEVER signs this (no local signer exists); plain
+    mappings and locally-signed shapes are REFUSED by the consumer.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    window: int = Field(ge=0)
+    checkpoint_hash: str = Field(min_length=1)
+    verifier_id: str = Field(min_length=1)
+    verifier_implementation_hash: str = Field(min_length=1)
+    runtime_bundle_hash: str = Field(min_length=1)
+    student_checkpoint_hash: str = Field(min_length=1)
+    optimizer_state_hash: str = Field(min_length=1)
+    global_update_step: int = Field(ge=0)
+    global_env_steps: int = Field(ge=0)
+    rng_state_hash: str = Field(min_length=1)
+    controller_store_hash: str = Field(min_length=1)
+    next_policy_step_equivalent: bool = False
+    verified: bool = False
+    attestation_hash: str = ""
+
+    @model_validator(mode="after")
+    def _validate_and_hash(self) -> "DirectorVerifiedRunStateRoundTrip":
+        for field_name in ("checkpoint_hash", "verifier_id",
+                           "verifier_implementation_hash",
+                           "runtime_bundle_hash", "student_checkpoint_hash",
+                           "optimizer_state_hash", "rng_state_hash",
+                           "controller_store_hash"):
+            value = getattr(self, field_name)
+            if not is_sha256_hex(value):
+                raise ValueError(
+                    "DIRECTOR_ROUND_TRIP_HASH_NOT_SHA256: "
+                    f"{field_name}={value!r}")
+        if not self.verified:
+            raise ValueError(
+                "DIRECTOR_ROUND_TRIP_NOT_VERIFIED: only a PASSING "
+                "director-runtime attestation may be consumed")
+        if not self.next_policy_step_equivalent:
+            raise ValueError(
+                "DIRECTOR_ROUND_TRIP_NEXT_STEP_NOT_EQUIVALENT: the reloaded "
+                "policy must reproduce the next update's step")
+        if not self.attestation_hash:
+            raise ValueError(
+                "DIRECTOR_ROUND_TRIP_UNSIGNED: the director-runtime must "
+                "sign the attestation (attestation_hash is mandatory)")
+        computed = verify_content_hash(
+            self.model_dump(), hash_field="attestation_hash",
+            carried=self.attestation_hash,
+            kind="DirectorVerifiedRunStateRoundTrip")
+        object.__setattr__(self, "attestation_hash", computed)
+        return self
 
 
 def consume_full_state_round_trip(raw: object, *, window: int,
@@ -324,6 +370,54 @@ def consume_full_state_round_trip(raw: object, *, window: int,
     return attestation
 
 
+def consume_director_verified_round_trip(
+        raw: object, *, window: int, checkpoint_hash: str,
+        expected_runtime_bundle_hash: str
+) -> DirectorVerifiedRunStateRoundTrip:
+    """P0-16 (section 6): the ONLY production round-trip consumer.
+
+    Accepts ONLY the director-runtime's immutable
+    DirectorVerifiedRunStateRoundTrip instance, bound to THIS window /
+    checkpoint / runtime bundle. Fail-closed:
+
+      * a plain Mapping -> REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED
+        (a mapping is not a signed attestation);
+      * any other object (incl. the TEST_ONLY locally-signed
+        FullStateRoundTripResult) ->
+        REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED;
+      * wrong window / checkpoint / runtime bundle ->
+        WINDOW_MISMATCH / CHECKPOINT_MISMATCH / RUNTIME_BUNDLE_MISMATCH.
+    """
+    if isinstance(raw, Mapping):
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_PLAIN_MAPPING_REJECTED: a plain "
+            "Mapping may NOT enter the production round-trip consumption "
+            "surface — only the director-runtime's signed "
+            "DirectorVerifiedRunStateRoundTrip is accepted")
+    if not isinstance(raw, DirectorVerifiedRunStateRoundTrip):
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_NOT_DIRECTOR_VERIFIED: the training "
+            "seam consumes ONLY the director-runtime's unforgeable "
+            f"DirectorVerifiedRunStateRoundTrip, got {type(raw).__name__} — "
+            "locally-signed shapes and 'save hash differs + load called' "
+            "are NOT a round-trip")
+    if raw.window != window:
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_WINDOW_MISMATCH: attestation window="
+            f"{raw.window} but this update ran in window={window}")
+    if raw.checkpoint_hash != checkpoint_hash:
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_CHECKPOINT_MISMATCH: attestation "
+            f"binds checkpoint {raw.checkpoint_hash!r} but this update "
+            f"reloaded {checkpoint_hash!r}")
+    if raw.runtime_bundle_hash != expected_runtime_bundle_hash:
+        raise StudentBindingBlocked(
+            "REAL_TRAINING_ROUND_TRIP_RUNTIME_BUNDLE_MISMATCH: attestation "
+            f"binds runtime bundle {raw.runtime_bundle_hash!r} but this run "
+            f"consumed {expected_runtime_bundle_hash!r}")
+    return raw
+
+
 class StudentTrainingSeam:
     """The ONLY place the loop may touch Student training.
 
@@ -347,10 +441,14 @@ class StudentTrainingSeam:
 
     def __init__(self, gate: FeedbackLaunchGate,
                  identity: StudentBindingIdentity,
-                 training_contract=None) -> None:
+                 training_contract=None,
+                 runtime_bundle_hash: str = "") -> None:
         self._gate = gate
         self.identity = identity
         self._training_contract = training_contract
+        #: P0-16 (section 6): the signed Runtime Bundle hash this run
+        #: consumes — the director's round-trip attestation must bind it
+        self._runtime_bundle_hash = runtime_bundle_hash
 
     def execute_training_step(self, window: int, *,
                               defer_real_update: bool = False
@@ -441,6 +539,10 @@ class StudentTrainingSeam:
             raise StudentBindingBlocked(
                 "REAL_DICODE_CURRICULUM_COUNT_MISMATCH: the plan must carry "
                 f"15 curriculum task ids, got {len(curriculum)}")
+        checkpoint_hash_after = str(
+            getattr(result, "checkpoint_hash_after", "") or "")
+        attestation = self._verify_director_round_trip(
+            contract, window=window, checkpoint_hash=checkpoint_hash_after)
         return TrainingStepRecord(
             status=EXECUTED_ONE_UPDATE_STATUS,
             student_training_transitions=int(
@@ -450,8 +552,10 @@ class StudentTrainingSeam:
                     "(12 dynamic + 3 non-target anchors); the OriginalTask "
                     f"{getattr(batch_plan, 'original_task_id', '')!r} is "
                     "appended ONCE internally by the shared DiCode runtime "
-                    "and never enters batch_candidate_ids"),
-            checkpoint_round_trip_pass=False)
+                    "and never enters batch_candidate_ids; round-trip "
+                    "VERIFIED by director-verifier "
+                    f"{attestation.verifier_id[:16]}"),
+            checkpoint_round_trip_pass=True)
 
     def _execute_one_update(self, window: int, *,
                             batch_candidate_ids) -> TrainingStepRecord:
@@ -485,22 +589,8 @@ class StudentTrainingSeam:
                 "update must change the full-state checkpoint hash")
         #: round-trip: the post-update checkpoint must reload cleanly
         contract.load_checkpoint(checkpoint_hash=hash_after)
-        #: P0-11: "the save hash differs and load_checkpoint was called"
-        #: is NOT a round-trip. The ONLY acceptable proof is the
-        #: director-verifier's immutable FullStateRoundTripResult
-        #: attestation (the reloaded full state reproduces the pre-save
-        #: full-state identity); without it the update fails closed —
-        #: CHECKPOINT_ROUND_TRIP_PASS can never be claimed.
-        verify = getattr(contract, "verify_full_state_round_trip", None)
-        if not callable(verify):
-            raise StudentBindingBlocked(
-                "REAL_TRAINING_ROUND_TRIP_NOT_ATTESTED: the shared training "
-                "contract must expose verify_full_state_round_trip (the "
-                "director-verifier attestation); 'save hash differs + load "
-                "called' is NOT a round-trip")
-        attestation = consume_full_state_round_trip(
-            verify(window=window, checkpoint_hash=hash_after),
-            window=window, checkpoint_hash=hash_after)
+        attestation = self._verify_director_round_trip(
+            contract, window=window, checkpoint_hash=hash_after)
         return TrainingStepRecord(
             status=EXECUTED_ONE_UPDATE_STATUS,
             student_training_transitions=int(
@@ -509,6 +599,25 @@ class StudentTrainingSeam:
                     f"{len(batch_candidate_ids)} final-batch candidates; "
                     f"checkpoint {hash_before[:16]} -> {hash_after[:16]}; "
                     "full-state round-trip VERIFIED by director-verifier "
-                    f"{attestation.verifier_id[:16]} (full-state hash "
-                    f"{attestation.state_hash_before_save[:16]})"),
+                    f"{attestation.verifier_id[:16]} (runtime bundle "
+                    f"{attestation.runtime_bundle_hash[:16]})"),
             checkpoint_round_trip_pass=True)
+
+    def _verify_director_round_trip(self, contract, *, window: int,
+                                    checkpoint_hash: str
+                                    ) -> DirectorVerifiedRunStateRoundTrip:
+        """P0-16 (section 6): the ONLY acceptable round-trip proof is the
+        director-runtime's unforgeable DirectorVerifiedRunStateRoundTrip —
+        locally-signed shapes and plain mappings are REFUSED (the consumer
+        rejects them); 'save hash differs + load called' is NOT a
+        round-trip."""
+        verify = getattr(contract, "verify_director_round_trip", None)
+        if not callable(verify):
+            raise StudentBindingBlocked(
+                "REAL_TRAINING_ROUND_TRIP_NOT_ATTESTED: the shared training "
+                "contract must expose verify_director_round_trip (the "
+                "director-runtime's unforgeable attestation)")
+        return consume_director_verified_round_trip(
+            verify(window=window, checkpoint_hash=checkpoint_hash),
+            window=window, checkpoint_hash=checkpoint_hash,
+            expected_runtime_bundle_hash=self._runtime_bundle_hash)

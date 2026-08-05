@@ -297,7 +297,8 @@ class FeedbackUEDController:
                  two_window_smoke_policy:
                  Optional[RealTwoWindowSmokePolicy] = None,
                  dicode_batch_binding=None,
-                 dicode_runtime_identity: str = "") -> None:
+                 dicode_runtime_identity: str = "",
+                 runtime_bundle_hash: str = "") -> None:
         """The five trailing kwargs are the PRODUCTION-PATH seams (P0-1..4).
         All default to None, which reproduces the historical mock/symbolic
         behavior byte for byte. With any real capability granted through
@@ -367,7 +368,8 @@ class FeedbackUEDController:
             self.student_binding = local_symbolic_binding()
         self.training_seam = StudentTrainingSeam(
             self.launch_gate, self.student_binding,
-            training_contract=training_contract)
+            training_contract=training_contract,
+            runtime_bundle_hash=runtime_bundle_hash)
         #: P0-10: the two-window smoke update-count contract (exactly one
         #: optimizer update, in the window that consumes feedback_k).
         #: None = historical behavior (every training-allowed window

@@ -145,5 +145,49 @@ def sign_full_state_round_trip(payload: Mapping[str, object]
     return FullStateRoundTripResult(**body, round_trip_hash=signature)
 
 
+def sign_director_verified_round_trip(payload: Mapping[str, object]
+                                      ) -> "DirectorVerifiedRunStateRoundTrip":
+    """TEST_ONLY: emulate the DIRECTOR-runtime's unforgeable
+    DirectorVerifiedRunStateRoundTrip attestation. Production never signs
+    this (there is no local signer); the fixture emulates the director
+    with a canonical hash so the seam's consumption + verification can be
+    exercised."""
+    from d052.feedback_llm_ued.student_binding import (
+        DirectorVerifiedRunStateRoundTrip,
+    )
+    body = dict(payload)
+    body.pop("attestation_hash", None)
+    body.setdefault(
+        "protocol_version",
+        DirectorVerifiedRunStateRoundTrip.model_fields["protocol_version"]
+        .default)
+    signature = canonical_sha256(body)
+    return DirectorVerifiedRunStateRoundTrip(**body,
+                                             attestation_hash=signature)
+
+
+def director_round_trip_payload(window, checkpoint_hash,
+                                runtime_bundle_hash, *,
+                                verifier_id=None,
+                                next_policy_step_equivalent=True,
+                                verified=True):
+    """A valid TEST_ONLY DirectorVerifiedRunStateRoundTrip payload."""
+    return dict(
+        window=window, checkpoint_hash=checkpoint_hash,
+        verifier_id=(verifier_id or text_sha256("TEST_ONLY_DIRECTOR_VERIFIER")),
+        verifier_implementation_hash=text_sha256(
+            "TEST_ONLY_VERIFIER_IMPL"),
+        runtime_bundle_hash=runtime_bundle_hash,
+        student_checkpoint_hash=text_sha256("TEST_ONLY_STUDENT_CKPT"),
+        optimizer_state_hash=text_sha256("TEST_ONLY_OPTIMIZER_STATE"),
+        global_update_step=1, global_env_steps=128,
+        rng_state_hash=text_sha256("TEST_ONLY_RNG_STATE"),
+        controller_store_hash=text_sha256("TEST_ONLY_CONTROLLER_STORE"),
+        next_policy_step_equivalent=next_policy_step_equivalent,
+        verified=verified)
+
+
 __all__ = ["sign_director_runtime_bundle", "sign_full_state_round_trip",
+           "sign_director_verified_round_trip",
+           "director_round_trip_payload",
            "valid_director_bundle_payload", "valid_director_bundle"]

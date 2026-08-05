@@ -151,7 +151,7 @@ class TestControllerPosture:
                 run_one_optimizer_update=lambda **kw: None,
                 save_checkpoint=lambda **kw: "hash",
                 load_checkpoint=lambda **kw: None,
-                verify_full_state_round_trip=lambda **kw: None),
+                verify_director_round_trip=lambda **kw: None),
             real_env_coder_callable=(
                 lambda **kw: __import__(
                     "test_feedback_llm_ued_envcoder_sequence",
