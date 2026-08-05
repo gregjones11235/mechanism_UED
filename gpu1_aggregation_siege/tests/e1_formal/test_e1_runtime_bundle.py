@@ -75,6 +75,9 @@ def _manifest_from_bundle(bundle) -> dict:
         "authorization_grant_hash": bundle.authorization_grant_hash,
         "object_identity_hashes": dict(bundle.object_identity_hashes),
         "student_selection": bundle.student_selection_mapping,
+"signature_ref": "",
+        "registry_identity": "",
+        "registry_hash": "",
         "bundle_hash": bundle.bundle_hash,
     }
 
@@ -343,6 +346,7 @@ class TestSignerGating:
         mapping = _manifest_from_bundle(bundle)
         mapping["mode"] = RB.BUNDLE_MODE_PRODUCTION
         mapping["signer_id"] = "would-be-production-signer"
+        mapping["signature_ref"] = "sig-ref"
         mapping["bundle_hash"] = RB.compute_bundle_hash(
             bundle_id=mapping["bundle_id"],
             mode=mapping["mode"],
@@ -351,6 +355,7 @@ class TestSignerGating:
             authorization_grant_hash=mapping["authorization_grant_hash"],
             object_identity_hashes=mapping["object_identity_hashes"],
             student_selection_hash=bundle.student_selection.descriptor_hash,
+            signature_ref="sig-ref",
         )
         with pytest.raises(RB.RuntimeBundleError) as excinfo:
             RB.load_verified_runtime_bundle(mapping, "test")

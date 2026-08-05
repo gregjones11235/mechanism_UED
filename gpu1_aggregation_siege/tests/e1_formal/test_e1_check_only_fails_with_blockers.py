@@ -22,6 +22,9 @@ class TestCheckOnlyFailsWithBlockers:
              "authorization_grant_hash": forged.authorization_grant_hash,
              "object_identity_hashes": dict(forged.object_identity_hashes),
              "student_selection": forged.student_selection_mapping,
+"signature_ref": "",
+        "registry_identity": "",
+        "registry_hash": "",
              "bundle_hash": forged.bundle_hash}
         p = tmp_path / "b.json"; p.write_text(json.dumps(m), encoding="utf-8")
         rp = str(tmp_path / "c.json")

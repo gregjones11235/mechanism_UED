@@ -65,6 +65,9 @@ class TestDualStudentCheckOnly:
                 bundle.object_identity_hashes
             ),
             "student_selection": bundle.student_selection_mapping,
+"signature_ref": "",
+        "registry_identity": "",
+        "registry_hash": "",
             "bundle_hash": bundle.bundle_hash,
         }
         path = tmp_path / "test_only_bundle.json"

@@ -614,12 +614,6 @@ def main(
         "the Runtime Bundle's issued value; NEVER defaulted to the "
         "first allowed candidate)",
     )
-    parser.add_argument(
-        "--llm-provider",
-        default="",
-        help="real LLM provider identity (must be on the "
-        "supervisor-owned whitelist; empty this round)",
-    )
     parser.add_argument("--report-out", default=DEFAULT_REPORT)
     parser.add_argument(
         "--check-only",
@@ -634,21 +628,31 @@ def main(
     gates = RT.resolve_production_gates(
         teacher_config_path=args.teacher_config
     )
-    gates["gates_checked"].append(RT.GATE_REAL_LLM_PROVIDER)
-    try:
-        RT.require_real_llm_provider(args.llm_provider)
-    except RuntimeError as e:
-        gates["blockers"].append(
-            _blocker(
-                RT.GATE_REAL_LLM_PROVIDER,
-                RT.E1_REAL_LLM_NOT_AUTHORIZED,
-                str(e),
-            )
-        )
 
     # ---- the director-signed runtime bundle (REQUIRED) ---------------
     gates["gates_checked"].append("director_runtime_bundle")
     bundle = _resolve_director_bundle(args, gates["blockers"])
+
+    # ---- director bundle verifier (production trust, not a static
+    #      signer tuple) ------------------------------------------------
+    gates["gates_checked"].append("director_bundle_verifier")
+    if bundle is not None:
+        from dicode.teachers.e1_formal import runtime_bundle as _RB
+
+        if bundle.mode == _RB.BUNDLE_MODE_PRODUCTION:
+            try:
+                _RB.verify_production_runtime_bundle(
+                    bundle,
+                    director_bundle_verifier,
+                    "run_e1_real_one_update.verifier",
+                )
+            except _RB.ProductionBundleVerificationError as e:
+                gates["blockers"].append(
+                    _blocker("director_bundle_verifier", e.code, str(e))
+                )
+            gates["blockers"].append(
+                _blocker("director_bundle_verifier", e.code, str(e))
+            )
 
     # ---- the director-selected Student (never defaulted) -------------
     gates["gates_checked"].append("student_selection")
@@ -710,7 +714,6 @@ def main(
             ENTRYPOINT,
             gates,
             extra={
-                "llm_provider_requested": args.llm_provider,
                 "runtime_bundle_verified": bundle is not None,
                 "note": (
                     "every blocker above must clear (a director-signed "

@@ -87,6 +87,9 @@ def _test_only_manifest() -> dict:
         "authorization_grant_hash": bundle.authorization_grant_hash,
         "object_identity_hashes": dict(bundle.object_identity_hashes),
         "student_selection": bundle.student_selection_mapping,
+"signature_ref": "",
+        "registry_identity": "",
+        "registry_hash": "",
         "bundle_hash": bundle.bundle_hash,
     }
 
@@ -303,7 +306,6 @@ class TestEntrypointCheckOnly:
         codes = [b["code"] for b in report["production_blockers"]]
         assert ENT.E1_DIRECTOR_RUNTIME_BUNDLE_REQUIRED in codes
         # no real LLM provider is authorized this round
-        assert RT.E1_REAL_LLM_NOT_AUTHORIZED in codes
 
     def test_check_only_with_missing_bundle_file_blocks(self, tmp_path):
         report_path = str(tmp_path / "check_only_missing_file.json")

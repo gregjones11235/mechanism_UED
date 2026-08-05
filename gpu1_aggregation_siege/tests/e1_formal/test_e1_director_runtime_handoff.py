@@ -101,6 +101,9 @@ def _test_only_manifest_path(tmp_path):
         "authorization_grant_hash": bundle.authorization_grant_hash,
         "object_identity_hashes": dict(bundle.object_identity_hashes),
         "student_selection": bundle.student_selection_mapping,
+"signature_ref": "",
+        "registry_identity": "",
+        "registry_hash": "",
         "bundle_hash": bundle.bundle_hash,
     }
     path = tmp_path / "test_only_director_bundle.json"

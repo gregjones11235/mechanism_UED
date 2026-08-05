@@ -379,6 +379,12 @@ class E1RuntimeBundle:
     capabilities: Tuple[Tuple[str, Any], ...]  # RUNTIME_CAPABILITY_CONTRACTS
     object_identity_hashes: Tuple[Tuple[str, str], ...]
     bundle_hash: str
+    #: CC2-Repair-3 (§一): director-signature + registry identity fields
+    #: (empty on TEST_ONLY; the PRODUCTION trust lives in the injected
+    #: DirectorBundleVerifier, never a static signer tuple)
+    signature_ref: str
+    registry_identity: str
+    registry_hash: str
     #: CC2-Student repair: the EXPLICIT director-issued Student
     #: selection (never read from a nonexistent bundle.student)
     student_selection: StudentSelectionDescriptor
@@ -516,12 +522,15 @@ def compute_bundle_hash(
     authorization_grant_hash: str,
     object_identity_hashes: Mapping[str, str],
     student_selection_hash: str = "",
+    signature_ref: str = "",
+    registry_identity: str = "",
+    registry_hash: str = "",
 ) -> str:
     """The canonical identity of one bundle (tamper-evident).
 
     CC2-Student repair: ``student_selection_hash`` is part of the
-    bundle identity — a different Student selection yields a different
-    bundle hash.
+    bundle identity. CC2-Repair-3: the director signature reference and
+    the registry identity/hash are also part of the identity.
     """
     return canonical_sha256(
         {
@@ -535,6 +544,9 @@ def compute_bundle_hash(
                 for contract in RUNTIME_CAPABILITY_CONTRACTS
             ],
             "student_selection_hash": student_selection_hash,
+            "signature_ref": signature_ref,
+            "registry_identity": registry_identity,
+            "registry_hash": registry_hash,
         }
     )
 
@@ -569,6 +581,9 @@ def _assemble(
     authorization_grant_hash: str,
     capabilities: Mapping[str, Any],
     student_selection: Any,
+    signature_ref: str = "",
+    registry_identity: str = "",
+    registry_hash: str = "",
     ctx: str,
 ) -> E1RuntimeBundle:
     resolved = _capability_mapping(capabilities, ctx)
@@ -588,6 +603,9 @@ def _assemble(
         authorization_grant_hash=authorization_grant_hash,
         object_identity_hashes=identity_hashes,
         student_selection_hash=descriptor.descriptor_hash,
+        signature_ref=signature_ref,
+        registry_identity=registry_identity,
+        registry_hash=registry_hash,
     )
     return E1RuntimeBundle(
         bundle_id=bundle_id,
@@ -604,6 +622,9 @@ def _assemble(
             for contract in RUNTIME_CAPABILITY_CONTRACTS
         ),
         bundle_hash=bundle_hash,
+        signature_ref=signature_ref,
+        registry_identity=registry_identity,
+        registry_hash=registry_hash,
         student_selection=descriptor,
     )
 
@@ -655,6 +676,9 @@ _MANIFEST_FIELDS = frozenset(
         "object_identity_hashes",
         "bundle_hash",
         "student_selection",
+        "signature_ref",
+        "registry_identity",
+        "registry_hash",
     }
 )
 
@@ -722,6 +746,23 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
                 f"64-hex identity hash, got {digest!r}",
             )
         identity_hashes[contract] = digest
+    # ---- director signature + registry identity (CC2-Repair-3) --------
+    signature_ref = mapping.get("signature_ref") or ""
+    registry_identity = mapping.get("registry_identity") or ""
+    registry_hash = mapping.get("registry_hash") or ""
+    if not isinstance(signature_ref, str) or not isinstance(
+        registry_identity, str
+    ) or not isinstance(registry_hash, str):
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_BAD_TYPE,
+            f"{ctx}: signature_ref / registry_identity / registry_hash "
+            "must be str",
+        )
+    if mode == BUNDLE_MODE_PRODUCTION and not signature_ref.strip():
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_MISSING_FIELD,
+            f"{ctx}: a PRODUCTION bundle must carry a signature_ref",
+        )
     # ---- student_selection (REQUIRED; parsed + verified fail-closed) --
     descriptor = parse_student_selection(
         mapping.get("student_selection"), f"{ctx}.student_selection"
@@ -737,6 +778,9 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
         authorization_grant_hash=grant_hash,
         object_identity_hashes=identity_hashes,
         student_selection_hash=descriptor.descriptor_hash,
+        signature_ref=signature_ref,
+        registry_identity=registry_identity,
+        registry_hash=registry_hash,
     )
     if recomputed != declared_hash:
         raise RuntimeBundleError(
@@ -772,6 +816,9 @@ def load_verified_runtime_bundle(mapping: Any, ctx: str) -> E1RuntimeBundle:
             for contract in RUNTIME_CAPABILITY_CONTRACTS
         ),
         bundle_hash=declared_hash,
+        signature_ref=signature_ref,
+        registry_identity=registry_identity,
+        registry_hash=registry_hash,
         student_selection=descriptor,
     )
 
@@ -803,4 +850,111 @@ def require_bundle_admissible_for_production(
             RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED,
             f"{ctx}: bundle signer {bundle.signer_id!r} is not on the "
             "supervisor-owned production whitelist",
+        )
+
+
+# ---------------------------------------------------------------------------
+# CC2-Repair-3 (§一): director-injected bundle verifier (production trust)
+# ---------------------------------------------------------------------------
+from typing import Protocol, runtime_checkable  # noqa: E402
+
+
+@runtime_checkable
+class DirectorBundleVerifier(Protocol):
+    """The director's trusted bundle verifier (real object only).
+
+    The static EMPTY ``AUTHORIZED_BUNDLE_SIGNERS`` is NEVER the final
+    production gate; trust lives in this injected verifier.
+    """
+
+    verifier_id: str
+    verifier_identity_hash: str
+    trusted_signer_registry_hash: str
+
+    def verify_bundle(
+        self,
+        *,
+        signer_id: str,
+        payload_hash: str,
+        signature_ref: str,
+        source_commit: str,
+        registry_identity: str,
+    ) -> bool: ...
+
+
+E1_PRODUCTION_BUNDLE_VERIFIER_UNBOUND = (
+    "E1_PRODUCTION_BUNDLE_VERIFIER_UNBOUND"
+)
+E1_PRODUCTION_BUNDLE_SIGNATURE_REJECTED = (
+    "E1_PRODUCTION_BUNDLE_SIGNATURE_REJECTED"
+)
+E1_PRODUCTION_BUNDLE_VERIFIER_BAD_TYPE = (
+    "E1_PRODUCTION_BUNDLE_VERIFIER_BAD_TYPE"
+)
+
+
+class ProductionBundleVerificationError(RuntimeBundleError):
+    """Fail-closed production bundle verification violation."""
+
+
+def require_production_bundle_verifier(
+    verifier: Any, ctx: str
+) -> DirectorBundleVerifier:
+    if verifier is None:
+        raise ProductionBundleVerificationError(
+            E1_PRODUCTION_BUNDLE_VERIFIER_UNBOUND,
+            f"{ctx}: no director-injected DirectorBundleVerifier; "
+            "E1_PRODUCTION_BUNDLE_VERIFIER_UNBOUND — the production "
+            "bundle cannot be trusted",
+        )
+    if isinstance(verifier, str) or isinstance(verifier, Mapping):
+        raise ProductionBundleVerificationError(
+            E1_PRODUCTION_BUNDLE_VERIFIER_BAD_TYPE,
+            f"{ctx}: the verifier must be a real object, never a "
+            "string / Mapping",
+        )
+    if not isinstance(verifier, DirectorBundleVerifier):
+        raise ProductionBundleVerificationError(
+            E1_PRODUCTION_BUNDLE_VERIFIER_BAD_TYPE,
+            f"{ctx}: the injected verifier does not implement the "
+            "DirectorBundleVerifier Protocol",
+        )
+    if getattr(verifier, "test_only", False):
+        raise ProductionBundleVerificationError(
+            E1_PRODUCTION_BUNDLE_VERIFIER_BAD_TYPE,
+            f"{ctx}: a TEST_ONLY verifier never enters a production "
+            "verification",
+        )
+    return verifier
+
+
+def verify_production_runtime_bundle(
+    bundle: E1RuntimeBundle, verifier: Any, ctx: str
+) -> None:
+    """Verify a PRODUCTION bundle through the director-injected
+    verifier (strictly True required) BEFORE any object resolution."""
+    if bundle.mode != BUNDLE_MODE_PRODUCTION:
+        raise ProductionBundleVerificationError(
+            RUNTIME_BUNDLE_TEST_ONLY_REJECTED,
+            f"{ctx}: only PRODUCTION bundles go through the production "
+            "verifier",
+        )
+    require_production_bundle_verifier(verifier, ctx)
+    if not bundle.signature_ref.strip():
+        raise ProductionBundleVerificationError(
+            RUNTIME_BUNDLE_MISSING_FIELD,
+            f"{ctx}: a PRODUCTION bundle must carry a signature_ref",
+        )
+    result = verifier.verify_bundle(
+        signer_id=bundle.signer_id,
+        payload_hash=bundle.bundle_hash,
+        signature_ref=bundle.signature_ref,
+        source_commit=bundle.source_commit,
+        registry_identity=bundle.registry_identity,
+    )
+    if result is not True:
+        raise ProductionBundleVerificationError(
+            E1_PRODUCTION_BUNDLE_SIGNATURE_REJECTED,
+            f"{ctx}: the director verifier did not strictly return True "
+            f"(got {result!r}); E1_PRODUCTION_BUNDLE_SIGNATURE_REJECTED",
         )
