@@ -1,0 +1,9 @@
+{
+  "bundle_mode": "PRODUCTION",
+  "llm_transport": "resolved transport_closure (BUG-E2-06 fixed; probe runner never the LLM transport)",
+  "manifest_objects": "REQUIRED_DIRECTOR_OBJECTS (12 descriptors: identity_hash/implementation_hash/source_commit/registry_identity)",
+  "persistent_student_mount": "mount_persistent_student (real adapter+checkpoint; BUG-E2-07 fixed)",
+  "resolved_runtime": "ResolvedDirectorRuntime (resolves and KEEPS all 12 objects; never discarded)",
+  "shared_bundle": "resolved_runtime.shared_bundle (BUG-E2-05 fixed)",
+  "status": "UNBOUND (external registry missing)"
+}

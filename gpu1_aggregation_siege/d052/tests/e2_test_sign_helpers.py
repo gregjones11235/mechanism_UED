@@ -23,6 +23,7 @@ from d052.feedback_llm_ued.anchor_manifest import SharedAnchorManifest
 from d052.feedback_llm_ued.director_runtime_bundle import (
     DIRECTOR_RUNTIME_BUNDLE_VERSION,
     DirectorRuntimeBundleManifest,
+    REQUIRED_DIRECTOR_OBJECTS,
 )
 from d052.feedback_llm_ued.student_binding import (
     FullStateRoundTripResult,
@@ -43,8 +44,21 @@ def valid_director_bundle_payload(*, anchors=None,
                      else C.GLOBAL_CANONICAL_ANCHOR_IDS),
         frozen=True)
     memory_mode, carry_mode = C.STUDENT_PROFILE_MEMORY_MAP[candidate_id]
+    #: REQUIRED_DIRECTOR_OBJECTS: every production runtime object the
+    #: manifest declares, each with identity/implementation/source/registry
+    #: (TEST_ONLY synthetic hashes; the production registry verifies them).
+    objects = dict(
+        (name, dict(
+            identity_hash=text_sha256(f"TEST_ONLY_OBJ_ID_{name}"),
+            implementation_hash=text_sha256(f"TEST_ONLY_OBJ_IMPL_{name}"),
+            source_commit=text_sha256("TEST_ONLY_SOURCE_COMMIT"),
+            registry_identity=text_sha256("TEST_ONLY_FORMAL_ASSET_REGISTRY"),
+        ))
+        for name in REQUIRED_DIRECTOR_OBJECTS
+    )
     return dict(
         registry_identity=text_sha256("TEST_ONLY_RUNTIME_BUNDLE"),
+        objects=objects,
         formal_asset_registry=text_sha256("TEST_ONLY_FORMAL_ASSET_REGISTRY"),
         signer_id=text_sha256("TEST_ONLY_TRUSTED_SIGNER"),
         source_commit=text_sha256("TEST_ONLY_SOURCE_COMMIT"),
@@ -118,6 +132,7 @@ def sign_director_runtime_bundle(
         AnchorManifestData,
         DiCodeBatchBindingData,
         ReferenceIdentityData,
+        RuntimeObjectDescriptor,
         SmokeSemanticsData,
         StudentInitContractData,
         _manifest_hash_body,
@@ -131,26 +146,31 @@ def sign_director_runtime_bundle(
     body.setdefault("bundle_version", DIRECTOR_RUNTIME_BUNDLE_VERSION)
     body.setdefault("student_adapter", "")
     body.setdefault("reference_adapter", "")
+    # Build EVERY nested model so the canonical signature body matches the
+    # production validator's model_dump() exactly (CanonicalModel adds the
+    # protocol_version default to every nested model — the plain payload
+    # dict would sign a DIFFERENT body than the validator recomputes).
     body["student_init_contract"] = StudentInitContractData(
-        **body["student_init_contract"]).model_dump()
+        **body["student_init_contract"])
     body["reference_identity"] = ReferenceIdentityData(
-        **body["reference_identity"]).model_dump()
+        **body["reference_identity"])
     body["shared_anchor_manifest"] = AnchorManifestData(
-        **body["shared_anchor_manifest"]).model_dump()
+        **body["shared_anchor_manifest"])
     body["smoke_semantics"] = SmokeSemanticsData(
-        **body["smoke_semantics"]).model_dump()
+        **body["smoke_semantics"])
     body["batch_binding"] = DiCodeBatchBindingData(
-        **body["batch_binding"]).model_dump()
-    #: §5 cross-binding: the signature covers the body WITHOUT the Student's
-    #: self-referential runtime_bundle_hash, which is then set to the
-    #: bundle's own hash (the production validator recomputes the SAME body)
-    sign_body = dict(body)
-    sign_body.pop("bundle_hash", None)
-    student = dict(sign_body["student_init_contract"])
-    student.pop("runtime_bundle_hash", None)
-    sign_body["student_init_contract"] = student
-    signature = canonical_sha256(sign_body)
-    student_final = dict(body["student_init_contract"])
+        **body["batch_binding"])
+    body["objects"] = {
+        name: RuntimeObjectDescriptor(**desc)
+        for name, desc in body["objects"].items()
+    }
+    #: §5 cross-binding: the signature covers the canonical body WITHOUT the
+    #: bundle_hash and WITHOUT the Student's self-referential
+    #: runtime_bundle_hash (which is then set to the bundle's own hash —
+    #: the production validator recomputes the SAME canonical body).
+    preview = DirectorRuntimeBundleManifest.model_construct(**body)
+    signature = canonical_sha256(_manifest_hash_body(preview))
+    student_final = dict(body["student_init_contract"].model_dump())
     student_final["runtime_bundle_hash"] = signature
     body["student_init_contract"] = student_final
     return DirectorRuntimeBundleManifest(**body, bundle_hash=signature)

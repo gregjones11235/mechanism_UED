@@ -1,0 +1,16 @@
+{
+  "blockers": [
+    "FORMAL_ASSET_REGISTRY_UNBOUND (external missing)"
+  ],
+  "checkpoint_writes": 0,
+  "counts_all_zero": true,
+  "executed": false,
+  "llm_calls": 0,
+  "note": "run_e2_object_level_check (shared core, BUG-E2-09) requires a real injected FormalAssetRegistry; the concrete registry does not exist in the repository. Blocked before any execution.",
+  "optimizer_updates": 0,
+  "paid_calls": 0,
+  "probe_executions": 0,
+  "production_taskarchive_writes": 0,
+  "status": "OBJECT_LEVEL_CHECK_BLOCKED",
+  "target": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+}

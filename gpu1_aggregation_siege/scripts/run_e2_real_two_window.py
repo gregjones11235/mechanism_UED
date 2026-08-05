@@ -113,6 +113,7 @@ from d052.feedback_llm_ued.simulator_feedback_store import MATCH_UNGRADED
 from d052.feedback_llm_ued.student_binding import (
     EXECUTED_ONE_UPDATE_STATUS,
     RealTwoWindowSmokePolicy,
+    StudentBindingBlocked,
 )
 from d052.schemas.common import is_sha256_hex
 from d052.feedback_llm_ued.runtime_authorization import (
@@ -129,10 +130,10 @@ from d052.feedback_llm_ued.director_runtime_bundle import (
     DirectorRuntimeBundleBlocked,
     DirectorRuntimeBundleManifest,
     assert_runtime_bundle_hash_cross_bound,
-    build_shared_bundle,
     build_student_init_contract,
     bundle_backend_identity,
     load_director_runtime_bundle,
+    mount_persistent_student,
     require_trusted_verifier,
     resolve_director_runtime_objects,
     runtime_bundle_binding_problems,
@@ -573,6 +574,39 @@ def _load_transport(dotted: str):
     return transport
 
 
+def _resolve_production_runtime(*, manifest, director_bundle_verifier,
+                                formal_asset_registry,
+                                selected_candidate_id):
+    """The ONE production gate + resolve + mount core (BUG-E2-09).
+
+    Both the CLI path and the injected entrypoint run this SAME core:
+    verifier -> bundle-hash cross-bind -> real registry -> resolve the
+    COMPLETE object set -> bind the shared five-slot bundle -> mount the
+    REAL Persistent Student. Returns ``(resolved_runtime, bundle)``.
+    """
+    require_trusted_verifier(director_bundle_verifier, manifest)
+    assert_runtime_bundle_hash_cross_bound(manifest)
+    if formal_asset_registry is None:
+        raise DirectorRuntimeBundleBlocked(
+            "FORMAL_ASSET_REGISTRY_UNBOUND: the production path resolves "
+            "real objects ONLY from the director's FormalAssetRegistry")
+    # BUG-E2-03/05: the resolution KEEPS every validated object in a
+    # ResolvedDirectorRuntime (never discarded, never re-resolved); the
+    # pipeline consumes the SAME instances from that object.
+    resolved_runtime = resolve_director_runtime_objects(
+        manifest, formal_asset_registry,
+        selected_candidate_id=selected_candidate_id)
+    bundle = resolved_runtime.shared_bundle
+    resolve_shared_runtime(bundle)
+    # BUG-E2-07 / BUG-COMMON-06: the object-level check mounts the REAL
+    # Persistent Student (real Adapter + real checkpoint), never a
+    # Manifest-derived synthetic Student.
+    mount_persistent_student(
+        resolved=resolved_runtime, manifest=manifest,
+        selected_candidate_id=selected_candidate_id)
+    return resolved_runtime, bundle
+
+
 def run_e2_object_level_check(*, manifest,
                               director_bundle_verifier,
                               formal_asset_registry,
@@ -584,16 +618,15 @@ def run_e2_object_level_check(*, manifest,
     BLOCKED dict — never a synthetic PASS, never a handoff.
     """
     try:
-        require_trusted_verifier(director_bundle_verifier, manifest)
-        assert_runtime_bundle_hash_cross_bound(manifest)
-        if formal_asset_registry is None:
-            raise DirectorRuntimeBundleBlocked(
-                "FORMAL_ASSET_REGISTRY_UNBOUND")
-        bundle = build_shared_bundle(manifest)
-        bundle = resolve_director_runtime_objects(
-            manifest, formal_asset_registry, bundle)
-        resolve_shared_runtime(bundle)
-    except DirectorRuntimeBundleBlocked as exc:
+        _resolved_runtime, bundle = _resolve_production_runtime(
+            manifest=manifest, director_bundle_verifier=(
+                director_bundle_verifier),
+            formal_asset_registry=formal_asset_registry,
+            selected_candidate_id=selected_candidate_id)
+        selected = mount_persistent_student(
+            resolved=_resolved_runtime, manifest=manifest,
+            selected_candidate_id=selected_candidate_id)
+    except (DirectorRuntimeBundleBlocked, StudentBindingBlocked) as exc:
         return dict(status="OBJECT_LEVEL_CHECK_BLOCKED",
                     executed=False,
                     REAL_LLM_EXECUTED=False,
@@ -602,7 +635,6 @@ def run_e2_object_level_check(*, manifest,
                     CHECKPOINT_RELOAD=False,
                     DIRECTOR_SMOKE_HANDOFF_READY=False,
                     reason=str(exc))
-    selected = bundle.student.binding
     if selected.candidate_id != selected_candidate_id:
         return dict(status="OBJECT_LEVEL_CHECK_BLOCKED", executed=False,
                     reason="selected student mismatch",
@@ -633,9 +665,13 @@ def run_e2_production_two_window(*, manifest, resolved_runtime,
         raise RealTwoWindowBlocked(
             "E2_REAL_SMOKE_AUTHORIZED=false: the real two-window smoke "
             "requires explicit director authorization; nothing is executed")
-    #: the real controller construction (consumed by run_two_real_windows)
+    #: BUG-E2-05/06: the real controller consumes the shared five-slot
+    #: bundle FROM the ResolvedDirectorRuntime, and the LLM transport is
+    #: the SEPARATE resolved transport_closure — the probe runner is only
+    #: for probing, never the LLM transport.
     return run_two_real_windows(
-        bundle=resolved_runtime, llm_transport=resolved_runtime.runner,
+        bundle=resolved_runtime.shared_bundle,
+        llm_transport=resolved_runtime.transport_closure,
         backend_id=manifest.backend_model_identity.get("backend_id", ""),
         model_id=manifest.backend_model_identity.get("model_id", ""),
         state_path="reports/feedback_llm_ued/real_two_window_state.json",
@@ -716,21 +752,18 @@ def main(argv=None, *, director_bundle_verifier=None,
                   f"{manifest.student_init_contract.candidate_id!r}",
                   file=sys.stderr)
             return 1
-        #: the director's object-level check chain (fixed order):
-        #: verifier -> bundle-hash cross-bind -> build -> resolve -> resolve
+        #: the director's object-level check chain — the SAME production
+        #: core the injected entrypoint runs (BUG-E2-09):
+        #: verifier -> bundle-hash cross-bind -> real registry -> resolve
+        #: -> shared bundle -> REAL Persistent Student mount
         try:
-            require_trusted_verifier(director_bundle_verifier, manifest)
-            assert_runtime_bundle_hash_cross_bound(manifest)
-            bundle = build_shared_bundle(manifest)
-            if formal_asset_registry is None:
-                raise DirectorRuntimeBundleBlocked(
-                    "FORMAL_ASSET_REGISTRY_UNBOUND: the production path "
-                    "resolves real objects ONLY from the director's "
-                    "FormalAssetRegistry")
-            bundle = resolve_director_runtime_objects(
-                manifest, formal_asset_registry, bundle)
-            resolve_shared_runtime(bundle)
-        except DirectorRuntimeBundleBlocked as exc:
+            _resolved_runtime, bundle = _resolve_production_runtime(
+                manifest=manifest,
+                director_bundle_verifier=director_bundle_verifier,
+                formal_asset_registry=formal_asset_registry,
+                selected_candidate_id=(
+                    manifest.student_init_contract.candidate_id))
+        except (DirectorRuntimeBundleBlocked, StudentBindingBlocked) as exc:
             print(f"\nOBJECT_LEVEL_CHECK_BLOCKED: {exc}", file=sys.stderr)
             return 1
         student_init_contract = build_student_init_contract(manifest)

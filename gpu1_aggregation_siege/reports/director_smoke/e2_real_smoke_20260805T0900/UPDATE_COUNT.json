@@ -1,0 +1,6 @@
+{
+  "status": "BLOCKED_EXTERNAL (canonical DiCode runtime not runnable; jax absent)",
+  "total_optimizer_updates_observed": 0,
+  "window_k1_optimizer_updates": 0,
+  "window_k_optimizer_updates": 0
+}
