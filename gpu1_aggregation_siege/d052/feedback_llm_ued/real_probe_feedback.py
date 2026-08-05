@@ -816,6 +816,12 @@ def build_real_feedback_record(*, feedback_id: str,
         student_parameter_tree_hash=student_binding.parameter_tree_hash,
         student_checkpoint_step=student_binding.checkpoint_global_step,
         student_roles=(C.STUDENT_ROLE_SEARCH,),
+        #: P0-16 (dual student): the FULL Student identity the feedback was
+        #: probed under — window k+1 may only consume the matching Student
+        student_candidate_id=student_binding.candidate_id,
+        student_memory_mode=student_binding.memory_mode,
+        student_memory_spec_hash=student_binding.memory_spec_hash,
+        runtime_bundle_hash=student_binding.runtime_bundle_hash,
         memory_compatibility_status=C.MEMORY_COMPATIBILITY_NOT_APPLICABLE)
     return record, provenance
 

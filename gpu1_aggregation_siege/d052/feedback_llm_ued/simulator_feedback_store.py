@@ -80,6 +80,13 @@ class SimulatorFeedbackRecord(CanonicalModel):
     student_checkpoint_step: int = Field(default=0, ge=0)
     student_roles: Tuple[str, ...] = Field(default_factory=tuple)
     memory_compatibility_status: str = C.MEMORY_COMPATIBILITY_NOT_APPLICABLE
+    #: P0-16 (dual student): the FULL Student identity a feedback record
+    #: belongs to — window k+1 may only consume feedback matching the
+    #: currently-selected Student
+    student_candidate_id: str = ""
+    student_memory_mode: str = ""
+    student_memory_spec_hash: str = ""
+    runtime_bundle_hash: str = ""
     record_hash: str = ""
 
     @model_validator(mode="after")
@@ -94,7 +101,9 @@ class SimulatorFeedbackRecord(CanonicalModel):
             raise ValueError(
                 f"CANDIDATE_HASH_NOT_SHA256: {self.candidate_hash!r}")
         for field_name in ("student_identity_hash", "reference_identity_hash",
-                           "student_parameter_tree_hash"):
+                           "student_parameter_tree_hash",
+                           "student_memory_spec_hash",
+                           "runtime_bundle_hash"):
             value = getattr(self, field_name)
             if value and not is_sha256_hex(value):
                 raise ValueError(

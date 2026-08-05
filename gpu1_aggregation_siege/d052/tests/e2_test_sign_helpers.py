@@ -218,7 +218,39 @@ def student_contract(candidate_id=C.STRONG_STUDENT_CANDIDATE_ID,
                              or text_sha256("TEST_ONLY_RUNTIME_BUNDLE")))
 
 
+def make_dual_student_controller(candidate_id):
+    """A two-window TEST_ONLY controller bound to the given director-
+    selected Student (real LLM + envcoder + probe grants; training NOT
+    authorized — isolates the dual-student binding + continuity seam)."""
+    from d052.feedback_llm_ued import constants as C
+    from d052.feedback_llm_ued.controller import FeedbackUEDController
+    from d052.feedback_llm_ued.llm_backend import RealBackendAdapter
+    from d052.feedback_llm_ued.runtime_authorization import (
+        RealRuntimeAuthorization,
+    )
+    from test_feedback_llm_ued_envcoder_sequence import (
+        TEST_BACKEND_ID, TEST_MODEL_ID, scripted_board_transport,
+        scripted_real_env_coder,
+    )
+    from test_feedback_llm_ued_two_window_update_count import (
+        ScriptedRealProbeRunner,
+    )
+    authorization = RealRuntimeAuthorization(
+        real_llm_backend=True, real_envcoder=True, real_probe=True)
+    backend = RealBackendAdapter(scripted_board_transport(),
+                                 backend_id=TEST_BACKEND_ID,
+                                 model_id=TEST_MODEL_ID, authorized=True)
+    return FeedbackUEDController(
+        C.MODE_NORMAL_FEEDBACK, backend=backend,
+        probe_runner=ScriptedRealProbeRunner(),
+        runtime_authorization=authorization,
+        student_init_contract=student_contract(candidate_id),
+        real_env_coder_callable=scripted_real_env_coder({}),
+        director_selected_candidate_id=candidate_id)
+
+
 __all__ = ["sign_director_runtime_bundle", "sign_full_state_round_trip",
            "sign_director_verified_round_trip",
            "director_round_trip_payload", "student_contract",
+           "make_dual_student_controller",
            "valid_director_bundle_payload", "valid_director_bundle"]

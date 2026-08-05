@@ -555,6 +555,23 @@ class FeedbackUEDController:
         self._set_phase(window, PHASE_EVIDENCE)
         evidence_window = max(0, window - 1)
         view = self._feedback_view(window)
+        #: P0-16 (dual student, section 3-4): window k+1 may ONLY consume
+        #: feedback produced under the SAME director-selected Student —
+        #: feedback from another Student is refused (a Student switch
+        #: between windows is a continuity violation)
+        for record in view.records():
+            if record.student_identity_hash and \
+                    record.student_identity_hash != \
+                    self.student_binding.identity_hash:
+                raise RuntimeError(
+                    "E2_TWO_WINDOW_STUDENT_CONTINUITY_VIOLATION: "
+                    f"record {record.feedback_id!r} was probed under Student "
+                    f"identity {record.student_identity_hash[:16]}... but "
+                    f"this run is bound to "
+                    f"{self.student_binding.identity_hash[:16]}... — the "
+                    "two windows must share the SAME director-selected "
+                    "Student (no switching); refusing to produce feedback "
+                    "or train")
         #: P0-12: EVERY mode runs the same lifecycle query — the static
         #: (no-feedback control) mode's masked view resolves no citation,
         #: so its retirement registry can never become non-empty and the
@@ -1190,7 +1207,14 @@ class FeedbackUEDController:
                     self.student_binding.parameter_tree_hash),
                 student_checkpoint_step=(
                     self.student_binding.checkpoint_global_step),
-                student_roles=(C.STUDENT_ROLE_SEARCH,))
+                student_roles=(C.STUDENT_ROLE_SEARCH,),
+                #: P0-16 (dual student): every record stamps the FULL
+                #: Student identity it was probed under
+                student_candidate_id=self.student_binding.candidate_id,
+                student_memory_mode=self.student_binding.memory_mode,
+                student_memory_spec_hash=(
+                    self.student_binding.memory_spec_hash),
+                runtime_bundle_hash=self.student_binding.runtime_bundle_hash)
             self.isolation.assert_record_clean(
                 record.model_dump(), label=f"feedback:{fid}")
             staged.append(record)

@@ -631,6 +631,17 @@ def main(argv=None) -> int:
         e2_pilot_authorized=C.E2_PILOT_AUTHORIZED,
         e2_real_smoke_authorized=C.E2_REAL_SMOKE_AUTHORIZED,
         formal_experiment_authorized=C.FORMAL_EXPERIMENT_AUTHORIZED,
+        #: P0-16 (section 6): read-only mount vs training-readiness are
+        #: SEPARATE — a Student may be read-only mounted and probed while
+        #: the training runtime (CanonicalDiCodeOneUpdateRuntime OBJECT)
+        #: is absent; REAL_CHECKPOINT_LOADED never implies a training
+        #: update executed
+        student_read_only_mount_ready=(
+            bundle.student.status == "BOUND"
+            if bundle.student is not None else False),
+        student_training_runtime_ready=(
+            bundle.training.contract is not None
+            if bundle.training is not None else False),
         real_capability_flags={
             name: bool(getattr(C, name))
             for name in C.NEVER_TRUE_REAL_CAPABILITY_FLAGS},
