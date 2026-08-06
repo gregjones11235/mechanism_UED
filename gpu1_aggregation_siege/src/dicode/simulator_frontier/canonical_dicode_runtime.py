@@ -27,6 +27,7 @@ never modified or redefined here.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import inspect
 import json
 from dataclasses import asdict, dataclass, field, fields
@@ -321,6 +322,36 @@ def mint_frontier_distribution_environment_adapter(
     )
 
 
+def _env_module_source(entrypoint: str, purpose: str = "frontier env") -> str:
+    """Read the FULL module source named by a 'module:attr' entry point.
+
+    BUG-E3-10: the loadable task code must be the whole module source (the
+    imports + the ``Env`` class) so DiCode's ``load_tasks_from_env_codes``
+    can exec it in a fresh module namespace.  ``inspect.getsource`` of a
+    class/function alone yields only the class/function body, which is NOT
+    loadable.  The entry point is still resolved (identity-bound) by the
+    adapter verification; the registered code is the module FILE source.
+    """
+    module_name, _attr = entrypoint.split(":", 1)
+    module = importlib.import_module(module_name)
+    try:
+        source_file = str(inspect.getsourcefile(module) or "")
+    except TypeError:
+        source_file = ""
+    if not source_file:
+        raise InvalidEvidenceError(
+            f"{purpose} entry point module {module_name!r} has no retrievable "
+            "source file — its code can never be registered as a loadable task "
+            "(fail closed)")
+    try:
+        with open(source_file, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        raise InvalidEvidenceError(
+            f"cannot read {purpose} entry point module source "
+            f"{source_file!r}: {exc!r} (fail closed)") from exc
+
+
 def materialize_and_register(adapter: Any, plan: Any,
                              gen_manager_archive: Any,
                              session_idx: int = 0) -> tuple[str, ...]:
@@ -351,9 +382,9 @@ def materialize_and_register(adapter: Any, plan: Any,
             "materialize_and_register requires the GenManager archive — "
             "frontier tasks are never invented outside the archive "
             "(fail closed)")
-    env_factory = _import_entrypoint(str(adapter.env_entrypoint),
-                                     "frontier environment factory")
-    env_code = inspect.getsource(env_factory)
+    # BUG-E3-10: the registered code is the FULL module source (loadable),
+    # not the class/function body returned by inspect.getsource.
+    env_code = _env_module_source(str(adapter.env_entrypoint))
     registered = []
     for slot in plan.curriculum_slots:
         distribution = plan.slot_distributions.get(slot)

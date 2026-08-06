@@ -1,0 +1,10 @@
+{
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "check_only": true,
+  "checkpoint_writes": 0,
+  "final_status": "E3_PERSISTENT_OBJECT_CHECK_ONLY_OK",
+  "llm_calls": 0,
+  "optimizer_updates": 0,
+  "probe_executions": 0,
+  "run_id": "e3_real_smoke_20260806T015910Z"
+}

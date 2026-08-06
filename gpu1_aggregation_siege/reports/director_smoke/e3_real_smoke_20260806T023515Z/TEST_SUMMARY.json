@@ -1,0 +1,10 @@
+{
+  "tests_run": "tests/simulator_frontier",
+  "py_compile": "0 errors",
+  "git_diff_check": "0 errors",
+  "pytest_gate": "544 passed, 0 failed, 0 errors (801.51s)",
+  "object_check_only": "E3_PERSISTENT_OBJECT_CHECK_ONLY_OK",
+  "real_smoke": "E3_REAL_SMOKE_PASS",
+  "head": "d50141b907e0de1b59f9c626ca53d26cb4de3c43",
+  "branch": "henry/simulator-frontier-foundation-codex"
+}

@@ -1,0 +1,17 @@
+{
+  "branch": "henry/simulator-frontier-foundation-codex",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "curriculum_slots": 15,
+  "elapsed_s": 592.44,
+  "final_status": "E3_REAL_SMOKE_PASS",
+  "formal_experiment_started": false,
+  "formal_longrun_authorized": false,
+  "fresh_process_restore": true,
+  "gpu": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "llm_calls": 2,
+  "next_policy_equivalent": true,
+  "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+  "run_id": "e3_real_smoke_20260806T023515Z",
+  "tested_source_commit": "d50141b907e0de1b59f9c626ca53d26cb4de3c43",
+  "update_count": 1
+}

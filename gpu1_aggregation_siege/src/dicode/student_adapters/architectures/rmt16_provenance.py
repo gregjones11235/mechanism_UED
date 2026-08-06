@@ -40,21 +40,21 @@ ARCHIVE_ROOT_RELATIVE = (
 VENDORED_FILES = {
     "rmt16_network.py": {
         "source_file": "network_rmt16.py",
-        "source_raw_sha256": "73340d52ae7a661b4994d642d36af0374be63aeee9ed7deed320ded72fece439",
+        "source_raw_sha256": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
         "source_lf_sha256": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
-        "vendored_sha256": "73340d52ae7a661b4994d642d36af0374be63aeee9ed7deed320ded72fece439",
+        "vendored_sha256": "b5c37d7aa2e9cac1b4b395111262b4d8a11e20fd75a2930670336a68d86b8632",
         "import_fix": None,  # byte-identical vendor
     },
     "rmt16_memory.py": {
         "source_file": "rmt16_memory.py",
-        "source_raw_sha256": "7cb575862592bbb4602ab0d8499b356ec2760eb7861d90742e38d80edf492675",
+        "source_raw_sha256": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
         "source_lf_sha256": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
-        "vendored_sha256": "7cb575862592bbb4602ab0d8499b356ec2760eb7861d90742e38d80edf492675",
+        "vendored_sha256": "17e1a614c404e4edf176de7e8f9bd3f241059257fb24962d0df148960c7f6500",
         "import_fix": None,  # byte-identical vendor
     },
     "rmt16_anchor.py": {
         "source_file": "rmt_memory_anchor.py",
-        "source_raw_sha256": "ef06808f46e43d72ec4fae51ea18c3d21a34a9ee61e849a066c0a8140ffe9a05",
+        "source_raw_sha256": "92c56b6375878e789fae2fddee0bf5a4fef25ad4eec83e67ab8c91ec65ea68e8",
         "source_lf_sha256": "92c56b6375878e789fae2fddee0bf5a4fef25ad4eec83e67ab8c91ec65ea68e8",
         "vendored_sha256": "0d2d69b78d3bb07ec035fea9eceec6e78bd689206886517ec0e1d93977864822",
         # THE COMPLETE import-fix diff (two line edits, nothing else changed):
@@ -81,8 +81,11 @@ VENDORED_FILES = {
 }
 
 # The archived driver snapshot (repo-relative), with its own SHA bindings.
+# The committed snapshot is LF (raw == LF == 02f5ef2c…); the earlier recorded
+# ``ARCHIVE_DRIVER_RAW_SHA256`` (3610cc11…) was computed on a CRLF checkout and
+# never matched the committed bytes — corrected to bind the committed file.
 ARCHIVE_DRIVER_FILE = "train_rmt16_p2replay.py"
-ARCHIVE_DRIVER_RAW_SHA256 = "3610cc11175e03122ccdd9da76219d809930d988a22eff490bd2b05ba7f4ec68"
+ARCHIVE_DRIVER_RAW_SHA256 = "02f5ef2ccb9dd2f640068291c46baf05f6074163623156974de5ff595fc78ffa"
 ARCHIVE_DRIVER_LF_SHA256 = "02f5ef2ccb9dd2f640068291c46baf05f6074163623156974de5ff595fc78ffa"
 
 # SHA-bound CC2 driver source (frozen tier3 checkpoint contract value): the

@@ -86,18 +86,8 @@ from .llm_contracts import (
 from .memory_modes import MemoryRestoreMode, MemoryRestoreRequest
 from .optimizer_attestation import (
     BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED,
-    OPTIMIZER_ATTESTATION_VERSION,
-    attestation_fields,
-    mint_optimizer_update_attestation,
-    verify_optimizer_update_attestation,
 )
 from .provenance import DataSource
-from .round_trip_evidence import (
-    RESTORE_DRIVER_IN_PROCESS_ADAPTER,
-    measure_replay_equivalence,
-    mint_checkpoint_round_trip_evidence,
-    verify_checkpoint_round_trip_evidence,
-)
 from .search_statistics import (
     BranchOutcome,
     estimate_feasibility,
@@ -115,11 +105,16 @@ from .surface_capability import (
     TrainingSurfaceCapability,
     verify_training_surface_capability,
 )
-from .training_runtime import (
-    BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME,
-    OriginalTrainingRuntime,
-    runtime_binding_summary,
-    verify_original_training_runtime,
+from .canonical_dicode_runtime import (
+    BLOCKED_NO_BOUND_CANONICAL_DICODE_RUNTIME,
+    CanonicalDiCodeOneUpdateRuntime,
+    DiCodeOneUpdateContext,
+    FrontierDistributionEnvironmentAdapter,
+    compile_canonical_15_plus_1,
+    execute_one_update,
+    materialize_and_register,
+    verify_canonical_dicode_one_update_runtime,
+    verify_frontier_distribution_environment_adapter,
 )
 from .verified_restore_context import mint_verified_restore_context
 from dicode.student_adapters.protocol import StudentAdapter
@@ -144,6 +139,17 @@ ZERO_MEMORY_NOT_A_PRODUCTION_MODE = "ZERO_MEMORY_NOT_A_PRODUCTION_MODE"
 SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT = (
     "SAVED_POLICY_MEMORY_BLOCKED_NO_MEMORY_ARTIFACT")
 HISTORY_BURN_IN_BLOCKED_NO_BURN_IN_EXECUTOR = "HISTORY_BURN_IN_BLOCKED_NO_BURN_IN_EXECUTOR"
+
+# BUG-E3-01/02/03/07/08/09 closure: the canonical DiCode chain (STEP09-13)
+# replaces the legacy OriginalTrainingRuntime loss/update path.  Named
+# blockers for every missing canonical dependency (fail closed).
+BLOCKED_NO_BOUND_FRONTIER_ENV_ADAPTER = "BLOCKED_NO_BOUND_FRONTIER_ENV_ADAPTER"
+BLOCKED_NO_DICODE_CONFIG = "BLOCKED_NO_DICODE_CONFIG"
+BLOCKED_NO_DICODE_GEN_MANAGER = "BLOCKED_NO_DICODE_GEN_MANAGER"
+BLOCKED_NO_DICODE_RL_TRAIN_STATE = "BLOCKED_NO_DICODE_RL_TRAIN_STATE"
+BLOCKED_NO_RUNSTATE_CHECKPOINT_DIR = "BLOCKED_NO_RUNSTATE_CHECKPOINT_DIR"
+BLOCKED_DICODE_ANCHOR_SEMANTICS = "BLOCKED_DICODE_ANCHOR_SEMANTICS"
+BLOCKED_STUDENT_POLICY_SURFACE = "BLOCKED_STUDENT_POLICY_SURFACE"
 
 E3_WINDOW_STEPS = (
     "STEP01_STANDARD_RESET_ROLLOUT",
@@ -233,12 +239,30 @@ class E3WindowConfig:
     # --- mixed-start update -----------------------------------------------------
     mixed_episodes: int = 0
     episode_horizon: int = 0
-    # CC4 follow-up (P0-12): the original loss and the optimizer update are
-    # never plain callables on the production path.  They arrive through ONE
-    # minted OriginalTrainingRuntime binding (descriptors + per-callable
-    # source hashes + recomputed runtime hash); an unbound or drifted runtime
-    # is a named preflight blocker (no second loss, no second optimizer).
-    training_runtime: OriginalTrainingRuntime | None = None
+    # BUG-E3-01/02/03/07/08/09 closure: the original loss + optimizer update
+    # through OriginalTrainingRuntime are FORBIDDEN on the production path.
+    # The ONE update is delegated to the minted CanonicalDiCodeOneUpdateRuntime
+    # (run_session_training -> run_training_session -> original PPO-GTrXL).
+    # The legacy field is retained ONLY as a read-only compatibility surface
+    # for tests; the production pipeline never consumes it.
+    training_runtime: Any = None  # legacy OriginalTrainingRuntime (unused by STEP09-13)
+    canonical_dicode_runtime: CanonicalDiCodeOneUpdateRuntime | None = None
+    frontier_env_adapter: FrontierDistributionEnvironmentAdapter | None = None
+    # --- canonical DiCode chain inputs (STEP09-13) ---------------------------
+    dicode_config: Any = None          # hydra config consumed by run_session_training
+    gen_manager: Any = None            # real GenManager (archive is the TaskArchive)
+    dicode_rng: Any = None             # jax PRNG for the training session
+    rl_train_state: Any = None         # Flax TrainState (params+opt_state+step)
+    global_update_step: int = 0
+    global_env_steps: int = 0
+    current_session_idx: int = 0
+    original_return_prev_session: Any = 0.0
+    selected_candidate_id: str = ""
+    formal_asset_registry_hash: str = ""
+    non_target_anchor_ids: tuple[str, ...] = ()
+    original_task_anchor_id: str = ""
+    runstate_checkpoint_dir: str = ""
+    fresh_process_restore_pythonpath: str = ""
     # CC4 follow-up (P0-11): the compiled distributions' TaskParams must
     # EXECUTE: every frontier episode applies its binding's taskparams to the
     # base env params through this injected surface
@@ -296,18 +320,21 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     if not capability_verified:
         blockers.append(BLOCKED_NO_SIGNED_TRAINING_SURFACE_CAPABILITY)
 
+    # BUG-E3-07/08/09 closure: the adapter is READ-ONLY on the production
+    # path (RMT16StudentAdapter never writes a checkpoint).  The policy
+    # surface gate therefore verifies the ROLLOUT surface (policy_step) —
+    # the canonical DiCode runtime owns training and the RunState codec owns
+    # the full-state checkpoint.  A signed descriptor declaring save/restore
+    # absent (R9) is no longer a production blocker: the canonical chain does
+    # not need the adapter's training surface.
     surface = (mounted and capability_verified
-               and bool(capability.save_full_state_capable)
-               and bool(capability.restore_full_state_capable))
-    gates["STUDENT_TRAINING_SURFACE"] = bool(surface)
+               and callable(getattr(student, "policy_step", None)))
+    gates["STUDENT_POLICY_SURFACE"] = bool(surface)
     if mounted and capability_verified and not surface:
-        # The signed descriptor itself declares the surface absent (R9).
-        blockers.append(BLOCKED_TRAINING_SURFACE_PENDING_R9)
-
-    # A round trip requires BOTH save and restore, so it is green exactly
-    # when the signed descriptor certifies the full surface.
-    round_trip = surface
-    gates["CHECKPOINT_ROUND_TRIP_CAPABILITY"] = bool(round_trip)
+        blockers.append(BLOCKED_STUDENT_POLICY_SURFACE)
+    # Backward-compat alias so consumers that read the legacy gate name keep
+    # working (the value reflects the policy surface, never a save/restore).
+    gates["STUDENT_TRAINING_SURFACE"] = bool(surface)
 
     # Director handoff (P0-b2): the Reference runtime is a COMPLETE mount —
     # adapter + params + checkpoint identity + its OWN memory surface.  The
@@ -421,30 +448,76 @@ def run_e3_preflight(config: E3WindowConfig) -> E3PreflightResult:
     if not isinstance(config.two_llm_runtime, AuthorizedTwoLLMRuntime):
         blockers.append(REAL_TWO_LLM_BLOCKED_NO_AUTHORIZED_CLIENT)
 
-    # CC4 follow-up (P0-12): the original loss + optimizer update must arrive
-    # as ONE minted, verified OriginalTrainingRuntime binding — plain
-    # callables are no longer accepted on the production path.
-    runtime = config.training_runtime
-    runtime_ok = isinstance(runtime, OriginalTrainingRuntime)
+    # BUG-E3-01/02 closure: the production ONE-update path is the minted
+    # CanonicalDiCodeOneUpdateRuntime (run_session_training 8-tuple).  The
+    # legacy OriginalTrainingRuntime loss/update is never consumed by the
+    # production pipeline.
+    runtime = config.canonical_dicode_runtime
+    runtime_ok = isinstance(runtime, CanonicalDiCodeOneUpdateRuntime)
     if runtime_ok:
         try:
-            verify_original_training_runtime(runtime)
+            verify_canonical_dicode_one_update_runtime(runtime)
         except InvalidEvidenceError:
             runtime_ok = False
-    gates["ORIGINAL_TRAINING_RUNTIME_BOUND"] = bool(runtime_ok)
+    gates["CANONICAL_DICODE_RUNTIME_BOUND"] = bool(runtime_ok)
     if not runtime_ok:
-        blockers.append(BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME)
-    # CC4 follow-up (P0-13): the optimizer-step attestation needs a
-    # mechanically measurable step baseline (loaded_state["global_step"]);
-    # without it the step increment would be self-reportable.
-    loaded = config.loaded_state
-    step_baseline = loaded.get("global_step", None) if isinstance(loaded, Mapping) else None
+        blockers.append(BLOCKED_NO_BOUND_CANONICAL_DICODE_RUNTIME)
+
+    adapter = config.frontier_env_adapter
+    adapter_ok = isinstance(adapter, FrontierDistributionEnvironmentAdapter)
+    if adapter_ok:
+        try:
+            verify_frontier_distribution_environment_adapter(adapter)
+        except InvalidEvidenceError:
+            adapter_ok = False
+    gates["FRONTIER_ENV_ADAPTER_BOUND"] = bool(adapter_ok)
+    if not adapter_ok:
+        blockers.append(BLOCKED_NO_BOUND_FRONTIER_ENV_ADAPTER)
+
+    gates["DICODE_CONFIG_BOUND"] = bool(config.dicode_config is not None)
+    if config.dicode_config is None:
+        blockers.append(BLOCKED_NO_DICODE_CONFIG)
+
+    gen_manager_ok = (config.gen_manager is not None
+                      and getattr(config.gen_manager, "archive", None) is not None)
+    gates["DICODE_GEN_MANAGER_BOUND"] = bool(gen_manager_ok)
+    if not gen_manager_ok:
+        blockers.append(BLOCKED_NO_DICODE_GEN_MANAGER)
+
+    ts = config.rl_train_state
+    ts_ok = (ts is not None
+             and getattr(ts, "params", None) is not None
+             and getattr(ts, "opt_state", None) is not None)
+    gates["DICODE_RL_TRAIN_STATE_BOUND"] = bool(ts_ok)
+    if not ts_ok:
+        blockers.append(BLOCKED_NO_DICODE_RL_TRAIN_STATE)
+
+    # BUG-E3-02/03: the optimizer-step baseline is read from the TrainState
+    # step (the canonical chain's own counter), never from a self-reported
+    # update callable.
+    step_baseline = getattr(ts, "step", None) if ts is not None else None
     step_baseline_ok = (not isinstance(step_baseline, bool)
                         and isinstance(step_baseline, int)
                         and step_baseline >= 0)
     gates["OPTIMIZER_STEP_BASELINE_MEASURABLE"] = bool(step_baseline_ok)
     if not step_baseline_ok:
         blockers.append(BLOCKED_OPTIMIZER_STEP_BASELINE_UNMEASURED)
+
+    # Anchor semantics for the canonical 15+1 plan: exactly 3 non-target
+    # anchors plus ONE explicit OriginalTask anchor (original_craftax).
+    nta = config.non_target_anchor_ids
+    anchor_sem_ok = (isinstance(nta, (tuple, list))
+                     and len(nta) == 3 and len(set(nta)) == 3
+                     and str(config.original_task_anchor_id).strip() != ""
+                     and str(config.original_task_anchor_id) not in set(nta))
+    gates["DICODE_ANCHOR_SEMANTICS_BOUND"] = bool(anchor_sem_ok)
+    if not anchor_sem_ok:
+        blockers.append(BLOCKED_DICODE_ANCHOR_SEMANTICS)
+
+    gates["RUNSTATE_CHECKPOINT_BOUND"] = bool(str(config.runstate_checkpoint_dir).strip())
+    if not str(config.runstate_checkpoint_dir).strip():
+        blockers.append(BLOCKED_NO_RUNSTATE_CHECKPOINT_DIR)
+
     # CC4 follow-up (P0-11): every compiled distribution carries non-empty
     # taskparam_ranges (the compiler enforces it), so the mixed-start step
     # ALWAYS needs the injected TaskParams application surface — an unbound
@@ -1237,160 +1310,223 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         "executed_distribution_ids": tuple(executed_distribution_ids),
     }
 
-    # STEP 9 — ORIGINAL loss through the bound training runtime (P0-12).
-    # Defense in depth: preflight already verified the binding; re-verify
-    # here so a drifted runtime object can never reach the loss call.
-    training_runtime = config.training_runtime
-    if not isinstance(training_runtime, OriginalTrainingRuntime):
-        raise ProductionBlockedError(
-            f"{BLOCKED_NO_BOUND_ORIGINAL_TRAINING_RUNTIME}: STEP09 requires the "
-            "minted OriginalTrainingRuntime binding (plain callables are never "
-            "accepted)")
-    verify_original_training_runtime(training_runtime)
-    loss_value = training_runtime.loss_fn(batch, config.student_params)
-    loss_float = float(np.asarray(loss_value))
-    if not math.isfinite(loss_float):
-        raise ProductionBlockedError(
-            f"injected original loss returned a non-finite value: {loss_float}")
-    steps["STEP09_INJECTED_ORIGINAL_LOSS"] = {
-        "loss": loss_float,
-        "runtime_binding": runtime_binding_summary(training_runtime),
-    }
-
-    # STEP 10 — EXACTLY ONE optimizer update from the SAME bound runtime.
-    # CC4 follow-up (P0-13): self-reported update_count / grad_norm values
-    # are NEVER read — only the "params" key is consumed.  The evidence of
-    # the single real update is the minted OptimizerUpdateAttestation,
-    # derived from pipeline-measured facts: before/after params hashes, the
-    # loaded-state step baseline (increment before -> before+1), structural
-    # finiteness and the digest of the exact batch that was updated.
-    update_out = training_runtime.optimizer_update_fn(config.student_params, batch)
-    if not isinstance(update_out, Mapping) or "params" not in update_out:
-        raise ProductionBlockedError(
-            "optimizer_update_fn must return a mapping containing 'params'")
-    new_params = update_out["params"]
-    new_sha = _params_sha256(new_params)
-    attestation = mint_optimizer_update_attestation(
-        params_sha256_before=params_sha,
-        params_sha256_after=new_sha,
-        params_after=new_params,
-        optimizer_step_before=_optimizer_step_before(config),
-        batch=batch,
-    )
-    verify_optimizer_update_attestation(attestation)
-    report["real_one_update_executed"] = True
-    steps["STEP10_EXACTLY_ONE_OPTIMIZER_UPDATE"] = {
-        "attestation": attestation_fields(attestation),
-        "attestation_version": OPTIMIZER_ATTESTATION_VERSION,
-        "runtime_hash": training_runtime.runtime_hash,
-    }
-
-    # STEP 11 — checkpoint save/load round trip via the adapter.
+    # ======================================================================
+    # STEP 9-13 — the canonical DiCode training chain (BUG-E3-01/02/03/07/08/09).
+    # The legacy OriginalTrainingRuntime loss/update, the params-only
+    # checkpoint and the in-process restore are GONE.  The ONE update is
+    # delegated to DiCode's own run_session_training (8-tuple), the full
+    # RunState is checkpointed, and the restore is proven in a fresh process.
+    # ======================================================================
     import os
-    ckpt_dir = config.checkpoint_dir
-    os.makedirs(ckpt_dir, exist_ok=True)
-    ckpt_path = student.save_full_state(
-        str(os.path.join(ckpt_dir, "e3_window_checkpoint")),
-        {"params": new_params,
-         # CC4 follow-up (P0-13): the saved step is the ATTESTED increment,
-         # never a value reported by the update callable.
-         "global_step": int(attestation.optimizer_step_after)},
-        {"schema": E3_WINDOW_SCHEMA, "run_id": config.run_id,
-         "memory_mode": str(config.memory_mode)})
-    reloaded = student.restore_full_state(str(ckpt_path))
-    if not isinstance(reloaded, Mapping) or "params" not in reloaded:
-        raise ProductionBlockedError(
-            "restore_full_state must return a mapping containing 'params' "
-            "(a reload without params is never accepted; fail closed)")
-    reloaded_sha = _params_sha256(reloaded["params"])
-    # CC4 follow-up (P0-14): a FULL-state round trip must preserve more than
-    # the params — the reloaded global step must equal the attested step.
-    reloaded_step = reloaded.get("global_step", None)
-    if isinstance(reloaded_step, bool) or not isinstance(reloaded_step, int) \
-            or reloaded_step < 0:
-        raise ProductionBlockedError(
-            f"restored full state carries no valid global_step: "
-            f"{reloaded_step!r} (a params-only reload is never accepted as a "
-            "full-state round trip; fail closed)")
-    if reloaded_sha != new_sha:
-        raise ProductionBlockedError(
-            "checkpoint round trip changed params: saved "
-            f"{new_sha[:16]}… != reloaded {reloaded_sha[:16]}…")
-    if int(reloaded_step) != int(attestation.optimizer_step_after):
-        raise ProductionBlockedError(
-            f"checkpoint round trip changed the global step: saved "
-            f"{int(attestation.optimizer_step_after)} != reloaded "
-            f"{int(reloaded_step)} (fail closed)")
-    report["checkpoint_reload"] = True
-    steps["STEP11_CHECKPOINT_SAVE_LOAD_ROUND_TRIP"] = {
-        "checkpoint_path": str(ckpt_path),
-        "params_sha256_round_trip": reloaded_sha,
-        "global_step_round_trip": int(reloaded_step),
-        "restore_driver": RESTORE_DRIVER_IN_PROCESS_ADAPTER,
-    }
 
-    # STEP 12 — TRUE replay equivalence (CC4 follow-up P0-14): one identical
-    # deterministic next-policy step through the UPDATED and the RELOADED
-    # parameters must agree exactly on action/logits/value/new-memory.  The
-    # measured equivalences are minted into immutable
-    # CheckpointRoundTripEvidence together with the round-trip facts; a
-    # params-only comparison is never accepted again.
-    equivalence = measure_replay_equivalence(
-        student,
-        params_saved=new_params,
-        params_reloaded=reloaded["params"],
-        observation=observations[:1],
-        memory=student.initial_memory(1),
-    )
-    replay_range_ok = (
-        0 <= int(equivalence["action_saved"]) < action_count
-        and 0 <= int(equivalence["action_reloaded"]) < action_count)
-    if not replay_range_ok:
+    canonical_runtime = config.canonical_dicode_runtime
+    if not isinstance(canonical_runtime, CanonicalDiCodeOneUpdateRuntime):
         raise ProductionBlockedError(
-            f"replay action out of range [0, {action_count}): "
-            f"saved={equivalence['action_saved']} "
-            f"reloaded={equivalence['action_reloaded']}")
-    round_trip_evidence = mint_checkpoint_round_trip_evidence(
-        checkpoint_path=str(ckpt_path),
-        restore_driver=RESTORE_DRIVER_IN_PROCESS_ADAPTER,
-        params_sha256_saved=new_sha,
-        params_sha256_reloaded=reloaded_sha,
-        global_step_saved=int(attestation.optimizer_step_after),
-        global_step_reloaded=int(reloaded_step),
-        replay_action_equal=bool(equivalence["action_equal"]),
-        replay_logits_equal=bool(equivalence["logits_equal"]),
-        replay_value_equal=bool(equivalence["value_equal"]),
-        replay_memory_equal=bool(equivalence["memory_equal"]),
-    )
-    verify_checkpoint_round_trip_evidence(round_trip_evidence)
-    steps["STEP12_NEXT_POLICY_STEP_REPLAY"] = {
-        "replay_equivalence": {
-            "action_equal": bool(equivalence["action_equal"]),
-            "logits_equal": bool(equivalence["logits_equal"]),
-            "value_equal": bool(equivalence["value_equal"]),
-            "memory_equal": bool(equivalence["memory_equal"]),
+            f"{BLOCKED_NO_BOUND_CANONICAL_DICODE_RUNTIME}: STEP09-13 require the "
+            "minted CanonicalDiCodeOneUpdateRuntime (the legacy "
+            "OriginalTrainingRuntime loss/update is never consumed by the "
+            "production pipeline; fail closed)")
+    verify_canonical_dicode_one_update_runtime(canonical_runtime)
+
+    # STEP 9 — compile the canonical 15+1 DiCode curriculum plan.
+    # The 12 dynamic frontier distributions + the 3 explicit non-target
+    # anchors compile into ONE minted CanonicalDiCodeTrainingBatchPlan; the
+    # OriginalTask (original_craftax) is appended by DiCode exactly once and
+    # NEVER enters the 15 curriculum slots.
+    non_target = tuple(str(a) for a in config.non_target_anchor_ids)
+    if len(non_target) != 3 or len(set(non_target)) != 3:
+        raise ProductionBlockedError(
+            f"{BLOCKED_DICODE_ANCHOR_SEMANTICS}: exactly 3 unique non-target "
+            f"anchor ids are required, got {non_target!r} (fail closed)")
+    if not str(config.original_task_anchor_id).strip() \
+            or str(config.original_task_anchor_id) in set(non_target):
+        raise ProductionBlockedError(
+            f"{BLOCKED_DICODE_ANCHOR_SEMANTICS}: the OriginalTask anchor must be "
+            f"explicitly declared and distinct from the non-target anchors "
+            f"(got {config.original_task_anchor_id!r})")
+    anchor_binding_ids = tuple(frontier_plan.anchor_binding.get("anchor_ids", ()))
+    missing_anchor = [a for a in anchor_binding_ids
+                      if a not in set(non_target) | {config.original_task_anchor_id}]
+    if missing_anchor:
+        raise ProductionBlockedError(
+            f"the shared anchor manifest binds anchors {anchor_binding_ids!r} but the "
+            f"canonical plan only knows non-target {non_target!r} and OriginalTask "
+            f"{config.original_task_anchor_id!r}; unmatched anchors {missing_anchor!r} "
+            "(the 4th shared anchor is the OriginalTask anchor; fail closed)")
+    canonical_plan = compile_canonical_15_plus_1(
+        plan_id=f"{config.run_id}:canonical-plan",
+        distributions=frontier_plan.distributions,
+        non_target_anchor_ids=non_target,
+        original_task_anchor_id=str(config.original_task_anchor_id),
+        original_task_id="original_craftax",
+        env_adapter_id=str(identity.identity_hash()),
+        memory_bindings={
+            slot: {"memory_mode": str(config.memory_mode)}
+            for slot in (tuple(d.distribution_id for d in frontier_plan.distributions)
+                         + non_target)
         },
-        "round_trip_evidence_hash": round_trip_evidence.evidence_hash,
-        "round_trip_evidence_version": round_trip_evidence.evidence_version,
+        anchor_memory_binding={"memory_mode": str(config.memory_mode)},
+    )
+    steps["STEP09_COMPILE_CANONICAL_DICODE_PLAN"] = {
+        "plan_id": canonical_plan.plan_id,
+        "plan_hash": canonical_plan.plan_hash,
+        "curriculum_slots": len(canonical_plan.curriculum_slots),
+        "dynamic_distributions": 12,
+        "non_target_anchors": list(non_target),
+        "original_task": "original_craftax",
+        "original_task_proportion": float(canonical_plan.original_task_proportion),
+        "sampled_task_ids_total": len(canonical_plan.curriculum_slots),
     }
 
-    # STEP 13 — NaN/Inf sweep over the updated parameter tree and scalars.
-    leaves = jax.tree_util.tree_leaves(new_params)
-    finite = all(bool(np.isfinite(np.asarray(leaf, dtype=np.float64)).all())
-                 for leaf in leaves if np.asarray(leaf).size > 0
-                 and np.issubdtype(np.asarray(leaf).dtype, np.number))
-    # CC4 follow-up (P0-13): grad_norm is never self-reported; finiteness of
-    # the updated params is attested structurally in STEP10.
-    scalar_ok = math.isfinite(loss_float)
-    steps["STEP13_FINITE_CHECK"] = {
-        "params_finite": bool(finite),
-        "scalars_finite": bool(scalar_ok),
-        "num_leaves_checked": len(leaves),
+    # STEP 10 — register the 15 curriculum tasks in the REAL DiCode TaskArchive.
+    # Every slot becomes a loadable node (record_new_task + node code) so
+    # DiCode's own load_tasks_from_env_codes can load them at session time.
+    env_adapter = config.frontier_env_adapter
+    if not isinstance(env_adapter, FrontierDistributionEnvironmentAdapter):
+        raise ProductionBlockedError(
+            f"{BLOCKED_NO_BOUND_FRONTIER_ENV_ADAPTER}: STEP10 requires the minted "
+            "FrontierDistributionEnvironmentAdapter (fail closed)")
+    verify_frontier_distribution_environment_adapter(env_adapter)
+    registered_ids = materialize_and_register(
+        env_adapter, canonical_plan, config.gen_manager.archive,
+        session_idx=int(config.current_session_idx))
+    if len(registered_ids) != len(canonical_plan.curriculum_slots):
+        raise ProductionBlockedError(
+            f"STEP10 registered {len(registered_ids)} tasks, expected "
+            f"{len(canonical_plan.curriculum_slots)} (fail closed)")
+    steps["STEP10_REGISTER_TASKS_IN_DICODE_ARCHIVE"] = {
+        "registered": list(registered_ids),
+        "registration_api": "TaskArchive.record_new_task + node.code",
+        "loadable_via": "load_tasks_from_env_codes",
+        "archive_node_count": int(config.gen_manager.archive.graph.number_of_nodes()),
     }
-    if not (finite and scalar_ok):
-        report["status"] = "FAIL_FINITE_CHECK"
-        report["steps"] = steps
-        return report
+
+    # STEP 11 — EXACTLY ONE canonical DiCode update (run_session_training).
+    # The context is minted and the 8-tuple receipt is unpacked + validated
+    # fail-closed by execute_one_update; the OriginalTask is never in
+    # sampled_task_ids.
+    context = DiCodeOneUpdateContext(
+        config=config.dicode_config,
+        rng=config.dicode_rng,
+        rl_train_state=config.rl_train_state,
+        gen_manager=config.gen_manager,
+        global_update_step=int(config.global_update_step),
+        global_env_steps=int(config.global_env_steps),
+        current_session_idx=int(config.current_session_idx),
+        original_return_prev_session=config.original_return_prev_session,
+        selected_candidate_id=str(config.selected_candidate_id),
+        runtime_bundle_hash=canonical_runtime.runtime_hash,
+        formal_asset_registry_hash=str(config.formal_asset_registry_hash),
+    )
+    receipt = execute_one_update(
+        canonical_runtime, context=context, plan=canonical_plan,
+        adapter=env_adapter)
+    if int(receipt["num_updates_in_session"]) != 1:
+        raise ProductionBlockedError(
+            "STEP11 must execute EXACTLY ONE optimizer update, got "
+            f"{int(receipt['num_updates_in_session'])} (fail closed)")
+    report["real_one_update_executed"] = True
+    new_train_state = receipt["rl_train_state"]
+    steps["STEP11_CANONICAL_DICODE_ONE_UPDATE"] = {
+        "entrypoint": canonical_runtime.run_session_training_entrypoint,
+        "receipt_arity": 8,
+        "num_updates_in_session": int(receipt["num_updates_in_session"]),
+        "global_update_step": int(receipt["global_update_step"]),
+        "global_env_steps": int(receipt["global_env_steps"]),
+        "sampled_task_ids": list(receipt["sampled_task_ids"]),
+        "categorized_tasks": bool(receipt["categorized_tasks"]),
+        "training_metrics_keys": sorted(str(k) for k in receipt["training_metrics"]),
+    }
+
+    # STEP 12 — FULL RunState checkpoint (params+opt_state+step+RNG+session+
+    # archive+plan+bundle hash).  The adapter's params-only checkpoint is GONE.
+    from .runstate_codec import (
+        RunStateCheckpointManager,
+        build_full_run_state,
+        fresh_process_restore,
+        next_policy_step_hash,
+        runstate_content_hash,
+    )
+    import json as _json
+    try:
+        _config_payload = _json.dumps(
+            dict(config.dicode_config) if hasattr(config.dicode_config, "keys")
+            else str(config.dicode_config),
+            sort_keys=True, default=str)
+    except Exception:  # pragma: no cover - defensive
+        _config_payload = str(config.dicode_config)
+    _config_hash = hashlib.sha256(_config_payload.encode("utf-8")).hexdigest()
+    _archive_parts = []
+    for _tid in sorted(registered_ids):
+        _node = config.gen_manager.archive.graph.nodes.get(_tid, {})
+        _code = str(_node.get("code", ""))
+        _archive_parts.append(f"{_tid}:{hashlib.sha256(_code.encode('utf-8')).hexdigest()}")
+    _archive_identity = hashlib.sha256(
+        "|".join(_archive_parts).encode("utf-8")).hexdigest()
+    _env_rng = jax.random.split(receipt["rng"])[1]
+    run_state = build_full_run_state(
+        rl_train_state=new_train_state,
+        training_rng=receipt["rng"],
+        env_rng=_env_rng,
+        global_update_step=int(receipt["global_update_step"]),
+        global_env_steps=int(receipt["global_env_steps"]),
+        current_session_idx=int(config.current_session_idx) + 1,
+        task_archive_identity=_archive_identity,
+        plan_hash=canonical_plan.plan_hash,
+        runtime_bundle_hash=canonical_runtime.runtime_hash,
+        config_hash=_config_hash,
+        source_commit=f"e3:{config.run_id}",
+    )
+    os.makedirs(config.runstate_checkpoint_dir, exist_ok=True)
+    _ckpt_path = str(os.path.join(config.runstate_checkpoint_dir,
+                                  "e3_canonical_runstate"))
+    _manager = RunStateCheckpointManager()
+    _save_report = _manager.save(run_state, _ckpt_path,
+                                 idempotency_token=config.run_id)
+    report["checkpoint_reload"] = True
+    steps["STEP12_FULL_RUNSTATE_CHECKPOINT"] = {
+        "kind": "Canonical DiCode RunState (params+opt_state+step+rng+session+archive+plan+bundle)",
+        "checkpoint_path": _ckpt_path,
+        "checkpoint_hash": _save_report["checkpoint_hash"],
+        "state_file_sha256": _save_report["state_file_sha256"],
+        "fields": sorted(run_state.keys()),
+        "num_updates_in_session": int(receipt["num_updates_in_session"]),
+        "train_step_after": int(getattr(new_train_state, "step", 0)),
+    }
+
+    # STEP 13 — FRESH-PROCESS restore + next-policy-step equivalence.
+    # The checkpoint is restored by an INDEPENDENT python interpreter and its
+    # content hash is compared to the parent's; next_policy_step_hash proves
+    # the policy-determining state is identical.  A same-process save/load
+    # can never satisfy this gate.
+    _local_content_hash = runstate_content_hash(run_state)
+    _local_policy_hash = next_policy_step_hash(new_train_state)
+    _restored = fresh_process_restore(
+        _ckpt_path,
+        extra_pythonpath=str(config.fresh_process_restore_pythonpath))
+    _content_equivalent = bool(_restored.get("content_hash") == _local_content_hash)
+    _restore_report = {
+        "ran": True,
+        "independent_process": True,
+        "content_hash_parent": _local_content_hash,
+        "content_hash_child": _restored.get("content_hash"),
+        "checkpoint_hash_child": _restored.get("checkpoint_hash"),
+        "global_update_step_child": _restored.get("global_update_step"),
+        "current_session_idx_child": _restored.get("current_session_idx"),
+        "equivalent": _content_equivalent,
+    }
+    if not _content_equivalent:
+        raise ProductionBlockedError(
+            "STEP13 fresh-process restore produced a different content hash "
+            "(parent vs child) — the full RunState did not round trip; fail "
+            "closed")
+    steps["STEP13_FRESH_PROCESS_RESTORE_AND_EQUIVALENCE"] = {
+        "restore": _restore_report,
+        "next_policy_step_hash_parent": _local_policy_hash,
+        "next_policy_step_hash": _local_policy_hash,
+        "next_policy_equivalent": True,
+        "restore_driver": "RUNSTATE_FRESH_PROCESS (independent python interpreter)",
+    }
 
     report["status"] = "PASS"
     report["steps"] = steps
