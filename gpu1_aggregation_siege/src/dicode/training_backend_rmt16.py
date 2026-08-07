@@ -197,9 +197,12 @@ class RMT16TrainingBackend(StudentTrainingBackend):
 
         new_memory = dict(memory)
 
-        # GTrXL reset
+        # GTrXL reset — BLOCKER-4: reset_runner_memory is responsible ONLY for
+        # clearing the done envs' memory (mem_idx -> window_mem, mem_mask ->
+        # zeros). It must NOT advance mem_idx for non-done envs — the single
+        # per-step mem_idx advance happens exactly once in policy_forward_eval.
         new_memory["mem_idx"] = jnp.where(
-            done, wm, jnp.clip(memory["mem_idx"] - 1, 0, wm)
+            done, wm, memory["mem_idx"]
         ).astype(jnp.int32)
         new_memory["mem_mask"] = jnp.where(
             done[:, None, None, None],
@@ -302,25 +305,38 @@ class RMT16TrainingBackend(StudentTrainingBackend):
         mask = memory["mask"]                   # (batch, num_heads, window_grad, window_mem + 1)
         rmt_tokens_seq = memory.get("rmt_tokens_seq")  # (batch, window_grad, num_tokens, es)
 
+        # BLOCKER-2 (strong): RMT16 training MUST be computed from the REAL
+        # per-step entering tokens recorded during the rollout
+        # (traj_batch.rmt_entering_tokens).  A None rmt_tokens_seq means the
+        # rollout-loss PPO loss silently dropped the RMT state — a PASS built on
+        # that is a lie.  Fail closed instead of silently falling back to the
+        # non-RMT model_forward_train.
+        if rmt_tokens_seq is None:
+            raise ValueError(
+                "RMT16_ENTERING_TOKENS_MISSING: policy_forward_train received "
+                "no rmt_tokens_seq — the rollout must record real pre-action "
+                "entering tokens (traj_batch.rmt_entering_tokens) and "
+                "prepare_training_memory_batch must supply them (fail closed)")
+        # shape guard: (batch, window_grad, num_tokens, embed_size)
+        if rmt_tokens_seq.ndim != 4 \
+                or rmt_tokens_seq.shape[2] != self._rmt_num_tokens:
+            raise ValueError(
+                f"RMT16_ENTERING_TOKENS_SHAPE: expected "
+                f"(batch, window_grad, {self._rmt_num_tokens}, embed_size), got "
+                f"{tuple(rmt_tokens_seq.shape)} (fail closed)")
+
         # network.model_forward_train expects:
         #   memories: (batch, window_mem, nl, es)  -- the WINDOW of memories
         #   obs: (batch, window_grad, obs_dim)       -- the observation window
         #   mask: (batch, num_heads, 1, window_mem + 1) — but we have window_grad dim
         #   rmt_tokens_seq: (batch, window_grad, nt, es)
 
-        if rmt_tokens_seq is not None:
-            pi, value = network.apply(
-                {"params": params},
-                memories_batch, obs, mask,
-                rmt_tokens_seq=rmt_tokens_seq,
-                method=network.model_forward_train,
-            )
-        else:
-            pi, value = network.apply(
-                {"params": params},
-                memories_batch, obs, mask,
-                method=network.model_forward_train,
-            )
+        pi, value = network.apply(
+            {"params": params},
+            memories_batch, obs, mask,
+            rmt_tokens_seq=rmt_tokens_seq,
+            method=network.model_forward_train,
+        )
         return pi, value
 
     def prepare_training_memory_batch(
@@ -334,6 +350,26 @@ class RMT16TrainingBackend(StudentTrainingBackend):
 
         Returns a dict ready for policy_forward_train.
         """
+        # RMT tokens sequence: BLOCKER-2 (strong) — the REAL pre-action entering
+        # tokens recorded during the rollout are REQUIRED.  If they are absent,
+        # the PPO loss would recompute without the persistent RMT state and the
+        # resulting PASS would be a lie — fail closed BEFORE any prep work.
+        entering = getattr(traj_batch, "rmt_entering_tokens", None)
+        if entering is None:
+            raise ValueError(
+                "RMT16_ENTERING_TOKENS_MISSING: prepare_training_memory_batch "
+                "found no traj_batch.rmt_entering_tokens — the rollout must "
+                "record real pre-action entering tokens (fail closed)")
+        # Window the entering tokens exactly like obs: collapse every leading
+        # dimension into the rollout-entry axis, then split into training
+        # windows of ``window_grad`` consecutive steps.
+        #   (minibatch, nt, es)        -> (minibatch/window_grad, window_grad, nt, es)
+        #   (num_steps, num_envs, nt, es) -> (…/window_grad, window_grad, nt, es)
+        entering = jnp.reshape(entering, (-1,) + tuple(entering.shape[-2:]))
+        entering = jnp.reshape(
+            entering, (-1, config.window_grad, self._rmt_num_tokens,
+                       entering.shape[-1]))
+
         # Select memories by indices
         memories_batch_sel = batch_indices_select(
             memories_batch, traj_batch.memories_indices[:, :: config.window_grad]
@@ -364,11 +400,8 @@ class RMT16TrainingBackend(StudentTrainingBackend):
         result = {
             "memories": memories_batch_sel,
             "mask": memories_mask,
+            "rmt_tokens_seq": entering,
         }
-
-        # RMT tokens sequence: if present in traj_batch
-        if hasattr(traj_batch, "rmt_entering_tokens") and traj_batch.rmt_entering_tokens is not None:
-            result["rmt_tokens_seq"] = traj_batch.rmt_entering_tokens
 
         return result
 
@@ -379,25 +412,48 @@ class RMT16TrainingBackend(StudentTrainingBackend):
     def serialize_memory_state(
         self, memory: Mapping[str, jnp.ndarray]
     ) -> Mapping[str, Any]:
-        """Serialize RMT16 memory for RunState checkpointing."""
+        """Serialize RMT16 memory for RunState checkpointing.
+
+        BLOCKER-5: the RunState MUST carry the REAL memory VALUES — never
+        shapes, never zeros.  Each leaf is moved to the host (numpy) so the
+        checkpoint round-trips value-exact across processes/devices.
+        """
         return {
             "architecture_family": "RMT16",
-            "memories_shape": list(np.asarray(memory["memories"]).shape),
-            "mem_mask_shape": list(np.asarray(memory["mem_mask"]).shape),
-            "mem_idx_shape": list(np.asarray(memory["mem_idx"]).shape),
-            "rmt.mem_tokens_shape": list(np.asarray(memory["rmt.mem_tokens"]).shape),
-            "rmt.seg_buf_shape": list(np.asarray(memory["rmt.seg_buf"]).shape),
-            "rmt.seg_count_shape": list(np.asarray(memory["rmt.seg_count"]).shape),
+            "carry_mode": self._carry_mode,
+            "values": {
+                "memories": np.asarray(memory["memories"]),
+                "mem_mask": np.asarray(memory["mem_mask"]),
+                "mem_idx": np.asarray(memory["mem_idx"]),
+                "rmt.mem_tokens": np.asarray(memory["rmt.mem_tokens"]),
+                "rmt.seg_buf": np.asarray(memory["rmt.seg_buf"]),
+                "rmt.seg_count": np.asarray(memory["rmt.seg_count"]),
+            },
         }
 
     def restore_memory_state(
         self, serialized: Mapping[str, Any]
     ) -> Mapping[str, jnp.ndarray]:
-        """Restore RMT16 memory from serialized RunState checkpoint."""
+        """Restore RMT16 memory from serialized RunState checkpoint.
+
+        BLOCKER-5: restores the ORIGINAL values — never a zero-init fallback.
+        """
         _require(
             serialized.get("architecture_family") == "RMT16",
             "architecture_family mismatch in serialized memory"
         )
-        return self.init_runner_memory(
-            num_envs=int(serialized["memories_shape"][0])
+        values = serialized.get("values")
+        _require(
+            isinstance(values, Mapping) and values,
+            "serialized RMT16 memory carries no values (fail closed)"
         )
+        required = ("memories", "mem_mask", "mem_idx", "rmt.mem_tokens",
+                    "rmt.seg_buf", "rmt.seg_count")
+        _require(
+            all(key in values for key in required),
+            f"serialized RMT16 memory missing fields: "
+            f"{sorted(set(required) - set(values))} (fail closed)"
+        )
+        return {
+            key: jnp.asarray(np.asarray(values[key])) for key in required
+        }

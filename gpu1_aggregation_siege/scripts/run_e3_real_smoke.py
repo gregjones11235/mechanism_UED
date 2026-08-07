@@ -115,6 +115,27 @@ def _params_hash(tree) -> str:
     return cc2_params_sha256(tree)
 
 
+def _opt_state_count(train_state) -> int | None:
+    """The optimizer's internal gradient-step counter (first opt_state leaf).
+
+    Adam/Clip optax chains carry a scalar count as their first leaf; its
+    before/after values prove the number of internal gradient steps the
+    canonical outer update actually performed.  None when unavailable.
+    """
+    import jax
+    import numpy as _np
+    opt_state = getattr(train_state, "opt_state", None)
+    if opt_state is None:
+        return None
+    try:
+        leaves = jax.tree_util.tree_leaves(opt_state)
+        if not leaves:
+            return None
+        return int(_np.asarray(leaves[0]))
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # 0. mount the REAL student (exact restore) — adapter-resolved by profile
 # ---------------------------------------------------------------------------
@@ -630,7 +651,8 @@ def run_runstate_roundtrip(*, receipt: dict, canonical_plan: Any,
                            canonical_runtime: Any, registered_ids: tuple,
                            config: Any, run_id: str, work_dir: str,
                            candidate_id: str = "",
-                           architecture_family: str = "") -> dict:
+                           architecture_family: str = "",
+                           backend: Any = None) -> dict:
     import jax
     from dicode.simulator_frontier.runstate_codec import (
         RunStateCheckpointManager,
@@ -645,6 +667,17 @@ def run_runstate_roundtrip(*, receipt: dict, canonical_plan: Any,
         archive_parts.append(tid)
     archive_identity = _sha256_text("|".join(archive_parts))
     env_rng = jax.random.split(receipt["rng"])[1]
+    # BLOCKER-5: the RunState carries the REAL post-session architecture memory
+    # (backend.serialize_memory_state of the captured memory), never shapes.
+    extra = {}
+    if backend is not None:
+        memory = receipt.get("architecture_memory")
+        if memory is None:
+            raise RuntimeError(
+                "ARCHITECTURE_MEMORY_MISSING: a backend was bound but the "
+                "one-update receipt carries no final architecture memory "
+                "(fail closed)")
+        extra["architecture_memory"] = backend.serialize_memory_state(memory)
     run_state = build_full_run_state(
         rl_train_state=new_state,
         training_rng=receipt["rng"],
@@ -659,6 +692,7 @@ def run_runstate_roundtrip(*, receipt: dict, canonical_plan: Any,
         source_commit=f"e3:{run_id}",
         candidate_id=candidate_id,
         architecture_family=architecture_family,
+        extra=extra,
     )
     ckpt_dir = os.path.join(work_dir, "runstate")
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -854,7 +888,8 @@ def real_smoke(candidate_id: str) -> dict:
         registered_ids=register_result["registered_ids"], config=config,
         run_id=RUN_ID, work_dir=work_dir,
         candidate_id=candidate_id,
-        architecture_family=mount.get("architecture_family", "UNKNOWN"))
+        architecture_family=mount.get("architecture_family", "UNKNOWN"),
+        backend=_backend)
 
     # evidence files
     update_count = {
@@ -935,6 +970,20 @@ def real_smoke(candidate_id: str) -> dict:
     else:
         _smoke_pass = "E3_REAL_SMOKE_PASS"
         _smoke_fail = "E3_REAL_SMOKE_FAIL"
+    # BLOCKER-params-lineage: params_changed_after_update MUST be COMPUTED from
+    # the real initial vs final params hashes (never hardcoded true), and the
+    # optimizer's internal gradient-step counter (opt_state leaf count) is
+    # recorded before/after so the evidence proves exactly one canonical outer
+    # update drove real internal gradient steps.
+    _initial_params_sha = (
+        selected_state.get("checkpoint_params_sha256", "")
+        if selected_state else "")
+    _final_params_sha = _params_hash(receipt["rl_train_state"].params)
+    _params_changed = bool(_final_params_sha) and bool(_initial_params_sha) \
+        and _final_params_sha != _initial_params_sha
+    _opt_count_before = _opt_state_count(
+        train_state) if selected_state else None
+    _opt_count_after = _opt_state_count(receipt["rl_train_state"])
     final = {
         "run_id": RUN_ID,
         "final_status": _smoke_pass if roundtrip["equivalent"]
@@ -948,13 +997,19 @@ def real_smoke(candidate_id: str) -> dict:
         "params_sha256": params_sha,
         "checkpoint_file_sha256": mount.get("mount_report", {}).get("file_sha256", ""),
         "checkpoint_params_sha256": params_sha,
-        "trainstate_initial_params_sha256": (
-            selected_state.get("checkpoint_params_sha256", "") if selected_state else ""),
-        "trainstate_final_params_sha256": _params_hash(receipt["rl_train_state"].params),
-        "initial_equals_checkpoint": (
-            params_sha == selected_state.get("checkpoint_params_sha256", "")
-            if selected_state else False),
-        "params_changed_after_update": True,
+        "trainstate_initial_params_sha256": _initial_params_sha,
+        "trainstate_final_params_sha256": _final_params_sha,
+        "initial_equals_checkpoint": bool(
+            params_sha and _initial_params_sha
+            and params_sha == _initial_params_sha),
+        "params_changed_after_update": _params_changed,
+        "canonical_outer_updates": int(receipt["num_updates_in_session"]),
+        "optimizer_internal_gradient_steps_before": _opt_count_before,
+        "optimizer_internal_gradient_steps_after": _opt_count_after,
+        "optimizer_internal_gradient_steps_delta": (
+            int(_opt_count_after) - int(_opt_count_before)
+            if _opt_count_before is not None and _opt_count_after is not None
+            else None),
         "optimizer_updates_observed": int(receipt["num_updates_in_session"]),
         "gpu": _gpu_uuid(),
         "update_count": int(receipt["num_updates_in_session"]),

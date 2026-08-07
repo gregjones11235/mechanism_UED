@@ -1,5 +1,6 @@
 import functools
 from collections.abc import Sequence
+from typing import Any
 
 import distrax
 import flax.linen as nn
@@ -105,6 +106,9 @@ class Transition:
 	info: jnp.ndarray
 	# BUG-E3-01: RMT16 entering tokens per step for training window
 	rmt_entering_tokens: jnp.ndarray | None = None
+	# BLOCKER-3: SlowGRU pre-action longstate (h/buf/count) per step, so PPO
+	# loss recomputes from the rollout's REAL hidden state, never zeros.
+	slowgru_longstate: Any | None = None
 
 
 # --- TRANSFORMER ---

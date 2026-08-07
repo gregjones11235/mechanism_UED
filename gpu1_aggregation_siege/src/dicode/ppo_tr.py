@@ -398,6 +398,23 @@ def make_train(
 				# 1. Reset memory on done (backend handles architecture specifics)
 				memory_dict = backend.reset_runner_memory(memory_dict, done)
 
+				# BLOCKER-2/3: capture the PRE-ACTION architecture state that will
+				# enter this policy step (before the eval forward advances memory):
+				# RMT16 entering mem_tokens, SlowGRU pre-action longstate. The PPO
+				# loss must recompute from THESE, not from post-step state / zeros.
+				_pre_rmt_tokens = memory_dict.get("rmt.mem_tokens")
+				_pre_longstate = None
+				if "longstate.h" in memory_dict:
+					# BLOCKER-3: also record the PRE-ACTION true_done that enters
+					# this policy step's slow update — the training scan must
+					# replay the SAME reset flags (never a shifted/derived guess).
+					_pre_longstate = {
+						"h": memory_dict["longstate.h"],
+						"buf": memory_dict["longstate.buf"],
+						"count": memory_dict["longstate.count"],
+						"td": memory_dict["true_done"],
+					}
+
 				# 2. Forward pass with backend
 				rng, _rng = jax.random.split(rng)
 				pi, value, memories_out, memory_dict = backend.policy_forward_eval(
@@ -434,6 +451,8 @@ def make_train(
 					memory_indices,
 					last_obs,
 					info,
+					rmt_entering_tokens=_pre_rmt_tokens,
+					slowgru_longstate=_pre_longstate,
 				)
 
 				carry = (
@@ -854,6 +873,13 @@ def make_train(
 				"num_updates_done": NUM_UPDATES,
 				"num_env_steps_done": num_env_steps_done,
 			},
+			# BLOCKER-5: the FINAL architecture runner memory (memories / mem_mask
+			# / mem_idx / rmt.* / longstate.*).  The RunState checkpoint carries the
+			# REAL post-session memory values so a resumed session starts from the
+			# exact same hidden state — never shapes, never zeros.  When no backend
+			# is bound this is None (the legacy ActorCriticTransformer path has no
+			# backend-specific memory to checkpoint).
+			"final_memory": final_runner_state[2] if _use_backend else None,
 		}
 
 	return train

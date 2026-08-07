@@ -30,6 +30,24 @@ from dicode.task_utils import (
 from minicraftax.tasks.seed_tasks.original import Env as OriginalTask
 
 
+# BLOCKER-5: the FINAL architecture runner memory of the most recent session.
+# ``run_session_training`` must keep returning the canonical EIGHT-tuple ABI, so
+# the real post-session memory is exposed through this module-level channel
+# instead of being smuggled into the tuple.  The e3 window / smoke driver reads
+# it after ``execute_one_update`` and serializes it into the RunState.
+_SESSION_FINAL_MEMORY: Any = None
+
+
+def get_session_final_memory() -> Any:
+    """Return the FINAL architecture runner memory of the last training session.
+
+    None when no session has run, or when the last session did not bind a
+    StudentTrainingBackend (the legacy ActorCriticTransformer path).  Callers
+    that bound a backend MUST see a non-None value (fail closed upstream).
+    """
+    return _SESSION_FINAL_MEMORY
+
+
 # Embedding instruction (shared across the codebase)
 EMBEDDING_INSTRUCTION = (
     "Generate an embedding for this list of achievements capturing "
@@ -127,6 +145,12 @@ def run_session_training(
         checkpoint_params=checkpoint_params,
     )
     print("  Training run finished.")
+
+    # BLOCKER-5: capture the REAL post-session architecture runner memory
+    # (memories / mem_mask / mem_idx / rmt.* / longstate.*) for the RunState
+    # checkpoint.  The 8-tuple ABI is untouched — this is a module-level channel.
+    global _SESSION_FINAL_MEMORY
+    _SESSION_FINAL_MEMORY = session_results.get("final_memory")
 
     # Update agent state
     rl_train_state = session_results["train_state"]

@@ -746,6 +746,22 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
         raise ProductionBlockedError(
             "run_session_training returned non-mapping training_metrics "
             f"({type(training_metrics).__name__}); fail closed")
+    # BLOCKER-5: the REAL post-session architecture runner memory.  When a
+    # backend is bound the RunState MUST carry real memory values — a session
+    # that trained an architecture but reports no memory is a lie (fail closed).
+    final_memory = None
+    if backend is not None:
+        try:
+            from dicode.training import get_session_final_memory
+            final_memory = get_session_final_memory()
+        except Exception:  # pragma: no cover - defensive import guard
+            final_memory = None
+        if final_memory is None:
+            raise ProductionBlockedError(
+                "ARCHITECTURE_MEMORY_MISSING: a backend was bound for this "
+                "one-update session but no final architecture memory was "
+                "captured (the RunState must carry REAL post-session memory "
+                "values; fail closed)")
     return {
         "rng": rng,
         "rl_train_state": rl_train_state,
@@ -756,4 +772,5 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
         "categorized_tasks": categorized_tasks,
         "evaluation_metrics": evaluation_metrics,
         "sampled_task_ids": tuple(sampled_task_ids),
+        "architecture_memory": final_memory,
     }

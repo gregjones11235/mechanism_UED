@@ -273,6 +273,14 @@ class E3WindowConfig:
     taskparam_apply_fn: Callable[..., Any] | None = None
     archive_path: str = ""
     checkpoint_dir: str = ""
+    # --- selected-student training binding (BLOCKER-1) ---------------------
+    # The production STEP11 update MUST train the SAME selected student that
+    # did the frontier rollout. These are injected by the controller/runtime
+    # construction (candidate -> profile -> adapter -> TrainingBackend ->
+    # checkpoint params -> E3WindowConfig), NEVER guessed from strings inside
+    # e3_window. Unbound => named preflight blocker (fail closed).
+    student_training_backend: Any = None          # StudentTrainingBackend
+    selected_checkpoint_params: Any = None        # checkpoint params (jax tree)
 
 
 @dataclass(frozen=True)
@@ -1405,6 +1413,36 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     # The context is minted and the 8-tuple receipt is unpacked + validated
     # fail-closed by execute_one_update; the OriginalTask is never in
     # sampled_task_ids.
+    # BLOCKER-1: the production path MUST train the SAME selected student that
+    # did the frontier rollout. The TrainingBackend + checkpoint params are
+    # injected on E3WindowConfig (never guessed from strings) and every
+    # binding is re-checked fail-closed here.
+    backend = config.student_training_backend
+    checkpoint_params = config.selected_checkpoint_params
+    if backend is None:
+        raise ProductionBlockedError(
+            "STEP11_BACKEND_UNBOUND: the selected student's TrainingBackend "
+            "is not bound on E3WindowConfig (fail closed — Smoke-only "
+            "backend is forbidden)")
+    if checkpoint_params is None:
+        raise ProductionBlockedError(
+            "STEP11_CHECKPOINT_PARAMS_UNBOUND: selected_checkpoint_params is "
+            "not bound on E3WindowConfig (fail closed)")
+    if str(getattr(backend, "candidate_id", "")) != str(
+            config.selected_candidate_id):
+        raise ProductionBlockedError(
+            "STEP11_CANDIDATE_MISMATCH: backend.candidate_id "
+            f"{getattr(backend, 'candidate_id', '')!r} != selected "
+            f"candidate {config.selected_candidate_id!r} (fail closed)")
+    if config.student is not None:
+        student_arch = getattr(
+            config.student.identity(), "architecture_family", "")
+        backend_arch = str(getattr(backend, "architecture_family", ""))
+        if backend_arch and student_arch and backend_arch != student_arch:
+            raise ProductionBlockedError(
+                "STEP11_ARCHITECTURE_MISMATCH: backend architecture "
+                f"{backend_arch!r} != student architecture {student_arch!r} "
+                "(fail closed)")
     context = DiCodeOneUpdateContext(
         config=config.dicode_config,
         rng=config.dicode_rng,
@@ -1420,7 +1458,8 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     )
     receipt = execute_one_update(
         canonical_runtime, context=context, plan=canonical_plan,
-        adapter=env_adapter)
+        adapter=env_adapter, backend=backend,
+        checkpoint_params=checkpoint_params)
     if int(receipt["num_updates_in_session"]) != 1:
         raise ProductionBlockedError(
             "STEP11 must execute EXACTLY ONE optimizer update, got "
@@ -1464,6 +1503,20 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
     _archive_identity = hashlib.sha256(
         "|".join(_archive_parts).encode("utf-8")).hexdigest()
     _env_rng = jax.random.split(receipt["rng"])[1]
+    # BLOCKER-5: the RunState carries the REAL post-session architecture memory
+    # (backend.serialize_memory_state of the captured memory), never shapes,
+    # never zeros.  A bound backend that produced no memory fails closed.
+    _runstate_extra = {}
+    if backend is not None:
+        _arch_memory = receipt.get("architecture_memory")
+        if _arch_memory is None:
+            raise ProductionBlockedError(
+                "ARCHITECTURE_MEMORY_MISSING: STEP11 bound a training backend "
+                "but the one-update receipt carries no final architecture "
+                "memory — the RunState must checkpoint REAL post-session "
+                "memory values (fail closed)")
+        _runstate_extra["architecture_memory"] = \
+            backend.serialize_memory_state(_arch_memory)
     run_state = build_full_run_state(
         rl_train_state=new_train_state,
         training_rng=receipt["rng"],
@@ -1479,6 +1532,7 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         candidate_id=str(config.selected_candidate_id),
         architecture_family=str(config.student.identity().architecture_family
                                if config.student is not None else "UNKNOWN"),
+        extra=_runstate_extra,
     )
     os.makedirs(config.runstate_checkpoint_dir, exist_ok=True)
     _ckpt_path = str(os.path.join(config.runstate_checkpoint_dir,

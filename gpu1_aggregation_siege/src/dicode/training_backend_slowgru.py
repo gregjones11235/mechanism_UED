@@ -109,6 +109,7 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
         checkpoint_path: str,
         action_dim: int = 43,
         carry_mode: str = "PERSISTENT",
+        num_steps: int = 128,
     ):
         self.architecture_family = "SLOWGRU"
         self.candidate_id = str(candidate_id)
@@ -117,6 +118,7 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
         self._checkpoint_path = str(checkpoint_path)
         self._action_dim = int(action_dim)
         self._carry_mode = str(carry_mode)
+        self._num_steps = int(num_steps)
 
         self._handle: dict | None = None
         self._network = None
@@ -224,9 +226,12 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
 
         new_memory = dict(memory)
 
-        # GTrXL reset (identical to ppo_tr.py _env_step)
+        # GTrXL reset — BLOCKER-4: reset_runner_memory is responsible ONLY for
+        # clearing the done envs' memory (mem_idx -> window_mem, mem_mask ->
+        # zeros). It must NOT advance mem_idx for non-done envs — the single
+        # per-step mem_idx advance happens exactly once in policy_forward_eval.
         new_memory["mem_idx"] = jnp.where(
-            d, wm, jnp.clip(memory["mem_idx"] - 1, 0, wm)
+            d, wm, memory["mem_idx"]
         ).astype(jnp.int32)
         new_memory["mem_mask"] = jnp.where(
             d[:, None, None, None],
@@ -336,11 +341,25 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
 
         memories_batch = memory["memories"]
         mask = memory["mask"]
-        true_done = memory.get("true_done", jnp.zeros((obs.shape[0], obs.shape[1]), dtype=jnp.bool_))
+        true_done = memory.get("true_done")
+        if true_done is None:
+            # BLOCKER-3: never recompute the slow-state PPO loss from a
+            # zero-init true_done — the rollout's REAL per-step done flags must
+            # be supplied (fail closed).
+            raise ValueError(
+                "SLOWGRU_TRUE_DONE_MISSING: policy_forward_train received no "
+                "true_done — prepare_training_memory_batch must supply the "
+                "rollout's real per-step done flags (fail closed)")
         longstate_prev = memory.get("longstate_prev")
         if longstate_prev is None:
-            # Default: zero longstate
-            longstate_prev = self._init_longstate(obs.shape[0])
+            # BLOCKER-3: NEVER recompute PPO loss from zero longstate — the
+            # rollout's real hidden state must be supplied. Missing => fail
+            # closed (a PASS built on zero-initialized SlowGRU state is a lie).
+            raise ValueError(
+                "SLOWGRU_LONGSTATE_MISSING: policy_forward_train received no "
+                "longstate_prev — the rollout must record real pre-action "
+                "longstate (traj_batch.slowgru_longstate) and "
+                "prepare_training_memory_batch must supply it (fail closed)")
 
         pi, value = self._network.apply(
             params,  # params is already the Flax variables dict {"params": ...}
@@ -389,14 +408,39 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
             "mask": memories_mask,
         }
 
-        # true_done per step for slow state update
-        if hasattr(traj_batch, "done"):
-            done_flat = traj_batch.done.reshape(
-                (-1, config.window_grad) + traj_batch.done.shape[2:])
-            # squeeze trailing dims
-            while done_flat.ndim > 2:
-                done_flat = done_flat.squeeze(-1)
-            result["true_done"] = done_flat
+        # BLOCKER-3: the SlowGRU loss must recompute from the rollout's REAL
+        # slow state — never zeros.  ``model_forward_train_longmem`` contract:
+        #   longstate_prev : (E, dim)  — the PRE-ROLLOUT slow state per env
+        #   true_done      : (E, T)    — the PRE-ACTION reset flags the rollout
+        #                                used at each of T=num_steps steps
+        # ppo_tr's minibatch preserves env-major structure: the trajectory's
+        # (num_steps, num_envs, ...) is swapaxes'd to (num_envs, num_steps, ...)
+        # and minibatched to (E=num_envs/minibatches, T=num_steps, ...).  So the
+        # recorded per-step pre-action longstate is ALREADY (E, T, ...) here,
+        # and step 0 of each env is the pre-rollout state.
+        ls = getattr(traj_batch, "slowgru_longstate", None)
+        if ls is None:
+            raise ValueError(
+                "SLOWGRU_LONGSTATE_MISSING: prepare_training_memory_batch "
+                "found no traj_batch.slowgru_longstate — the rollout must "
+                "record real pre-action longstate (fail closed)")
+        if ls["h"].ndim < 2 or int(ls["h"].shape[1]) != self._num_steps:
+            raise ValueError(
+                f"SLOWGRU_LONGSTATE_ORDER: expected (E, T=num_steps={self._num_steps}, "
+                f"...) minibatch structure, got h shape {tuple(ls['h'].shape)} "
+                f"(fail closed)")
+        longstate_prev = {
+            key: ls[key][:, 0] for key in ("h", "buf", "count")
+        }
+        td = ls.get("td")
+        if td is None:
+            raise ValueError(
+                "SLOWGRU_TD_MISSING: prepare_training_memory_batch found no "
+                "recorded pre-action true_done (traj_batch.slowgru_longstate "
+                "['td']) — the training scan must replay the rollout's real "
+                "reset flags (fail closed)")
+        result["longstate_prev"] = longstate_prev
+        result["true_done"] = td
 
         return result
 
@@ -407,25 +451,42 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
     def serialize_memory_state(
         self, memory: Mapping[str, jnp.ndarray]
     ) -> Mapping[str, Any]:
-        """Serialize SlowGRU memory for RunState checkpointing."""
+        """Serialize SlowGRU memory for RunState checkpointing.
+
+        BLOCKER-5: the RunState MUST carry the REAL memory VALUES — never
+        shapes, never zeros.  Each leaf is moved to the host (numpy) so the
+        checkpoint round-trips value-exact across processes/devices.
+        """
         return {
             "architecture_family": "SLOWGRU",
-            "memories_shape": list(np.asarray(memory["memories"]).shape),
-            "memories_mask_shape": list(np.asarray(memory["mem_mask"]).shape),
-            "memories_mask_idx_shape": list(np.asarray(memory["mem_idx"]).shape),
-            "longstate.h_shape": list(np.asarray(memory["longstate.h"]).shape),
-            "longstate.buf_shape": list(np.asarray(memory["longstate.buf"]).shape),
-            "longstate.count_shape": list(np.asarray(memory["longstate.count"]).shape),
+            "carry_mode": self._carry_mode,
+            "values": {
+                key: np.asarray(memory[key]) for key in MEMORY_FIELD_KEYS
+                if key in memory
+            },
         }
 
     def restore_memory_state(
         self, serialized: Mapping[str, Any]
     ) -> Mapping[str, jnp.ndarray]:
-        """Restore SlowGRU memory from serialized RunState checkpoint."""
+        """Restore SlowGRU memory from serialized RunState checkpoint.
+
+        BLOCKER-5: restores the ORIGINAL values — never a zero-init fallback.
+        """
         _require(
             serialized.get("architecture_family") == "SLOWGRU",
             "architecture_family mismatch in serialized memory"
         )
-        return self.init_runner_memory(
-            num_envs=int(serialized["memories_shape"][0])
+        values = serialized.get("values")
+        _require(
+            isinstance(values, Mapping) and values,
+            "serialized SlowGRU memory carries no values (fail closed)"
         )
+        _require(
+            all(key in values for key in MEMORY_FIELD_KEYS),
+            f"serialized SlowGRU memory missing fields: "
+            f"{sorted(set(MEMORY_FIELD_KEYS) - set(values))} (fail closed)"
+        )
+        return {
+            key: jnp.asarray(np.asarray(values[key])) for key in MEMORY_FIELD_KEYS
+        }
