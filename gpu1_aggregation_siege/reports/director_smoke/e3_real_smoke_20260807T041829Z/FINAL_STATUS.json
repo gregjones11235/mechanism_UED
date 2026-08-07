@@ -1,0 +1,17 @@
+{
+  "branch": "henry/simulator-frontier-foundation-codex",
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "curriculum_slots": 15,
+  "elapsed_s": 573.28,
+  "final_status": "E3_REAL_SMOKE_PASS",
+  "formal_experiment_started": false,
+  "formal_longrun_authorized": false,
+  "fresh_process_restore": true,
+  "gpu": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "llm_calls": 2,
+  "next_policy_equivalent": true,
+  "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "run_id": "e3_real_smoke_20260807T041829Z",
+  "tested_source_commit": "ecc535668d807cba6507712971a823940d4593a9",
+  "update_count": 1
+}

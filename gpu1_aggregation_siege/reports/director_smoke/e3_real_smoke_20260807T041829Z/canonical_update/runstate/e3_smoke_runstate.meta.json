@@ -1,0 +1,29 @@
+{
+  "checkpoint_hash": "6b023a4d18cbf879913985c9281c191f88ce84625e1b7983d05e4fdd139308a5",
+  "codec_version": "simulator_frontier.runstate_codec/v1",
+  "config_hash": "aa24861a4636719d11043c507e933515de8ec02126c89f2eb5a53e6cb57a58d4",
+  "current_session_idx": 1,
+  "fields": [
+    "config_hash",
+    "current_session_idx",
+    "env_rng",
+    "global_env_steps",
+    "global_update_step",
+    "opt_state",
+    "params",
+    "plan_hash",
+    "runtime_bundle_hash",
+    "source_commit",
+    "task_archive_identity",
+    "train_step",
+    "training_rng"
+  ],
+  "global_env_steps": 131072,
+  "global_update_step": 1,
+  "idempotency_token": "e3_real_smoke_20260807T041829Z",
+  "plan_hash": "ff4e09baae6ce1a50c44af286053c8a4a052048d2341afda3546a8106609780d",
+  "runtime_bundle_hash": "85938dc6fadb92dc08361f303881067bbe7c5fc3803826f4b99db1865fce22fd",
+  "schema": "simulator_frontier.canonical_runstate_checkpoint/v1",
+  "source_commit": "e3:e3_real_smoke_20260807T041829Z",
+  "state_file_sha256": "b9a2b9c999c6d8a646343734eb4de9eb6516f8d3e3b05ddf5173ff0320533610"
+}

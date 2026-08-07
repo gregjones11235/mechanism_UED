@@ -1,0 +1,26 @@
+{
+  "curriculum_slots": [
+    "plan-e3-1786076460326::D00",
+    "plan-e3-1786076460326::D01",
+    "plan-e3-1786076460326::D02",
+    "plan-e3-1786076460326::D03",
+    "plan-e3-1786076460326::D04",
+    "plan-e3-1786076460326::D05",
+    "plan-e3-1786076460326::D06",
+    "plan-e3-1786076460326::D07",
+    "plan-e3-1786076460326::D08",
+    "plan-e3-1786076460326::D09",
+    "plan-e3-1786076460326::D10",
+    "plan-e3-1786076460326::D11",
+    "anchor_a",
+    "anchor_b",
+    "anchor_c"
+  ],
+  "dynamic": 12,
+  "non_target_anchors": 3,
+  "original_task_appended_internally_by_dicode": "original_craftax",
+  "plan_hash": "ff4e09baae6ce1a50c44af286053c8a4a052048d2341afda3546a8106609780d",
+  "registration_api": "TaskArchive.record_new_task + node.code",
+  "sampled_ids_total": 15,
+  "target_probability": 0.2
+}
