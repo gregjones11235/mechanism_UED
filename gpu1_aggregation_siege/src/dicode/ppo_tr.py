@@ -40,11 +40,21 @@ def make_train(
 	task_embeddings=None,
 	task_distribution_proportions=None,
 	initial_global_update_step=0,
+	backend=None,
+	checkpoint_params=None,
 ):
-	"""Sets up the environment, network, and returns the JIT-compiled train function."""
+	"""Sets up the environment, network, and returns the JIT-compiled train function.
+
+	BUG-E3-01: when ``backend`` is provided, architecture-specific parts
+	(network, policy forward, memory) are delegated to it.  When
+	``checkpoint_params`` is provided, the TrainState is initialized from
+	those params (not random).  When neither is provided, the original
+	ActorCriticTransformer path is used (backward compatible).
+	"""
 	# --- Environment Setup (IDENTICAL TO OLD CODE) ---
 	NUM_UPDATES = num_training_updates
 	num_tasks = len(task_classes)
+	_use_backend = backend is not None
 
 	static_env_params = StaticEnvParams()
 	env_params = EnvParams(max_timesteps=4096)
@@ -114,20 +124,24 @@ def make_train(
 	)
 	env_params = env.default_params
 
-	# --- Network Setup (CHANGED TO TRANSFORMER) ---
-	# NOTE: You must ensure your config has these keys (embed_size, num_heads, etc.)
-	# We map existing config keys where possible, or expect new ones.
-	network = ActorCriticTransformer(
-		action_dim=env.action_space(env_params).n,
-		activation=config.activation,
-		hidden_layers=config.hidden_layers,  # Mapping layer_size to hidden_layers
-		encoder_size=config.embed_size,  # Mapping embedding_size to encoder_size/embed_size
-		num_heads=config.num_heads,
-		qkv_features=config.qkv_features,
-		num_layers=config.num_layers,
-		gating=config.gating,
-		gating_bias=config.gating_bias,
-	)
+	# --- Network Setup ---
+	# BUG-E3-01: when a backend is provided, the network comes from the backend
+	# (ActorCriticTransformerRMT16 for RMT16, etc.).  Otherwise the original
+	# ActorCriticTransformer is used (backward compatible).
+	if _use_backend:
+		network = backend.get_network()
+	else:
+		network = ActorCriticTransformer(
+			action_dim=env.action_space(env_params).n,
+			activation=config.activation,
+			hidden_layers=config.hidden_layers,
+			encoder_size=config.embed_size,
+			num_heads=config.num_heads,
+			qkv_features=config.qkv_features,
+			num_layers=config.num_layers,
+			gating=config.gating,
+			gating_bias=config.gating_bias,
+		)
 
 	# --- Optimizer Setup ---
 	TOTAL_GLOBAL_UPDATES = (
@@ -163,20 +177,27 @@ def make_train(
 
 		# --- Initialization ---
 		if train_state is None:
-			rng, _rng = jax.random.split(rng)
+			if _use_backend and checkpoint_params is not None:
+				# BUG-E3-01: initialize TrainState from checkpoint params
+				# (parameter lineage: checkpoint == initial)
+				rng, _rng = jax.random.split(rng)
+				train_state = backend.create_train_state_from_checkpoint(
+					checkpoint_params, tx, _rng)
+			else:
+				rng, _rng = jax.random.split(rng)
 
-			# Transformer Init Shapes
-			init_obs = jnp.zeros((2, obs_dim))
-			init_memory = jnp.zeros((2, config.window_mem, config.num_layers, config.embed_size))
-			init_mask = jnp.zeros((2, config.num_heads, 1, config.window_mem + 1), dtype=jnp.bool_)
+				# Transformer Init Shapes
+				init_obs = jnp.zeros((2, obs_dim))
+				init_memory = jnp.zeros((2, config.window_mem, config.num_layers, config.embed_size))
+				init_mask = jnp.zeros((2, config.num_heads, 1, config.window_mem + 1), dtype=jnp.bool_)
 
-			network_params = network.init(_rng, init_memory, init_obs, init_mask)
+				network_params = network.init(_rng, init_memory, init_obs, init_mask)
 
-			train_state = TrainState.create(
-				apply_fn=network.apply,
-				params=network_params,
-				tx=tx,
-			)
+				train_state = TrainState.create(
+					apply_fn=network.apply,
+					params=network_params,
+					tx=tx,
+				)
 
 		rng, _rng = jax.random.split(rng)
 		obsv, env_state = env.reset(_rng, env_params)
@@ -186,14 +207,18 @@ def make_train(
 			)
 		)
 
-		# --- Initialize Transformer Memory State ---
-		memories = jnp.zeros(
-			(config.num_envs, config.window_mem, config.num_layers, config.embed_size)
-		)
-		memories_mask = jnp.zeros(
-			(config.num_envs, config.num_heads, 1, config.window_mem + 1), dtype=jnp.bool_
-		)
-		memories_mask_idx = jnp.zeros((config.num_envs,), dtype=jnp.int32) + (config.window_mem + 1)
+		# --- Initialize Memory State ---
+		# BUG-E3-01: backend-aware memory (RMT16 includes rmt fields)
+		if _use_backend:
+			memory_dict = backend.init_runner_memory(config.num_envs)
+		else:
+			memories = jnp.zeros(
+				(config.num_envs, config.window_mem, config.num_layers, config.embed_size)
+			)
+			memories_mask = jnp.zeros(
+				(config.num_envs, config.num_heads, 1, config.window_mem + 1), dtype=jnp.bool_
+			)
+			memories_mask_idx = jnp.zeros((config.num_envs,), dtype=jnp.int32) + (config.window_mem + 1)
 		done = jnp.zeros((config.num_envs,), dtype=jnp.bool_)
 
 		rng, _rng = jax.random.split(rng)
@@ -204,18 +229,30 @@ def make_train(
 		# Current update step counter
 		init_update_step = 0
 
-		initial_runner_state = (
-			train_state,
-			env_state,
-			memories,
-			memories_mask,
-			memories_mask_idx,
-			obsv,
-			done,
-			init_step_env_currentloop,
-			init_update_step,
-			_rng,
-		)
+		if _use_backend:
+			initial_runner_state = (
+				train_state,
+				env_state,
+				memory_dict,
+				obsv,
+				done,
+				init_step_env_currentloop,
+				init_update_step,
+				_rng,
+			)
+		else:
+			initial_runner_state = (
+				train_state,
+				env_state,
+				memories,
+				memories_mask,
+				memories_mask_idx,
+				obsv,
+				done,
+				init_step_env_currentloop,
+				init_update_step,
+				_rng,
+			)
 
 		def _log_callback(metrics, step):
 			# Unpack the tuple (now includes max)
@@ -255,7 +292,7 @@ def make_train(
 			# jax.debug.print("Step: {x} | LR: {y:.8f}", x=_step_count, y=_current_lr)
 			# ==================================
 			# === A. COLLECT TRAJECTORIES ===
-			def _env_step(runner_state, _):
+			def _env_step_original(runner_state, _):
 				(
 					train_state,
 					env_state,
@@ -345,35 +382,129 @@ def make_train(
 				)
 				return carry, (transition, memories_out)
 
+			# BUG-E3-01: backend-aware env step for RMT16/SlowGRU
+			def _env_step_backend(runner_state, _):
+				(
+					train_state,
+					env_state,
+					memory_dict,
+					last_obs,
+					done,
+					step_env_currentloop,
+					update_step,
+					rng,
+				) = runner_state
+
+				# 1. Reset memory on done (backend handles architecture specifics)
+				memory_dict = backend.reset_runner_memory(memory_dict, done)
+
+				# 2. Forward pass with backend
+				rng, _rng = jax.random.split(rng)
+				pi, value, memories_out, memory_dict = backend.policy_forward_eval(
+					train_state.params, memory_dict, last_obs)
+				action = pi.sample(seed=_rng)
+				log_prob = pi.log_prob(action)
+
+				# 3. Step Env
+				rng, _rng = jax.random.split(rng)
+				obsv, env_state, reward, done, info = env.step(_rng, env_state, action, env_params)
+
+				env_state = env_state.replace(
+					running_original_return=jnp.full(
+						(config.num_envs,), current_original_return, dtype=jnp.float32
+					)
+				)
+
+				# 4. Compute memory indices for training
+				memory_indices = jnp.arange(0, config.window_mem)[
+					None, :
+				] + step_env_currentloop * jnp.ones((config.num_envs, 1), dtype=jnp.int32)
+
+				# 5. Extract GTrXL mask for the Transition (backward compat)
+				backend_mem_mask = memory_dict.get("mem_mask",
+					jnp.zeros((config.num_envs, config.num_heads, 1, config.window_mem + 1), dtype=jnp.bool_))
+
+				transition = Transition(
+					done,
+					action,
+					value,
+					reward,
+					log_prob,
+					backend_mem_mask.squeeze(),
+					memory_indices,
+					last_obs,
+					info,
+				)
+
+				carry = (
+					train_state,
+					env_state,
+					memory_dict,
+					obsv,
+					done,
+					step_env_currentloop + 1,
+					update_step,
+					rng,
+				)
+				return carry, (transition, memories_out)
+
+			# Select the appropriate env_step function
+			if _use_backend:
+				_env_step = _env_step_backend
+			else:
+				_env_step = _env_step_original
+
 			# Save previous memories to concatenate later (so first step of batch has context)
-			memories_previous = runner_state[2]
+			if _use_backend:
+				memories_previous = runner_state[2]  # memory_dict
+			else:
+				memories_previous = runner_state[2]
 
 			(final_state_carry), (traj_batch, memories_batch) = jax.lax.scan(
 				_env_step, runner_state, None, config.num_steps
 			)
 
-			(
-				train_state,
-				final_env_state,
-				final_memories,
-				final_mask,
-				final_mask_idx,
-				final_obs,
-				done,
-				final_step_loop,
-				update_step,
-				rng,
-			) = final_state_carry
+			if _use_backend:
+				(
+					train_state,
+					final_env_state,
+					final_memory_dict,
+					final_obs,
+					done,
+					final_step_loop,
+					update_step,
+					rng,
+				) = final_state_carry
+				final_memories = final_memory_dict["memories"]
+				final_mask = final_memory_dict["mem_mask"]
+				final_mask_idx = final_memory_dict["mem_idx"]
+			else:
+				(
+					train_state,
+					final_env_state,
+					final_memories,
+					final_mask,
+					final_mask_idx,
+					final_obs,
+					done,
+					final_step_loop,
+					update_step,
+					rng,
+				) = final_state_carry
 
 			# === B. CALCULATE ADVANTAGES (GAE) ===
 			# For GAE we need the value of the *next* state (final_obs)
-			_, last_val, _ = network.apply(
-				train_state.params,
-				final_memories,
-				final_obs,
-				final_mask,
-				method=network.model_forward_eval,
-			)
+			if _use_backend:
+				pi_final, last_val, _, _ = backend.policy_forward_eval(
+					train_state.params, final_memory_dict, final_obs)
+			else:
+				_, last_val, _ = network.apply(
+					train_state.params,
+					final_memories,
+					final_obs,
+					final_mask,
+					method=network.model_forward_eval,
+				)
 
 			def _calculate_gae(traj_batch, last_val):
 				def _get_advantages(carry, transition):
@@ -433,12 +564,18 @@ def make_train(
 			# === C. UPDATE NETWORK (TRANSFORMER LOSS) ===
 
 			# Concatenate previous memories so the first steps of the batch have context
-			memories_batch = jnp.concatenate(
-				[jnp.swapaxes(memories_previous, 0, 1), memories_batch], axis=0
-			)
+			if _use_backend:
+				# memories_batch from backend env_step is the memory output per step
+				memories_batch = jnp.concatenate(
+					[jnp.swapaxes(memories_previous["memories"], 0, 1), memories_batch], axis=0
+				)
+			else:
+				memories_batch = jnp.concatenate(
+					[jnp.swapaxes(memories_previous, 0, 1), memories_batch], axis=0
+				)
 
 			def _update_epoch(update_state, unused):
-				def _update_minbatch(train_state, batch_info):
+				def _update_minbatch_original(train_state, batch_info):
 					traj_batch, memories_batch, advantages, targets = batch_info
 
 					# advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -489,7 +626,7 @@ def make_train(
 							(traj_batch, targets, gae),
 						)
 
-						# Network Output (Train Mode)
+						# Network Output (Train Mode) - original ActorCriticTransformer
 						pi, value = network.apply(
 							params,
 							memories_batch,
@@ -530,6 +667,67 @@ def make_train(
 					grad_norm = optax.global_norm(grads)
 					train_state = train_state.apply_gradients(grads=grads)
 					return train_state, (total_loss, value_loss, loss_actor, entropy, grad_norm)
+
+				# BUG-E3-01: backend-aware minibatch training
+				def _update_minbatch_backend(train_state, batch_info):
+					traj_batch, memories_batch, advantages, targets = batch_info
+
+					def _loss_fn(params, traj_batch, memories_batch, gae, targets):
+						# Prepare training memory via backend
+						training_memory = backend.prepare_training_memory_batch(
+							traj_batch, memories_batch, config)
+
+						# Reshape Obs
+						obs = traj_batch.obs.reshape(
+							(-1, config.window_grad) + traj_batch.obs.shape[2:]
+						)
+						traj_batch_r, targets_r, gae_r = jax.tree_util.tree_map(
+							lambda x: jnp.reshape(x, (-1, config.window_grad) + x.shape[2:]),
+							(traj_batch, targets, gae),
+						)
+
+						# Network Output (Train Mode) via backend
+						pi, value = backend.policy_forward_train(
+							params, training_memory, obs)
+						log_prob = pi.log_prob(traj_batch_r.action)
+
+						# Value Loss
+						value_pred_clipped = traj_batch_r.value + (value - traj_batch_r.value).clip(
+							-config.clip_eps, config.clip_eps
+						)
+						value_losses = jnp.square(value - targets_r)
+						value_losses_clipped = jnp.square(value_pred_clipped - targets_r)
+						value_loss = 0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+
+						# Actor Loss
+						ratio = jnp.exp(log_prob - traj_batch_r.log_prob)
+						gae_r = (gae_r - gae_r.mean()) / (gae_r.std() + 1e-8)
+						loss_actor1 = ratio * gae_r
+						loss_actor2 = (
+							jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * gae_r
+						)
+						loss_actor = -jnp.minimum(loss_actor1, loss_actor2).mean()
+
+						entropy = pi.entropy().mean()
+						total_loss = (
+							loss_actor + config.vf_coef * value_loss - config.ent_coef * entropy
+						)
+						return total_loss, (value_loss, loss_actor, entropy)
+
+					grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
+					(total_loss, (value_loss, loss_actor, entropy)), grads = grad_fn(
+						train_state.params, traj_batch, memories_batch, advantages, targets
+					)
+
+					grad_norm = optax.global_norm(grads)
+					train_state = train_state.apply_gradients(grads=grads)
+					return train_state, (total_loss, value_loss, loss_actor, entropy, grad_norm)
+
+				# Select the appropriate minibatch function
+				if _use_backend:
+					_update_minbatch = _update_minbatch_backend
+				else:
+					_update_minbatch = _update_minbatch_original
 
 				(train_state, traj_batch, memories_batch, advantages, targets, update_step, rng) = (
 					update_state
@@ -599,18 +797,30 @@ def make_train(
 			train_state = update_state[0]
 			rng = update_state[-1]
 			# Reset loop counter to 0 for the next block of rollouts
-			next_runner_state = (
-				train_state,
-				final_env_state,
-				final_memories,
-				final_mask,
-				final_mask_idx,
-				final_obs,
-				done,
-				0,
-				update_step + 1,
-				rng,
-			)
+			if _use_backend:
+				next_runner_state = (
+					train_state,
+					final_env_state,
+					final_memory_dict,
+					final_obs,
+					done,
+					0,
+					update_step + 1,
+					rng,
+				)
+			else:
+				next_runner_state = (
+					train_state,
+					final_env_state,
+					final_memories,
+					final_mask,
+					final_mask_idx,
+					final_obs,
+					done,
+					0,
+					update_step + 1,
+					rng,
+				)
 
 			return next_runner_state, scoring_data
 
@@ -1021,6 +1231,8 @@ def run_training_session(
 	task_distribution_proportions=None,
 	global_update_step=0,
 	current_original_return=0.0,
+	backend=None,
+	checkpoint_params=None,
 ):
 	config_t = config.training
 	train_fn = make_train(
@@ -1030,6 +1242,8 @@ def run_training_session(
 		task_embeddings,
 		task_distribution_proportions,
 		global_update_step,
+		backend=backend,
+		checkpoint_params=checkpoint_params,
 	)
 	train_jit = jax.jit(train_fn)
 	print("JIT compiling and running training session (Transformer)...")

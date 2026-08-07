@@ -1,0 +1,11 @@
+{
+  "craftax": "?",
+  "gpu": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+  "jax": "0.6.0",
+  "llm_transport": {
+    "authorized": true,
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-plus"
+  },
+  "openai": "2.44.0"
+}

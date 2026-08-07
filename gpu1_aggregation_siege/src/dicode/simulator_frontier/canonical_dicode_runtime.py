@@ -650,7 +650,9 @@ def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
 
 
 def execute_one_update(runtime: Any, *, context: Any, plan: Any,
-                       adapter: Any) -> Mapping[str, Any]:
+                       adapter: Any,
+                       backend: Any = None,
+                       checkpoint_params: Any = None) -> Mapping[str, Any]:
     """Delegate ONE update with DiCode's EXACT ``run_session_training`` ABI.
 
     E3-P0-2: the real entry point is
@@ -663,6 +665,11 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
     ``sampled_task_ids = list(plan.curriculum_slots)`` (the OriginalTask is
     appended by DiCode exactly once and is NEVER in ``sampled_task_ids``),
     and verifies the returned ``OneUpdateReceipt`` at the contract level.
+
+    BUG-E3-01: ``backend`` and ``checkpoint_params`` are passed through to
+    ``run_session_training`` → ``run_training_session`` → ``make_train``
+    so the canonical DiCode PPO core trains the SELECTED Student's
+    architecture, not a fresh ActorCriticTransformer.
     """
     verify_canonical_dicode_one_update_runtime(runtime)
     if not isinstance(context, DiCodeOneUpdateContext):
@@ -698,6 +705,8 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
             int(context.current_session_idx),
             sampled_task_ids,
             context.original_return_prev_session,
+            backend=backend,
+            checkpoint_params=checkpoint_params,
         )
     except Exception as exc:
         raise ProductionBlockedError(

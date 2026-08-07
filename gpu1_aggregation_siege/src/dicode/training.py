@@ -7,6 +7,7 @@ This module provides functions for:
 """
 
 # --- Third-Party ---
+from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -46,6 +47,8 @@ def run_session_training(
     current_session_idx: int,
     sampled_task_ids: list[str],
     original_return_prev_session: float = 0.0,
+    backend: Any = None,
+    checkpoint_params: Any = None,
 ) -> tuple:
     """Runs a full training session on a sampled batch of tasks.
 
@@ -120,6 +123,8 @@ def run_session_training(
         task_distribution_proportions=task_distribution_proportions,
         global_update_step=global_update_step,
         current_original_return=original_return_prev_session,
+        backend=backend,
+        checkpoint_params=checkpoint_params,
     )
     print("  Training run finished.")
 

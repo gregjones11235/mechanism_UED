@@ -1,0 +1,5 @@
+{
+  "final_status": "OBJECT_LEVEL_CHECK_BLOCKED",
+  "reason": "NameError: name 'Any' is not defined",
+  "run_id": "e3_real_smoke_20260807T051802Z"
+}

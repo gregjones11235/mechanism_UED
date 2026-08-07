@@ -1,0 +1,5 @@
+{
+  "final_status": "OBJECT_LEVEL_CHECK_BLOCKED",
+  "reason": "StudentRegistryError: student profile missing: /home/oseasy/git_work/wt_e3_sim_frontier/conf/student_profiles/rmt16_persistent_98304.yaml",
+  "run_id": "e3_real_smoke_20260807T051632Z"
+}

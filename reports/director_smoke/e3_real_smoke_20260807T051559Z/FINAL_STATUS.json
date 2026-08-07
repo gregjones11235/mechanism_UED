@@ -1,0 +1,5 @@
+{
+  "final_status": "OBJECT_LEVEL_CHECK_BLOCKED",
+  "reason": "ModuleNotFoundError: No module named 'dicode.student_adapters.registry'",
+  "run_id": "e3_real_smoke_20260807T051559Z"
+}

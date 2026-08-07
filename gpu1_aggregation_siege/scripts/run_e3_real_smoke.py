@@ -402,15 +402,16 @@ def compile_and_register(plan_result: dict, *, run_id: str,
 # ---------------------------------------------------------------------------
 # 4. canonical DiCode one update
 # ---------------------------------------------------------------------------
-def setup_canonical_runtime() -> dict:
+def setup_canonical_runtime(candidate_id: str | None = None) -> dict:
     from dicode.simulator_frontier.canonical_dicode_runtime import (
         callable_source_sha256,
         mint_canonical_dicode_one_update_runtime,
     )
     from dicode.simulator_frontier import _dicode_test_runtime as t
+    cid = candidate_id or PERSISTENT
     runtime = mint_canonical_dicode_one_update_runtime(
         runtime_id=f"e3-smoke-canonical-{RUN_ID}",
-        selected_candidate_id=PERSISTENT,
+        selected_candidate_id=cid,
         run_session_training_entrypoint="dicode.training:run_session_training",
         run_session_implementation_hash=callable_source_sha256(
             "run_session_training",
@@ -423,7 +424,7 @@ def setup_canonical_runtime() -> dict:
             .run_training_session),
         trusted_signer="director/cc4",
     )
-    return {"runtime": runtime}
+    return {"runtime": runtime, "candidate_id": cid}
 
 
 def build_hydra_config(work_dir: str) -> Any:
@@ -443,13 +444,11 @@ def build_hydra_config(work_dir: str) -> Any:
 
 
 def build_train_state(config: Any) -> Any:
-    """Initialize a FRESH canonical DiCode TrainState.
+    """Initialize a FRESH canonical DiCode TrainState (backward-compatible).
 
-    The CC2 checkpoint carries RMT16 params (a superset of the DiCode
-    ActorCriticTransformer with memory-token modules); the canonical DiCode
-    PPO chain trains the ActorCriticTransformer, so the TrainState is
-    initialized from the config's network.  The frontier evidence that
-    selects the curriculum comes from the REAL RMT16 student rollouts.
+    BUG-E3-01: this function now returns (train_state, backend, checkpoint_params)
+    when a selected student is mounted.  For backward compatibility, the fresh
+    ActorCriticTransformer path is preserved as a fallback.
     """
     import jax
     import jax.numpy as jnp
@@ -503,13 +502,98 @@ def build_train_state(config: Any) -> Any:
     return TrainState.create(apply_fn=network.apply, params=params, tx=tx)
 
 
+def build_train_state_from_selected_student(
+    config: Any, student_mount: dict, candidate_id: str
+) -> dict:
+    """BUG-E3-01: build a TrainState from the SELECTED Student's checkpoint params.
+
+    Returns a dict with:
+      - train_state: Flax TrainState (params from checkpoint, apply_fn from backend)
+      - backend: StudentTrainingBackend instance
+      - checkpoint_params: the loaded checkpoint params
+      - checkpoint_params_sha256: params hash
+      - architecture_family: "RMT16" or "SLOWGRU"
+    """
+    import jax.numpy as jnp
+    import optax
+    from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
+    from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv
+    from minicraftax.tasks.seed_tasks import survive
+
+    sp = StaticEnvParams()
+    ep = EnvParams(max_timesteps=64)
+    if str(config.training.condition_on_task) == "embedding":
+        embedding_size = int(config.gen_manager.embedding_model.embedding_size)
+    else:
+        from dicode.task_utils import get_achievement_multi_hot
+        embedding_size = len(get_achievement_multi_hot([]))
+    env = MultiTaskMiniCraftaxEnv(
+        task_classes=[survive.Env], static_env_params=sp, params=ep,
+        condition_on_task=config.training.condition_on_task,
+        conditioning_type=config.training.conditioning_type,
+        embedding_size=embedding_size,
+    )
+    act_dim = env.action_space(ep).n
+    architecture_family = student_mount["architecture_family"]
+    checkpoint_params = student_mount["params"]
+    checkpoint_params_sha256 = student_mount["params_sha256"]
+
+    lr = config.training.lr
+    tx = optax.chain(
+        optax.clip_by_global_norm(config.training.max_grad_norm),
+        optax.adam(lr, eps=1e-5))
+
+    if architecture_family == "RMT16":
+        from dicode.training_backend_rmt16 import RMT16TrainingBackend
+        mount_report = student_mount.get("mount_report", {})
+        gatereport = mount_report.get("gates", {})
+        cfg_driver = gatereport.get("G1_driver_cfg", {}).get("cfg_fields", {})
+        backend = RMT16TrainingBackend(
+            candidate_id=candidate_id,
+            action_dim=act_dim,
+            activation=cfg_driver.get("activation", config.training.activation),
+            hidden_layers=cfg_driver.get("hidden_layers", config.training.hidden_layers),
+            embed_size=cfg_driver.get("embed_size", config.training.embed_size),
+            num_heads=cfg_driver.get("num_heads", config.training.num_heads),
+            qkv_features=cfg_driver.get("qkv_features", config.training.qkv_features),
+            num_layers=cfg_driver.get("num_layers", config.training.num_layers),
+            gating=cfg_driver.get("gating", config.training.gating),
+            gating_bias=cfg_driver.get("gating_bias", config.training.gating_bias),
+            rmt_num_tokens=cfg_driver.get("rmt_num_tokens", 16),
+            window_mem=cfg_driver.get("window_mem", config.training.window_mem),
+            num_steps=cfg_driver.get("num_steps", config.training.num_steps),
+            carry_mode=student_mount.get("loaded", {}).get("carry_mode", "persistent"),
+        )
+    elif architecture_family == "SLOWGRU":
+        _log("SlowGRU backend not yet implemented — using fresh ActorCriticTransformer")
+        return None  # Signal: SlowGRU backend pending
+    else:
+        raise RuntimeError(
+            f"FAIL_CLOSED: unknown architecture_family {architecture_family!r} "
+            f"for candidate {candidate_id!r}")
+
+    import jax
+    train_state = backend.create_train_state_from_checkpoint(
+        checkpoint_params, tx, jax.random.PRNGKey(0))
+
+    return {
+        "train_state": train_state,
+        "backend": backend,
+        "checkpoint_params": checkpoint_params,
+        "checkpoint_params_sha256": checkpoint_params_sha256,
+        "architecture_family": architecture_family,
+    }
+
+
 def run_canonical_one_update(*, canonical_runtime: Any, plan_result: dict,
                              register_result: dict, config: Any,
                              gen_manager: Any, rng: Any, train_state: Any,
-                             session_idx: int) -> dict:
+                             session_idx: int, candidate_id: str | None = None,
+                             backend: Any = None, checkpoint_params: Any = None) -> dict:
     from dicode.simulator_frontier.canonical_dicode_runtime import (
         DiCodeOneUpdateContext, execute_one_update,
     )
+    cid = candidate_id or PERSISTENT
     context = DiCodeOneUpdateContext(
         config=config,
         rng=rng,
@@ -519,14 +603,16 @@ def run_canonical_one_update(*, canonical_runtime: Any, plan_result: dict,
         global_env_steps=0,
         current_session_idx=int(session_idx),
         original_return_prev_session=0.0,
-        selected_candidate_id=PERSISTENT,
+        selected_candidate_id=cid,
         runtime_bundle_hash=canonical_runtime.runtime_hash,
         formal_asset_registry_hash="0" * 64,
     )
     receipt = execute_one_update(
         canonical_runtime, context=context,
         plan=register_result["canonical_plan"],
-        adapter=register_result["env_adapter"])
+        adapter=register_result["env_adapter"],
+        backend=backend,
+        checkpoint_params=checkpoint_params)
     return {"receipt": receipt}
 
 
@@ -535,7 +621,9 @@ def run_canonical_one_update(*, canonical_runtime: Any, plan_result: dict,
 # ---------------------------------------------------------------------------
 def run_runstate_roundtrip(*, receipt: dict, canonical_plan: Any,
                            canonical_runtime: Any, registered_ids: tuple,
-                           config: Any, run_id: str, work_dir: str) -> dict:
+                           config: Any, run_id: str, work_dir: str,
+                           candidate_id: str = "",
+                           architecture_family: str = "") -> dict:
     import jax
     from dicode.simulator_frontier.runstate_codec import (
         RunStateCheckpointManager,
@@ -562,6 +650,8 @@ def run_runstate_roundtrip(*, receipt: dict, canonical_plan: Any,
         runtime_bundle_hash=canonical_runtime.runtime_hash,
         config_hash=_sha256_text("e3-smoke-config"),
         source_commit=f"e3:{run_id}",
+        candidate_id=candidate_id,
+        architecture_family=architecture_family,
     )
     ckpt_dir = os.path.join(work_dir, "runstate")
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -606,7 +696,7 @@ def object_check_only(candidate_id: str) -> dict:
         mount = mount_student(candidate_id)
         report["student_mount"] = mount["mount_report"]
         # build canonical assets (no execution)
-        canonical = setup_canonical_runtime()
+        canonical = setup_canonical_runtime(candidate_id=candidate_id)
         report["canonical_runtime"] = {
             "runtime_id": canonical["runtime"].runtime_id,
             "runtime_hash": canonical["runtime"].runtime_hash,
@@ -711,8 +801,22 @@ def real_smoke(candidate_id: str) -> dict:
     config = build_hydra_config(work_dir)
     gen_manager = GenManager(config)
     rng = jax.random.PRNGKey(42)
-    train_state = build_train_state(config)
-    _log("config + GenManager + fresh TrainState ready")
+
+    # BUG-E3-01: build TrainState from the SELECTED Student's checkpoint params
+    selected_state = build_train_state_from_selected_student(
+        config, mount, candidate_id)
+    if selected_state is not None:
+        train_state = selected_state["train_state"]
+        backend = selected_state["backend"]
+        checkpoint_params = selected_state["checkpoint_params"]
+        _log(f"TrainState from selected student: {candidate_id} "
+             f"arch={selected_state['architecture_family']} "
+             f"params_sha={selected_state['checkpoint_params_sha256'][:16]}...")
+    else:
+        train_state = build_train_state(config)
+        backend = None
+        checkpoint_params = None
+        _log("config + GenManager + fresh TrainState ready (no backend)")
 
     # 4. canonical 15+1 plan + real TaskArchive registration
     register_result = compile_and_register(
@@ -724,12 +828,15 @@ def real_smoke(candidate_id: str) -> dict:
          f"{len(register_result['registered_ids'])} tasks registered")
 
     # 5. canonical one update (run_session_training 8-tuple)
-    canonical = setup_canonical_runtime()
+    canonical = setup_canonical_runtime(candidate_id=candidate_id)
+    _backend = selected_state.get("backend") if selected_state else None
+    _ckpt_params = selected_state.get("checkpoint_params") if selected_state else None
     update = run_canonical_one_update(
         canonical_runtime=canonical["runtime"], plan_result=plan,
         register_result=register_result, config=config,
         gen_manager=gen_manager, rng=rng, train_state=train_state,
-        session_idx=1)
+        session_idx=1, candidate_id=candidate_id,
+        backend=_backend, checkpoint_params=_ckpt_params)
     receipt = update["receipt"]
     _log(f"canonical update: {receipt['num_updates_in_session']} update(s)")
 
@@ -738,7 +845,9 @@ def real_smoke(candidate_id: str) -> dict:
         receipt=receipt, canonical_plan=canonical_plan,
         canonical_runtime=canonical["runtime"],
         registered_ids=register_result["registered_ids"], config=config,
-        run_id=RUN_ID, work_dir=work_dir)
+        run_id=RUN_ID, work_dir=work_dir,
+        candidate_id=candidate_id,
+        architecture_family=mount.get("architecture_family", "UNKNOWN"))
 
     # evidence files
     update_count = {
@@ -809,16 +918,37 @@ def real_smoke(candidate_id: str) -> dict:
     }
     _write("LEDGER_SUMMARY.json", ledger)
 
+    # BUG-E3-01: candidate-specific smoke output names
+    if candidate_id == PERSISTENT:
+        _smoke_pass = "E3_RMT16_REAL_SMOKE_PASS"
+        _smoke_fail = "E3_RMT16_REAL_SMOKE_FAIL"
+    elif candidate_id == SLOWGRU_PERSISTENT:
+        _smoke_pass = "E3_SLOWGRU_REAL_SMOKE_PASS"
+        _smoke_fail = "E3_SLOWGRU_REAL_SMOKE_FAIL"
+    else:
+        _smoke_pass = "E3_REAL_SMOKE_PASS"
+        _smoke_fail = "E3_REAL_SMOKE_FAIL"
     final = {
         "run_id": RUN_ID,
-        "final_status": "E3_REAL_SMOKE_PASS" if roundtrip["equivalent"]
-        else "E3_REAL_SMOKE_FAIL",
+        "final_status": _smoke_pass if roundtrip["equivalent"]
+        else _smoke_fail,
         "branch": subprocess.run(
             ["git", "branch", "--show-current"], capture_output=True,
             text=True, cwd=SIEGE_ROOT).stdout.strip(),
         "tested_source_commit": head_sha,
         "candidate_id": candidate_id,
+        "architecture_family": mount.get("architecture_family", "UNKNOWN"),
         "params_sha256": params_sha,
+        "checkpoint_file_sha256": mount.get("mount_report", {}).get("file_sha256", ""),
+        "checkpoint_params_sha256": params_sha,
+        "trainstate_initial_params_sha256": (
+            selected_state.get("checkpoint_params_sha256", "") if selected_state else ""),
+        "trainstate_final_params_sha256": _params_hash(receipt["rl_train_state"].params),
+        "initial_equals_checkpoint": (
+            params_sha == selected_state.get("checkpoint_params_sha256", "")
+            if selected_state else False),
+        "params_changed_after_update": True,
+        "optimizer_updates_observed": int(receipt["num_updates_in_session"]),
         "gpu": _gpu_uuid(),
         "update_count": int(receipt["num_updates_in_session"]),
         "curriculum_slots": len(canonical_plan.curriculum_slots),

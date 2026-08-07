@@ -1,0 +1,13 @@
+{
+  "branch": "henry/simulator-frontier-foundation-codex",
+  "git_diff_check": "0 errors",
+  "head": "427cd0797c86bf3b1f59f1d85ec4eaec1ce6cce5",
+  "py_compile": "0 errors",
+  "pytest_gate": "run separately: pytest tests/simulator_frontier (failed=0/errors=0)",
+  "source_files_modified": [
+    "src/dicode/simulator_frontier/e3_window.py",
+    "src/dicode/simulator_frontier/runstate_codec.py",
+    "src/dicode/simulator_frontier/canonical_dicode_runtime.py"
+  ],
+  "tests_run": "tests/simulator_frontier"
+}

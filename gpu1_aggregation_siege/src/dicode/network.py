@@ -103,6 +103,8 @@ class Transition:
 	memories_indices: jnp.ndarray
 	obs: jnp.ndarray
 	info: jnp.ndarray
+	# BUG-E3-01: RMT16 entering tokens per step for training window
+	rmt_entering_tokens: jnp.ndarray | None = None
 
 
 # --- TRANSFORMER ---

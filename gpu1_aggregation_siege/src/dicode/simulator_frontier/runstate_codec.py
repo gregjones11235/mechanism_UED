@@ -49,6 +49,8 @@ REQUIRED_RUNSTATE_FIELDS = (
     "global_update_step", "global_env_steps", "current_session_idx",
     "task_archive_identity", "plan_hash", "runtime_bundle_hash",
     "config_hash", "source_commit",
+    # BUG-E3-01: architecture identity fields for the selected Student
+    "candidate_id", "architecture_family",
 )
 
 RUNSTATE_CODEC_VERSION = "simulator_frontier.runstate_codec/v1"
@@ -254,12 +256,17 @@ def build_full_run_state(*, rl_train_state: Any, training_rng: Any,
                          task_archive_identity: str, plan_hash: str,
                          runtime_bundle_hash: str, config_hash: str,
                          source_commit: str,
+                         candidate_id: str = "",
+                         architecture_family: str = "",
                          extra: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Assemble the COMPLETE canonical run state for checkpointing.
 
     ``rl_train_state`` carries params + opt_state + step; the RNGs, counters,
     session index, task-archive identity, plan / runtime-bundle / config
     hashes and the source commit ALL enter the checkpoint.
+
+    BUG-E3-01: ``candidate_id`` and ``architecture_family`` identify the
+    selected Student whose architecture was trained.
     """
     params = getattr(rl_train_state, "params", None)
     opt_state = getattr(rl_train_state, "opt_state", None)
@@ -282,6 +289,8 @@ def build_full_run_state(*, rl_train_state: Any, training_rng: Any,
         "runtime_bundle_hash": runtime_bundle_hash,
         "config_hash": config_hash,
         "source_commit": source_commit,
+        "candidate_id": str(candidate_id),
+        "architecture_family": str(architecture_family),
     }
     if extra:
         run_state.update(dict(extra))

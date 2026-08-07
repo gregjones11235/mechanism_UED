@@ -1,0 +1,71 @@
+{
+  "checkpoint_writes": 0,
+  "counts_all_zero": true,
+  "elapsed_s": 29.77,
+  "error": "NameError: name 'Any' is not defined",
+  "executed": false,
+  "llm_calls": 0,
+  "note": "object check-only: real assets mounted, NO execution",
+  "optimizer_updates": 0,
+  "paid_calls": 0,
+  "probe_executions": 0,
+  "production_taskarchive_writes": 0,
+  "status": "OBJECT_LEVEL_CHECK_BLOCKED",
+  "student_mount": {
+    "architecture_family": "RMT16",
+    "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+    "gates": {
+      "G0_identity": {
+        "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+        "identity_hash": "822f5789619bf9a16b2eea20fefe3c95cd701906399c49d88c20467c67cb14bc"
+      },
+      "G1_driver_cfg": {
+        "cfg_fields": {
+          "activation": "relu",
+          "embed_size": 256,
+          "gating": true,
+          "gating_bias": 2.0,
+          "hidden_layers": 256,
+          "num_heads": 8,
+          "num_layers": 2,
+          "num_steps": 128,
+          "qkv_features": 256,
+          "rmt_num_tokens": 16,
+          "window_mem": 128
+        },
+        "driver_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc"
+      },
+      "G2_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+      "G3_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+      "G4_manifest": {
+        "arm": "RMT16-Persistent-OrigVtrace",
+        "carry_mode": "persistent",
+        "step": 98304
+      },
+      "G5_structure": {
+        "action_count": 43,
+        "actor_out_kernel_shape": [
+          256,
+          43
+        ],
+        "craftax_len_action": 43,
+        "encoder_kernel_shape": [
+          8335,
+          256
+        ],
+        "num_params_leaves": 101,
+        "observation_dim": 8335
+      },
+      "G6_absent_components": {
+        "optimizer": "ABSENT_IN_CHECKPOINT",
+        "policy_memory": "ABSENT_IN_CHECKPOINT (memory re-derives from the CC2 reset convention via initial_memory)",
+        "train_rng": "ABSENT_IN_CHECKPOINT"
+      }
+    },
+    "global_step": 98304,
+    "params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d"
+  },
+  "target": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+}

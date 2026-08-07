@@ -1476,6 +1476,9 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
         runtime_bundle_hash=canonical_runtime.runtime_hash,
         config_hash=_config_hash,
         source_commit=f"e3:{config.run_id}",
+        candidate_id=str(config.selected_candidate_id),
+        architecture_family=str(config.student.identity().architecture_family
+                               if config.student is not None else "UNKNOWN"),
     )
     os.makedirs(config.runstate_checkpoint_dir, exist_ok=True)
     _ckpt_path = str(os.path.join(config.runstate_checkpoint_dir,
@@ -1485,13 +1488,16 @@ def one_window_pipeline(config: E3WindowConfig) -> dict[str, Any]:
                                  idempotency_token=config.run_id)
     report["checkpoint_reload"] = True
     steps["STEP12_FULL_RUNSTATE_CHECKPOINT"] = {
-        "kind": "Canonical DiCode RunState (params+opt_state+step+rng+session+archive+plan+bundle)",
+        "kind": "Canonical DiCode RunState (params+opt_state+step+rng+session+archive+plan+bundle+architecture)",
         "checkpoint_path": _ckpt_path,
         "checkpoint_hash": _save_report["checkpoint_hash"],
         "state_file_sha256": _save_report["state_file_sha256"],
         "fields": sorted(run_state.keys()),
         "num_updates_in_session": int(receipt["num_updates_in_session"]),
         "train_step_after": int(getattr(new_train_state, "step", 0)),
+        "candidate_id": str(config.selected_candidate_id),
+        "architecture_family": str(config.student.identity().architecture_family
+                                   if config.student is not None else "UNKNOWN"),
     }
 
     # STEP 13 — FRESH-PROCESS restore + next-policy-step equivalence.
