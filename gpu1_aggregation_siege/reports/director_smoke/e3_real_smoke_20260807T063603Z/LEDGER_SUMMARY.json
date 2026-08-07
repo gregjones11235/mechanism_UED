@@ -1,0 +1,11 @@
+{
+  "authorization_id": "auth-e3_real_smoke_20260807T063603Z",
+  "duplicate_calls": false,
+  "journal_entries": 2,
+  "journal_hash": "15eee0c36ba7ade420f1eea81b8caabe372c5de9f16b0532469225d4683e4cce",
+  "llm_calls": 2,
+  "role_order": [
+    "frontier_evidence_diagnostician",
+    "curriculum_search_planner"
+  ]
+}

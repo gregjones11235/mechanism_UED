@@ -1,0 +1,24 @@
+{
+  "checkpoint_hash": "199717313cd5adbcef06608743cdf880d7d1d4026ae9eb788f248370a83e64b4",
+  "checkpoint_path": "/home/oseasy/git_work/wt_e3_sim_frontier/gpu1_aggregation_siege/reports/director_smoke/e3_real_smoke_20260807T063603Z/canonical_update/runstate/e3_smoke_runstate",
+  "checkpoint_written": true,
+  "fields": [
+    "architecture_family",
+    "candidate_id",
+    "config_hash",
+    "current_session_idx",
+    "env_rng",
+    "global_env_steps",
+    "global_update_step",
+    "opt_state",
+    "params",
+    "plan_hash",
+    "runtime_bundle_hash",
+    "source_commit",
+    "task_archive_identity",
+    "train_step",
+    "training_rng"
+  ],
+  "kind": "Canonical DiCode RunState (params+opt_state+step+rng+session+archive+plan+bundle)",
+  "state_file_sha256": "a20e8d5b2ca0872ec900a576bfe693baf19b6e906c771a7c657f983581413f63"
+}
