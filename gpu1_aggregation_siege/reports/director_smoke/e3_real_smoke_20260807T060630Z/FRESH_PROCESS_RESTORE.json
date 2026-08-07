@@ -1,0 +1,10 @@
+{
+  "checkpoint_hash_child": "3a1b10c80a8d45513d13b54e45ee92379ee9b42025fc90a2ca6b746316f0f4f2",
+  "content_hash_child": "478bf8c7e3f2c60482690f80682edb50ba97b60776801239f7f46db6dbc6e576",
+  "content_hash_parent": "478bf8c7e3f2c60482690f80682edb50ba97b60776801239f7f46db6dbc6e576",
+  "current_session_idx_child": 1,
+  "equivalent": true,
+  "global_update_step_child": 1,
+  "independent_process": true,
+  "ran": true
+}

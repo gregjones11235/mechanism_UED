@@ -1,0 +1,73 @@
+{
+  "canonical_runtime": {
+    "entrypoint": "dicode.training:run_session_training",
+    "runtime_hash": "ffaa1e833432c0724e7c8d8a45f98c7b224c4912ebb79c5f37812ef08377b652",
+    "runtime_id": "e3-smoke-canonical-e3_real_smoke_20260807T055538Z"
+  },
+  "checkpoint_writes": 0,
+  "counts_all_zero": true,
+  "elapsed_s": 7.41,
+  "executed": false,
+  "llm_calls": 0,
+  "llm_transport": {
+    "authorized": true,
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-plus"
+  },
+  "note": "object check-only: real assets mounted, NO execution",
+  "optimizer_updates": 0,
+  "paid_calls": 0,
+  "probe_executions": 0,
+  "production_taskarchive_writes": 0,
+  "status": "E3_SLOWGRU_PERSISTENT_OBJECT_CHECK_ONLY_OK",
+  "student_mount": {
+    "architecture_family": "SLOWGRU",
+    "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+    "driver_source_sha256": "7918333c63bdb6c8917bf423dfb8484942fb46edc6a7c8fa7e36c769cada2545",
+    "file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+    "gates": {
+      "G0_identity": {
+        "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+        "identity_hash": "aa9f976c28fdfd5b94a81c1340102636606b4b8b7f68c19a02b0e67a8939ca6a"
+      },
+      "G1_contract": {
+        "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+        "carry_mode": "PERSISTENT",
+        "contract_checkpoint_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl"
+      },
+      "G2_runtime_path": {
+        "slowgru_runtime_path": "/home/oseasy/student_pool_v1/cc3/slowgru_runtime"
+      },
+      "G3_network_src_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+      "G4_load": {
+        "carry_mode": "PERSISTENT",
+        "file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+        "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+        "runtime": "THIN_GTRXL128_SLOWGRU_RUNTIME"
+      },
+      "G5_trainer_src_sha256": "7918333c63bdb6c8917bf423dfb8484942fb46edc6a7c8fa7e36c769cada2545",
+      "G6_memory_contract": {
+        "fields_checked": [
+          "longstate.buf",
+          "longstate.count",
+          "longstate.h",
+          "memories",
+          "memories_mask",
+          "memories_mask_idx"
+        ],
+        "mode": "PERSISTENT"
+      },
+      "G7_action_count": {
+        "craftax_len_action": 43,
+        "profile_action_count": 43
+      }
+    },
+    "global_step": 98304,
+    "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc"
+  },
+  "target": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "two_llm_runtime": {
+    "authorization_id": "auth-e3_real_smoke_20260807T055538Z",
+    "bound": true
+  }
+}

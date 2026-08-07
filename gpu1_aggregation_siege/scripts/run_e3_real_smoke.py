@@ -565,8 +565,15 @@ def build_train_state_from_selected_student(
             carry_mode=student_mount.get("loaded", {}).get("carry_mode", "persistent"),
         )
     elif architecture_family == "SLOWGRU":
-        _log("SlowGRU backend not yet implemented — using fresh ActorCriticTransformer")
-        return None  # Signal: SlowGRU backend pending
+        from dicode.training_backend_slowgru import SlowGRUTrainingBackend
+        backend = SlowGRUTrainingBackend(
+            candidate_id=candidate_id,
+            slowgru_runtime_path=SLOWGRU_RUNTIME_PATH,
+            checkpoint_contract_path=SLOWGRU_CHECKPOINT_CONTRACT_PATH,
+            checkpoint_path=CHECKPOINTS[candidate_id],
+            action_dim=act_dim,
+            carry_mode="PERSISTENT",
+        )
     else:
         raise RuntimeError(
             f"FAIL_CLOSED: unknown architecture_family {architecture_family!r} "
