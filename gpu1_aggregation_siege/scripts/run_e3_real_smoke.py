@@ -24,7 +24,7 @@ Environment (set by the launcher, never defaulted):
   CUDA_VISIBLE_DEVICES=2, PYTHONPATH=<repo>/gpu1_aggregation_siege/src
 
 Usage:
-    python run_e3_real_smoke.py [--check-only] [--student=persistent|reset128]
+    python run_e3_real_smoke.py [--check-only] [--student=PERSISTENT_RMT16_ORIGINAL_VTRACE_98304|RESET128_RMT16_ORIGINAL_VTRACE_98304|SLOWGRU_PERSISTENT_CANONICAL_98304]
 
 ``--check-only`` mounts the REAL student + builds the REAL canonical assets
 and stops BEFORE any rollout / LLM / probe / update / checkpoint write
@@ -58,20 +58,32 @@ OUT_DIR = os.path.join(SIEGE_ROOT, "reports", "director_smoke", RUN_ID)
 
 PERSISTENT = "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
 RESET128 = "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+SLOWGRU_PERSISTENT = "SLOWGRU_PERSISTENT_CANONICAL_98304"
 
 CHECKPOINTS = {
     PERSISTENT: "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl",
     RESET128: "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl",
+    SLOWGRU_PERSISTENT: "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
 }
 PROFILES = {
     PERSISTENT: "rmt16_persistent_98304",
     RESET128: "rmt16_reset128_98304",
+    SLOWGRU_PERSISTENT: "slowgru_persistent_98304",
 }
 FROZEN_DRIVER_PATH = ("/home/oseasy/cc4_tier3_eval_20260730/repo/"
                       "D:/Projects/dicode-codex-director/orchestration/control/"
                       "_cc2_stage/train_rmt16_p2replay.py")
 FROZEN_DRIVER_SOURCE_SHA256 = ("453bd1ecc8d9671c741c4462214bd7699c74611a52"
                                "ec157ff30cd68653b4bafc")
+
+# SlowGRU asset map (server paths — runtime only, NOT in profiles)
+SLOWGRU_RUNTIME_PATH = "/home/oseasy/student_pool_v1/cc3/slowgru_runtime"
+SLOWGRU_CHECKPOINT_CONTRACT_PATH = ("/home/oseasy/student_pool_v1/cc3/"
+                                    "SLOWGRU_PERSISTENT_CANONICAL_98304/"
+                                    "checkpoint_contract.json")
+SLOWGRU_NETWORK_SRC_SHA256 = "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b"
+SLOWGRU_TRAINER_SRC_SHA256 = "7918333c63bdb6c8917bf423dfb8484942fb46edc6a7c8fa7e36c769cada2545"
+
 SMOKE_SIGNER = "mechanism_UED.e3_real_smoke.signer"
 
 
@@ -104,17 +116,49 @@ def _params_hash(tree) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 0. mount the REAL persistent student (exact restore)
+# 0. mount the REAL student (exact restore) — adapter-resolved by profile
 # ---------------------------------------------------------------------------
+def resolve_adapter(candidate_id: str, profile):
+    """Resolve the correct StudentAdapter for a candidate_id + profile.
+
+    Raises (fail closed) on unknown family / adapter mismatch / missing paths.
+    """
+    family = profile.architecture_family
+    if family == "RMT16":
+        from dicode.student_adapters.rmt16_adapter import RMT16StudentAdapter
+        return RMT16StudentAdapter(
+            profile, driver_source_path=FROZEN_DRIVER_PATH,
+            expected_driver_sha256=FROZEN_DRIVER_SOURCE_SHA256)
+    if family == "SLOWGRU":
+        from dicode.student_adapters.slowgru_adapter import SlowGRUStudentAdapter
+        _require_asset(candidate_id,
+                       SLOWGRU_RUNTIME_PATH, "SLOWGRU_RUNTIME_PATH")
+        _require_asset(candidate_id,
+                       SLOWGRU_CHECKPOINT_CONTRACT_PATH,
+                       "SLOWGRU_CHECKPOINT_CONTRACT_PATH")
+        return SlowGRUStudentAdapter(
+            profile,
+            slowgru_runtime_path=SLOWGRU_RUNTIME_PATH,
+            checkpoint_contract_path=SLOWGRU_CHECKPOINT_CONTRACT_PATH,
+            expected_network_src_sha256=SLOWGRU_NETWORK_SRC_SHA256,
+            expected_trainer_src_sha256=SLOWGRU_TRAINER_SRC_SHA256)
+    raise RuntimeError(
+        f"FAIL_CLOSED: unknown architecture_family {family!r} for "
+        f"candidate {candidate_id!r} (never guess)")
+
+
+def _require_asset(candidate_id: str, value: Any, name: str) -> None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise RuntimeError(
+            f"FAIL_CLOSED: {name} not configured for {candidate_id!r}")
+
+
 def mount_student(candidate_id: str) -> dict:
     from dicode.student_adapters.registry import (
         default_profile_dir, load_student_profile)
-    from dicode.student_adapters.rmt16_adapter import RMT16StudentAdapter
     profile = load_student_profile(
         default_profile_dir() / f"{PROFILES[candidate_id]}.yaml")
-    adapter = RMT16StudentAdapter(
-        profile, driver_source_path=FROZEN_DRIVER_PATH,
-        expected_driver_sha256=FROZEN_DRIVER_SOURCE_SHA256)
+    adapter = resolve_adapter(candidate_id, profile)
     loaded = adapter.load_full_state(
         CHECKPOINTS[candidate_id], profile.expected_identity())
     return {
@@ -125,16 +169,16 @@ def mount_student(candidate_id: str) -> dict:
         "params_sha256": loaded["params_sha256"],
         "identity_hash": str(adapter.identity().identity_hash()),
         "candidate_id": candidate_id,
+        "architecture_family": profile.architecture_family,
         "mount_report": {
             "candidate_id": candidate_id,
+            "architecture_family": profile.architecture_family,
             "params_sha256": loaded["params_sha256"],
             "file_sha256": loaded["file_sha256"],
-            "driver_source_sha256": loaded["driver_source_sha256"],
+            "driver_source_sha256": loaded.get("driver_source_sha256", ""),
             "global_step": loaded["global_step"],
             "gates": {k: v for k, v in loaded["gates"].items()
-                      if k in ("G0_identity", "G1_driver_cfg", "G2_file_sha256",
-                               "G3_params_sha256", "G4_manifest",
-                               "G5_structure", "G6_absent_components")},
+                      if k.startswith("G")},
         },
     }
 
@@ -582,7 +626,7 @@ def object_check_only(candidate_id: str) -> dict:
                                and (os.environ.get("DASHSCOPE_API_KEY", "")
                                     or os.environ.get("OPENAI_API_KEY", ""))),
         }
-        report["status"] = "E3_PERSISTENT_OBJECT_CHECK_ONLY_OK"
+        report["status"] = "E3_SLOWGRU_PERSISTENT_OBJECT_CHECK_ONLY_OK" if candidate_id == SLOWGRU_PERSISTENT else "E3_PERSISTENT_OBJECT_CHECK_ONLY_OK"
         report["executed"] = False
         report["counts_all_zero"] = True
     except Exception as exc:
@@ -897,10 +941,11 @@ def main(argv=None) -> int:
         if check_only:
             report = object_check_only(candidate_id)
             status = report.get("status")
-            if status == "E3_PERSISTENT_OBJECT_CHECK_ONLY_OK":
+            if status in ("E3_PERSISTENT_OBJECT_CHECK_ONLY_OK",
+                         "E3_SLOWGRU_PERSISTENT_OBJECT_CHECK_ONLY_OK"):
                 _write("FINAL_STATUS.json", {
                     "run_id": RUN_ID,
-                    "final_status": "E3_PERSISTENT_OBJECT_CHECK_ONLY_OK",
+                    "final_status": status,
                     "check_only": True,
                     "llm_calls": 0, "probe_executions": 0,
                     "optimizer_updates": 0, "checkpoint_writes": 0,

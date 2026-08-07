@@ -291,11 +291,12 @@ EXPECTED_CANDIDATES = {
     "gtrxl128_control_98304": "CONTROL_CONTINUOUS_98304",
     "baseline_teacher_17500_smoke": "BASELINE_TEACHER_CKPT17500",
     "slowgru_persistent_24576_compat": "SLOWGRU_PERSISTENT_24576",
+    "slowgru_persistent_98304": "SLOWGRU_PERSISTENT_CANONICAL_98304",
 }
 
 
 class TestProfileLoading:
-    def test_all_five_profiles_load_with_contracted_interface(self):
+    def test_all_six_profiles_load_with_contracted_interface(self):
         profile_dir = default_profile_dir()
         files = sorted(profile_dir.glob("*.yaml"))
         assert {f.stem for f in files} == set(EXPECTED_CANDIDATES)
