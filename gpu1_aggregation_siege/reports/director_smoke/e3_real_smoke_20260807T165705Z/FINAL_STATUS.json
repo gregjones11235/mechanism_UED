@@ -22,7 +22,7 @@
   "params_changed_after_update": true,
   "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
   "run_id": "e3_real_smoke_20260807T165705Z",
-  "tested_source_commit": "7611e03778304436c879d37d9a3f11d27c27a270",
+  "tested_source_commit": "2a778e660b5bde9d4ca6dab71c4a86225b34b0e3",
   "trainstate_final_params_sha256": "0c346740c7e116ab318238ae526d55fe7e009b5ef92b2179a87cddf6222d9cbb",
   "trainstate_initial_params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
   "update_count": 1

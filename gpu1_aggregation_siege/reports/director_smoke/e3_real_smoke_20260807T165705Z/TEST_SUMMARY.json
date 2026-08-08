@@ -1,7 +1,7 @@
 {
   "branch": "henry/simulator-frontier-foundation-codex",
   "git_diff_check": "0 errors",
-  "head": "7611e03778304436c879d37d9a3f11d27c27a270",
+  "head": "2a778e660b5bde9d4ca6dab71c4a86225b34b0e3",
   "py_compile": "0 errors",
   "pytest_gate": "run separately: pytest tests/simulator_frontier (failed=0/errors=0)",
   "source_files_modified": [
