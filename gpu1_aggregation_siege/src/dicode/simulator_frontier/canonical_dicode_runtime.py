@@ -36,6 +36,10 @@ from typing import Any, Mapping
 from .errors import InvalidEvidenceError, ProductionBlockedError
 
 CANONICAL_DICODE_RUNTIME_VERSION = "canonical-dicode-one-update-runtime/v1"
+# E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128: the formal session runtime
+# delegates ONE invocation to DiCode's run_session_training with the configured
+# max_updates_per_session (100) — never a for-loop of one-update calls.
+CANONICAL_DICODE_SESSION_RUNTIME_VERSION = "canonical-dicode-session-runtime/v1"
 CANONICAL_BATCH_PLAN_SCHEMA = "simulator_frontier.canonical-dicode-batch-plan/v1"
 ENV_ADAPTER_SCHEMA = "simulator_frontier.frontier-distribution-env-adapter/v1"
 
@@ -560,6 +564,121 @@ def verify_canonical_dicode_one_update_runtime(runtime: Any) -> None:
             "with or self-reported (fail closed)")
 
 
+@dataclass(frozen=True)
+class CanonicalDiCodeSessionRuntime:
+    """The formal SESSION runtime bound to DiCode's original training chain.
+
+    E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128: one invocation == one native
+    ``run_session_training`` == ``config.dicode_manager.max_updates_per_session``
+    (100) outer updates.  This is the formal replacement for the one-update
+    smoke runtime; it NEVER builds a second training loop or a for-loop of
+    single updates — DiCode's own ``run_training_session`` runs the full
+    session.
+
+    Mint-only: resolves and source-hash binds BOTH DiCode entry points
+    (``run_session_training`` and ``run_training_session``); ``runtime_hash``
+    is computed in ``__post_init__``; a synthetic trusted signer is rejected.
+    """
+
+    runtime_id: str
+    selected_candidate_id: str
+    run_session_training_entrypoint: str
+    run_session_implementation_hash: str
+    run_training_session_entrypoint: str
+    run_training_implementation_hash: str
+    trusted_signer: str
+    runtime_hash: str = field(init=False)
+    runtime_version: str = CANONICAL_DICODE_SESSION_RUNTIME_VERSION
+
+    def __post_init__(self) -> None:
+        _require_nonempty_str("runtime_id", self.runtime_id)
+        _require_nonempty_str("selected_candidate_id", self.selected_candidate_id)
+        _require_nonempty_str("trusted_signer", self.trusted_signer)
+        if str(self.trusted_signer).startswith(_SYNTHETIC_SIGNATURE_PREFIX):
+            raise InvalidEvidenceError(
+                "trusted_signer must be a real director signer id — a synthetic "
+                "self-signature can never bind the DiCode training runtime")
+        _require_sha256("run_session_implementation_hash",
+                        self.run_session_implementation_hash)
+        _require_sha256("run_training_implementation_hash",
+                        self.run_training_implementation_hash)
+        if self.run_session_training_entrypoint.count(":") != 1 \
+                or self.run_training_session_entrypoint.count(":") != 1:
+            raise InvalidEvidenceError(
+                "run_session_training and run_training_session entry points "
+                "must be 'module:attr'")
+        payload = {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name != "runtime_hash"
+        }
+        object.__setattr__(self, "runtime_hash", _canonical_sha256(payload))
+
+
+def mint_canonical_dicode_session_runtime(
+        *, runtime_id: Any, selected_candidate_id: Any,
+        run_session_training_entrypoint: Any,
+        run_session_implementation_hash: Any,
+        run_training_session_entrypoint: Any,
+        run_training_implementation_hash: Any,
+        trusted_signer: Any) -> CanonicalDiCodeSessionRuntime:
+    session = _import_entrypoint(str(run_session_training_entrypoint),
+                                 "run_session_training")
+    if callable_source_sha256("run_session_training", session) \
+            != _require_sha256("run_session_implementation_hash",
+                               run_session_implementation_hash):
+        raise InvalidEvidenceError(
+            "run_session_training implementation hash drift (substitution "
+            "rejected)")
+    training = _import_entrypoint(str(run_training_session_entrypoint),
+                                  "run_training_session")
+    if callable_source_sha256("run_training_session", training) \
+            != _require_sha256("run_training_implementation_hash",
+                               run_training_implementation_hash):
+        raise InvalidEvidenceError(
+            "run_training_session implementation hash drift (substitution "
+            "rejected)")
+    return CanonicalDiCodeSessionRuntime(
+        runtime_id=str(runtime_id),
+        selected_candidate_id=str(selected_candidate_id),
+        run_session_training_entrypoint=str(run_session_training_entrypoint),
+        run_session_implementation_hash=str(run_session_implementation_hash),
+        run_training_session_entrypoint=str(run_training_session_entrypoint),
+        run_training_implementation_hash=str(run_training_implementation_hash),
+        trusted_signer=str(trusted_signer),
+    )
+
+
+def verify_canonical_dicode_session_runtime(runtime: Any) -> None:
+    if isinstance(runtime, Mapping) or not isinstance(
+            runtime, CanonicalDiCodeSessionRuntime):
+        raise InvalidEvidenceError(
+            "expected a minted CanonicalDiCodeSessionRuntime")
+    session = _import_entrypoint(runtime.run_session_training_entrypoint,
+                                 "run_session_training")
+    if callable_source_sha256("run_session_training", session) \
+            != runtime.run_session_implementation_hash:
+        raise InvalidEvidenceError(
+            "run_session_training implementation hash drift (substitution "
+            "rejected)")
+    training = _import_entrypoint(runtime.run_training_session_entrypoint,
+                                  "run_training_session")
+    if callable_source_sha256("run_training_session", training) \
+            != runtime.run_training_implementation_hash:
+        raise InvalidEvidenceError(
+            "run_training_session implementation hash drift (substitution "
+            "rejected)")
+    payload = {
+        f.name: getattr(runtime, f.name)
+        for f in fields(runtime)
+        if f.name != "runtime_hash"
+    }
+    if _canonical_sha256(payload) != runtime.runtime_hash:
+        raise InvalidEvidenceError(
+            "runtime_hash mismatch: the canonical DiCode session runtime was "
+            "tampered with or self-reported (fail closed)")
+
+
 def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
                                 non_target_anchor_ids: Any,
                                 original_task_anchor_id: Any,
@@ -649,43 +768,33 @@ def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
     )
 
 
-def execute_one_update(runtime: Any, *, context: Any, plan: Any,
-                       adapter: Any,
-                       backend: Any = None,
-                       checkpoint_params: Any = None) -> Mapping[str, Any]:
-    """Delegate ONE update with DiCode's EXACT ``run_session_training`` ABI.
+def _delegate_canonical_session(runtime: Any, *, context: Any, plan: Any,
+                                adapter: Any, backend: Any = None,
+                                checkpoint_params: Any = None,
+                                purpose: str = "session") -> Mapping[str, Any]:
+    """Common delegate: call DiCode's ``run_session_training`` with the EXACT
+    8-tuple ABI and validate every field fail-closed.
 
-    E3-P0-2: the real entry point is
-    ``dicode.training.run_session_training(config, rng, rl_train_state,
-    gen_manager, global_update_step, global_env_steps, current_session_idx,
-    sampled_task_ids, original_return_prev_session)``.  Direction 三 NEVER
-    updates params itself and NEVER builds a second training loop: it
-    assembles a minted ``DiCodeOneUpdateContext``, registers the 15
-    curriculum tasks via the environment adapter, passes
-    ``sampled_task_ids = list(plan.curriculum_slots)`` (the OriginalTask is
-    appended by DiCode exactly once and is NEVER in ``sampled_task_ids``),
-    and verifies the returned ``OneUpdateReceipt`` at the contract level.
-
-    BUG-E3-01: ``backend`` and ``checkpoint_params`` are passed through to
-    ``run_session_training`` → ``run_training_session`` → ``make_train``
-    so the canonical DiCode PPO core trains the SELECTED Student's
-    architecture, not a fresh ActorCriticTransformer.
+    Shared by ``execute_one_update`` (smoke/unit, config max_updates_per_session
+    forced to 1) and ``execute_session`` (formal, config
+    max_updates_per_session = 100).  Direction 三 NEVER updates params itself
+    and NEVER builds a second training loop; ``sampled_task_ids`` come from the
+    minted plan and the OriginalTask is appended by DiCode exactly once.
     """
-    verify_canonical_dicode_one_update_runtime(runtime)
     if not isinstance(context, DiCodeOneUpdateContext):
         raise InvalidEvidenceError(
-            "execute_one_update requires a minted DiCodeOneUpdateContext")
+            f"execute_{purpose} requires a minted DiCodeOneUpdateContext")
     if str(context.selected_candidate_id) != str(runtime.selected_candidate_id):
         raise InvalidEvidenceError(
-            "execute_one_update: the context selected_candidate_id must equal "
+            f"execute_{purpose}: the context selected_candidate_id must equal "
             "the runtime selected_candidate_id (training binds the SELECTED "
             "Student; fail closed)")
     if not isinstance(plan, CanonicalDiCodeTrainingBatchPlan):
         raise InvalidEvidenceError(
-            "execute_one_update requires a minted CanonicalDiCodeTrainingBatchPlan")
+            f"execute_{purpose} requires a minted CanonicalDiCodeTrainingBatchPlan")
     if not isinstance(adapter, FrontierDistributionEnvironmentAdapter):
         raise InvalidEvidenceError(
-            "execute_one_update requires a minted "
+            f"execute_{purpose} requires a minted "
             "FrontierDistributionEnvironmentAdapter")
     session = _import_entrypoint(runtime.run_session_training_entrypoint,
                                  "run_session_training")
@@ -710,7 +819,7 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
         )
     except Exception as exc:
         raise ProductionBlockedError(
-            f"run_session_training rejected the one-update request: {exc!r}") from exc
+            f"run_session_training rejected the {purpose} request: {exc!r}") from exc
     # BUG-E3-06: run_session_training returns the canonical EIGHT-tuple
     # (rng, rl_train_state, global_update_step, global_env_steps,
     #  training_metrics, num_updates_in_session, categorized_tasks,
@@ -759,7 +868,7 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
         if final_memory is None:
             raise ProductionBlockedError(
                 "ARCHITECTURE_MEMORY_MISSING: a backend was bound for this "
-                "one-update session but no final architecture memory was "
+                f"{purpose} session but no final architecture memory was "
                 "captured (the RunState must carry REAL post-session memory "
                 "values; fail closed)")
     return {
@@ -774,3 +883,46 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
         "sampled_task_ids": tuple(sampled_task_ids),
         "architecture_memory": final_memory,
     }
+
+
+def execute_one_update(runtime: Any, *, context: Any, plan: Any,
+                       adapter: Any,
+                       backend: Any = None,
+                       checkpoint_params: Any = None) -> Mapping[str, Any]:
+    """Delegate ONE canonical DiCode update (smoke / unit test contract).
+
+    E3-P0-2: this is the single-update runtime used by unit tests, object
+    checks and single-update smoke.  ``context.config`` must force
+    ``dicode_manager.max_updates_per_session == 1`` (build_hydra_config
+    default).  The formal path (100 updates/session) uses ``execute_session``.
+    """
+    verify_canonical_dicode_one_update_runtime(runtime)
+    return _delegate_canonical_session(
+        runtime, context=context, plan=plan, adapter=adapter,
+        backend=backend, checkpoint_params=checkpoint_params,
+        purpose="one-update")
+
+
+def execute_session(runtime: Any, *, context: Any, plan: Any,
+                    adapter: Any,
+                    backend: Any = None,
+                    checkpoint_params: Any = None) -> Mapping[str, Any]:
+    """Delegate ONE complete native DiCode curriculum session (formal path).
+
+    E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128: one invocation == one
+    ``run_session_training`` == ``config.dicode_manager.max_updates_per_session``
+    (100) outer updates.  This is NEVER a for-loop of ``execute_one_update``
+    calls — DiCode's own ``run_training_session`` runs the full session.
+    """
+    verify_canonical_dicode_session_runtime(runtime)
+    receipt = _delegate_canonical_session(
+        runtime, context=context, plan=plan, adapter=adapter,
+        backend=backend, checkpoint_params=checkpoint_params,
+        purpose="session")
+    expected = int(context.config.dicode_manager.max_updates_per_session)
+    if int(receipt["num_updates_in_session"]) != expected:
+        raise ProductionBlockedError(
+            f"formal session must execute exactly {expected} updates "
+            f"(max_updates_per_session), got "
+            f"{int(receipt['num_updates_in_session'])} (fail closed)")
+    return receipt

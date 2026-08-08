@@ -1,0 +1,60 @@
+{
+  "schema": "simulator_frontier.native_dicode_budget_audit/v1",
+  "BASE_SOURCE_COMMIT": "0eebbf751b9fa3128928bff5817bd4bbc2bf5aad",
+  "protocol": "E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128",
+  "abandon_8x256": true,
+  "old_stable_layout_restored": true,
+  "update_layout": {
+    "num_envs": 1024,
+    "num_steps": 128,
+    "env_steps_per_outer_update": 131072,
+    "evidence": [
+      "conf/training/default.yaml:7 num_envs: 1024",
+      "conf/training/default.yaml:8 num_steps: 128",
+      "ppo_tr.py:867 num_env_steps_done = NUM_UPDATES * num_envs * num_steps"
+    ]
+  },
+  "native_dicode_budget": {
+    "total_timesteps": 2005401600,
+    "total_outer_updates": 15300,
+    "total_outer_updates_formula": "2_005_401_600 / (1024*128) = 15,300",
+    "seed_phase_updates": 200,
+    "seed_evidence": [
+      "setup.py:241 num_training_updates=config.dicode_manager.max_updates_per_session * 2",
+      "setup.py:244 num_seed_updates = num_updates_done (=200)"
+    ],
+    "curriculum_sessions": 151,
+    "curriculum_updates_per_session": 100,
+    "curriculum_total_updates": 15100,
+    "curriculum_formula": "151 sessions x 100 = 15,100 = 15,300 - 200 (seed)",
+    "max_updates_per_session": 100,
+    "max_updates_per_session_evidence": "conf/dicode_manager/default.yaml:3"
+  },
+  "e3_mechanism_budget": {
+    "e3_seed_replay": false,
+    "e3_sessions_target": 151,
+    "e3_updates_per_session": 100,
+    "e3_total_outer_updates": 15100,
+    "e3_total_env_steps": 1979187200,
+    "e3_total_env_steps_formula": "15,100 x 131,072 = 1,979,187,200",
+    "note": "E3 starts from the selected Student checkpoint (Student_0); seed phase is NOT replayed"
+  },
+  "session_cadence": {
+    "env_steps_per_session": 13107200,
+    "two_sessions_env_steps": 26214400,
+    "optimizer_internal_steps_per_outer_update": 32,
+    "optimizer_internal_steps_per_session": 3200,
+    "optimizer_internal_steps_total": 483200,
+    "optimizer_formula": "update_epochs(4) x num_minibatches(8) = 32 internal grad steps/outer update"
+  },
+  "task_protocol": {
+    "sampled_curriculum_tasks": 15,
+    "dynamic": 12,
+    "non_target_anchors": 3,
+    "original_task": "original_craftax",
+    "original_appended_internally_once": true,
+    "original_task_proportion": 0.20,
+    "curriculum_proportion_total": 0.80,
+    "total_task_classes": 16
+  }
+}

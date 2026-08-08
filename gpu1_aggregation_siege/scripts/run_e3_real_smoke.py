@@ -448,14 +448,21 @@ def setup_canonical_runtime(candidate_id: str | None = None) -> dict:
     return {"runtime": runtime, "candidate_id": cid}
 
 
-def build_hydra_config(work_dir: str) -> Any:
+def build_hydra_config(work_dir: str,
+                       max_updates_per_session: int = 1) -> Any:
+    """Compose the E3 hydra config.
+
+    ``max_updates_per_session`` defaults to 1 for single-update smoke.  The
+    formal E3 session runtime passes 100 (one full native DiCode curriculum
+    session per window — never a for-loop of single updates).
+    """
     from hydra import compose, initialize
     from omegaconf import OmegaConf
     with initialize(version_base="1.2", config_path="../conf"):
         config = compose(config_name="config", overrides=[
             "use_wandb=false",
             f"gen_manager.graph_path={work_dir}/task_graph.graphml",
-            "dicode_manager.max_updates_per_session=1",
+            f"dicode_manager.max_updates_per_session={int(max_updates_per_session)}",
             "training.condition_on_task=one_hot",
         ])
     OmegaConf.set_struct(config, False)
