@@ -1,1 +1,40 @@
-.envdicode_src/*_report.json
+# --- credentials (NEVER commit; public repo) ---
+.env
+env.sh
+*.key
+*_secret*
+
+# --- run artifacts ---
+outputs/
+outputs_*/
+rl_checkpoints/
+wandb/
+*.log
+runtime_analysis/
+dicode_src/*_report.json
+
+# --- large binaries / archives ---
+*.tgz
+*.tar.gz
+*.zip
+*.rar
+*.npz
+*.graphml
+*.sif
+blob
+
+# --- eval / analysis scratch ---
+eval_*_seed*.json
+salvage/
+evac/
+
+# --- python ---
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+venv/
+.ipynb_checkpoints/
