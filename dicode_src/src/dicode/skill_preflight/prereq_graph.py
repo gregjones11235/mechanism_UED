@@ -149,6 +149,79 @@ DIRECT_PREREQS: dict[str, frozenset[str]] = {
 }
 
 # Documented alternatives NOT encoded as edges (conjunctive semantics would over-block):
+# --- shuffled-graph ablation (env-gated; no-op unless SP_SHUFFLE_PREREQ is set) ---------
+# Degree-preserving random rewiring by double-edge swaps. Keeps: node set, edge count,
+# per-node in-degree (how many prereqs) and out-degree (how often used as a prereq),
+# and acyclicity. Scrambles: WHICH achievement is a prerequisite of WHICH.
+# Ablation for "is it the domain knowledge in the graph, or just the ordering discipline?"
+import os as _os
+
+
+def _shuffle_direct_prereqs(_seed):
+    import random as _random
+    from collections import Counter as _Counter
+
+    rng = _random.Random(_seed)
+    edges = sorted((p, a) for a, ps in DIRECT_PREREQS.items() for p in ps)
+    n_edges = len(edges)
+    parents = {a: set(ps) for a, ps in DIRECT_PREREQS.items()}
+    out_before = _Counter(p for p, _ in edges)
+    in_before = {a: len(ps) for a, ps in DIRECT_PREREQS.items()}
+    orig_edges = set(edges)
+
+    def _acyclic(pmap):
+        colour = {a: 0 for a in pmap}
+
+        def visit(a):
+            colour[a] = 1
+            for q in pmap[a]:
+                if colour[q] == 1:
+                    return False
+                if colour[q] == 0 and not visit(q):
+                    return False
+            colour[a] = 2
+            return True
+
+        return all(visit(a) for a in pmap if colour[a] == 0)
+
+    swaps = attempts = 0
+    target, cap = 20 * n_edges, 400 * n_edges
+    while swaps < target and attempts < cap:
+        attempts += 1
+        i, j = rng.randrange(n_edges), rng.randrange(n_edges)
+        (a, b), (c, d) = edges[i], edges[j]
+        if len({a, b, c, d}) < 4:
+            continue
+        if a in parents[d] or c in parents[b]:
+            continue
+        parents[b].discard(a); parents[b].add(c)
+        parents[d].discard(c); parents[d].add(a)
+        if _acyclic(parents):
+            edges[i], edges[j] = (a, d), (c, b)
+            swaps += 1
+        else:
+            parents[b].discard(c); parents[b].add(a)
+            parents[d].discard(a); parents[d].add(c)
+
+    new_edges = {(p, a) for a, ps in parents.items() for p in ps}
+    out_after = _Counter(p for p, _ in new_edges)
+    assert len(new_edges) == n_edges, "edge count changed"
+    assert all(len(parents[a]) == in_before[a] for a in parents), "in-degree changed"
+    assert out_after == out_before, "out-degree changed"
+    DIRECT_PREREQS.update({a: frozenset(ps) for a, ps in parents.items()})
+    print(
+        "[PREREQ-SHUFFLE] seed=%d nodes=%d edges=%d swaps=%d/%d changed=%d/%d degseq=OK"
+        % (_seed, len(DIRECT_PREREQS), n_edges, swaps, attempts,
+           len(orig_edges - new_edges), n_edges),
+        flush=True,
+    )
+
+
+_SP_SHUFFLE = _os.environ.get("SP_SHUFFLE_PREREQ", "").strip()
+if _SP_SHUFFLE:
+    _shuffle_direct_prereqs(int(_SP_SHUFFLE))
+
+
 _ALTERNATIVE_PATHS: dict[str, str] = {
     "collect_sapphire": "also minable with a diamond pickaxe (pickaxe>=4)",
     "collect_ruby": "also minable with a diamond pickaxe (pickaxe>=4)",
