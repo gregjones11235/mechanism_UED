@@ -1,0 +1,32 @@
+{
+  "schema": "simulator_frontier.session_memory_audit/v1",
+  "num_updates": 100,
+  "num_envs": 1024,
+  "num_steps": 128,
+  "scoring_window_updates": 40,
+  "warmup_updates": 60,
+  "per_update_bytes": {
+    "rmt_entering_tokens": 2147483648,
+    "slowgru_longstate_h": 134217728,
+    "slowgru_longstate_buf": 134217728,
+    "slowgru_longstate_count": 524288,
+    "slowgru_true_done": 131072,
+    "slowgru_total": 269090816,
+    "projected_scoring_only": 1572864
+  },
+  "estimated_retained_bytes_before": {
+    "rmt16": 214905651200,
+    "slowgru": 27066368000
+  },
+  "estimated_retained_bytes_after_projection": 62914560,
+  "bytes_to_gib": {
+    "rmt16_before": 200.1,
+    "slowgru_before": 25.2,
+    "after_projection": 0.1
+  },
+  "observed_oom_bytes": {
+    "rmt16": 85899345920,
+    "slowgru": 171798691840
+  },
+  "conclusion": "The OOM is dominated by retaining rmt_entering_tokens / slowgru_longstate across all 100 updates in the scan output, plus keeping 100 scoring_data copies when only 40 are used. The fix strips the recurrent fields from the scoring projection and discards the warmup (60) scoring output, retaining only the last 40 projected windows."
+}

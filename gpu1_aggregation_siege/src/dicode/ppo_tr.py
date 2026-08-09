@@ -546,8 +546,16 @@ def make_train(
 
 			# Prepare scoring data (standard PPO interface for your calculator)
 			# We strip out transformer specifics here because scoring doesn't need them
+			# SCORING_MUST_NOT_RETAIN_POLICY_MEMORY=true: the PPO-only recurrent
+			# trajectory state (RMT16 rmt_entering_tokens, SlowGRU
+			# slowgru_longstate) must NEVER enter the scoring projection.  scoring.py
+			# only reads info/reward/value; retaining these huge recurrent tensors
+			# across a 100-update session scan is exactly what ballooned the JIT to
+			# ~80-160GB on a 48GB GPU.  This strip happens AFTER the PPO loss has
+			# consumed the FULL traj_batch (training trajectory stays full).
 			scoring_traj = traj_batch.replace(
-				obs=None, action=None, log_prob=None, memories_mask=None, memories_indices=None
+				obs=None, action=None, log_prob=None, memories_mask=None, memories_indices=None,
+				rmt_entering_tokens=None, slowgru_longstate=None,
 			)
 			# Explicitly set fields to None if the NamedTuple structure allows, or just reconstruct
 			# Actually, Transition has new fields. The calculator expects `info` etc.
@@ -841,11 +849,39 @@ def make_train(
 					rng,
 				)
 
+			# SPLIT-RETENTION: two Python-level scan variants selected statically
+			# (never a traced conditional).  ``_update_step_noscore`` runs the
+			# identical math but returns a minimal () output so the warmup phase
+			# retains NO trajectory; ``_update_step`` returns the projected scoring
+			# data only for the retained window.  This is what keeps a 100-update
+			# session's JIT inside 48GB.
 			return next_runner_state, scoring_data
 
-		# --- Run fixed-iteration training loop ---
+		# --- Run fixed-iteration training loop (TWO PHASES) ---
+		# Phase A: warmup_updates execute identical _update_steps but collect NO
+		# scoring (scan output is an empty tuple — no trajectory retention).
+		# Phase B: scoring_updates execute the same _update_steps and retain only
+		# the projected scoring window.  The split preserves RNG / env / memory /
+		# optimizer / counters continuity because Phase B starts from Phase A's
+		# final runner_state — never a re-init.
+		def _update_step_noscore(runner_state, unused):
+			return _update_step(runner_state, unused)[0], ()
+
+		k = config.scoring_window_updates
+		warmup_updates = max(NUM_UPDATES - k, 0)
+		scoring_updates = min(NUM_UPDATES, k)
+
+		if warmup_updates > 0:
+			(final_runner_state, _warmup_scoring) = jax.lax.scan(
+				_update_step_noscore, initial_runner_state, None,
+				length=warmup_updates,
+			)
+		else:
+			final_runner_state = initial_runner_state
+
 		(final_runner_state, scan_scoring_data) = jax.lax.scan(
-			_update_step, initial_runner_state, None, length=NUM_UPDATES
+			_update_step, final_runner_state, None,
+			length=scoring_updates,
 		)
 
 		final_train_state = final_runner_state[0]
