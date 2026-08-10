@@ -1104,10 +1104,17 @@ def run_training_session(
 	if bool(config.get("runtime", {}).get("host_callback_free", False)):
 		# Keep the baseline log schema and update ordering, but emit after the
 		# compiled scan has completed so no Python callback runs inside the JIT.
-		metrics = jax.device_get(results["metrics"].get("train_metrics"))
-		if metrics is None:
+		metric_arrays = jax.device_get(results["metrics"].get("train_metrics"))
+		if metric_arrays is None:
 			raise RuntimeError("callback-free training returned no train_metrics")
-		for update_offset, row in enumerate(metrics):
+		# ``lax.scan`` preserves the tuple structure and stacks each metric
+		# independently, so device_get returns six arrays shaped [updates], not
+		# an [updates, 6] matrix.  Reconstruct rows without changing ordering.
+		if isinstance(metric_arrays, tuple):
+			metrics_rows = zip(*metric_arrays)
+		else:
+			metrics_rows = metric_arrays
+		for update_offset, row in enumerate(metrics_rows):
 			t_loss, v_loss, a_loss, ent, g_norm_mean, g_norm_max = row
 			wandb.log(
 				{
