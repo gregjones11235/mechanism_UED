@@ -37,6 +37,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import inspect
 import subprocess
 import sys
 import time
@@ -308,7 +309,10 @@ def run_real_actual_n(student_mount: dict, *, n: int = 4, horizon: int = 16) -> 
 # ---------------------------------------------------------------------------
 # 2. two REAL LLM roles
 # ---------------------------------------------------------------------------
-def build_two_llm_runtime() -> Any:
+def build_two_llm_runtime(*, max_output_tokens_per_call: int = 1024,
+                          max_total_tokens_per_call: int = 20000,
+                          retry_cap: int = 0,
+                          provider: str = "dashscope") -> Any:
     from dicode.simulator_frontier import _e3_real_llm_clients as clients
     from dicode.simulator_frontier.two_llm_descriptor import (
         build_authorized_two_llm_runtime,
@@ -319,20 +323,46 @@ def build_two_llm_runtime() -> Any:
     )
     factory = clients.client_factory
     impl_hash = callable_source_sha256("client factory", factory)
+    from pathlib import Path
+    from dicode.simulator_frontier.e3_durable_llm_journal import implementation_hash
+    combo_hash = implementation_hash(
+        str(Path(clients.__file__).resolve()),
+        str(Path(__file__).resolve().parents[1] / "src" / "dicode" / "simulator_frontier" / "e3_durable_llm_journal.py"))
     descriptor = mint_two_llm_runtime_descriptor(
         descriptor_id=f"e3-smoke-llm-{RUN_ID}",
         authorization_id=f"auth-{RUN_ID}",
-        provider="dashscope",
+        provider=provider,
         model=os.environ.get("QWEN_MODEL", "qwen-plus"),
         client_factory_entrypoint=(
             "dicode.simulator_frontier._e3_real_llm_clients:client_factory"),
         client_factory_implementation_hash=impl_hash,
-        token_cap=20000,
-        retry_cap=2,
+        token_cap=int(max_total_tokens_per_call),
+        retry_cap=int(retry_cap),
         journal_sink="e3-real-smoke",
         trusted_signer="director/cc4",
     )
+    os.environ["E3_LLM_PROVIDER"] = str(provider)
+    os.environ["E3_CLIENT_FACTORY_IMPLEMENTATION_HASH"] = combo_hash
+    os.environ["E3_MAX_OUTPUT_TOKENS_PER_CALL"] = str(int(max_output_tokens_per_call))
+    os.environ["E3_MAX_TOTAL_TOKENS_PER_CALL"] = str(int(max_total_tokens_per_call))
+    os.environ["E3_RETRY_CAP"] = str(int(retry_cap))
     return build_authorized_two_llm_runtime(descriptor)
+
+
+def assert_formal_curriculum_adapter_ready() -> None:
+    src = inspect.getsource(compile_and_register)
+    if "_dicode_test_runtime" in src or "synthetic_taskparam_apply" in src:
+        raise RuntimeError("BLOCKED_FORMAL_CURRICULUM_ADAPTER_TEST_ONLY")
+    if "TaskParams" not in src or "materialize_and_register" not in src:
+        raise RuntimeError("BLOCKED_FORMAL_CURRICULUM_ADAPTER_TEST_ONLY")
+
+
+def load_controller_executable_anchor_manifest(path: str | None = None) -> dict:
+    from dicode.simulator_frontier.production_task_materializer import (
+        load_executable_anchor_manifest,
+    )
+    resolved = path or os.environ.get("E3_EXECUTABLE_ANCHOR_MANIFEST", "")
+    return load_executable_anchor_manifest(resolved)
 
 
 def run_two_real_llm_roles(runtime: Any, evidence: dict) -> dict:
@@ -341,9 +371,15 @@ def run_two_real_llm_roles(runtime: Any, evidence: dict) -> dict:
     from dicode.simulator_frontier.llm_contracts import run_two_llm_production
     evidence_hash = evidence_hash_of(dict(evidence))
     decision = decide_invocation(InvocationReason.REVISION_REQUIRED)
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    clients.clear_audit_events()
     result = run_two_llm_production(
         decision, evidence, runtime=runtime, expected_state_id=evidence.get(
             "feasibility", {}).get("state_id", ""))
+    events = clients.drain_audit_events()
+    if len(events) != 2 or {e.get("role") for e in events} != set(result["role_order"]):
+        raise RuntimeError("E3_LLM_AUDIT_EVENT_COUNT_INVALID")
+    result["audit_events"] = events
     return result
 
 
@@ -352,7 +388,7 @@ def run_two_real_llm_roles(runtime: Any, evidence: dict) -> dict:
 # ---------------------------------------------------------------------------
 def compile_and_register(plan_result: dict, *, run_id: str,
                          state_id: str, memory_mode: str, gen_manager: Any,
-                         session_idx: int) -> dict:
+                         session_idx: int, anchor_manifest: dict | None = None) -> dict:
     from dicode.simulator_frontier.canonical_dicode_runtime import (
         compile_canonical_15_plus_1,
         materialize_and_register,
@@ -365,7 +401,6 @@ def compile_and_register(plan_result: dict, *, run_id: str,
     from dicode.simulator_frontier.canonical_dicode_runtime import (
         callable_source_sha256,
     )
-    import math
     from dataclasses import asdict
     dists = []
     for slot in ("D00", "D01", "D02", "D03", "D04", "D05",
@@ -385,17 +420,19 @@ def compile_and_register(plan_result: dict, *, run_id: str,
             evidence_hash=plan_result["evidence_hash"],
             retention_constraint="anchor_ratio>=0.20",
         ))
+    executable_manifest = anchor_manifest or load_controller_executable_anchor_manifest()
+    anchors = tuple(str(a["anchor_id"]) for a in executable_manifest["anchors"])
     frontier_plan = FrontierDistributionPlan(
         distributions=tuple(dists),
         anchor_binding={
-            "bound": True, "anchor_ids": ("anchor_a", "anchor_b", "anchor_c",
-                                          "ORIGINAL_TASK_ANCHOR"),
-            "manifest_hash": "0" * 64, "controller_signature_ref": "e3-smoke",
+            "bound": True, "anchor_ids": anchors,
+            "manifest_hash": str(executable_manifest["manifest_hash"]),
+            "controller_signature_ref": str(executable_manifest["controller_signature_ref"]),
         },
         plan_hash=_sha256_text(json.dumps(
             [asdict(d) for d in dists], sort_keys=True, default=str)),
     )
-    non_target = ("anchor_a", "anchor_b", "anchor_c")
+    non_target = anchors
     original_anchor = "ORIGINAL_TASK_ANCHOR"
     canonical_plan = compile_canonical_15_plus_1(
         plan_id=f"{run_id}:canonical-plan",
@@ -410,7 +447,9 @@ def compile_and_register(plan_result: dict, *, run_id: str,
         },
         anchor_memory_binding={"memory_mode": memory_mode},
     )
-    # env adapter with seed-task module sources as the loadable env code
+    # Production adapter: TaskParams resolution is implemented by the
+    # materializer itself; the test-only synthetic runtime is forbidden.
+    from dicode.simulator_frontier.production_task_materializer import resolve_taskparams
     adapter = mint_frontier_distribution_environment_adapter(
         adapter_id="e3-smoke-env-adapter",
         env_entrypoint="minicraftax.tasks.seed_tasks.collecting:Env",
@@ -418,21 +457,19 @@ def compile_and_register(plan_result: dict, *, run_id: str,
             "env", __import__("minicraftax.tasks.seed_tasks.collecting",
                               fromlist=["Env"]).Env),
         taskparam_apply_entrypoint=(
-            "dicode.simulator_frontier._dicode_test_runtime:"
-            "synthetic_taskparam_apply"),
+            "dicode.simulator_frontier.production_task_materializer:resolve_taskparams"),
         taskparam_implementation_hash=callable_source_sha256(
-            "taskparam",
-            __import__(
-                "dicode.simulator_frontier._dicode_test_runtime",
-                fromlist=["synthetic_taskparam_apply"]).synthetic_taskparam_apply),
+            "taskparam", resolve_taskparams),
     )
     registered = materialize_and_register(
-        adapter, canonical_plan, gen_manager.archive, session_idx=session_idx)
+        adapter, canonical_plan, gen_manager.archive, session_idx=session_idx,
+        anchor_manifest=executable_manifest["anchors"])
     return {
         "frontier_plan": frontier_plan,
         "canonical_plan": canonical_plan,
         "env_adapter": adapter,
-        "registered_ids": registered,
+        "registered_ids": registered["registered_ids"],
+        "certificates": registered["certificates"],
         "non_target_anchors": list(non_target),
         "original_task_anchor_id": original_anchor,
     }

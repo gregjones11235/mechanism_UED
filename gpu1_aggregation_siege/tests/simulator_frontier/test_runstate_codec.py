@@ -98,6 +98,34 @@ class TestSaveRestore:
         with pytest.raises(RunStateError):
             manager.restore(str(tmp_path / "ckpt"))
 
+    def test_meta_publish_failure_removes_new_state_and_allows_retry(self, tmp_path, monkeypatch):
+        manager = RunStateCheckpointManager()
+        run_state = _run_state()
+        real_replace = os.replace
+        calls = []
+
+        def fail_meta(src, dst):
+            calls.append((src, dst))
+            if str(dst).endswith(".meta.json"):
+                raise OSError("injected metadata replace failure")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", fail_meta)
+        with pytest.raises(OSError):
+            manager.save(run_state, str(tmp_path / "ckpt"), idempotency_token="retry")
+        assert not list(tmp_path.glob("ckpt.*"))
+        monkeypatch.setattr(os, "replace", real_replace)
+        report = manager.save(run_state, str(tmp_path / "ckpt"), idempotency_token="retry")
+        assert report["checkpoint_hash"]
+
+    def test_existing_checkpoint_idempotent_and_conflict_refused(self, tmp_path):
+        manager = RunStateCheckpointManager()
+        run_state = _run_state()
+        first = manager.save(run_state, str(tmp_path / "ckpt"), idempotency_token="same")
+        assert manager.save(run_state, str(tmp_path / "ckpt"), idempotency_token="same") == first
+        with pytest.raises(RunStateError):
+            manager.save(run_state, str(tmp_path / "ckpt"), idempotency_token="different")
+
 
 class TestFreshProcessRestore:
     def test_fresh_process_restore_equivalence(self, tmp_path):

@@ -1,0 +1,19 @@
+{
+  "schema": "e3_slowgru_attempt_archive/v1",
+  "attempt": "SlowGRU first attempt",
+  "status": "SLOWGRU_FIRST_ATTEMPT_TERMINAL=BLOCKED_SUPERSEDED",
+  "old_head": "806e51cf5d9e16ea4749855b456690f624fa581d",
+  "dirty_diff_sha256": "d1dacf91f1c50cd04018348fc60b1da36fd21604b70172b5ea1718ac758ab392",
+  "gpu1_test_only_evidence": "/home/oseasy/e3_gpu1_materializer_verify_20260810T203405/",
+  "second_attempt_validation_evidence": "/home/oseasy/e3_gpu1_slowgru_second_attempt_20260810/evidence",
+  "why_not_started": [
+    "first attempt used test-only synthetic curriculum adapter",
+    "controller executable anchor bindings were absent",
+    "formal full-budget authorization was not available for the first attempt"
+  ],
+  "paid_api_calls": 0,
+  "training_started": false,
+  "training_updates": 0,
+  "training_env_steps": 0,
+  "superseded_by": "SlowGRU second attempt"
+}

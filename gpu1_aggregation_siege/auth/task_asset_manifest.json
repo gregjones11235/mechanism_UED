@@ -12,28 +12,28 @@
   "schema": "e3_task_asset_manifest/v1",
   "task_assets": {
     "anchor_manifest": {
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/dicode/simulator_frontier/anchor_manifest.py",
+      "path": "../src/dicode/simulator_frontier/anchor_manifest.py",
       "sha256": "9184e65bdbcc39bc4dfc1dcb36cf1946d65092252d32fb03b5e27cd12a0502e5"
     },
     "base_task": {
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/minicraftax/tasks/base_task.py",
-      "sha256": "858393c8061a59f2b0419bf00bbbe79db58324ffabb09c4dca9b63d847160b2b"
+      "path": "../src/minicraftax/tasks/base_task.py",
+      "sha256": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa"
     },
     "canonical_dicode_runtime": {
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/dicode/simulator_frontier/canonical_dicode_runtime.py",
-      "sha256": "5026eaa05ccd5d6dc2853853acb240ac74f669727dfc3b5d60130fb764a91da5"
+      "path": "../src/dicode/simulator_frontier/canonical_dicode_runtime.py",
+      "sha256": "81bce6693d3000a9644424ff5346b58aad7384a47d81a3dab5ff6727f9120378"
     },
     "frontier_distributions": {
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/dicode/simulator_frontier/frontier_distributions.py",
+      "path": "../src/dicode/simulator_frontier/frontier_distributions.py",
       "sha256": "bcb903139dde8a8ce221aae670faf78a71184fb82129b84a90b2d23881f9edf9"
     },
     "multitask_env": {
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/minicraftax/envs/multitask.py",
-      "sha256": "0fe7fa1e0ca666bfa222fb91dd1ea34eea62b29f49de1c68594689993428b242"
+      "path": "../src/minicraftax/envs/multitask.py",
+      "sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae"
     },
     "seed_tasks_survive": {
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/minicraftax/tasks/seed_tasks/survive.py",
-      "sha256": "819904ff3d65bda1325041f45c0653a4ff118b534c721b320f587c9318e15100"
+      "path": "../src/minicraftax/tasks/seed_tasks/survive.py",
+      "sha256": "ddb2b7e97fb1970dd1fa6cb0063bf35ce2cdb1ff3be17cbaab60e821f45e9e58"
     }
   }
 }

@@ -34,6 +34,7 @@ import os
 import pickle
 import subprocess
 import sys
+import tempfile
 from typing import Any, Mapping
 
 from .errors import InvalidEvidenceError
@@ -58,6 +59,20 @@ RUNSTATE_CODEC_VERSION = "simulator_frontier.runstate_codec/v1"
 
 class RunStateError(RuntimeError):
     """Fail-closed run-state violation."""
+
+
+def _fsync_directory(path: str) -> None:
+    """Durably publish directory entry replacements where supported."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        # Windows does not permit opening directories this way; the file
+        # fsyncs still provide the strongest portable guarantee available.
+        pass
 
 
 def _file_sha256(path: str) -> str:
@@ -142,29 +157,70 @@ class RunStateCheckpointManager:
         os.makedirs(directory, exist_ok=True)
         state_path = path + ".state.pkl"
         meta_path = path + ".meta.json"
-        with open(state_path, "wb") as handle:
-            pickle.dump(dict(run_state), handle, protocol=4)
-        state_sha = _file_sha256(state_path)
-        metadata: dict[str, Any] = {
-            "schema": RUNSTATE_SCHEMA,
-            "codec_version": RUNSTATE_CODEC_VERSION,
-            "state_file_sha256": state_sha,
-            "fields": sorted(str(k) for k in run_state),
-            "global_update_step": int(run_state["global_update_step"]),
-            "global_env_steps": int(run_state["global_env_steps"]),
-            "current_session_idx": int(run_state["current_session_idx"]),
-            "plan_hash": str(run_state["plan_hash"]),
-            "runtime_bundle_hash": str(run_state["runtime_bundle_hash"]),
-            "config_hash": str(run_state["config_hash"]),
-            "source_commit": str(run_state["source_commit"]),
-            "idempotency_token": str(idempotency_token),
-        }
-        metadata["checkpoint_hash"] = hashlib.sha256(
-            json.dumps(metadata, sort_keys=True,
-                       separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        with open(meta_path, "w", encoding="utf-8") as handle:
-            json.dump(metadata, handle, indent=2, sort_keys=True)
+        tmp_state = state_path + f".tmp.{os.getpid()}"
+        tmp_meta = meta_path + f".tmp.{os.getpid()}"
+        if os.path.exists(state_path) or os.path.exists(meta_path):
+            if not (os.path.isfile(state_path) and os.path.isfile(meta_path)):
+                raise RunStateError("RUNSTATE_PARTIAL_EXISTING")
+            existing = self.restore(path)
+            if str(existing["metadata"].get("idempotency_token", "")) != str(idempotency_token):
+                raise RunStateError("RUNSTATE_IDEMPOTENCY_CONFLICT")
+            if runstate_content_hash(existing["run_state"]) != runstate_content_hash(run_state):
+                raise RunStateError("RUNSTATE_IDEMPOTENCY_CONTENT_CONFLICT")
+            return {"checkpoint_path": path, "state_file_sha256": existing["metadata"]["state_file_sha256"],
+                    "checkpoint_hash": existing["metadata"]["checkpoint_hash"], "state_file": state_path, "meta_file": meta_path}
+        published_state = False
+        try:
+            # The state file is written and durably flushed before any
+            # metadata is published.  Metadata is the completion marker.
+            with open(tmp_state, "wb") as handle:
+                pickle.dump(dict(run_state), handle, protocol=4)
+                handle.flush()
+                os.fsync(handle.fileno())
+            state_sha = _file_sha256(tmp_state)
+            metadata: dict[str, Any] = {
+                "schema": RUNSTATE_SCHEMA,
+                "codec_version": RUNSTATE_CODEC_VERSION,
+                "state_file_sha256": state_sha,
+                "fields": sorted(str(k) for k in run_state),
+                "global_update_step": int(run_state["global_update_step"]),
+                "global_env_steps": int(run_state["global_env_steps"]),
+                "current_session_idx": int(run_state["current_session_idx"]),
+                "plan_hash": str(run_state["plan_hash"]),
+                "runtime_bundle_hash": str(run_state["runtime_bundle_hash"]),
+                "config_hash": str(run_state["config_hash"]),
+                "source_commit": str(run_state["source_commit"]),
+                "idempotency_token": str(idempotency_token),
+            }
+            metadata["checkpoint_hash"] = hashlib.sha256(
+                json.dumps(metadata, sort_keys=True,
+                           separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            with open(tmp_meta, "w", encoding="utf-8") as handle:
+                json.dump(metadata, handle, indent=2, sort_keys=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            # Replace the state first and metadata last: a visible meta file
+            # therefore always has a complete, matching state counterpart.
+            os.replace(tmp_state, state_path)
+            published_state = True
+            os.replace(tmp_meta, meta_path)
+            _fsync_directory(directory)
+        except Exception:
+            for tmp in (tmp_state, tmp_meta):
+                try: os.unlink(tmp)
+                except FileNotFoundError: pass
+            # If state publication succeeded but completion metadata did not,
+            # remove only this save's newly published state.  Never touch a
+            # pre-existing checkpoint (those return through the idempotent
+            # branch above).
+            if published_state and not os.path.exists(meta_path):
+                try:
+                    os.unlink(state_path)
+                    _fsync_directory(directory)
+                except FileNotFoundError:
+                    pass
+            raise
         return {
             "checkpoint_path": path,
             "state_file_sha256": state_sha,
@@ -177,6 +233,9 @@ class RunStateCheckpointManager:
         """Restore the full run state fail-closed (tamper / missing rejected)."""
         state_path = path + ".state.pkl"
         meta_path = path + ".meta.json"
+        if any(name.startswith(os.path.basename(path) + ".") and ".tmp." in name
+               for name in os.listdir(os.path.dirname(os.path.abspath(path)) or ".")):
+            raise RunStateError("RUNSTATE_RESTORE_TEMP_PRESENT")
         for required in (state_path, meta_path):
             if not os.path.isfile(required):
                 raise RunStateError(

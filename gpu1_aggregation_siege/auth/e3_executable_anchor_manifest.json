@@ -1,0 +1,73 @@
+{
+  "schema": "e3_executable_anchor_manifest/v1",
+  "controller_signature_ref": "CODEX_SOLE_CONTROLLER_AUTHORITY_20260810",
+  "manifest_hash": "36c697f26cee802b9527fd75c3f8aa1ae42ebb7189532f6c239009804bb1973c",
+  "anchors": [
+    {
+      "anchor_id": "collecting",
+      "base_env_entrypoint": "minicraftax.tasks.seed_tasks.collecting:Env",
+      "base_env_hash": "51b5980577e8a1d462b4f7955952111f5227af345ec1380220ecd7fd9996b8cb",
+      "taskparams": {
+        "passive_spawn_multiplier": 1.0,
+        "melee_spawn_multiplier": 0.2,
+        "ranged_spawn_multiplier": 0.2,
+        "mob_health_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "melee_trigger_distance": 10,
+        "monsters_killed_to_clear_level": 8,
+        "needs_depletion_multiplier": 0.5,
+        "health_recover_multiplier": 1.0,
+        "health_loss_multiplier": 1.0,
+        "mana_recover_multiplier": 1.0,
+        "growing_plants_age": 600
+      },
+      "world_set_ref": "collecting.standard_reset",
+      "seed_policy_ref": "controller.collecting.seed.v1",
+      "reset_protocol": "STANDARD_RESET"
+    },
+    {
+      "anchor_id": "combat",
+      "base_env_entrypoint": "minicraftax.tasks.seed_tasks.combat:Env",
+      "base_env_hash": "020483fd3e91c027fab81df6bc02a3736586d29698b2abe62ef9f0dde07a0600",
+      "taskparams": {
+        "passive_spawn_multiplier": 1.0,
+        "melee_spawn_multiplier": 1.0,
+        "ranged_spawn_multiplier": 0.2,
+        "mob_health_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "melee_trigger_distance": 10,
+        "monsters_killed_to_clear_level": 8,
+        "needs_depletion_multiplier": 1.0,
+        "health_recover_multiplier": 5.0,
+        "health_loss_multiplier": 1.0,
+        "mana_recover_multiplier": 1.0,
+        "growing_plants_age": 600
+      },
+      "world_set_ref": "combat.standard_reset",
+      "seed_policy_ref": "controller.combat.seed.v1",
+      "reset_protocol": "STANDARD_RESET"
+    },
+    {
+      "anchor_id": "crafting",
+      "base_env_entrypoint": "minicraftax.tasks.seed_tasks.crafting:Env",
+      "base_env_hash": "0a864c53f0d7ae3dd880f5a082bc76a7fc2726d6892fda275cb5295ce300ca83",
+      "taskparams": {
+        "passive_spawn_multiplier": 1.0,
+        "melee_spawn_multiplier": 0.1,
+        "ranged_spawn_multiplier": 0.05,
+        "mob_health_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "melee_trigger_distance": 10,
+        "monsters_killed_to_clear_level": 8,
+        "needs_depletion_multiplier": 0.5,
+        "health_recover_multiplier": 1.0,
+        "health_loss_multiplier": 1.0,
+        "mana_recover_multiplier": 1.0,
+        "growing_plants_age": 600
+      },
+      "world_set_ref": "crafting.standard_reset",
+      "seed_policy_ref": "controller.crafting.seed.v1",
+      "reset_protocol": "STANDARD_RESET"
+    }
+  ]
+}

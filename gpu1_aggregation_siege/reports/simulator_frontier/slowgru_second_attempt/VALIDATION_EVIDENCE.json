@@ -1,0 +1,66 @@
+{
+  "schema": "e3_slowgru_second_attempt_validation/v1",
+  "attempt": "SlowGRU second attempt",
+  "status": "VALIDATION_ONLY_NO_TRAINING_NO_API",
+  "candidate": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "budget_contract": {
+    "sessions": 151,
+    "updates_per_session": 100,
+    "env_steps_per_update": 131072,
+    "additional_env_steps": 1979187200,
+    "semantics": "ADDITIONAL_FROM_PRETRAINED_CHECKPOINT"
+  },
+  "server": {
+    "python": "/home/oseasy/miniconda3/envs/dicode310/bin/python",
+    "cuda_visible_devices": "1",
+    "gpu_index": 1,
+    "gpu_uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+    "validation_root": "/media/数据磁盘2/e3_slowgru_anchor_validation_20260810T2",
+    "test_root": "/media/数据磁盘2/e3_slowgru_server_tests_20260810T"
+  },
+  "anchor_15_jax_smoke": {
+    "exit_code": 0,
+    "result_sha256": "b75d5ad8d4dd2278c1e145ba890b9f74ca9768d8c52d4a61c2416fb6826a9b84",
+    "script_sha256": "715edc152dfef3345329b18f9395a28453471ab597f4ef633c46351c64b5d0bc",
+    "stdout_sha256": "fbde599dbf381d432a443bc10f1ad175b305d5469414c7aa24c275083647af81",
+    "stderr_sha256": "9da08fd741ca96bb2f93ecd6ae8d8c8bee090024523f3b383d02e9b353d84bbe",
+    "evidence_path": "/media/数据磁盘2/e3_slowgru_anchor_validation_20260810T2/evidence",
+    "assertions": [
+      "15 modules compile/import/instantiate",
+      "collecting/combat/crafting anchor TaskParams exact values",
+      "12 dynamic TaskParams distinct and bounded",
+      "MultiTask stacked TaskParams has 15 entries per field",
+      "reset task_id 0,1,2,3 writes matching state.task_params"
+    ]
+  },
+  "server_hardening_suite": {
+    "exit_code": 0,
+    "tests_passed": 31,
+    "tests_skipped": 0,
+    "stdout_sha256": "1354131091a7599cc599feaac8a537ba5cf54743601766dc9455c7589dc7f41b",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence_path": "/media/数据磁盘2/e3_slowgru_server_tests_20260810T/evidence/hardening_stdout.txt"
+  },
+  "server_runstate_atomicity_suite": {
+    "exit_code": 0,
+    "tests_passed": 10,
+    "tests_skipped": 0,
+    "note": "Repair2 rerun; server evidence directory retained the exact stdout/stderr."
+  },
+  "server_authorization_suite": {
+    "exit_code": 0,
+    "tests_passed": 20,
+    "tests_skipped": 0,
+    "stdout_sha256": "e6cd03241f0dcc3cc08d294486d2bd1c531f4b911cac29afc7488b942d1dffc7",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence_path": "/media/数据磁盘2/e3_slowgru_server_tests_20260810T/evidence/auth_stdout.txt"
+  },
+  "formal_run": {
+    "started": false,
+    "paid_api_calls": 0,
+    "training_updates": 0,
+    "training_env_steps": 0,
+    "controller_signature": "NOT_CREATED",
+    "note": "Validation evidence is not a formal-run PASS and does not authorize launch."
+  }
+}

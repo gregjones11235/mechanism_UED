@@ -1,0 +1,461 @@
+import importlib.util
+import json
+import hashlib
+import pickle
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+VALID_TASKPARAM_RANGES = {
+    "passive_spawn_multiplier": [1.0, 2.0],
+    "melee_spawn_multiplier": [1.0, 2.0],
+    "ranged_spawn_multiplier": [1.0, 2.0],
+    "mob_health_multiplier": [1.0, 2.0],
+    "mob_damage_multiplier": [1.0, 2.0],
+    "melee_trigger_distance": [2, 4],
+    "monsters_killed_to_clear_level": [2, 4],
+    "needs_depletion_multiplier": [1.0, 2.0],
+    "health_recover_multiplier": [1.0, 2.0],
+    "health_loss_multiplier": [1.0, 2.0],
+    "mana_recover_multiplier": [1.0, 2.0],
+    "growing_plants_age": [2, 4],
+}
+VALID_START_DISTRIBUTION = {f"D{i:02d}": {"s": 1.0} for i in range(12)}
+
+
+def _journal_cls():
+    p = Path(__file__).resolve().parents[2] / "src" / "dicode" / "simulator_frontier" / "e3_durable_llm_journal.py"
+    spec = importlib.util.spec_from_file_location("e3dj", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.DurablePaidCallJournal
+
+
+def test_budget_positive_and_negative():
+    import e3_authorization as a
+    a.resolve_e3_budget(candidate=a.FORMAL_BUDGET_CANDIDATE, sessions=151, scope="formal")
+    for n in (150, 152):
+        with pytest.raises(ValueError):
+            a.resolve_e3_budget(candidate=a.FORMAL_BUDGET_CANDIDATE, sessions=n, scope="formal")
+
+
+def test_journal_tamper_and_ceiling(tmp_path):
+    J = _journal_cls(); j = J(str(tmp_path / "j.json"), max_success_keys=1)
+    ident = dict(source_commit="a", candidate="b", session=1, evidence_hash="c",
+                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+    key = j.composite_key(**ident)
+    j.record_success(key=key, identity=ident, returned_model="m",
+                     usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                     validated_output={"ok": True}, response_content="{}",
+                     )
+    assert j.lookup(key, identity=ident)["key"] == key
+    payload = json.loads((tmp_path / "j.json").read_text())
+    payload["entries"][key]["content"] = "tampered"
+    (tmp_path / "j.json").write_text(json.dumps(payload))
+    with pytest.raises(ValueError):
+        j.lookup(key, identity=ident)
+
+
+def test_journal_concurrent_unique_and_usage_rejection(tmp_path):
+    J = _journal_cls(); path = tmp_path / "concurrent.json"
+    def one(i):
+        j = J(str(path)); ident = dict(source_commit="a", candidate="b", session=i,
+            evidence_hash=str(i), role="r", provider="p", requested_model="m",
+            client_implementation_hash="i")
+        key = j.composite_key(**ident)
+        return j.record_success(key=key, identity=ident, returned_model="m",
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            validated_output={"i": i}, response_content="{}")
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        list(pool.map(one, range(16)))
+    j = J(str(path)); assert len(j._load()["entries"]) == 16
+    capped = J(str(tmp_path / "cap.json"), max_success_keys=2)
+    for i in range(2): one_ident = dict(source_commit="c", candidate="d", session=i,
+        evidence_hash=str(i), role="r", provider="p", requested_model="m", client_implementation_hash="i"); capped.record_success(key=capped.composite_key(**one_ident), identity=one_ident, returned_model="m", usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}, validated_output={"i":i}, response_content="{}")
+    third = dict(source_commit="c", candidate="d", session=3, evidence_hash="3",
+                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+    with pytest.raises(ValueError):
+        capped.record_success(key=capped.composite_key(**third), identity=third,
+            returned_model="m", usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},
+            validated_output={"i":3}, response_content="{}")
+    assert len(capped._load()["entries"]) == 2
+
+
+@pytest.mark.parametrize("usage", [
+    {"prompt_tokens": 1, "completion_tokens": 1},
+    {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 0},
+    {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 2},
+    {"prompt_tokens": 1, "completion_tokens": 1025, "total_tokens": 1026},
+    {"prompt_tokens": 1, "completion_tokens": 20001, "total_tokens": 20002},
+])
+def test_invalid_usage_rejected(tmp_path, usage):
+    J = _journal_cls(); j = J(str(tmp_path / "u.json"))
+    ident = dict(source_commit="a", candidate="b", session=1, evidence_hash="u",
+                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+    with pytest.raises(ValueError):
+        j.record_success(key=j.composite_key(**ident), identity=ident,
+                         returned_model="m", usage=usage, validated_output={}, response_content="")
+    assert j._load()["entries"] == {}
+
+
+@pytest.mark.parametrize("field", ["content", "validated_output", "requested_model",
+                                    "returned_model", "key_identity", "usage_total",
+                                    "usage_completion", "usage_sum"])
+def test_existing_entry_tamper_hard_fails(tmp_path, field):
+    J = _journal_cls(); path = tmp_path / "tamper.json"; j = J(str(path))
+    ident = dict(source_commit="a", candidate="b", session=1, evidence_hash="t",
+                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+    key = j.composite_key(**ident)
+    j.record_success(key=key, identity=ident, returned_model="m",
+        usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},
+        validated_output={"ok":True}, response_content="{}")
+    payload = json.loads(path.read_text()); entry = payload["entries"][key]
+    if field == "content": entry["content"] = "x"
+    elif field == "validated_output": entry["validated_output"] = {"bad": True}
+    elif field == "requested_model": entry["requested_model"] = "other"
+    elif field == "returned_model": entry["returned_model"] = "other"
+    elif field == "key_identity": entry["key_identity"]["session"] = 99
+    elif field == "usage_total": entry["usage"]["total_tokens"] = 0
+    elif field == "usage_completion": entry["usage"]["completion_tokens"] = 1025
+    else: entry["usage"]["total_tokens"] = 3
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError): j.lookup(key, identity=ident)
+
+
+def test_run_metadata_helpers(tmp_path):
+    import run_e3_formal_longrun as r
+    payload={"source_commit":"a","candidate_id":"b","sessions":2}
+    r.write_run_metadata_once(str(tmp_path), payload)
+    raw=(tmp_path/"RUN_METADATA.json").read_bytes(); assert r.verify_run_metadata(str(tmp_path), payload)==payload
+    assert (tmp_path/"RUN_METADATA.json").read_bytes()==raw
+    with pytest.raises(ValueError): r.write_run_metadata_once(str(tmp_path), payload)
+    r.append_resume_event(str(tmp_path), {"pid":1})
+    assert (tmp_path/"RUN_METADATA.json").read_bytes()==raw
+    assert json.loads((tmp_path/"RESUME_EVENTS.jsonl").read_text().strip())["pid"]==1
+    (tmp_path/"RUN_METADATA.sha256").write_text("0"*64)
+    with pytest.raises(ValueError): r.verify_run_metadata(str(tmp_path), payload)
+
+
+def test_run_lease_releases_on_raise(tmp_path):
+    import run_e3_formal_longrun as r
+    with pytest.raises(RuntimeError):
+        with r.run_lease(str(tmp_path/"x"), metadata={}):
+            raise RuntimeError("boom")
+    with r.run_lease(str(tmp_path/"x"), metadata={}):
+        pass
+
+
+def test_run_lease_cross_process(tmp_path):
+    import run_e3_formal_longrun as r
+    run_dir = tmp_path / "proc"
+    run_dir.mkdir()
+    child = tmp_path / "child_lease.py"
+    child.write_text("import os,sys; sys.path.insert(0,sys.argv[1]); import run_e3_formal_longrun as r; from pathlib import Path\nwith r.run_lease(sys.argv[2], metadata={}):\n Path(sys.argv[3]).write_text(str(os.getpid())); sys.stdin.readline()\n")
+    proc = subprocess.Popen([sys.executable, str(child), str(Path(__file__).resolve().parents[2]/"scripts"), str(run_dir), str(run_dir/"ready")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        ready = run_dir / "ready"
+        deadline = time.time() + 10
+        while time.time() < deadline and not ready.exists(): time.sleep(.05)
+        assert ready.exists()
+        with pytest.raises(RuntimeError):
+            with r.run_lease(str(run_dir), metadata={}): pass
+        proc.stdin.write("\n"); proc.stdin.flush(); assert proc.wait(timeout=10) == 0
+        with r.run_lease(str(run_dir), metadata={}) as rec:
+            assert any(str(old.get("pid")) == ready.read_text() for old in rec.get("takeover_history", []))
+    finally:
+        if proc.poll() is None: proc.kill(); proc.wait()
+
+
+def test_resume_helper_counter_formula():
+    import run_e3_formal_longrun as r
+    assert 100 * r.ENV_STEPS_PER_UPDATE == 13_107_200
+
+
+def test_two_role_client_journal_reuse(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "roles.json"))
+    monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
+    calls = []
+    def fake(system, user, **kwargs):
+        calls.append(system)
+        if "Diagnostician" in system:
+            body = {"frontier_class":"LEARNABLE_FRONTIER","confidence":0.8,"dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,"recommended_evidence_action":"x"}
+        else:
+            body = {"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"seed":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":0.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION}
+        return {"content": json.dumps(body), "requested_model":"m", "returned_model":"m", "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients, "_call_qwen", fake)
+    evidence={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}
+    dc=clients._DiagnosticianClient("s","b"); pc=clients._PlannerClient("s",4,16)
+    d=dc.complete(evidence); p=pc.complete({**evidence,"diagnostician_summary":d})
+    d2=dc.complete(evidence); p2=pc.complete({**evidence,"diagnostician_summary":d2})
+    assert len(calls)==2
+    assert d2 == d and p2 == p
+    J = _journal_cls(); entries = J(str(tmp_path / "roles.json"))._load()["entries"]
+    assert len(entries) == 2
+    assert {e.get("role") for e in entries.values()} == {
+        "frontier_evidence_diagnostician", "curriculum_search_planner"}
+
+
+def test_diagnosis_change_rekeys_planner(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "d.json")); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
+    calls=[]
+    def fake(system,user,**kw):
+        calls.append(system)
+        body={"frontier_class":"LEARNABLE_FRONTIER","confidence":.8,"dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,"recommended_evidence_action":"x"} if "Diagnostician" in system else {"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"s":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION}
+        return {"content":json.dumps(body),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients,"_call_qwen",fake); evidence={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}
+    dc=clients._DiagnosticianClient("s","b"); pc=clients._PlannerClient("s",4,16); d=dc.complete(evidence); pc.complete({**evidence,"diagnostician_summary":d})
+    changed=dict(d); changed["confidence"]=.9
+    from dicode.simulator_frontier.llm_contracts import compute_diagnostician_hash
+    changed["diagnosis_hash"]=compute_diagnostician_hash(changed,evidence_hash=clients._evidence_hash_of(evidence)); clients.clear_audit_events(); dc.complete(evidence); pc.complete({**evidence,"diagnostician_summary":changed}); events=clients.drain_audit_events()
+    assert len(calls)==3 and len(events)==2 and events[0]["reused"] and events[1]["paid_new"]
+    assert len(_journal_cls()(str(tmp_path / "d.json"))._load()["entries"]) == 3
+
+
+def test_role2_failure_resume_reuses_role1(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "r.json")); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
+    calls=[]; fail=[True]
+    def fake(system,user,**kw):
+        calls.append(system)
+        if "Diagnostician" in system:
+            body={"frontier_class":"LEARNABLE_FRONTIER","confidence":.8,"dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,"recommended_evidence_action":"x"}
+        else:
+            if fail:
+                fail.clear()
+                raise RuntimeError("planner failure")
+            body={"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"s":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION}
+        return {"content":json.dumps(body),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients,"_call_qwen",fake); evidence={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}
+    dc=clients._DiagnosticianClient("s","b"); pc=clients._PlannerClient("s",4,16); clients.clear_audit_events(); d=dc.complete(evidence)
+    with pytest.raises(RuntimeError): pc.complete({**evidence,"diagnostician_summary":d})
+    first_events = clients.drain_audit_events()
+    assert len(first_events) == 1 and first_events[0]["role"] == "frontier_evidence_diagnostician"
+    assert first_events[0]["paid_new"] and not first_events[0]["reused"]
+    assert len(_journal_cls()(str(tmp_path / "r.json"))._load()["entries"]) == 1
+    d2=dc.complete(evidence); p2=pc.complete({**evidence,"diagnostician_summary":d2}); events=clients.drain_audit_events()
+    assert len(calls)==3 and d2==d and p2 and [e["role"] for e in events] == ["frontier_evidence_diagnostician","curriculum_search_planner"]
+    assert events[0]["reused"] and not events[0]["paid_new"]
+    assert events[1]["paid_new"] and not events[1]["reused"]
+
+
+def test_formal_disk_gate_new_child_and_escape(tmp_path, monkeypatch):
+    import run_e3_formal_longrun as runner
+    root = tmp_path / "data-root"
+    root.mkdir()
+    monkeypatch.setattr(runner, "FORMAL_RUN_ROOT", str(root))
+    monkeypatch.setattr(runner.shutil, "disk_usage",
+                        lambda path: type("U", (), {"free": 100 * (1024 ** 3)})())
+    free, required = runner._assert_formal_disk_capacity(
+        str(root / "new-run"))
+    assert free >= required >= 70 * (1024 ** 3)
+    with pytest.raises(RuntimeError, match="RUN_DIR_MUST_USE_DATA_DISK"):
+        runner._assert_formal_disk_capacity(str(tmp_path / "escape"))
+
+
+def test_formal_gpu_gate_rejects_wrong_cvd_without_query(monkeypatch):
+    import run_e3_formal_longrun as runner
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    with pytest.raises(RuntimeError, match="CUDA_VISIBLE_DEVICES"):
+        runner._assert_formal_gpu_binding()
+
+
+def test_formal_gpu_gate_rejects_uuid_mismatch(monkeypatch):
+    import run_e3_formal_longrun as runner
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.setattr(runner, "_gpu_uuid", lambda: "GPU-wrong")
+    with pytest.raises(RuntimeError, match="UUID_MISMATCH"):
+        runner._assert_formal_gpu_binding()
+
+
+def test_formal_gpu_gate_rejects_cpu_fallback(monkeypatch):
+    pytest.importorskip("jax")
+    import run_e3_formal_longrun as runner
+    import jax
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.setattr(runner, "_gpu_uuid", lambda: runner.EXPECTED_PHYSICAL_GPU_UUID)
+    monkeypatch.setattr(jax, "devices", lambda: [type("CpuDevice", (), {"platform": "cpu"})()])
+    with pytest.raises(RuntimeError, match="NO_GPU_JAX_DEVICE"):
+        runner._assert_formal_gpu_binding()
+
+
+def test_formal_gpu_gate_accepts_bound_gpu1(monkeypatch):
+    pytest.importorskip("jax")
+    import run_e3_formal_longrun as runner
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.setattr(runner, "_gpu_uuid", lambda: runner.EXPECTED_PHYSICAL_GPU_UUID)
+    assert runner._assert_formal_gpu_binding() == runner.EXPECTED_PHYSICAL_GPU_UUID
+
+
+def test_finite_gate_rejects_params_opt_and_metrics(tmp_path):
+    jax = pytest.importorskip("jax")
+    import run_e3_formal_longrun as runner
+    good = SimpleNamespace(params=jax.numpy.ones((2,)),
+                           opt_state=jax.numpy.ones((2,)))
+    runner._assert_finite_training_artifacts(
+        train_state=good, receipt={"training_metrics": {"loss": 1.0},
+                                   "evaluation_metrics": {"return": 0.0}})
+    for state, receipt, message in (
+        (SimpleNamespace(params=jax.numpy.array([jax.numpy.nan]),
+                         opt_state=jax.numpy.ones((1,))), {}, "PARAMS"),
+        (SimpleNamespace(params=jax.numpy.ones((1,)),
+                         opt_state=jax.numpy.array([jax.numpy.inf])), {}, "OPT_STATE"),
+        (good, {"training_metrics": {"loss": jax.numpy.nan}}, "TRAINING_METRICS"),
+    ):
+        with pytest.raises(RuntimeError, match=message):
+            runner._assert_finite_training_artifacts(train_state=state, receipt=receipt)
+
+
+def _write_resume_fixture(root: Path, *, mutate=None, sessions=2):
+    import run_e3_formal_longrun as runner
+    (root / "evidence").mkdir(parents=True)
+    (root / "runstate").mkdir(parents=True)
+    previous = None
+    for i in range(1, sessions + 1):
+        stem = root / "runstate" / f"e3_canonical_runstate_s{i:03d}"
+        state = Path(str(stem) + ".state.pkl")
+        state.write_bytes(pickle.dumps({"params": {"x": float(i)},
+                                       "opt_state": {"x": float(i)}}))
+        sha = hashlib.sha256(state.read_bytes()).hexdigest()
+        meta = {
+            "schema": "simulator_frontier.canonical_runstate_checkpoint/v1",
+            "codec_version": "simulator_frontier.runstate_codec/v1",
+            "state_file_sha256": sha, "fields": [],
+            "global_update_step": i * 100,
+            "global_env_steps": i * 100 * runner.ENV_STEPS_PER_UPDATE,
+            "current_session_idx": i, "plan_hash": "p",
+            "runtime_bundle_hash": "r", "config_hash": "c",
+            "source_commit": "source", "idempotency_token": f"e3-longrun-s{i}",
+        }
+        meta["checkpoint_hash"] = hashlib.sha256(
+            json.dumps(meta, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        Path(str(stem) + ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        report = {
+            "schema": "simulator_frontier.e3_formal_longrun_session/v1",
+            "protocol": "E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128",
+            "session_idx": i, "current_session_idx": i,
+            "candidate_id": "candidate", "source_commit": "source",
+            "authorization_manifest_hash": "auth", "previous_checkpoint": previous,
+            "num_updates_in_session": 100,
+            "env_steps_per_update": runner.ENV_STEPS_PER_UPDATE,
+            "start_global_update": (i - 1) * 100,
+            "start_global_env_steps": (i - 1) * 100 * runner.ENV_STEPS_PER_UPDATE,
+            "global_update_step": i * 100,
+            "global_env_steps": i * 100 * runner.ENV_STEPS_PER_UPDATE,
+            "fresh_process_restore_equivalent": True,
+            "checkpoint_path": str(stem), "checkpoint_state_sha256": sha,
+            "checkpoint_hash": meta["checkpoint_hash"],
+            "checkpoint_content_hash": f"content-{i}",
+        }
+        (root / "evidence" / f"session_{i:03d}.json").write_text(
+            json.dumps(report), encoding="utf-8")
+        previous = str(stem)
+    if mutate:
+        mutate(root)
+
+
+def test_resume_fixture_positive_and_chain_negative(tmp_path):
+    import run_e3_formal_longrun as runner
+    _write_resume_fixture(tmp_path)
+    reports, start, previous = runner._load_and_validate_completed_sessions(
+        str(tmp_path), candidate="candidate", source_commit="source",
+        sessions=151, authorization_manifest_hash="auth")
+    assert len(reports) == 2 and start == 3 and previous.endswith("s002")
+    mutations = {
+        "gap": lambda root: (root / "evidence" / "session_001.json").rename(root / "evidence" / "session_003.json"),
+        "extra": lambda root: (root / "evidence" / "session_002.json").replace(root / "evidence" / "session_152.json"),
+        "previous": lambda root: json.dump({**json.loads((root / "evidence" / "session_002.json").read_text()), "previous_checkpoint": "wrong"}, (root / "evidence" / "session_002.json").open("w")),
+        "auth": lambda root: json.dump({**json.loads((root / "evidence" / "session_001.json").read_text()), "authorization_manifest_hash": "wrong"}, (root / "evidence" / "session_001.json").open("w")),
+        "source": lambda root: json.dump({**json.loads((root / "evidence" / "session_001.json").read_text()), "source_commit": "wrong"}, (root / "evidence" / "session_001.json").open("w")),
+        "counter": lambda root: json.dump({**json.loads((root / "evidence" / "session_001.json").read_text()), "global_update_step": 9}, (root / "evidence" / "session_001.json").open("w")),
+        "state_sha": lambda root: (root / "runstate" / "e3_canonical_runstate_s001.state.pkl").write_bytes(b"tamper"),
+        "meta_hash": lambda root: json.dump({**json.loads((root / "runstate" / "e3_canonical_runstate_s001.meta.json").read_text()), "checkpoint_hash": "0" * 64}, (root / "runstate" / "e3_canonical_runstate_s001.meta.json").open("w")),
+        "orphan": lambda root: (root / "runstate" / "orphan.state.pkl").write_bytes(b"orphan"),
+    }
+    for _name, mutation in mutations.items():
+        case = tmp_path / _name
+        case.mkdir()
+        _write_resume_fixture(case, mutate=mutation)
+        with pytest.raises(ValueError):
+            runner._load_and_validate_completed_sessions(
+                str(case), candidate="candidate", source_commit="source",
+                sessions=151, authorization_manifest_hash="auth")
+
+
+def test_archive_attribute_failure_rolls_back_new_nodes(monkeypatch):
+    pytest.importorskip("jax")
+    import dicode.simulator_frontier.canonical_dicode_runtime as runtime
+    from dicode.simulator_frontier import production_task_materializer as materializer
+    Plan = runtime.CanonicalDiCodeTrainingBatchPlan
+    dynamic_slots = tuple(f"plan-001::D{i:02d}" for i in range(12))
+    slots = dynamic_slots + ("collecting", "combat", "crafting")
+    valid = dict(VALID_TASKPARAM_RANGES)
+    slot_distributions = {
+        slot: ({"distribution_id": slot, "taskparam_ranges": valid,
+                "evidence_hash": "e" * 64} if "::" in slot else
+               {"distribution_id": slot, "evidence_hash": "e" * 64})
+        for slot in slots}
+    plan = Plan(
+        plan_id="plan-001", curriculum_slots=slots,
+        curriculum_weights={slot: 0.8 / 15 for slot in slots},
+        original_task_included=True, original_task_proportion=0.2,
+        curriculum_proportion_total=0.8, slot_distributions=slot_distributions,
+        memory_bindings={slot: {} for slot in slots}, env_adapter_id="adapter")
+
+    class Attrs(dict):
+        def __init__(self, slot, fail_slot):
+            super().__init__(); self.slot = slot; self.fail_slot = fail_slot
+        def update(self, *args, **kwargs):
+            if self.slot == self.fail_slot:
+                raise RuntimeError("injected attribute failure")
+            return super().update(*args, **kwargs)
+
+    class Graph:
+        def __init__(self): self.nodes = {}
+        def has_node(self, node): return node in self.nodes
+        def remove_node(self, node): self.nodes.pop(node, None)
+
+    class Archive:
+        def __init__(self, fail_record=None): self.graph = Graph(); self.fail_record = fail_record
+        def record_new_task(self, child_task, parent_tasks, description, session_id):
+            self.graph.nodes.setdefault(child_task, Attrs(child_task, dynamic_slots[7]))
+            if child_task == self.fail_record:
+                raise RuntimeError("injected record failure")
+
+    archive = Archive()
+    monkeypatch.setattr(runtime, "verify_frontier_distribution_environment_adapter", lambda adapter: None)
+    monkeypatch.setattr(materializer, "require_anchor_bindings", lambda _m: [
+        {"anchor_id": n, "taskparams": {}, "base_env_entrypoint": "x:y",
+         "base_env_hash": "a" * 64, "world_set_ref": "w",
+         "seed_policy_ref": "s", "reset_protocol": "STANDARD_RESET"}
+        for n in ("collecting", "combat", "crafting")])
+    monkeypatch.setattr(materializer, "resolve_taskparams", lambda *args, **kwargs: {k: 1 for k in valid})
+    monkeypatch.setattr(materializer, "render_slot_env_module", lambda *args, **kwargs: ("class Env: pass\n", "c" * 64))
+    monkeypatch.setattr(materializer, "canonical_sha256", lambda value: "d" * 64)
+    monkeypatch.setattr(runtime, "_env_module_source", lambda *args: "class Env: pass\n")
+    monkeypatch.setattr(runtime, "_import_entrypoint", lambda *args: object)
+    monkeypatch.setattr(runtime, "class_source_sha256", lambda *args: "a" * 64)
+    with pytest.raises(Exception):
+        runtime.materialize_and_register(SimpleNamespace(env_implementation_hash="a" * 64), plan, archive,
+                                          session_idx=1, anchor_manifest=object())
+    assert archive.graph.nodes == {}
+    existing = Archive()
+    existing.graph.nodes[dynamic_slots[0]] = {"keep": "unchanged"}
+    with pytest.raises(Exception):
+        runtime.materialize_and_register(SimpleNamespace(env_implementation_hash="a" * 64), plan, existing,
+                                          session_idx=1, anchor_manifest=object())
+    assert existing.graph.nodes == {dynamic_slots[0]: {"keep": "unchanged"}}
+    failed_record = Archive(fail_record=dynamic_slots[7])
+    with pytest.raises(Exception):
+        runtime.materialize_and_register(SimpleNamespace(env_implementation_hash="a" * 64), plan, failed_record,
+                                          session_idx=1, anchor_manifest=object())
+    assert failed_record.graph.nodes == {}

@@ -14,38 +14,43 @@
     },
     "controller_public_key": {
       "kind": "verification_material",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/auth/e3_controller_public_key.bin",
+      "path": "e3_controller_public_key.bin",
       "sha256": "ecf28b4c98a4e7ec138258f09e7d52aaf738d654afafd945851a0238d1aca906"
     },
     "runner_authorization": {
       "kind": "runner",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/e3_authorization.py",
-      "sha256": "79d268386779df816b6032823465c86cd8df0ddf821af7e6db67482b6209934c"
+      "path": "../scripts/e3_authorization.py",
+      "sha256": "3b317ea09187f1ed2ab86f6f9d353ac794629ff912c8b4f2b5aa5036523e6c58"
     },
     "runner_capsule_actualn": {
       "kind": "runner",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/e3_capsule_actualn.py",
-      "sha256": "0bbd5339af5f2b1b2f0a7b1d2d7dae5f017da0285becc1e7a7d55ed4d075b759"
+      "path": "../scripts/e3_capsule_actualn.py",
+      "sha256": "c5d11ebddf0082b108813ea1735b97af7ced5cbd064bf23aae683576766e5973"
     },
     "runner_ed25519_pure": {
       "kind": "runner",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/dicode/simulator_frontier/ed25519_pure.py",
-      "sha256": "2daca6a092c3fd091c708f56fd72648c8ae4fbbda76362cd06091c5507851213"
+      "path": "../src/dicode/simulator_frontier/ed25519_pure.py",
+      "sha256": "fcf79f4b9ee277e09a82a5de31c2b4e37cb448af516e613337788841d11bdf7c"
     },
     "runner_formal_longrun": {
       "kind": "runner",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/run_e3_formal_longrun.py",
-      "sha256": "514823f05e9d5be76ef481be8864821ddac5c03e802743f7248eaa5f0d916c07"
+      "path": "../scripts/run_e3_formal_longrun.py",
+      "sha256": "05e0546bfc0cd1734134e00128db19e3b52b75dba4f343bf59bca28f9ccc4fcb"
     },
     "runner_verify": {
       "kind": "runner",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/verify_e3_ah_gate.py",
-      "sha256": "e8cfa278ac38de22319a4a68709aa389b8db294888d02614b530a4a5451e8c46"
+      "path": "../scripts/verify_e3_ah_gate.py",
+      "sha256": "0692cadff306941245dcbdb96e0b37950f150fa37d19e96201e21590fa79e0c2"
     },
     "task_asset_manifest": {
       "kind": "task_asset_manifest",
-      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/auth/task_asset_manifest.json",
-      "sha256": "0aa0cca3561af65d73a4149c5a8ce0ccba1e93ca721ed6896fba2587ca8f9ab3"
+      "path": "task_asset_manifest.json",
+      "sha256": "db2b40dac3397fc0347213d0ca7085c0e0fd7e4e87febe0462f00a607685a155"
+    },
+    "executable_anchor_manifest": {
+      "kind": "executable_anchor_manifest",
+      "path": "e3_executable_anchor_manifest.json",
+      "sha256": "06dca1f9b2421d0dfc175f8b5c5e23b4a8dc7b98f45f298677a2b3f3cb209d03"
     }
   },
   "schema": "e3_formal_asset_registry/v2"

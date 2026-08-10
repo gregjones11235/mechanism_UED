@@ -122,6 +122,16 @@ def callable_source_sha256(name: str, fn: Any) -> str:
         f"{source_file}\n::\n{normalized}".encode("utf-8")).hexdigest()
 
 
+def class_source_sha256(name: str, fn: Any) -> str:
+    """Hash only the normalized class source used by anchor certificates."""
+    try:
+        source = inspect.getsource(fn)
+    except (OSError, TypeError) as exc:
+        raise InvalidEvidenceError(f"{name}: anchor source unavailable") from exc
+    return hashlib.sha256(source.replace("\r\n", "\n").replace("\r", "\n")
+                         .encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class CanonicalDiCodeTrainingBatchPlan:
     """The 15+1 curriculum plan direction 三 GENERATES for the DiCode runtime.
@@ -358,7 +368,8 @@ def _env_module_source(entrypoint: str, purpose: str = "frontier env") -> str:
 
 def materialize_and_register(adapter: Any, plan: Any,
                              gen_manager_archive: Any,
-                             session_idx: int = 0) -> tuple[str, ...]:
+                             session_idx: int = 0,
+                             *, anchor_manifest: Any = None) -> dict[str, Any]:
     """Register the 15 curriculum tasks into the GenManager TaskArchive.
 
     E3-P0-3: ``run_session_training`` only receives ``sampled_task_ids`` and
@@ -386,43 +397,126 @@ def materialize_and_register(adapter: Any, plan: Any,
             "materialize_and_register requires the GenManager archive — "
             "frontier tasks are never invented outside the archive "
             "(fail closed)")
-    # BUG-E3-10: the registered code is the FULL module source (loadable),
-    # not the class/function body returned by inspect.getsource.
-    env_code = _env_module_source(str(adapter.env_entrypoint))
-    registered = []
-    for slot in plan.curriculum_slots:
+    from .production_task_materializer import (
+        canonical_sha256, render_slot_env_module, resolve_taskparams,
+        require_anchor_bindings,
+    )
+    anchors = [s for s in plan.curriculum_slots if "::" not in str(s)]
+    anchor_records = require_anchor_bindings(anchor_manifest)
+    by_anchor = {str(a["anchor_id"]): a for a in anchor_records}
+    if set(anchors) != set(by_anchor):
+        raise ProductionBlockedError("BLOCKED_ANCHOR_EXECUTABLE_BINDING_MISSING")
+
+    # Prepare and validate every task before touching the archive.  This keeps
+    # malformed dynamic ranges or anchor bindings from creating partial runs.
+    prepared = []
+    for slot_raw in plan.curriculum_slots:
+        slot = str(slot_raw)
         distribution = plan.slot_distributions.get(slot)
-        if distribution is None:
-            raise ProductionBlockedError(
-                f"task registration failed: slot {slot!r} has no distribution "
-                "binding (fail closed)")
-        try:
-            #: the REAL TaskArchive registration surface (record_new_task),
-            #: never a nonexistent register_task
-            gen_manager_archive.record_new_task(
-                child_task=str(slot),
-                parent_tasks=[],
-                description=str(slot),
-                session_id=int(session_idx),
-            )
-            if gen_manager_archive.graph.has_node(str(slot)):
-                gen_manager_archive.graph.nodes[str(slot)].update({
-                    "distribution_hash": str(plan.plan_hash),
-                    "source_frontier": (
-                        "FRONTIER_DYNAMIC" if "::" in slot
-                        else "NON_TARGET_ANCHOR"),
-                    "student_identity": str(plan.env_adapter_id),
-                    "memory_binding": json.dumps(
-                        plan.memory_bindings.get(slot, {}),
-                        sort_keys=True),
-                    "code": env_code,
-                })
-        except Exception as exc:
-            raise ProductionBlockedError(
-                f"GenManager TaskArchive refused task registration for "
-                f"{slot!r}: {exc!r} (fail closed)") from exc
-        registered.append(str(slot))
-    return tuple(registered)
+        if not isinstance(distribution, Mapping):
+            raise ProductionBlockedError(f"slot {slot!r} distribution must be mapping")
+        if "::" in slot:
+            if distribution.get("distribution_id") not in (None, slot):
+                raise ProductionBlockedError("slot distribution identity mismatch")
+            ranges = distribution.get("taskparam_ranges")
+            params = resolve_taskparams(ranges, distribution_id=slot,
+                                        plan_hash=str(plan.plan_hash))
+            env_code, code_sha = render_slot_env_module(
+                params, distribution_id=slot, plan_hash=str(plan.plan_hash))
+            cert = {
+                "slot": slot, "kind": "dynamic",
+                "distribution_id": slot,
+                "evidence_hash": str(distribution.get("evidence_hash", "")),
+                "plan_hash": str(plan.plan_hash), "code_sha256": code_sha,
+                "resolved_taskparams": params,
+                "resolved_taskparams_sha256": canonical_sha256(params),
+                "base_env_entrypoint": "minicraftax.tasks.seed_tasks.collecting:Env",
+                "base_env_hash": str(adapter.env_implementation_hash),
+                "execution_fields": {
+                    "taskparams": "PPO_EXECUTED",
+                    "start_state": "SIMULATOR_SEARCH_ONLY",
+                    "seed": "SIMULATOR_SEARCH_ONLY",
+                    "stochasticity": "SIMULATOR_SEARCH_ONLY",
+                },
+            }
+        else:
+            anchor = by_anchor[slot]
+            params = dict(anchor["taskparams"])
+            env_code = _env_module_source(anchor["base_env_entrypoint"],
+                                          f"anchor {slot}")
+            code_sha = hashlib.sha256(env_code.encode("utf-8")).hexdigest()
+            anchor_cls = _import_entrypoint(anchor["base_env_entrypoint"],
+                                            f"anchor {slot}")
+            if class_source_sha256(f"anchor {slot}", anchor_cls) != str(anchor["base_env_hash"]):
+                # The controller class hash is authoritative; local source
+                # drift is never tolerated even when import succeeds.
+                raise ProductionBlockedError(
+                    f"anchor {slot!r} source hash mismatch")
+            cert = {
+                "slot": slot, "kind": "anchor", "distribution_id": slot,
+                "evidence_hash": str(distribution.get("evidence_hash", "")),
+                "plan_hash": str(plan.plan_hash), "code_sha256": code_sha,
+                "resolved_taskparams": params,
+                "resolved_taskparams_sha256": canonical_sha256(params),
+                "base_env_entrypoint": str(anchor["base_env_entrypoint"]),
+                "base_env_hash": str(anchor["base_env_hash"]),
+                "world_set_ref": str(anchor["world_set_ref"]),
+                "seed_policy_ref": str(anchor["seed_policy_ref"]),
+                "reset_protocol": str(anchor["reset_protocol"]),
+                "execution_fields": {
+                    "taskparams": "PPO_EXECUTED",
+                    "start_state": "SIMULATOR_SEARCH_ONLY",
+                    "seed": "SIMULATOR_SEARCH_ONLY",
+                    "stochasticity": "SIMULATOR_SEARCH_ONLY",
+                },
+            }
+        prepared.append((slot, env_code, cert))
+
+    registered = []
+    certificates = []
+    graph = getattr(gen_manager_archive, "graph", None)
+    if graph is None or not hasattr(graph, "has_node") or not hasattr(graph, "remove_node"):
+        raise ProductionBlockedError("archive graph is required for atomic registration")
+    existing = [slot for slot, _code, _cert in prepared if graph.has_node(slot)]
+    if existing:
+        raise ProductionBlockedError(f"target task already exists: {existing!r}")
+    created = []
+    try:
+        for slot, env_code, cert in prepared:
+            before = set(graph.nodes)
+            try:
+                gen_manager_archive.record_new_task(
+                    child_task=slot, parent_tasks=[], description=slot,
+                    session_id=int(session_idx))
+            except Exception:
+                if slot not in before and graph.has_node(slot):
+                    created.append(slot)
+                raise
+            if not graph.has_node(slot):
+                raise ProductionBlockedError(f"archive did not create task node {slot!r}")
+            # Record immediately after node creation, before any attribute
+            # mutation, so an attribute failure is rolled back too.
+            created.append(slot)
+            graph.nodes[slot].update({
+                "distribution_hash": str(plan.plan_hash),
+                "source_frontier": "FRONTIER_DYNAMIC" if cert["kind"] == "dynamic" else "NON_TARGET_ANCHOR",
+                "student_identity": str(plan.env_adapter_id),
+                "memory_binding": json.dumps(plan.memory_bindings.get(slot, {}), sort_keys=True),
+                "code": env_code, "code_sha256": cert["code_sha256"],
+                "resolved_taskparams": cert["resolved_taskparams"],
+                "certificate": cert,
+            })
+            registered.append(slot)
+            certificates.append(cert)
+    except Exception as exc:
+        for slot in created:
+            if graph.has_node(slot):
+                graph.remove_node(slot)
+        if any(graph.has_node(slot) for slot in created):
+            raise ProductionBlockedError("archive rollback incomplete") from exc
+        raise ProductionBlockedError(
+            f"GenManager TaskArchive refused task registration: {exc!r}") from exc
+    return {"registered_ids": tuple(registered), "certificates": tuple(certificates)}
 
 
 def verify_frontier_distribution_environment_adapter(adapter: Any) -> None:
