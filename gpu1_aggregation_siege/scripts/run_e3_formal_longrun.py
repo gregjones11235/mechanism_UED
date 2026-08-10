@@ -96,6 +96,25 @@ SEARCH_HORIZON = 16
 REQUESTED_N_PER_SESSION = 12
 SEED = 42
 
+# Audit gate (sole-controller 2026-08-10): the full-budget formal longrun is
+# NOT authorized until the audit items are closed and the sole controller signs
+# a full-budget authorization manifest covering the current source commit.
+# Until then this MUST stay False and the controller refuses full-budget
+# launches (verification-scope runs with a signed verification manifest are
+# still permitted).
+E3_FORMAL_LONGRUN_AUTHORIZED = False
+
+# Verification scope: sessions above this cap are only permitted when
+# E3_FORMAL_LONGRUN_AUTHORIZED is True (i.e. the sole controller signed a
+# full-budget authorization covering the current source commit).
+VERIFICATION_SESSIONS_MAX = 3
+
+# Authorization material (runner-side, verification only — never the private
+# key).  These are bound into the signed manifest and re-verified at runtime.
+AUTH_DIR = os.path.join(SIEGE_ROOT, "auth")
+AUTH_PUBLIC_KEY = os.path.join(AUTH_DIR, "e3_controller_public_key.bin")
+AUTH_REGISTRY = os.path.join(AUTH_DIR, "formal_asset_registry.json")
+
 
 def _log(msg: str) -> None:
     print(f"[e3-longrun-ctrl] {msg}", flush=True)
@@ -128,6 +147,14 @@ def _gpu_uuid() -> str:
 
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _params_hash(params) -> str:
@@ -175,69 +202,6 @@ def _resolved_config_hash() -> str:
     return _sha256_text(json.dumps(payload, sort_keys=True, default=str))
 
 
-def _build_backend_for_candidate(candidate_id: str, mount: dict, action_dim: int):
-    """Build the architecture TrainingBackend for a candidate (used for P0-4
-    memory restore and for step 5 train-state construction)."""
-    import run_e3_real_smoke as prod
-    architecture_family = mount["architecture_family"]
-    if architecture_family == "RMT16":
-        from dicode.training_backend_rmt16 import RMT16TrainingBackend
-        mount_report = mount.get("mount_report", {})
-        gatereport = mount_report.get("gates", {})
-        cfg_driver = gatereport.get("G1_driver_cfg", {}).get("cfg_fields", {})
-        return RMT16TrainingBackend(
-            candidate_id=candidate_id,
-            action_dim=action_dim,
-            activation=cfg_driver.get("activation", "relu"),
-            hidden_layers=cfg_driver.get("hidden_layers", 256),
-            embed_size=cfg_driver.get("embed_size", 256),
-            num_heads=cfg_driver.get("num_heads", 8),
-            qkv_features=cfg_driver.get("qkv_features", 256),
-            num_layers=cfg_driver.get("num_layers", 2),
-            gating=cfg_driver.get("gating", True),
-            gating_bias=cfg_driver.get("gating_bias", 2.0),
-            rmt_num_tokens=cfg_driver.get("rmt_num_tokens", 16),
-            window_mem=cfg_driver.get("window_mem", 128),
-            num_steps=cfg_driver.get("num_steps", NUM_STEPS),
-            carry_mode=mount.get("loaded", {}).get("carry_mode", "persistent"),
-        )
-    elif architecture_family == "SLOWGRU":
-        from dicode.training_backend_slowgru import SlowGRUTrainingBackend
-        return SlowGRUTrainingBackend(
-            candidate_id=candidate_id,
-            slowgru_runtime_path=prod.SLOWGRU_RUNTIME_PATH,
-            checkpoint_contract_path=prod.SLOWGRU_CHECKPOINT_CONTRACT_PATH,
-            checkpoint_path=prod.CHECKPOINTS[candidate_id],
-            action_dim=action_dim,
-            num_steps=NUM_STEPS,
-            carry_mode="PERSISTENT",
-        )
-    raise RuntimeError(f"unknown architecture_family {architecture_family!r}")
-
-
-def _adapter_memory_view(memory, architecture_family: str):
-    """Adapt a TrainingBackend memory dict to the Student adapter's contract
-    keys.  SLOWGRU's TrainingBackend emits RMT-style keys (mem_mask / mem_idx)
-    while its Student adapter's memory contract uses the legacy names
-    (memories_mask / memories_mask_idx).  RMT16 already matches, so it is a
-    pass-through.  Shapes/values are identical — only the key names change.
-    The training path keeps the backend keys; this view is only for the
-    frontier capsule / actual-N rollout (adapter policy_step)."""
-    if memory is None or architecture_family != "SLOWGRU":
-        return memory
-    out = dict(memory)
-    if "mem_mask" in out and "memories_mask" not in out:
-        out["memories_mask"] = out.pop("mem_mask")
-    if "mem_idx" in out and "memories_mask_idx" not in out:
-        out["memories_mask_idx"] = out.pop("mem_idx")
-    # slowgru_runtime.policy_step reads ms["step_idx"] (segment counter).  The
-    # TrainingBackend memory dict does not carry it, so initialize at segment
-    # start (0) exactly like slowgru_runtime.init_memory.
-    if "step_idx" not in out:
-        out["step_idx"] = 0
-    return out
-
-
 def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
                     prev_runstate: str | None, source_commit: str,
                     trusted_signer: str, formal_asset_registry_hash: str) -> dict:
@@ -282,14 +246,19 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
         current_session_idx = int(prev_state["current_session_idx"]) + 1
         training_rng = prev_state["training_rng"]
         student_params = prev_state["params"]
-        # P0-4: the RunState carries the REAL post-session architecture memory.
-        # Restore it so the next session's frontier / actual-N / PPO initial
-        # runner state begin from the trained hidden state, never zero-init.
+        # Session boundary semantics (sole-controller audit 2026-08-10): B —
+        # NEW SESSION.  The environment and the recurrent policy memory are
+        # RESET together at the start of each session; only params / optimizer
+        # / training RNG / global counters continue.  The previous session's
+        # final architecture memory is recorded in its RunState for evidence
+        # but is NOT injected into the new session (never a half-restored
+        # mixed state: old memory with a fresh env).
         architecture_memory_serialized = prev_state.get("architecture_memory")
         _log(f"session {session_idx}: resume from {prev_runstate} "
              f"global_update={start_global_update} "
              f"global_env={start_global_env_steps} session={current_session_idx} "
-             f"arch_memory={'present' if architecture_memory_serialized is not None else 'none'}")
+             f"boundary=B_NEW_SESSION_ENV_AND_MEMORY_RESET "
+             f"prev_arch_memory_recorded={architecture_memory_serialized is not None}")
 
     # ---- 1. mount student (real) ---------------------------------------------
     mount = _mount_student(candidate_id, checkpoint_params=student_params)
@@ -300,31 +269,22 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
     # ---- 2. real frontier capsule + same-state actual-N (once per session) ----
     # P0-1/2/3: capture ONE real frontier capsule from a real Student rollout,
     # then run N branches from that SAME capsule (only branch RNG differs).
-    # success is decided by an explicit gate_progress predicate; death/timeout
-    # is never auto-success; state_id is the real encoded payload hash.
+    # success is decided by a TASK-BASED predicate (all relevant achievements
+    # done); death/timeout is never auto-success; state_id is the real encoded
+    # payload hash.
     import e3_capsule_actualn as capsule_mod
-    # P0-4: restore the resumed architecture memory (session>1) so the capture
-    # rollout / actual-N branches start from the trained hidden state.
-    resumed_memory = None
-    if architecture_memory_serialized is not None:
-        _mem_backend = _build_backend_for_candidate(candidate_id, mount, 43)
-        resumed_memory = _mem_backend.restore_memory_state(
-            architecture_memory_serialized)
-        _log(f"session {session_idx}: arch-memory restored for "
-             f"{mount['architecture_family']}")
-    # P0-4: the capture rollout runs through the Student adapter, which has its
-    # OWN memory contract key names (SLOWGRU uses legacy memories_mask /
-    # memories_mask_idx).  Alias the restored backend memory to the adapter
-    # view for the capsule; the training path below keeps the backend keys.
-    capsule_memory = _adapter_memory_view(
-        resumed_memory, mount["architecture_family"])
+    # Session-boundary semantics B: the capture rollout starts from the
+    # Student's fresh initial memory (never the previous session's recurrent
+    # memory) — the env and the memory reset together.  The task-based
+    # success/progress predicate is built inside capture and bound to the
+    # capsule; actual-N reuses it.
     capsule = capsule_mod.capture_frontier_capsule(
         student=mount["adapter"], student_params=mount["params"],
         run_id=f"e3-longrun-s{session_idx}",
         reset_seed=SEED, capture_at_step=SEARCH_HORIZON,
         max_timesteps=SEARCH_HORIZON + 8, success_threshold=0.50,
         memory_mode="SAVED_POLICY_MEMORY",
-        initial_memory=capsule_memory,
+        initial_memory=None,
     )
     capsule["student"] = mount["adapter"]
     capsule["student_params"] = mount["params"]
@@ -463,7 +423,10 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
         adapter=register_result["env_adapter"],
         backend=backend,
         checkpoint_params=checkpoint_params,
-        initial_memory_dict=resumed_memory)
+        # Session-boundary semantics B: training starts from the backend's
+        # fresh initial memory (the env is reset this session too) — no
+        # cross-session recurrent-memory injection.
+        initial_memory_dict=None)
     if int(receipt["num_updates_in_session"]) != UPDATES_PER_SESSION:
         raise RuntimeError(
             f"session {session_idx}: expected {UPDATES_PER_SESSION} updates, "
@@ -550,6 +513,14 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
         "optimizer_semantics": ("NEW_OPTIMIZER_PHASE_FROM_SESSION0_THEN_CONTINUOUS"
                                 if prev_runstate is None
                                 else "RESUME_PREVIOUS_SESSION_OPT_STATE"),
+        # Session-boundary semantics B: env + recurrent memory reset together;
+        # only params/optimizer/RNG/global counters continue.
+        "session_boundary_semantics": "B_NEW_SESSION_ENV_AND_MEMORY_RESET",
+        "success_predicate": capsule.get("predicate_meta"),
+        "capture_success_basis": capsule.get("success_basis"),
+        "predicate_applicability": (capsule.get("facts", {}).get("predicate_applicability")),
+        "actual_n_predicate_meta": actual_n.get("predicate_meta"),
+        "actual_n_branch_seeds": actual_n.get("branch_seeds"),
         "curriculum_slots": len(canonical_plan.curriculum_slots),
         "registered_ids": list(register_result["registered_ids"]),
         "plan_hash": canonical_plan.plan_hash,
@@ -609,14 +580,39 @@ def main(argv=None) -> int:
     # P0-6/7/8: require a controller-signed authorization manifest.  Without
     # it, the formal launch is BLOCKED before ANY output dir / LLM / GPU.
     import e3_authorization as auth_mod
+    import run_e3_real_smoke as prod
     source_commit = _git_head()
+    # Full-budget gate: until the sole controller signs a full-budget
+    # authorization AND closes the audit, E3_FORMAL_LONGRUN_AUTHORIZED is
+    # False and launches above the verification cap are blocked.
+    if not E3_FORMAL_LONGRUN_AUTHORIZED and int(sessions) > VERIFICATION_SESSIONS_MAX:
+        print(f"[e3-longrun-ctrl] FULL_BUDGET_BLOCKED: "
+              f"E3_FORMAL_LONGRUN_AUTHORIZED=False — {sessions} sessions "
+              f"(cap {VERIFICATION_SESSIONS_MAX}) is a full-budget launch and "
+              f"is NOT authorized until the audit is closed and the sole "
+              f"controller signs the full-budget manifest (fail closed)",
+              flush=True)
+        return BLOCKED
     try:
         if not auth_manifest:
             raise ValueError(
                 "--auth-manifest=<path> is required: the sole controller must "
-                "sign an E3 authorization manifest (P0-6 fail closed)")
-        auth = auth_mod.load_authorization(auth_manifest)
-        auth_mod.verify_runtime_authorization(auth, source_commit, candidate_id)
+                "sign an E3 authorization manifest (audit fail closed)")
+        # Bind the RUNNING artifacts to the signed manifest.
+        runner_sha256 = _sha256_file(
+            os.path.join(SCRIPT_DIR, "run_e3_formal_longrun.py"))
+        checkpoint_sha256 = _sha256_file(prod.CHECKPOINTS[candidate_id])
+        probe = prod.mount_student(candidate_id)
+        student_profile_sha256 = str(probe.get("params_sha256", ""))
+        auth = auth_mod.load_authorization(
+            auth_manifest,
+            public_key_path=AUTH_PUBLIC_KEY,
+            registry_path=AUTH_REGISTRY,
+        )
+        auth_mod.verify_runtime_authorization(
+            auth, source_commit, candidate_id,
+            runner_sha256, checkpoint_sha256, student_profile_sha256,
+            AUTH_REGISTRY)
     except ValueError as exc:
         print(f"[e3-longrun-ctrl] AUTHORIZATION_BLOCKED: {exc}", flush=True)
         return BLOCKED
@@ -627,7 +623,10 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"[e3-longrun-ctrl] DIR_CLAIM_BLOCKED: {exc}", flush=True)
         return BLOCKED
-    trusted_signer = auth.controller_signature_ref
+    # The authorization is the Ed25519 signature (independently verifiable).
+    # trusted_signer / formal_asset_registry_hash now come from the signed
+    # manifest that was verified against the running artifacts.
+    trusted_signer = auth.authorization_id
     formal_asset_registry_hash = auth.formal_asset_registry_hash
     _wandb_offline_init(f"e3-formal-{candidate_id[:12]}")
 

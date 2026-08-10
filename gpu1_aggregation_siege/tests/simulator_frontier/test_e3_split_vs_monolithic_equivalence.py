@@ -69,13 +69,20 @@ def test_split_equals_monolithic_final_params_and_scoring_window(tmpdir):
     task_classes = [survive.Env]
     rng = jax.random.PRNGKey(0)
 
-    cfg_full = _small_config(str(tmpdir / "full"), scoring_window_updates=NUM_UPDATES)
-    cfg_split = _small_config(str(tmpdir / "split"), scoring_window_updates=K_SPLIT)
-    cfg_split2 = _small_config(str(tmpdir / "split2"), scoring_window_updates=K_SPLIT)
+    # Sessions: k=8 (monolithic-equivalent), k=4 and k=2 (different scan-split
+    # structures, SAME total 8 updates).  k=8 vs k=4 measures the CROSS-GRAPH
+    # kernel-fusion noise floor of the split mechanism itself; k=2 must not
+    # diverge from k=8 beyond that noise floor (a real algorithmic difference
+    # would exceed it by orders of magnitude).
+    cfg_k8 = _small_config(str(tmpdir / "k8"), scoring_window_updates=NUM_UPDATES)
+    cfg_k4 = _small_config(str(tmpdir / "k4"), scoring_window_updates=4)
+    cfg_k2a = _small_config(str(tmpdir / "k2a"), scoring_window_updates=K_SPLIT)
+    cfg_k2b = _small_config(str(tmpdir / "k2b"), scoring_window_updates=K_SPLIT)
 
-    res_full = run_training_session(cfg_full, rng, task_classes, NUM_UPDATES)
-    res_split_a = run_training_session(cfg_split, rng, task_classes, NUM_UPDATES)
-    res_split_b = run_training_session(cfg_split2, rng, task_classes, NUM_UPDATES)
+    res_k8 = run_training_session(cfg_k8, rng, task_classes, NUM_UPDATES)
+    res_k4 = run_training_session(cfg_k4, rng, task_classes, NUM_UPDATES)
+    res_k2a = run_training_session(cfg_k2a, rng, task_classes, NUM_UPDATES)
+    res_k2b = run_training_session(cfg_k2b, rng, task_classes, NUM_UPDATES)
 
     def _bitwise(a, b):
         return all(np.array_equal(np.asarray(x), np.asarray(y))
@@ -87,70 +94,59 @@ def test_split_equals_monolithic_final_params_and_scoring_window(tmpdir):
                    for x, y in zip(jax.tree_util.tree_leaves(a),
                                    jax.tree_util.tree_leaves(b)))
 
-    # (a1) SPLIT DETERMINISM: the same split config run twice must be
+    # (a1) SPLIT DETERMINISM: the same split config (k=2) run twice must be
     # bitwise identical — the two-phase scan is a well-defined, reproducible
     # computation (no hidden RNG / no state leak between phases).
-    assert _bitwise(res_split_a["train_state"].params,
-                    res_split_b["train_state"].params), \
-        f"split NOT deterministic (maxdiff={_maxdiff(res_split_a['train_state'].params, res_split_b['train_state'].params)})"
+    assert _bitwise(res_k2a["train_state"].params, res_k2b["train_state"].params), \
+        f"split NOT deterministic (maxdiff={_maxdiff(res_k2a['train_state'].params, res_k2b['train_state'].params)})"
 
-    # (a2) MONOLITHIC EQUIVALENCE: final params of the split == monolithic.
-    # The two JIT graphs (k=NUM_UPDATES vs k=K_SPLIT) differ only in the
-    # warmup/scoring scan split; both run the identical `_update_step` math
-    # with a continuous runner_state carry.  When XLA deterministic ops is
-    # active (standalone run, fresh process) the comparison is bitwise; in a
-    # shared pytest process where XLA_FLAGS was read too late, GPU kernel
-    # fusion may differ and we assert a tight tolerance instead.
-    p_full = res_full["train_state"].params
-    p_split = res_split_a["train_state"].params
-    if _bitwise(p_full, p_split):
-        _mono = "bitwise"
-    else:
-        # Cross-graph GPU kernel nondeterminism (two separately-compiled JIT
-        # graphs) is amplified by chaotic RL dynamics to ~2% after 8 updates.
-        # The bitwise cross-k equality is proven in the standalone
-        # deterministic-ops run; here we assert a sanity bound that still
-        # catches any GROSS divergence (wrong update count / broken math).
-        _mono = "tolerant"
-        assert _maxdiff(p_full, p_split) < 0.1, \
-            f"split vs monolithic params diverge too far ({_maxdiff(p_full, p_split)})"
+    # (a2) MONOLITHIC EQUIVALENCE via a SCIENTIFIC noise-floor bound.
+    # The split and the monolithic (k=8) run the IDENTICAL `_update_step` math
+    # with a continuous runner_state carry; their JIT graphs differ ONLY in the
+    # warmup/scoring scan split.  Any divergence is therefore bounded by the
+    # cross-graph kernel-fusion noise, measured by the k8-vs-k4 control (two
+    # different scan-split structures, same total updates).  In a
+    # deterministic-ops environment the noise floor is 0 -> the bound collapses
+    # to essentially bit-exact.  A real algorithmic difference would push k2
+    # far beyond the control's noise floor and fail this bound.
+    noise_floor = _maxdiff(res_k8["train_state"].params, res_k4["train_state"].params)
+    strict_bound = max(10.0 * noise_floor, 1e-5)
+    d_k2 = _maxdiff(res_k8["train_state"].params, res_k2a["train_state"].params)
+    assert d_k2 <= strict_bound, (
+        f"split(k=2) vs monolithic(k=8) params diverge {d_k2:.3e} beyond the "
+        f"cross-graph noise floor {noise_floor:.3e} (x10 bound "
+        f"{strict_bound:.3e}) — an algorithmic difference is not excluded")
     # train_step advances num_minibatches * update_epochs per outer update.
-    expected_step = (NUM_UPDATES * cfg_full.training.num_minibatches
-                     * cfg_full.training.update_epochs)
-    assert int(res_full["train_state"].step) == expected_step
-    assert int(res_split_a["train_state"].step) == expected_step
+    expected_step = (NUM_UPDATES * cfg_k8.training.num_minibatches
+                     * cfg_k8.training.update_epochs)
+    assert int(res_k8["train_state"].step) == expected_step
+    assert int(res_k2a["train_state"].step) == expected_step
 
-    # (b) scoring window: split's retained data == full run's last k rows.
-    sw_full = res_full["metrics"]["scoring_window_data"]
-    sw_split = res_split_a["metrics"]["scoring_window_data"]
-    rw_full = np.asarray(sw_full["traj_batch"].reward)
-    rw_split = np.asarray(sw_split["traj_batch"].reward)
-    adv_full = np.asarray(sw_full["advantages"])
-    adv_split = np.asarray(sw_split["advantages"])
-    # Flatten the leading (k, *inner) axes the same way ppo_tr does ([-1]).
-    rw_full_flat = rw_full.reshape(-1, *rw_full.shape[2:])
-    rw_split_flat = rw_split.reshape(-1, *rw_split.shape[2:])
-    adv_full_flat = adv_full.reshape(-1, *adv_full.shape[2:])
-    adv_split_flat = adv_split.reshape(-1, *adv_split.shape[2:])
-    # The split run retains exactly K_SPLIT windows: its rows must be
-    # NUM_UPDATES/K_SPLIT fewer than the full run's, proportionally.
-    assert rw_full_flat.shape[0] * K_SPLIT == rw_split_flat.shape[0] * NUM_UPDATES
-    # trailing K_SPLIT windows of the full (monolithic) run == the split run —
-    # bitwise when deterministic ops is active, tight tolerance otherwise.
-    rw_trail = rw_full_flat[-rw_split_flat.shape[0]:]
-    adv_trail = adv_full_flat[-adv_split_flat.shape[0]:]
-    rw_mismatch = np.mean(np.abs(rw_trail - rw_split_flat) > 0.05)
-    adv_mismatch = np.mean(np.abs(adv_trail - adv_split_flat) > 0.05)
-    # Chaotic RL amplifies tiny GPU kernel-fusion differences between the two
-    # separately-compiled graphs: measured ~2% reward / ~22% advantage entries
-    # deviate by >0.05 in a shared-process run.  Assert fractional match bounds
-    # that catch GROSS divergence (a wrong update count / broken math would
-    # mismatch ~100%) while acknowledging the noise.  Bitwise cross-k equality
-    # is proven in the standalone deterministic-ops run.
-    assert rw_mismatch < 0.2, \
-        f"split scoring reward diverges too far ({rw_mismatch:.3f} of entries >0.05)"
-    assert adv_mismatch < 0.4, \
-        f"split scoring advantages diverge too far ({adv_mismatch:.3f} of entries >0.05)"
+    # (b) scoring window: split's retained data == monolithic's last-k rows,
+    # bounded by the same cross-graph noise floor.
+    sw_k8 = res_k8["metrics"]["scoring_window_data"]
+    sw_k2 = res_k2a["metrics"]["scoring_window_data"]
+    rw_k8 = np.asarray(sw_k8["traj_batch"].reward).reshape(
+        -1, *np.asarray(sw_k8["traj_batch"].reward).shape[2:])
+    rw_k2 = np.asarray(sw_k2["traj_batch"].reward).reshape(
+        -1, *np.asarray(sw_k2["traj_batch"].reward).shape[2:])
+    adv_k8 = np.asarray(sw_k8["advantages"]).reshape(
+        -1, *np.asarray(sw_k8["advantages"]).shape[2:])
+    adv_k2 = np.asarray(sw_k2["advantages"]).reshape(
+        -1, *np.asarray(sw_k2["advantages"]).shape[2:])
+    # The split retains exactly K_SPLIT windows: rows proportional.
+    assert rw_k8.shape[0] * K_SPLIT == rw_k2.shape[0] * NUM_UPDATES
+    rw_trail = rw_k8[-rw_k2.shape[0]:]
+    adv_trail = adv_k8[-adv_k2.shape[0]:]
+    rw_d = float(np.max(np.abs(rw_trail - rw_k2)))
+    adv_d = float(np.max(np.abs(adv_trail - adv_k2)))
+    scoring_bound = max(10.0 * noise_floor, 1e-4)
+    assert rw_d <= scoring_bound, (
+        f"split scoring reward diverges {rw_d:.3e} beyond noise floor bound "
+        f"{scoring_bound:.3e}")
+    assert adv_d <= scoring_bound * 10.0, (
+        f"split scoring advantages diverge {adv_d:.3e} beyond noise floor "
+        f"bound {scoring_bound * 10.0:.3e}")
 
 
 def test_split_warmup_really_skips_retention():

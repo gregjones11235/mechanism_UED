@@ -1,0 +1,52 @@
+{
+  "assets": {
+    "checkpoint_rmt16": {
+      "candidate": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+      "kind": "student_checkpoint",
+      "path": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl",
+      "sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723"
+    },
+    "checkpoint_slowgru": {
+      "candidate": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+      "kind": "student_checkpoint",
+      "path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
+      "sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47"
+    },
+    "controller_public_key": {
+      "kind": "verification_material",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/auth/e3_controller_public_key.bin",
+      "sha256": "ecf28b4c98a4e7ec138258f09e7d52aaf738d654afafd945851a0238d1aca906"
+    },
+    "runner_authorization": {
+      "kind": "runner",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/e3_authorization.py",
+      "sha256": "79d268386779df816b6032823465c86cd8df0ddf821af7e6db67482b6209934c"
+    },
+    "runner_capsule_actualn": {
+      "kind": "runner",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/e3_capsule_actualn.py",
+      "sha256": "0bbd5339af5f2b1b2f0a7b1d2d7dae5f017da0285becc1e7a7d55ed4d075b759"
+    },
+    "runner_ed25519_pure": {
+      "kind": "runner",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/src/dicode/simulator_frontier/ed25519_pure.py",
+      "sha256": "2daca6a092c3fd091c708f56fd72648c8ae4fbbda76362cd06091c5507851213"
+    },
+    "runner_formal_longrun": {
+      "kind": "runner",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/run_e3_formal_longrun.py",
+      "sha256": "514823f05e9d5be76ef481be8864821ddac5c03e802743f7248eaa5f0d916c07"
+    },
+    "runner_verify": {
+      "kind": "runner",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/scripts/verify_e3_ah_gate.py",
+      "sha256": "e8cfa278ac38de22319a4a68709aa389b8db294888d02614b530a4a5451e8c46"
+    },
+    "task_asset_manifest": {
+      "kind": "task_asset_manifest",
+      "path": "/home/oseasy/experiments/e3_frontier_worktree/gpu1_aggregation_siege/auth/task_asset_manifest.json",
+      "sha256": "0aa0cca3561af65d73a4149c5a8ce0ccba1e93ca721ed6896fba2587ca8f9ab3"
+    }
+  },
+  "schema": "e3_formal_asset_registry/v2"
+}

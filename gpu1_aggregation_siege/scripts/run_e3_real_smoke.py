@@ -250,19 +250,37 @@ def run_real_actual_n(student_mount: dict, *, n: int = 4, horizon: int = 16) -> 
             transitions += 1
             if bool(np.asarray(done)):
                 break
-        # progress measure: gate_progress if present else a scaled reward sum
-        progress = float(getattr(state, "gate_progress", 0.0) or 0.0)
-        if not (0.0 <= progress <= 1.0):
-            progress = 0.0
+        # Task-based success/progress (audit: no fake gate_progress, no auto
+        # success on done).  survive.Env.is_success = all relevant achievements
+        # done; progress = fraction of relevant done.  Fails closed if the
+        # real fields are missing.
+        ach = getattr(state, "achievements", None)
+        if ach is None:
+            raise RuntimeError(
+                "run_real_actual_n: state lacks achievements (fail closed)")
+        rel = task.relevant_achievements
+        rel_idx = [int(a.value) for a in rel]
+        ach_np = np.asarray(ach)
+        done_flags = [bool(ach_np[i]) for i in rel_idx]
+        progress = float(sum(done_flags)) / float(len(rel_idx))
+        success = all(done_flags)
+        # real state_id from actual observable bytes (never a fake constant)
+        real_state_bytes = b"|".join(
+            np.asarray(getattr(state, f)).astype(np.float32).tobytes()
+            for f in ("achievements", "player_health", "player_level", "timestep"))
         outcomes.append({
             "branch_id": f"real-n-{i}",
-            "state_id": "e3-capture-real",
+            "state_id": _sha256_text(real_state_bytes.hex()),
             "search_source": "STUDENT_DETERMINISTIC",
             "rng_seed": int(1000 + i),
             "horizon": int(horizon),
             "transitions_used": transitions,
-            "success": bool(success or bool(np.asarray(done))),
+            "success": success,
             "progress": progress,
+            "success_basis": {
+                "achievements_done": {str(k): v for k, v in zip(rel_idx, done_flags)},
+                "achievements_completed": sum(done_flags),
+                "achievements_total": len(rel_idx)},
         })
     successes = sum(1 for o in outcomes if o["success"])
     from dicode.simulator_frontier.search_statistics import (

@@ -1,0 +1,16 @@
+{
+  "authorization_id": "e3-verification-ah-PERSISTENT_R-20260810T034050Z",
+  "source_commit": "2a9f7e6f78f28e8c7dd51730f4384a65be208faa",
+  "candidate_id": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "runner_sha256": "514823f05e9d5be76ef481be8864821ddac5c03e802743f7248eaa5f0d916c07",
+  "checkpoint_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+  "student_profile_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+  "task_asset_manifest_sha256": "0aa0cca3561af65d73a4149c5a8ce0ccba1e93ca721ed6896fba2587ca8f9ab3",
+  "formal_asset_registry_hash": "d6f211beb2d03cd76a8230d677847dc6e90eb6f7a0b5d5bb19e15dc4376ebc04",
+  "allowed_heads": [],
+  "issued_at_utc": "2026-08-10T03:40:50Z",
+  "scope": "verification-gate A-H only; NOT full budget",
+  "signer_public_key_fingerprint": "ecf28b4c98a4e7ec138258f09e7d52aaf738d654afafd945851a0238d1aca906",
+  "signature": "W+bH4Q+soI55iLwlRYqOnsMKk2F9w2MfgZHwhecbUl9m6aaTNWQPPdD5yDo/qMLGA1G9JMZ7GloZl26W7+T4Ag==",
+  "manifest_hash": "caffdde4441412e2a30a03e3fc91c75f072f58f0373541dd28fdbd2678ab62a4"
+}
