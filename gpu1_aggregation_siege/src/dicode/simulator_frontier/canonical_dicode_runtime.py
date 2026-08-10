@@ -771,6 +771,7 @@ def compile_canonical_15_plus_1(*, plan_id: Any, distributions: Any,
 def _delegate_canonical_session(runtime: Any, *, context: Any, plan: Any,
                                 adapter: Any, backend: Any = None,
                                 checkpoint_params: Any = None,
+                                initial_memory_dict: Any = None,
                                 purpose: str = "session") -> Mapping[str, Any]:
     """Common delegate: call DiCode's ``run_session_training`` with the EXACT
     8-tuple ABI and validate every field fail-closed.
@@ -780,6 +781,10 @@ def _delegate_canonical_session(runtime: Any, *, context: Any, plan: Any,
     max_updates_per_session = 100).  Direction 三 NEVER updates params itself
     and NEVER builds a second training loop; ``sampled_task_ids`` come from the
     minted plan and the OriginalTask is appended by DiCode exactly once.
+
+    P0-4: ``initial_memory_dict`` (resumed architecture memory from the previous
+    session's RunState) is forwarded to run_session_training so the PPO initial
+    runner state starts from the trained hidden state, never a zero re-init.
     """
     if not isinstance(context, DiCodeOneUpdateContext):
         raise InvalidEvidenceError(
@@ -816,6 +821,7 @@ def _delegate_canonical_session(runtime: Any, *, context: Any, plan: Any,
             context.original_return_prev_session,
             backend=backend,
             checkpoint_params=checkpoint_params,
+            initial_memory_dict=initial_memory_dict,
         )
     except Exception as exc:
         raise ProductionBlockedError(
@@ -888,7 +894,8 @@ def _delegate_canonical_session(runtime: Any, *, context: Any, plan: Any,
 def execute_one_update(runtime: Any, *, context: Any, plan: Any,
                        adapter: Any,
                        backend: Any = None,
-                       checkpoint_params: Any = None) -> Mapping[str, Any]:
+                       checkpoint_params: Any = None,
+                       initial_memory_dict: Any = None) -> Mapping[str, Any]:
     """Delegate ONE canonical DiCode update (smoke / unit test contract).
 
     E3-P0-2: this is the single-update runtime used by unit tests, object
@@ -900,24 +907,30 @@ def execute_one_update(runtime: Any, *, context: Any, plan: Any,
     return _delegate_canonical_session(
         runtime, context=context, plan=plan, adapter=adapter,
         backend=backend, checkpoint_params=checkpoint_params,
+        initial_memory_dict=initial_memory_dict,
         purpose="one-update")
 
 
 def execute_session(runtime: Any, *, context: Any, plan: Any,
                     adapter: Any,
                     backend: Any = None,
-                    checkpoint_params: Any = None) -> Mapping[str, Any]:
+                    checkpoint_params: Any = None,
+                    initial_memory_dict: Any = None) -> Mapping[str, Any]:
     """Delegate ONE complete native DiCode curriculum session (formal path).
 
     E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128: one invocation == one
     ``run_session_training`` == ``config.dicode_manager.max_updates_per_session``
     (100) outer updates.  This is NEVER a for-loop of ``execute_one_update``
     calls — DiCode's own ``run_training_session`` runs the full session.
+
+    P0-4: ``initial_memory_dict`` forwards the resumed architecture memory to
+    the PPO initial runner state.
     """
     verify_canonical_dicode_session_runtime(runtime)
     receipt = _delegate_canonical_session(
         runtime, context=context, plan=plan, adapter=adapter,
         backend=backend, checkpoint_params=checkpoint_params,
+        initial_memory_dict=initial_memory_dict,
         purpose="session")
     expected = int(context.config.dicode_manager.max_updates_per_session)
     if int(receipt["num_updates_in_session"]) != expected:

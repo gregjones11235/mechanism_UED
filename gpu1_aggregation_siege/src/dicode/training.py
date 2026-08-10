@@ -67,6 +67,7 @@ def run_session_training(
     original_return_prev_session: float = 0.0,
     backend: Any = None,
     checkpoint_params: Any = None,
+    initial_memory_dict: Any = None,
 ) -> tuple:
     """Runs a full training session on a sampled batch of tasks.
 
@@ -143,6 +144,7 @@ def run_session_training(
         current_original_return=original_return_prev_session,
         backend=backend,
         checkpoint_params=checkpoint_params,
+        initial_memory_dict=initial_memory_dict,
     )
     print("  Training run finished.")
 

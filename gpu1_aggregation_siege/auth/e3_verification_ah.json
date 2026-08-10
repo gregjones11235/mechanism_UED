@@ -1,0 +1,11 @@
+{
+  "authorization_id": "e3-verification-ah-gate-20260810",
+  "controller_signature_ref": "sole-controller:e3-verification-ah-gate:20260810",
+  "source_commit": "ba8d3f92033623f7acf5ebae2012c1cfc2b61962",
+  "candidate_id": "BOTH_ARMS",
+  "formal_asset_registry_hash": "fff5b0ea7965cdbed72647bc6736b6a38edff16ee8d178267083f82815d9946e",
+  "allowed_heads": [],
+  "scope": "verification-gate A-H only; NOT full budget",
+  "issued_for": "E3 A-H verification runs (F/G/H real sessions) ordered 2026-08-10",
+  "manifest_hash": "dfce18807b081e2b31eeb2b2272535ffa31c61687cb79d451795444a1ef5409f"
+}

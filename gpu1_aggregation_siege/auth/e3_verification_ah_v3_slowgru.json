@@ -1,0 +1,11 @@
+{
+  "authorization_id": "e3-verification-ah-gate-20260810-slowgru-v3",
+  "controller_signature_ref": "sole-controller:e3-verification-ah-gate:20260810:slowgru:v3",
+  "source_commit": "095557278daf8c734ee7e65ad41b567924abdff7",
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "formal_asset_registry_hash": "276e812b5c2f216a4481dad008cd87f83fcc0a768f734ee6fa31d7050be5554d",
+  "allowed_heads": [],
+  "scope": "verification-gate A-H only; NOT full budget",
+  "issued_for": "E3 A-H verification runs on final committed source 0955572",
+  "manifest_hash": "bf5ba42cb8a68cb887e16d527a816fec3fc9ac526c3134cbcfdb871410e8d013"
+}

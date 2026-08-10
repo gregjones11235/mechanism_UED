@@ -42,6 +42,7 @@ def make_train(
 	initial_global_update_step=0,
 	backend=None,
 	checkpoint_params=None,
+	initial_memory_dict=None,
 ):
 	"""Sets up the environment, network, and returns the JIT-compiled train function.
 
@@ -209,8 +210,15 @@ def make_train(
 
 		# --- Initialize Memory State ---
 		# BUG-E3-01: backend-aware memory (RMT16 includes rmt fields)
+		# P0-4: when initial_memory_dict is provided (resumed architecture memory
+		# from the previous session's RunState), the PPO initial runner state
+		# starts from the trained hidden state — NEVER a zero re-init.  The dict
+		# must be batch=num_envs (the controller broadcasts/slices it accordingly).
 		if _use_backend:
-			memory_dict = backend.init_runner_memory(config.num_envs)
+			if initial_memory_dict is not None:
+				memory_dict = dict(initial_memory_dict)
+			else:
+				memory_dict = backend.init_runner_memory(config.num_envs)
 		else:
 			memories = jnp.zeros(
 				(config.num_envs, config.window_mem, config.num_layers, config.embed_size)
@@ -1295,6 +1303,7 @@ def run_training_session(
 	current_original_return=0.0,
 	backend=None,
 	checkpoint_params=None,
+	initial_memory_dict=None,
 ):
 	config_t = config.training
 	train_fn = make_train(
@@ -1306,6 +1315,7 @@ def run_training_session(
 		global_update_step,
 		backend=backend,
 		checkpoint_params=checkpoint_params,
+		initial_memory_dict=initial_memory_dict,
 	)
 	train_jit = jax.jit(train_fn)
 	print("JIT compiling and running training session (Transformer)...")

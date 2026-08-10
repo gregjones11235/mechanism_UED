@@ -1,0 +1,75 @@
+{
+  "gate_A": {
+    "candidate": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+    "schema": "e3_verification_gate_A/v1",
+    "same_seed_same_state_id": true,
+    "state_id": "4d6a4c9f2b6a7b4253ec15c037c8f345a92a776062679803c163679af99f500e",
+    "same_capsule_same_branch_seeds": true,
+    "same_capsule_same_successes": true,
+    "diff_seed_diff_state_id": true,
+    "diff_seedbase_diff_branches": true,
+    "positive_pass": true,
+    "negative_pass": true,
+    "verdict": "PASS"
+  },
+  "evidence": {
+    "candidate": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+    "architecture_family": "SLOWGRU",
+    "sessions_run": [
+      1,
+      2,
+      3
+    ],
+    "gate_B_session_index": "PASS",
+    "session_index_sequence": [
+      1,
+      2,
+      3
+    ],
+    "start_global_updates": [
+      0,
+      100,
+      200
+    ],
+    "gate_CD_continuity": "PASS",
+    "params_carry_ok": true,
+    "optimizer_steps": {
+      "1": 3200,
+      "2": 6400,
+      "3": 9600
+    },
+    "rng_advanced": {
+      "1": "8f043e6d2d172210",
+      "2": "4add543c07f0ebbb",
+      "3": "79d4b269e2d2ed55"
+    },
+    "arch_memory_present": {
+      "1": true,
+      "2": true,
+      "3": true
+    },
+    "gate_FG_real_100": "PASS",
+    "env_steps_per_session": [
+      [
+        1,
+        13107200
+      ],
+      [
+        2,
+        13107200
+      ],
+      [
+        3,
+        13107200
+      ]
+    ],
+    "gate_H_fresh_restore": "PASS",
+    "fresh_restore_per_session": {
+      "1": true,
+      "2": true,
+      "3": true
+    },
+    "final_all_fresh_restore_ok": true
+  },
+  "overall": "PASS"
+}

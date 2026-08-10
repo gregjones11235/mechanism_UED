@@ -197,7 +197,8 @@ def _make_context_and_plan():
 
 def _monkeypatch_session(monkeypatch, updates=100):
     def _fake_session(config, rng, ts, gm, gu, ge, csi, sampled_task_ids,
-                      orig_ret, *, backend=None, checkpoint_params=None):
+                      orig_ret, *, backend=None, checkpoint_params=None,
+                      initial_memory_dict=None):
         return (rng, ts, gu + updates, ge + updates * 1024 * 128,
                 {}, updates, {}, {})
     monkeypatch.setattr(
