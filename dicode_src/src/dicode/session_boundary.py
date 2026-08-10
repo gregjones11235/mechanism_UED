@@ -45,6 +45,21 @@ def sha256_file(path: str | os.PathLike[str]) -> str:
     return digest.hexdigest()
 
 
+def sha256_path(path: str | os.PathLike[str]) -> str:
+    """Hash a file or a directory tree with stable relative-path ordering."""
+    root = Path(path)
+    if root.is_file():
+        return sha256_file(root)
+    if not root.is_dir():
+        raise FileNotFoundError(root)
+    digest = hashlib.sha256()
+    for child in sorted(p for p in root.rglob("*") if p.is_file()):
+        digest.update(str(child.relative_to(root)).replace("\\", "/").encode())
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(sha256_file(child)))
+    return digest.hexdigest()
+
+
 def _atomic_write(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)

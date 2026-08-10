@@ -40,6 +40,7 @@ def make_train(
 	task_embeddings=None,
 	task_distribution_proportions=None,
 	initial_global_update_step=0,
+	host_callback_free=False,
 ):
 	"""Sets up the environment, network, and returns the JIT-compiled train function."""
 	# --- Environment Setup (IDENTICAL TO OLD CODE) ---
@@ -643,7 +644,8 @@ def make_train(
 			metrics_to_log = (*losses_mean, gn_mean, gn_max)
 
 			current_step = initial_global_update_step + update_step
-			jax.debug.callback(_log_callback, metrics_to_log, current_step)
+			if not host_callback_free:
+				jax.debug.callback(_log_callback, metrics_to_log, current_step)
 			
 
 			# D. PREPARE FOR NEXT STEP
@@ -663,12 +665,21 @@ def make_train(
 				rng,
 			)
 
+			if host_callback_free:
+				return next_runner_state, (scoring_data, metrics_to_log)
 			return next_runner_state, scoring_data
 
 		# --- Run fixed-iteration training loop ---
-		(final_runner_state, scan_scoring_data) = jax.lax.scan(
-			_update_step, initial_runner_state, None, length=NUM_UPDATES
-		)
+		if host_callback_free:
+			(final_runner_state, scan_outputs) = jax.lax.scan(
+				_update_step, initial_runner_state, None, length=NUM_UPDATES
+			)
+			scan_scoring_data, scan_train_metrics = scan_outputs
+		else:
+			(final_runner_state, scan_scoring_data) = jax.lax.scan(
+				_update_step, initial_runner_state, None, length=NUM_UPDATES
+			)
+			scan_train_metrics = None
 
 		final_train_state = final_runner_state[0]
 
@@ -692,6 +703,7 @@ def make_train(
 			"train_state": final_train_state,
 			"metrics": {
 				"scoring_window_data": final_scoring_window_data,
+				"train_metrics": scan_train_metrics,
 				"num_updates_done": NUM_UPDATES,
 				"num_env_steps_done": num_env_steps_done,
 			},
@@ -1081,11 +1093,33 @@ def run_training_session(
 		task_embeddings,
 		task_distribution_proportions,
 		global_update_step,
+		host_callback_free=bool(
+			config.get("runtime", {}).get("host_callback_free", False)
+		),
 	)
 	train_jit = jax.jit(train_fn)
 	print("JIT compiling and running training session (Transformer)...")
 	start_time = time.time()
 	results = train_jit(rng, train_state, current_original_return)
+	if bool(config.get("runtime", {}).get("host_callback_free", False)):
+		# Keep the baseline log schema and update ordering, but emit after the
+		# compiled scan has completed so no Python callback runs inside the JIT.
+		metrics = jax.device_get(results["metrics"].get("train_metrics"))
+		if metrics is None:
+			raise RuntimeError("callback-free training returned no train_metrics")
+		for update_offset, row in enumerate(metrics):
+			t_loss, v_loss, a_loss, ent, g_norm_mean, g_norm_max = row
+			wandb.log(
+				{
+					"train/total_loss": t_loss,
+					"train/value_loss": v_loss,
+					"train/actor_loss": a_loss,
+					"train/entropy": ent,
+					"train/grad_norm_mean": g_norm_mean,
+					"train/grad_norm_max": g_norm_max,
+					"global_step": global_update_step + update_offset,
+				}
+			)
 	print(f"Session finished in {time.time() - start_time:.2f} seconds.")
 	return results
 
