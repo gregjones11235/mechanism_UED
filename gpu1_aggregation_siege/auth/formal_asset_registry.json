@@ -25,12 +25,12 @@
     "runner_capsule_actualn": {
       "kind": "runner",
       "path": "../scripts/e3_capsule_actualn.py",
-      "sha256": "c5d11ebddf0082b108813ea1735b97af7ced5cbd064bf23aae683576766e5973"
+      "sha256": "8a4d188950ec76812832c32b7e06e6ba96442c90c0b064ea312620d8c36cc0cc"
     },
     "runner_ed25519_pure": {
       "kind": "runner",
       "path": "../src/dicode/simulator_frontier/ed25519_pure.py",
-      "sha256": "fcf79f4b9ee277e09a82a5de31c2b4e37cb448af516e613337788841d11bdf7c"
+      "sha256": "2daca6a092c3fd091c708f56fd72648c8ae4fbbda76362cd06091c5507851213"
     },
     "runner_formal_longrun": {
       "kind": "runner",
@@ -40,12 +40,12 @@
     "runner_verify": {
       "kind": "runner",
       "path": "../scripts/verify_e3_ah_gate.py",
-      "sha256": "0692cadff306941245dcbdb96e0b37950f150fa37d19e96201e21590fa79e0c2"
+      "sha256": "1f210249b1b74fcaa9ae98e4474fc12576f822e779098ed68fda845a00876fb0"
     },
     "task_asset_manifest": {
       "kind": "task_asset_manifest",
       "path": "task_asset_manifest.json",
-      "sha256": "db2b40dac3397fc0347213d0ca7085c0e0fd7e4e87febe0462f00a607685a155"
+      "sha256": "5318cc9abffef5047694a4db7ac13cf2cc0d371f90f9259114c19601a0c2e0f1"
     },
     "executable_anchor_manifest": {
       "kind": "executable_anchor_manifest",

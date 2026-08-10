@@ -17,7 +17,7 @@
     },
     "base_task": {
       "path": "../src/minicraftax/tasks/base_task.py",
-      "sha256": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa"
+      "sha256": "858393c8061a59f2b0419bf00bbbe79db58324ffabb09c4dca9b63d847160b2b"
     },
     "canonical_dicode_runtime": {
       "path": "../src/dicode/simulator_frontier/canonical_dicode_runtime.py",
@@ -29,11 +29,11 @@
     },
     "multitask_env": {
       "path": "../src/minicraftax/envs/multitask.py",
-      "sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae"
+      "sha256": "0fe7fa1e0ca666bfa222fb91dd1ea34eea62b29f49de1c68594689993428b242"
     },
     "seed_tasks_survive": {
       "path": "../src/minicraftax/tasks/seed_tasks/survive.py",
-      "sha256": "ddb2b7e97fb1970dd1fa6cb0063bf35ce2cdb1ff3be17cbaab60e821f45e9e58"
+      "sha256": "819904ff3d65bda1325041f45c0653a4ff118b534c721b320f587c9318e15100"
     }
   }
 }
