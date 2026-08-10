@@ -48,6 +48,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import pickle
 import subprocess
 import sys
 import time
@@ -174,6 +175,55 @@ def _write_json(path: str, payload) -> None:
         json.dump(payload, fh, ensure_ascii=False, indent=2, sort_keys=True,
                   default=str)
     os.replace(tmp, path)
+
+
+def _write_initial_boundary(run_dir: str, session_idx: int, *,
+                            train_state, training_rng, source_commit: str,
+                            start_global_update: int,
+                            start_global_env_steps: int,
+                            previous_checkpoint: str | None) -> dict:
+    """Persist checkpoint-authoritative session input before training.
+
+    Under boundary semantics B, environment and recurrent memory are both
+    fresh and therefore intentionally absent from the carried state.  Params,
+    optimizer, train step and training RNG are the complete carried state and
+    are serialized atomically for an independent verifier.
+    """
+    boundary_dir = os.path.join(run_dir, "boundaries")
+    os.makedirs(boundary_dir, exist_ok=True)
+    stem = os.path.join(boundary_dir, f"session_{session_idx:03d}_initial")
+    state_path = stem + ".state.pkl"
+    meta_path = stem + ".meta.json"
+    payload = {
+        "schema": "simulator_frontier.e3_session_initial_boundary/v1",
+        "session_idx": int(session_idx),
+        "source_commit": str(source_commit),
+        "previous_checkpoint": str(previous_checkpoint or ""),
+        "params": train_state.params,
+        "opt_state": train_state.opt_state,
+        "train_step": int(train_state.step),
+        "training_rng": training_rng,
+        "global_update_step": int(start_global_update),
+        "global_env_steps": int(start_global_env_steps),
+        "session_boundary_semantics": "B_NEW_SESSION_ENV_AND_MEMORY_RESET",
+        "environment_restore_input": None,
+        "architecture_memory_restore_input": None,
+    }
+    state_tmp = state_path + ".tmp"
+    with open(state_tmp, "wb") as fh:
+        pickle.dump(payload, fh, protocol=4)
+    os.replace(state_tmp, state_path)
+    meta = {
+        "schema": "simulator_frontier.e3_session_initial_boundary_meta/v1",
+        "session_idx": int(session_idx),
+        "state_file": os.path.basename(state_path),
+        "state_file_sha256": _sha256_file(state_path),
+        "source_commit": str(source_commit),
+        "boundary_semantics": "B_NEW_SESSION_ENV_AND_MEMORY_RESET",
+    }
+    _write_json(meta_path, meta)
+    return {"state_path": state_path, "meta_path": meta_path,
+            "state_file_sha256": meta["state_file_sha256"]}
 
 
 def _mount_student(candidate_id: str, checkpoint_params=None) -> dict:
@@ -371,6 +421,13 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
         _log(f"session {session_idx}: resumed TrainState params="
              f"{initial_params_sha[:16]}... opt_step={train_step}")
 
+    boundary_report = _write_initial_boundary(
+        run_dir, session_idx, train_state=train_state,
+        training_rng=training_rng, source_commit=source_commit,
+        start_global_update=start_global_update,
+        start_global_env_steps=start_global_env_steps,
+        previous_checkpoint=prev_runstate)
+
     # ---- 6. canonical 15+1 plan + real TaskArchive ---------------------------
     register_result = prod.compile_and_register(
         {"planner": plan, "evidence_hash": llm_result["evidence_hash"]},
@@ -516,6 +573,8 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
         # Session-boundary semantics B: env + recurrent memory reset together;
         # only params/optimizer/RNG/global counters continue.
         "session_boundary_semantics": "B_NEW_SESSION_ENV_AND_MEMORY_RESET",
+        "initial_boundary_state_sha256": boundary_report["state_file_sha256"],
+        "initial_boundary_state_path": boundary_report["state_path"],
         "success_predicate": capsule.get("predicate_meta"),
         "capture_success_basis": capsule.get("success_basis"),
         "predicate_applicability": (capsule.get("facts", {}).get("predicate_applicability")),
@@ -579,8 +638,10 @@ def main(argv=None) -> int:
         return FAIL
     # P0-6/7/8: require a controller-signed authorization manifest.  Without
     # it, the formal launch is BLOCKED before ANY output dir / LLM / GPU.
+    # PRE-GPU AUTHORIZATION: e3_authorization is dependency-free and loads its
+    # Ed25519 verifier directly by file.  Do not import run_e3_real_smoke,
+    # mount a Student, import JAX or query a GPU until this block passes.
     import e3_authorization as auth_mod
-    import run_e3_real_smoke as prod
     source_commit = _git_head()
     # Full-budget gate: until the sole controller signs a full-budget
     # authorization AND closes the audit, E3_FORMAL_LONGRUN_AUTHORIZED is
@@ -598,22 +659,23 @@ def main(argv=None) -> int:
             raise ValueError(
                 "--auth-manifest=<path> is required: the sole controller must "
                 "sign an E3 authorization manifest (audit fail closed)")
-        # Bind the RUNNING artifacts to the signed manifest.
+        # Bind only standard-library-readable immutable artifacts first.
         runner_sha256 = _sha256_file(
             os.path.join(SCRIPT_DIR, "run_e3_formal_longrun.py"))
-        checkpoint_sha256 = _sha256_file(prod.CHECKPOINTS[candidate_id])
-        probe = prod.mount_student(candidate_id)
-        student_profile_sha256 = str(probe.get("params_sha256", ""))
         auth = auth_mod.load_authorization(
             auth_manifest,
             public_key_path=AUTH_PUBLIC_KEY,
             registry_path=AUTH_REGISTRY,
         )
+        static_assets = auth_mod.resolve_candidate_static_assets(
+            AUTH_REGISTRY, candidate_id)
         auth_mod.verify_runtime_authorization(
             auth, source_commit, candidate_id,
-            runner_sha256, checkpoint_sha256, student_profile_sha256,
-            AUTH_REGISTRY)
-    except ValueError as exc:
+            runner_sha256, static_assets["checkpoint_sha256"],
+            auth.student_profile_sha256, AUTH_REGISTRY,
+            task_asset_manifest_sha256=
+                static_assets["task_asset_manifest_sha256"])
+    except (ValueError, OSError, KeyError) as exc:
         print(f"[e3-longrun-ctrl] AUTHORIZATION_BLOCKED: {exc}", flush=True)
         return BLOCKED
     # P0-8: atomic unique directory claim (rejects duplicate run ids).
@@ -622,6 +684,19 @@ def main(argv=None) -> int:
         auth_mod.claim_output_dir(run_dir, run_id)
     except ValueError as exc:
         print(f"[e3-longrun-ctrl] DIR_CLAIM_BLOCKED: {exc}", flush=True)
+        return BLOCKED
+    # Authorization and the atomic output claim have passed.  Production/JAX
+    # imports and model mounting are now permitted, followed by a second
+    # identity check against the already-authorized checkpoint file.
+    import run_e3_real_smoke as prod
+    probe = prod.mount_student(candidate_id)
+    mounted_file_sha = str(probe.get("loaded", {}).get("file_sha256", ""))
+    mounted_params_sha = str(probe.get("params_sha256", ""))
+    if (mounted_file_sha != static_assets["checkpoint_sha256"]
+            or mounted_params_sha != auth.student_profile_sha256):
+        print("[e3-longrun-ctrl] POST_MOUNT_AUTHORIZATION_BLOCKED: mounted "
+              "checkpoint file or params SHA differs from signed authorization",
+              flush=True)
         return BLOCKED
     # The authorization is the Ed25519 signature (independently verifiable).
     # trusted_signer / formal_asset_registry_hash now come from the signed
@@ -635,6 +710,16 @@ def main(argv=None) -> int:
         "protocol": "E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128",
         "branch": FORMAL_BRANCH,
         "source_commit": source_commit,
+        "runner_sha256": runner_sha256,
+        "authorization_id": auth.authorization_id,
+        "authorization_manifest_hash": auth.manifest_hash,
+        "checkpoint_sha256": static_assets["checkpoint_sha256"],
+        "signed_expected_params_sha256": auth.student_profile_sha256,
+        "mounted_params_sha256": mounted_params_sha,
+        "optional_student_profile_file_sha256":
+            static_assets["student_profile_file_sha256"],
+        "task_asset_manifest_sha256":
+            static_assets["task_asset_manifest_sha256"],
         "candidate_id": candidate_id,
         "sessions": sessions,
         "updates_per_session": UPDATES_PER_SESSION,

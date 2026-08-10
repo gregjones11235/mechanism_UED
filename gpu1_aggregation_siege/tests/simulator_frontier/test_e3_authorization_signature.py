@@ -20,20 +20,39 @@ import tempfile
 import pytest
 
 import e3_authorization as am
-from dicode.simulator_frontier.ed25519_pure import generate_keypair_bytes, sign_bytes
+
+# Use the same dependency-free module loaded by the pre-GPU authorization
+# path; importing dicode.simulator_frontier would import JAX before the gate.
+generate_keypair_bytes = am._ED_MODULE.generate_keypair_bytes
+sign_bytes = am._ED_MODULE.sign_bytes
 
 
 def _make_registry(tmpdir):
     asset = os.path.join(tmpdir, "asset.bin")
     with open(asset, "wb") as fh:
         fh.write(b"real-asset-bytes-v1")
+    profile = os.path.join(tmpdir, "profile.yaml")
+    task_manifest = os.path.join(tmpdir, "task_manifest.json")
+    open(profile, "wb").write(b"candidate: CAND_TEST\n")
+    open(task_manifest, "wb").write(b'{"schema":"task-test/v1"}')
     reg = {
         "schema": "e3_formal_asset_registry/v2",
         "assets": {
             "test_asset": {
                 "path": asset,
                 "kind": "student_checkpoint",
+                "candidate": "CAND_TEST",
                 "sha256": hashlib.sha256(b"real-asset-bytes-v1").hexdigest(),
+            },
+            "test_profile": {
+                "path": profile, "kind": "student_profile",
+                "candidate": "CAND_TEST",
+                "sha256": hashlib.sha256(b"candidate: CAND_TEST\n").hexdigest(),
+            },
+            "task_manifest": {
+                "path": task_manifest, "kind": "task_asset_manifest",
+                "sha256": hashlib.sha256(
+                    b'{"schema":"task-test/v1"}').hexdigest(),
             },
         },
     }
@@ -41,7 +60,8 @@ def _make_registry(tmpdir):
     canonical = json.dumps(reg, sort_keys=True, indent=2)
     with open(reg_path, "w", encoding="utf-8") as fh:
         fh.write(canonical)
-    return reg_path, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return (reg_path, am._sha256_file(reg_path),
+            asset, profile, task_manifest)
 
 
 def _canonical(payload):
@@ -53,7 +73,7 @@ def _canonical(payload):
 
 def _build_signed_manifest(tmpdir, sk, pk, *, tamper_commit=False,
                            wrong_key=False):
-    reg_path, reg_hash = _make_registry(tmpdir)
+    reg_path, reg_hash, asset, profile, task_manifest = _make_registry(tmpdir)
     pubkey_path = os.path.join(tmpdir, "pubkey.bin")
     with open(pubkey_path, "wb") as fh:
         fh.write(pk if not wrong_key else bytes(31) + bytes([pk[-1] ^ 1]))
@@ -63,8 +83,10 @@ def _build_signed_manifest(tmpdir, sk, pk, *, tamper_commit=False,
         "candidate_id": "CAND_TEST",
         "runner_sha256": "b" * 64,
         "checkpoint_sha256": hashlib.sha256(b"real-asset-bytes-v1").hexdigest(),
-        "student_profile_sha256": "c" * 64,
-        "task_asset_manifest_sha256": "d" * 64,
+        "student_profile_sha256": hashlib.sha256(
+            b"candidate: CAND_TEST\n").hexdigest(),
+        "task_asset_manifest_sha256": hashlib.sha256(
+            b'{"schema":"task-test/v1"}').hexdigest(),
         "formal_asset_registry_hash": reg_hash,
         "allowed_heads": [],
         "issued_at_utc": "2026-08-10T00:00:00Z",
@@ -91,7 +113,7 @@ def test_ed25519_roundtrip():
     sk, pk = generate_keypair_bytes()
     sig = sign_bytes(b"payload", sk)
     am.verify_bytes  # ensure import surface exists
-    from dicode.simulator_frontier.ed25519_pure import verify_bytes
+    verify_bytes = am._ED_MODULE.verify_bytes
     verify_bytes(b"payload", sig, pk)  # no raise
     with pytest.raises(ValueError):
         verify_bytes(b"tampered", sig, pk)
@@ -105,6 +127,35 @@ def test_load_authorization_verifies_signature_registry_per_asset():
             m, public_key_path=pubk, registry_path=reg)
         assert auth.source_commit == "a" * 40
         assert auth.manifest_hash
+
+
+def test_static_runtime_binding_uses_registry_files_without_model_mount():
+    sk, pk = generate_keypair_bytes()
+    with tempfile.TemporaryDirectory() as td:
+        m, pubk, reg = _build_signed_manifest(td, sk, pk)
+        auth = am.load_authorization(m, public_key_path=pubk,
+                                     registry_path=reg)
+        assets = am.resolve_candidate_static_assets(reg, "CAND_TEST")
+        am.verify_runtime_authorization(
+            auth, auth.source_commit, auth.candidate_id,
+            auth.runner_sha256, assets["checkpoint_sha256"],
+            auth.student_profile_sha256, reg,
+            task_asset_manifest_sha256=
+                assets["task_asset_manifest_sha256"])
+
+
+def test_current_registry_shape_does_not_require_profile_file():
+    """Current production registries bind params in the signed manifest and
+    need not fabricate a student_profile asset before mounting."""
+    with tempfile.TemporaryDirectory() as td:
+        reg_path, _reg_hash, _asset, profile, _task = _make_registry(td)
+        registry = json.load(open(reg_path, encoding="utf-8"))
+        del registry["assets"]["test_profile"]
+        with open(reg_path, "w", encoding="utf-8") as fh:
+            json.dump(registry, fh, sort_keys=True, indent=2)
+        assets = am.resolve_candidate_static_assets(reg_path, "CAND_TEST")
+        assert assets["student_profile_path"] == ""
+        assert assets["student_profile_file_sha256"] == ""
 
 
 def test_tampered_manifest_rejected():

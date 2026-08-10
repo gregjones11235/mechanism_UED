@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import sys
@@ -33,7 +34,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from dicode.simulator_frontier.ed25519_pure import verify_bytes
+# Do not import ``dicode.simulator_frontier`` here: importing a package runs
+# its __init__, whose production surface imports JAX.  Authorization is the
+# pre-GPU gate, so load the dependency-free verifier directly from its file.
+_ED25519_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", "src", "dicode", "simulator_frontier",
+    "ed25519_pure.py"))
+_ED_SPEC = importlib.util.spec_from_file_location(
+    "_e3_ed25519_pure_preflight", _ED25519_PATH)
+if _ED_SPEC is None or _ED_SPEC.loader is None:
+    raise ImportError("cannot load dependency-free Ed25519 verifier")
+_ED_MODULE = importlib.util.module_from_spec(_ED_SPEC)
+_ED_SPEC.loader.exec_module(_ED_MODULE)
+verify_bytes = _ED_MODULE.verify_bytes
 
 
 def _sha256_text(text: str) -> str:
@@ -96,6 +109,59 @@ def verify_registry_assets(registry_path: str) -> dict:
                 f"registry={want} (fail closed)")
         verified[aid] = {"kind": kind, "sha256_ok": True}
     return verified
+
+
+def resolve_candidate_static_assets(registry_path: str,
+                                    candidate_id: str) -> dict[str, str]:
+    """Resolve authorization inputs without importing JAX or mounting a model.
+
+    A formal candidate must have exactly one checkpoint asset.  A future
+    immutable Student-profile file is additionally returned when present, but
+    is not required by the current registry: its authoritative params identity
+    is already signed in ``E3Authorization.student_profile_sha256`` and is
+    checked against the real mount after this pre-GPU gate.  The task manifest
+    remains mandatory.
+    """
+    with open(registry_path, "r", encoding="utf-8") as fh:
+        registry = json.load(fh)
+    assets = registry.get("assets", {})
+    if not isinstance(assets, Mapping):
+        raise ValueError("formal asset registry assets malformed (fail closed)")
+
+    def _one(kind: str, *, candidate_required: bool) -> Mapping[str, Any]:
+        matches = []
+        for meta in assets.values():
+            if not isinstance(meta, Mapping) or meta.get("kind") != kind:
+                continue
+            if candidate_required and meta.get("candidate") != candidate_id:
+                continue
+            matches.append(meta)
+        if len(matches) != 1:
+            raise ValueError(
+                f"registry requires exactly one {kind!r} asset for "
+                f"candidate {candidate_id!r}, got {len(matches)} (fail closed)")
+        return matches[0]
+
+    checkpoint = _one("student_checkpoint", candidate_required=True)
+    profiles = [meta for meta in assets.values()
+                if isinstance(meta, Mapping)
+                and meta.get("kind") == "student_profile"
+                and meta.get("candidate") == candidate_id]
+    if len(profiles) > 1:
+        raise ValueError(
+            f"registry has ambiguous student_profile assets for candidate "
+            f"{candidate_id!r} (fail closed)")
+    profile = profiles[0] if profiles else None
+    task_manifest = _one("task_asset_manifest", candidate_required=False)
+    return {
+        "checkpoint_path": str(checkpoint["path"]),
+        "checkpoint_sha256": str(checkpoint["sha256"]),
+        "student_profile_path": str(profile["path"]) if profile else "",
+        "student_profile_file_sha256": (
+            str(profile["sha256"]) if profile else ""),
+        "task_asset_manifest_path": str(task_manifest["path"]),
+        "task_asset_manifest_sha256": str(task_manifest["sha256"]),
+    }
 
 
 @dataclass(frozen=True)
@@ -266,7 +332,8 @@ def verify_runtime_authorization(auth: E3Authorization, runtime_head: str,
                                  runner_sha256: str,
                                  checkpoint_sha256: str,
                                  student_profile_sha256: str,
-                                 registry_path: str) -> dict:
+                                 registry_path: str,
+                                 task_asset_manifest_sha256: str | None = None) -> dict:
     """P0-7/audit: bind the RUNNING artifacts to the signed manifest.
 
     - runtime HEAD must equal auth.source_commit OR be an explicit
@@ -298,6 +365,15 @@ def verify_runtime_authorization(auth: E3Authorization, runtime_head: str,
         raise ValueError(
             f"student profile SHA mismatch: actual={student_profile_sha256[:16]} "
             f"signed={auth.student_profile_sha256[:16]} (fail closed)")
+    if not task_asset_manifest_sha256:
+        raise ValueError(
+            "task asset manifest SHA missing from runtime binding "
+            "(fail closed)")
+    if task_asset_manifest_sha256 != auth.task_asset_manifest_sha256:
+        raise ValueError(
+            f"task asset manifest SHA mismatch: actual="
+            f"{task_asset_manifest_sha256[:16]} signed="
+            f"{auth.task_asset_manifest_sha256[:16]} (fail closed)")
     verified = verify_registry_assets(registry_path)
     actual_reg_hash = recompute_registry_hash(registry_path)
     if actual_reg_hash != auth.formal_asset_registry_hash:

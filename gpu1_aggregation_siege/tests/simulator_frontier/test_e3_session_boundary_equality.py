@@ -14,11 +14,13 @@ Runs against real verification-run evidence when E3_VERIFY_RUN_DIR is set
 
 import hashlib
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 import verify_e3_ah_gate as ver
+import run_e3_formal_longrun as runner
 
 
 def test_per_leaf_equality_primitive_detects_mismatch():
@@ -37,6 +39,27 @@ def test_per_leaf_equality_primitive_detects_shape_change():
     a = {"x": np.zeros((4,), dtype=np.float32)}
     b = {"x": np.zeros((5,), dtype=np.float32)}
     assert ver._per_leaf_equality(a, b)["equal"] is False
+
+
+def test_runner_boundary_is_atomic_and_verifier_reads_authoritative_leaves(tmp_path):
+    train_state = SimpleNamespace(
+        params={"w": np.arange(4, dtype=np.float32)},
+        opt_state={"m": np.ones(4, dtype=np.float32)},
+        step=3200)
+    report = runner._write_initial_boundary(
+        str(tmp_path), 2, train_state=train_state,
+        training_rng=np.asarray([1, 2], dtype=np.uint32),
+        source_commit="a" * 40, start_global_update=100,
+        start_global_env_steps=100 * ver.ENV_STEPS_PER_UPDATE,
+        previous_checkpoint="runstate/session_001")
+    loaded = ver._load_initial_boundary(str(tmp_path), 2)
+    assert loaded["sha256"] == report["state_file_sha256"]
+    assert ver._per_leaf_equality(
+        train_state.params, loaded["state"]["params"])["equal"] is True
+    assert ver._per_leaf_equality(
+        train_state.opt_state, loaded["state"]["opt_state"])["equal"] is True
+    assert loaded["state"]["environment_restore_input"] is None
+    assert loaded["state"]["architecture_memory_restore_input"] is None
 
 
 def _run_dir():

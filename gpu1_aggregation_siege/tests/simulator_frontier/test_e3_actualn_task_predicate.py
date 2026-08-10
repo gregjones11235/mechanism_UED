@@ -111,3 +111,35 @@ def test_empty_relevant_achievements_fails_closed():
         relevant_achievements = []
     with pytest.raises(RuntimeError):
         cap.build_task_success_predicate(NoRelevant)
+
+
+def test_formal_setup_returns_initialized_task_instance():
+    """Regression: the formal setup must not pass survive.Env class to the
+    predicate builder because relevant_achievements is instance state."""
+    setup = cap._build_multitask_setup(max_timesteps=24, reset_seed=42)
+    task = setup["task"]
+    assert isinstance(task, survive.Env)
+    pred, meta = cap.build_task_success_predicate(task)
+    assert meta["achievement_indices"] == [
+        int(a.value) for a in task.relevant_achievements]
+    assert pred(setup["state0"]) is False
+
+
+def test_task_class_is_rejected_before_formal_capture():
+    with pytest.raises(RuntimeError, match="class, not the initialized task instance"):
+        cap.build_task_success_predicate(survive.Env)
+
+
+def test_saved_policy_memory_missing_has_no_silent_fallback():
+    calls = []
+    factory = lambda n: calls.append(n) or {"fresh": True}
+    with pytest.raises(RuntimeError, match="contains no policy_memory"):
+        cap._resolve_branch_memory(None, "SAVED_POLICY_MEMORY", factory)
+    assert calls == []
+    saved = {"h": np.asarray([1.0])}
+    assert cap._resolve_branch_memory(
+        saved, "SAVED_POLICY_MEMORY", factory) is saved
+    assert calls == []
+    assert cap._resolve_branch_memory(
+        None, "ZERO_MEMORY_ABLATION", factory) == {"fresh": True}
+    assert calls == [1]

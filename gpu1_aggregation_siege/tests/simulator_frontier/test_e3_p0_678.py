@@ -17,13 +17,16 @@ import base64
 import hashlib
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
 import e3_authorization as auth_mod
-from dicode.simulator_frontier.ed25519_pure import generate_keypair_bytes, sign_bytes
+
+generate_keypair_bytes = auth_mod._ED_MODULE.generate_keypair_bytes
+sign_bytes = auth_mod._ED_MODULE.sign_bytes
 
 
 def _canonical(payload):
@@ -46,7 +49,7 @@ def _make_signed_env(tmpdir, *, commit="a" * 40, candidate="CAND_TEST",
     reg_path = Path(tmpdir) / "registry.json"
     canonical = json.dumps(reg, sort_keys=True, indent=2)
     reg_path.write_text(canonical, encoding="utf-8")
-    reg_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    reg_hash = auth_mod._sha256_file(str(reg_path))
     payload = {
         "authorization_id": "auth-p0-678",
         "source_commit": commit,
@@ -91,6 +94,21 @@ def test_full_budget_blocked_when_not_authorized():
     import run_e3_formal_longrun as ctrl
     assert ctrl.E3_FORMAL_LONGRUN_AUTHORIZED is False
     assert ctrl.VERIFICATION_SESSIONS_MAX == 3
+
+
+def test_missing_authorization_blocks_before_production_import_and_output():
+    import run_e3_formal_longrun as ctrl
+    with tempfile.TemporaryDirectory() as td:
+        out = str(Path(td) / "must-not-exist")
+        sys.modules.pop("run_e3_real_smoke", None)
+        rc = ctrl.main([
+            "--student=PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+            "--sessions=1", f"--out={out}",
+            f"--auth-manifest={Path(td) / 'missing.json'}",
+        ])
+        assert rc == ctrl.BLOCKED
+        assert not Path(out).exists()
+        assert "run_e3_real_smoke" not in sys.modules
 
 
 def test_manifest_missing_fails_closed():

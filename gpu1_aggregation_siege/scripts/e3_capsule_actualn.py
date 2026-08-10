@@ -69,12 +69,30 @@ def _slice_batch_memory(memory: Mapping[str, Any], index: int) -> dict:
     return out
 
 
+def _resolve_branch_memory(saved_memory, memory_mode: str,
+                           initial_memory_factory):
+    """Resolve branch memory without ever disguising a fresh reset as saved."""
+    if memory_mode == "SAVED_POLICY_MEMORY":
+        if saved_memory is None:
+            raise RuntimeError(
+                "SAVED_POLICY_MEMORY requested but the restored capsule "
+                "contains no policy_memory (fail closed; never silently "
+                "initialize fresh memory)")
+        return saved_memory
+    if memory_mode == "ZERO_MEMORY_ABLATION":
+        return initial_memory_factory(1)
+    raise RuntimeError(
+        f"unsupported actual-N memory_mode {memory_mode!r}; only "
+        "SAVED_POLICY_MEMORY or explicit ZERO_MEMORY_ABLATION are accepted "
+        "(fail closed)")
+
+
 def _build_multitask_setup(*, max_timesteps: int, reset_seed: int) -> dict:
     """Build the MultiTaskMiniCraftaxEnv setup with 8335-dim observations
     (8268 symbolic + 67 task embedding) — the SAME env the RMT16 / SlowGRU
     Student adapters expect (obs_dim 8335).
 
-    Exposes ``task_class`` (the concrete Task the capsule is captured for) so
+    Exposes ``task`` (the initialized concrete Task the capsule uses) so
     the success/progress predicates are derived from the REAL task interface.
     """
     import jax
@@ -102,7 +120,10 @@ def _build_multitask_setup(*, max_timesteps: int, reset_seed: int) -> dict:
         "obs0": obs,
         "max_timesteps": max_timesteps,
         "reset_seed": reset_seed,
-        "task_class": survive.Env,
+        # relevant_achievements is populated on the instantiated task, not on
+        # the class.  Capture and verification must use this exact env-owned
+        # instance so their task interface cannot diverge.
+        "task": env.tasks[0],
     }
 
 
@@ -110,21 +131,25 @@ def _build_multitask_setup(*, max_timesteps: int, reset_seed: int) -> dict:
 # Task-based success / progress predicates (fail closed, real fields only)
 # ---------------------------------------------------------------------------
 
-def task_relevant_achievement_indices(task_class) -> list[int]:
+def task_relevant_achievement_indices(task) -> list[int]:
     """Extract the relevant achievement indices for a concrete Task class.
 
     Fails closed if the task does not expose the real interface
     (is_success / relevant_achievements with .value indices).  There is no
     default; a missing interface is a hard error.
     """
-    if not hasattr(task_class, "is_success"):
+    if isinstance(task, type):
         raise RuntimeError(
-            f"task {task_class!r} lacks is_success(state) — cannot build a "
+            f"task {task!r} is a class, not the initialized task instance "
+            "owned by the environment (fail closed)")
+    if not hasattr(task, "is_success"):
+        raise RuntimeError(
+            f"task {task!r} lacks is_success(state) — cannot build a "
             "task success predicate (fail closed)")
-    rel = getattr(task_class, "relevant_achievements", None)
+    rel = getattr(task, "relevant_achievements", None)
     if not rel or not isinstance(rel, (list, tuple)):
         raise RuntimeError(
-            f"task {task_class!r} lacks a non-empty relevant_achievements "
+            f"task {task!r} lacks a non-empty relevant_achievements "
             "list — cannot build a task success predicate (fail closed)")
     indices: list[int] = []
     for ach in rel:
@@ -152,15 +177,15 @@ def _read_achievements(state) -> np.ndarray:
             f"cannot read state.achievements: {exc!r} (fail closed)") from exc
 
 
-def build_task_success_predicate(task_class) -> tuple[Callable[[Any], bool], dict]:
+def build_task_success_predicate(task) -> tuple[Callable[[Any], bool], dict]:
     """Build a success predicate from the Task class's is_success().
 
     success == all relevant achievements done (the task's true objective).
     Returns (predicate(state)->bool, meta) where meta records the frozen
     achievement indices + task identity (the RAW success basis definition).
     """
-    indices = task_relevant_achievement_indices(task_class)
-    task_name = getattr(task_class, "__name__", str(task_class))
+    indices = task_relevant_achievement_indices(task)
+    task_name = type(task).__name__
 
     def _pred(state) -> bool:
         ach = _read_achievements(state)
@@ -182,14 +207,14 @@ def build_task_success_predicate(task_class) -> tuple[Callable[[Any], bool], dic
     return _pred, meta
 
 
-def build_task_progress_fn(task_class) -> Callable[[Any], float]:
+def build_task_progress_fn(task) -> Callable[[Any], float]:
     """Progress = fraction of relevant achievements completed (0..1).
 
     Computed from the REAL state.achievements bytes at the relevant indices.
     Fails closed on missing fields / non-finite results.
     """
-    indices = task_relevant_achievement_indices(task_class)
-    task_name = getattr(task_class, "__name__", str(task_class))
+    indices = task_relevant_achievement_indices(task)
+    task_name = type(task).__name__
     n = float(len(indices))
 
     def _prog(state) -> float:
@@ -344,8 +369,8 @@ def capture_frontier_capsule(*, student, student_params, run_id: str,
     observe_fn = getattr(env, "get_obs", None)
     if observe_fn is None:
         raise RuntimeError("capture: env exposes no get_obs(state)")
-    task_class = setup["task_class"]
-    task_name = getattr(task_class, "__name__", str(task_class))
+    task = setup["task"]
+    task_name = type(task).__name__
 
     identity = student.identity()
     params_sha = _params_hash(student_params)
@@ -383,8 +408,8 @@ def capture_frontier_capsule(*, student, student_params, run_id: str,
             "state is never a frontier branch point)")
 
     # Task-based predicate (frozen achievement semantics), validated.
-    pred, pred_meta = build_task_success_predicate(task_class)
-    prog = build_task_progress_fn(task_class)
+    pred, pred_meta = build_task_success_predicate(task)
+    prog = build_task_progress_fn(task)
     indices = pred_meta["achievement_indices"]
     applicability = verify_predicate_applicability(state, pred, indices,
                                                    task_name)
@@ -461,7 +486,7 @@ def capture_frontier_capsule(*, student, student_params, run_id: str,
         "predicate": pred,
         "progress_fn": prog,
         "predicate_meta": pred_meta,
-        "task_class": task_class,
+        "task": task,
         "task_name": task_name,
         "steps_executed": steps_executed,
         "student": student,
@@ -532,12 +557,10 @@ def run_same_state_actual_n(*, capsule: dict, n: int, horizon: int,
         bundle = restore_env_state(encoded, capsule["template"])
         state = bundle.env_state
         obs = observe_fn(state, task_embeddings)
-        memory = bundle.policy_memory if memory_mode == "SAVED_POLICY_MEMORY" \
-            else student.initial_memory(1)
+        memory = _resolve_branch_memory(
+            bundle.policy_memory, memory_mode, student.initial_memory)
         prev_action = bundle.previous_action if hasattr(bundle, "previous_action") else 0
         prev_reward = bundle.previous_reward if hasattr(bundle, "previous_reward") else 0.0
-        if memory is None:
-            memory = student.initial_memory(1)
         transitions_used = 0
         terminal_event = None
         rng = jax.random.PRNGKey(env_seed)
