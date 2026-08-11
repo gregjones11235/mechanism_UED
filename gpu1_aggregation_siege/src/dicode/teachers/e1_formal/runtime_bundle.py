@@ -238,10 +238,10 @@ def parse_student_selection(
     architecture_family = _require_non_empty_str(
         mapping.get("architecture_family"), "architecture_family", ctx
     )
-    if architecture_family.upper() != "RMT16":
+    if architecture_family.upper() not in ("RMT16", "SLOWGRU"):
         raise RuntimeBundleError(
             RUNTIME_BUNDLE_STUDENT_SELECTION_BAD,
-            f"{ctx}: architecture_family must be RMT16, got "
+            f"{ctx}: architecture_family must be RMT16 or SLOWGRU, got "
             f"{architecture_family!r}",
         )
     expected_memory = STUDENT_MEMORY_MODE_BY_CANDIDATE[selected]
@@ -884,6 +884,62 @@ def require_bundle_admissible_for_production(
             f"{ctx}: a PRODUCTION bundle must carry a signature_ref "
             "(the director-injected verifier authorizes the signer)",
         )
+
+
+#: capability contract -> the registry contract that materializes it
+#: (the FormalAssetRegistry itself binds the formal_asset_registry slot)
+CAPABILITY_TO_REGISTRY_CONTRACT: Mapping[str, str] = {
+    "student_identity": "student_identity",
+    "reference_identity": "reference_identity",
+    "student_adapter": "student_adapter",
+    "reference_adapter": "reference_adapter",
+    "anchor_manifest": "anchor_manifest",
+    "probe_runner": "candidate_probe_runner",
+    "training": "canonical_dicode_one_update_runtime",
+    "full_state_checkpoint": "canonical_dicode_runstate_checkpoint",
+}
+
+
+def bind_capabilities_from_registry(
+    bundle: "E1RuntimeBundle", resolution: Mapping[str, Any],
+    registry: Any, ctx: str
+) -> "E1RuntimeBundle":
+    """Bind the RESOLVED real objects as the bundle's capability surface.
+
+    A PRODUCTION manifest bundle is manifest-only (``capabilities=()``);
+    the one-window pipeline requires ``runtime.capability(contract)`` to
+    return a REAL object for every capability contract. This returns a
+    NEW bundle carrying the registry-resolved real objects (the identity
+    hashes / bundle_hash are unchanged — the objects ARE the ones the
+    manifest declared, cross-bound by the resolution). Fail-closed: any
+    unbound capability refuses.
+    """
+    from dataclasses import replace
+
+    if not isinstance(bundle, E1RuntimeBundle):
+        raise RuntimeBundleError(
+            RUNTIME_BUNDLE_BAD_TYPE,
+            f"{ctx}: expected an E1RuntimeBundle, got "
+            f"{type(bundle).__name__}",
+        )
+    resolutions = resolution.get("resolutions", {})
+    bound = []
+    for contract in RUNTIME_CAPABILITY_CONTRACTS:
+        if contract == "formal_asset_registry":
+            obj = registry
+        else:
+            registry_contract = CAPABILITY_TO_REGISTRY_CONTRACT[contract]
+            res = resolutions.get(registry_contract)
+            obj = getattr(res, "object", None) if res is not None else None
+        if obj is None or isinstance(obj, (str, bytes, Mapping)) or (
+                isinstance(obj, (bool, int, float))):
+            raise RuntimeBundleError(
+                RUNTIME_BUNDLE_UNBOUND,
+                f"{ctx}: capability {contract!r} did not resolve to a "
+                "real object from the FormalAssetRegistry",
+            )
+        bound.append((contract, obj))
+    return replace(bundle, capabilities=tuple(bound))
 
 
 # ---------------------------------------------------------------------------

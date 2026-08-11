@@ -1,0 +1,46 @@
+{
+  "anchors": [
+    {
+      "anchor_id": "anchor_task_1",
+      "code_hash": "496a320c5d2bee3590e02d1704a8c77ce4448ed55407fc3ebb497eb099105a90",
+      "frozen_at": "2026-08-05T16:52:26Z",
+      "frozen_by": "mechanism_UED_supervisor_freeze",
+      "reset_protocol": "6ee4878b1b920d236ade74a49445fa225feaaa7cbbbbaea56851572f87709882",
+      "seed_protocol": "97d50f23af4d6b1c0c29b6b3849ed31bf00e74d4f49118449d26358c3c223da4",
+      "source_task_id": "task_1",
+      "task_params_hash": "93d239f40f79bb381472a8fbabd7a56769eb6d0ea793b039536dc44a816485f3"
+    },
+    {
+      "anchor_id": "anchor_task_2",
+      "code_hash": "69821af27198132334f9f4fc7fa2035eade239ca9977d20592123760dd938bf8",
+      "frozen_at": "2026-08-05T16:52:26Z",
+      "frozen_by": "mechanism_UED_supervisor_freeze",
+      "reset_protocol": "918072bf9f6dc07d080a56a7a088e72f29ab25ace4b87b3468678640e649d37e",
+      "seed_protocol": "c3115942ba01ba1bf67096e55d155169d3f266e7ffb4c223a94f3d41ffdc24de",
+      "source_task_id": "task_2",
+      "task_params_hash": "aca2dd94770abec5f6c06222e7848b2fcd9962b197adebfeb80abf607d72228c"
+    },
+    {
+      "anchor_id": "anchor_task_3",
+      "code_hash": "7e58ecb115d14c5d830afb82d11cbb0e83280e0a6445a0ac4c0e82fb9b4249ff",
+      "frozen_at": "2026-08-05T16:52:26Z",
+      "frozen_by": "mechanism_UED_supervisor_freeze",
+      "reset_protocol": "f31a75470d69b70e9ca91951a5cbf8371a1a8c52e08dd50da864057be747c75e",
+      "seed_protocol": "c9702965eb6d69985a281a6084f74095e3b23d0c6ab4de3fa29f03faf9a36052",
+      "source_task_id": "task_3",
+      "task_params_hash": "19d6156b38af83edb4fd54f0f9665c0d42a90df58e9aed47ae65549b3a04ca11"
+    },
+    {
+      "anchor_id": "anchor_original_craftax",
+      "code_hash": "8626b3e5893f67ae5e111360b307576531a57cff3a95a736f1c9e04d17c44406",
+      "frozen_at": "2026-08-05T16:52:26Z",
+      "frozen_by": "mechanism_UED_supervisor_freeze",
+      "reset_protocol": "ff04dcbc20af1c135920786088fa60d0808c7f3a8b91767c8134159353400cd3",
+      "seed_protocol": "70964b3217a4f718039045b0401bd4335e101285e1e01ed7772933bf3b8b6110",
+      "source_task_id": "original_craftax",
+      "task_params_hash": "c52370fb1504ad3d7b4397f4d73ee51db6e02ecd528b6670106a80abefa31110"
+    }
+  ],
+  "manifest_sha256": "a8844cd0e55ddfd7c5f2ccde138c00842021dee5326679eb6ab952b9aed18da0",
+  "status": "FROZEN"
+}

@@ -37,4 +37,5 @@ class TestRejectsUnknownStudent:
         assert SC.ALLOWED_STUDENT_CANDIDATE_IDS == {
             "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
             "RESET128_RMT16_ORIGINAL_VTRACE_98304",
+            "SLOWGRU_PERSISTENT_CANONICAL_98304",
         }

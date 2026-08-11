@@ -22,7 +22,7 @@ def _mount(**overrides):
 class TestAcceptsPersistentStudent:
     def test_persistent_is_in_the_allowed_set(self):
         assert _PERSISTENT in SC.ALLOWED_STUDENT_CANDIDATE_IDS
-        assert len(SC.ALLOWED_STUDENT_CANDIDATE_IDS) == 2
+        assert len(SC.ALLOWED_STUDENT_CANDIDATE_IDS) == 3
 
     def test_persistent_mounts_with_its_own_profile(self):
         mount = _mount()

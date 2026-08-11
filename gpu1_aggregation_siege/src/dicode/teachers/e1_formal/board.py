@@ -127,6 +127,96 @@ _ROLE_TASK_LINES: Dict[str, str] = {
 }
 
 
+#: The official craftax-67 achievement registry (the ONE sanctioned d052
+#: import, mirrored from task_specs): the intervention tutor may only
+#: target these verbatim achievement ids (unknown_target_policy=error).
+from d052.achievements import REGISTRY as _CRAFTAX67_REGISTRY  # noqa: E402
+
+_CRAFTAX67_ACHIEVEMENTS: Tuple[str, ...] = tuple(
+    sorted(_CRAFTAX67_REGISTRY.names)
+)
+
+
+#: The EXACT output contract each role must satisfy (real LLM surface).
+#: The board validates fail-closed against these shapes, so the prompt
+#: states them verbatim; any extra / missing field voids the window.
+_ROLE_OUTPUT_CONTRACTS: Dict[str, str] = {
+    "student_modeler": (
+        "OUTPUT CONTRACT — respond with EXACTLY one JSON object and no "
+        "other text (no markdown fences, no commentary). It MUST have "
+        "EXACTLY these top-level fields and no others:\n"
+        '{"model_summary": "<one paragraph>", '
+        '"capability_profile": [{"skill_id": "<id>", '
+        '"success_rate": <float in [0,1]>}]}\n'
+        "Do NOT echo window_id, session_idx, trigger_code, "
+        "student_candidate_id, evidence_hash or any context field."
+    ),
+    "behavior_auditor": (
+        "OUTPUT CONTRACT — respond with EXACTLY one JSON object and no "
+        "other text. It MUST have EXACTLY this top-level field and no "
+        "others:\n"
+        '{"findings": [{"finding_id": "<unique id>", '
+        '"description": "<str>"}]}\n'
+        "At least one finding is required; finding_id values must be "
+        "unique. Do NOT echo any context field."
+    ),
+    "causal_failure_analyst": (
+        "OUTPUT CONTRACT — respond with EXACTLY one JSON object and no "
+        "other text. It MUST have EXACTLY these top-level fields and no "
+        "others:\n"
+        '{"weaknesses": [{"weakness_id": "<unique id>", "name": "<str>", '
+        '"evidence_refs": ["<str>"], "priority": <int 1..3>}], '
+        '"hypotheses": [{"hypothesis_id": "<unique id>", '
+        '"weakness_id": "<a weakness_id>", "statement": "<str>"}], '
+        '"reuse_previous_direction": <bool>, '
+        '"overall_confidence": <float>}\n'
+        "At least one weakness is required; at most 3 weaknesses and 6 "
+        "hypotheses. Do NOT echo any context field."
+    ),
+    "intervention_tutor": (
+        "OUTPUT CONTRACT — respond with EXACTLY one JSON object and no "
+        "other text. It MUST have EXACTLY these top-level fields and no "
+        "others:\n"
+        '{"families": [{"family_id": "<unique id>", '
+        '"description": "<str>", "target_achievements": ["<str>"], '
+        '"axis_changes": [{"axis": "<str>", "from_value": "<str>", '
+        '"to_value": "<str>"}], "constant_axes": ["<str>"], '
+        '"scaffolding": "<str>", "student_must_do": "<str>"}], '
+        '"explorations": [{"proposal_id": "<unique id>", '
+        '"description": "<str>", "axis_changes": [{"axis": "<str>", '
+        '"from_value": "<str>", "to_value": "<str>"}]}]}\n'
+        "6 to 8 families (the E1 window requires at least 6 distinct "
+        "intervention families so the pipeline can compile 12 dynamic "
+        "tasks: 6 families x 2 variants); at most 2 explorations; an "
+        "axis must not appear in both axis_changes and constant_axes of "
+        "the same family. Do NOT echo any context field.\n"
+        "HARD CONSTRAINT: every target_achievements entry MUST be "
+        "verbatim one of the official craftax-67 achievement ids: "
+        f"{', '.join(sorted(_CRAFTAX67_ACHIEVEMENTS))}. Free-form goal "
+        "sentences are REJECTED."
+    ),
+    "explorer": (
+        "OUTPUT CONTRACT — respond with EXACTLY one JSON object and no "
+        "other text. It MUST have EXACTLY these top-level fields and no "
+        "others:\n"
+        '{"exploration_rationale": "<str>", '
+        '"candidate_axes": ["<unique axis str>"]}\n'
+        "At least one and at most 8 distinct candidate_axes. Do NOT echo "
+        "any context field."
+    ),
+    "critic": (
+        "OUTPUT CONTRACT — respond with EXACTLY one JSON object and no "
+        "other text. It MUST have EXACTLY these top-level fields and no "
+        "others:\n"
+        '{"vetoes": [{"family_id": "<an intervention family_id>", '
+        '"reason": "<one of GUARD_VETO | RETENTION_VETO | '
+        "CRITIC_VETO_CONTRACT_VIOLATION | CRITIC_VETO_UNSUPPORTED_CLAIM "
+        '| CRITIC_VETO_EVIDENCE_MISMATCH>"}], "notes": "<str>"}\n'
+        'Use "vetoes": [] to veto nothing. Do NOT echo any context field.'
+    ),
+}
+
+
 @dataclass(frozen=True)
 class ReviewWindow:
     """Immutable, hash-identified record of one review window."""
@@ -266,7 +356,7 @@ def build_role_prompt(
         f"fixed sequence; build on them, do not contradict them without "
         f"stating why):\n{_render_upstream(upstream)}\n"
         "Respond with exactly one JSON object matching your role output "
-        "contract."
+        f"contract.\n{_ROLE_OUTPUT_CONTRACTS[role]}"
     )
     return ROLE_SYSTEM_PROMPTS[role], user_prompt
 

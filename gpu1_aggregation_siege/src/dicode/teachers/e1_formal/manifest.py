@@ -46,8 +46,11 @@ ENVCODER_ROLE = "envcoder"
 #: (window identity, student candidate id, evidence hash) and every
 #: successfully-parsed upstream role output, so the envelope hash — and
 #: therefore every replay key — changes with the sequential chain.
-BOARD_PROMPT_VERSION = "e1-board-prompt-v2"
-ENVCODER_PROMPT_VERSION = "e1-envcoder-prompt-v1"
+#: v3 (real smoke): each role prompt now states the EXACT output contract
+#: (field-level JSON shape) so a real LLM can satisfy the fail-closed
+#: parser; the envelope hash changes accordingly.
+BOARD_PROMPT_VERSION = "e1-board-prompt-v3"
+ENVCODER_PROMPT_VERSION = "e1-envcoder-prompt-v3"
 ROLE_OUTPUT_SCHEMA_VERSION = "e1-role-output-v1"
 ENVCODER_OUTPUT_SCHEMA_VERSION = "e1-envcoder-output-v1"
 

@@ -168,6 +168,9 @@ class ExecutableCandidate:
     provenance_hash: str
     variant_params_executed: bool
     execution_marker: str
+    #: the REAL env-code this candidate executes (the probes instantiate
+    #: it through make_env); defaulted for backward-compat construction
+    env_code: str = ""
 
 
 def build_executable_environment_artifact(
@@ -399,6 +402,7 @@ def bind_executable_candidate(
         executable_artifact_hash=(
             executable_artifact.executable_artifact_hash
         ),
+        env_code=executable_artifact.env_code,
         environment_family=executable_artifact.environment_family,
         variant_index=spec.variant,
         variant_params=spec.variant_params,

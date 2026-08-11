@@ -1,0 +1,53 @@
+# Student profile — logical identity and interface parameters ONLY.
+# No checkpoint paths, no checkpoint payloads, no server paths (enforced by
+# student_adapters.registry.load_student_profile fail-closed scan).
+# Identity values transcribed from the CC3 owner capsule
+# (candidate_manifest.json + checkpoint_contract.json + identity_verification.json)
+# and READY.json; all are re-verified at mount time (fail closed).
+
+candidate_id: SLOWGRU_PERSISTENT_CANONICAL_98304
+architecture_family: SLOWGRU
+checkpoint_format: BAKEOFF_PKL
+global_step: 98304
+total_env_steps: 98304
+params_sha256: 99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc
+# The trainer ran under a git commit tracked in the canonical capsule.
+source_commit: "57b6925e8834a86742afbb445a83abfd3544a3db"
+observation_shape: [8335]
+action_count: 43
+
+memory:
+  mode: PERSISTENT
+  fields:
+    memories:          {shape: [null, 128, 2, 256], dtype: float32}
+    memories_mask:     {shape: [null, 8, 1, 129],   dtype: bool}
+    memories_mask_idx: {shape: [null],              dtype: int32}
+    longstate.h:       {shape: [null, 256],         dtype: float32}
+    longstate.buf:     {shape: [null, 32, 256],     dtype: float32}
+    longstate.count:   {shape: [null],              dtype: int32}
+
+notes:
+  carry_mode: persistent
+  checkpoint_file_sha256: 0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47
+  network_src_sha256: b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b
+  canonical_trainer_src_sha256: 7918333c63bdb6c8917bf423dfb8484942fb46edc6a7c8fa7e36c769cada2545
+  slow_interval: 32
+  slow_dim: 256
+  window_mem: 128
+  num_heads: 8
+  num_layers: 2
+  embed_size: 256
+  memory_family: "GTrXL128 fast window (128) + slow-GRU long-term channel (SLOW_INTERVAL=32, SLOW_DIM=256)"
+  formal_ranking: INCONCLUSIVE_FULL_TIE
+  formal_winner: null
+  provisional_rank: 1
+  provisional_rank_note: "strict-rule rank 1; not a scientific superiority claim; formal ranking is INCONCLUSIVE_FULL_TIE"
+  resume_source: SLOWGRU_PERSISTENT_24576
+  exact_resume_proven: true
+  bit_exact_determinism: true
+  training_seed: "42"
+  boundary_semantics: "PERSISTENT: slow longstate + fast window memories fully carried across 128-step segment boundaries; clears only on true episode done/reset"
+  params_sha256_regime: "cc3_params_sha_packed (leaves+packed treedef, bakeoff lineage)"
+  artifact_status: "server-only canonical capsule; no local copy"
+  capsule_id: "SLOWGRU_PERSISTENT_CANONICAL_98304"
+  READY_status: "READY=true, exact_resume_proven=true, bit_exact_determinism=true"

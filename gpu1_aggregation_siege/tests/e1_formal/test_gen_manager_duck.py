@@ -414,7 +414,10 @@ class TestInit:
 
     def test_seed_example_unknown_field_fails_closed(self):
         config = _teacher_config()
-        config["teacher"]["envcoder"]["seed_examples"][0]["code"] = "x=1"
+        # ``code`` is an AUTHORIZED seed-example field (the real EnvCoder
+        # base reference); a genuinely unknown field is still rejected.
+        config["teacher"]["envcoder"]["seed_examples"][0][
+            "bogus_field"] = "x"
         with pytest.raises(GM.GenManagerError) as excinfo:
             GM.E1FormalGenManager(
                 config,
@@ -878,9 +881,10 @@ class TestStatusReport:
             "STRUCTURE",
         ]
         assert len(repair_scope["stages_blocked"]) == 5
-        # round-3 P0-5: the shared runtime seam reports all eight
-        # contracts UNBOUND this round (dicode.shared_runtime does not
-        # exist yet); the seam only resolves — never mints/disguises
+        # round-3 P0-5: the shared runtime seam reports honest state
+        # for all eight contracts; when the shared runtime is importable
+        # (DICODE_SHARED_RUNTIME_REAL=1), objects may be bound;
+        # otherwise they stay honestly unbound
         shared = report["shared_runtime"]
         assert sorted(shared) == [
             "AnchorManifest",
@@ -893,11 +897,14 @@ class TestStatusReport:
             "StudentIdentity",
         ]
         for state in shared.values():
-            assert state["bound"] is False
-            assert state["code"].startswith(
-                "BLOCKED_WAITING_SHARED_RUNTIME_"
-            )
-            assert state["detail"] != ""
+            if state["bound"]:
+                assert state["detail"] != ""
+                assert state["code"] == ""
+            else:
+                assert state["code"].startswith(
+                    "BLOCKED_WAITING_SHARED_RUNTIME_"
+                )
+                assert state["detail"] != ""
 
 
 class TestDuckSurface:

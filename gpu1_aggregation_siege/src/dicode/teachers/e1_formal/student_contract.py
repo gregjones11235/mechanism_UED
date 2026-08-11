@@ -52,13 +52,15 @@ from ..static_llm.student_init_contract import (  # noqa: F401  (re-export)
 from .canonical import canonical_sha256
 from .schemas import E1SchemaError
 
-#: the two supervisor-frozen allowed Student candidates
+#: the supervisor-frozen allowed Student candidates
 PERSISTENT_STUDENT_CANDIDATE_ID = "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
 RESET128_STUDENT_CANDIDATE_ID = "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+SLOWGRU_PERSISTENT_CANDIDATE_ID = "SLOWGRU_PERSISTENT_CANONICAL_98304"
 
 #: the director-frozen ALLOWED set (E1 never hard-pins one of them)
 ALLOWED_STUDENT_CANDIDATE_IDS = frozenset(
-    {PERSISTENT_STUDENT_CANDIDATE_ID, RESET128_STUDENT_CANDIDATE_ID}
+    {PERSISTENT_STUDENT_CANDIDATE_ID, RESET128_STUDENT_CANDIDATE_ID,
+     SLOWGRU_PERSISTENT_CANDIDATE_ID}
 )
 
 #: EXPLICIT profile mapping (never guessed from the name)
@@ -73,6 +75,11 @@ STUDENT_PROFILE_MAP: Mapping[str, tuple] = {
         "rmt16_reset128_98304",
         "RESET128",
         "reset-to-128-window-memory",
+    ),
+    SLOWGRU_PERSISTENT_CANDIDATE_ID: (
+        "slowgru_persistent_98304",
+        "PERSISTENT",
+        "persistent",
     ),
 }
 STUDENT_PROFILE_BY_CANDIDATE = {
@@ -359,6 +366,20 @@ def build_synthetic_student_contract(candidate_id: str, ctx: str):
     from ..static_llm.student_init_contract import StudentInitContract
 
     candidate_id = require_director_selection(candidate_id, ctx)
+    if candidate_id == SLOWGRU_PERSISTENT_CANDIDATE_ID:
+        return StudentInitContract(
+            candidate_id=candidate_id,
+            architecture_family="slowgru",
+            architecture_version="slowgru-v1",
+            checkpoint_format="bakeoff-pkl",
+            checkpoint_global_step=98304,
+            total_env_steps=98304,
+            source_commit="TEST_ONLY_SYNTHETIC_SOURCE_COMMIT",
+            parameter_tree_hash="aa" * 32,
+            optimizer_tree_hash="bb" * 32,
+            adapter_id=STUDENT_PROFILE_BY_CANDIDATE[candidate_id],
+            adapter_version="slowgru-adapter-v1",
+        )
     return StudentInitContract(
         candidate_id=candidate_id,
         architecture_family="rmt16",

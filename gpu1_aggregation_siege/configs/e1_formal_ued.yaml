@@ -45,8 +45,8 @@ anchors:
     - task_2
     - task_3
     - original_craftax
-  manifest_path: configs/e1_formal_ued_anchor_manifest.DRAFT.json
-  manifest_status: DRAFT_UNFROZEN  # retention stays BLOCKED until frozen
+  manifest_path: configs/e1_formal_ued_anchor_manifest.FROZEN.json
+  manifest_status: FROZEN  # supervisor-frozen shared anchor manifest
 
 strong_student:
   candidate_id: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304

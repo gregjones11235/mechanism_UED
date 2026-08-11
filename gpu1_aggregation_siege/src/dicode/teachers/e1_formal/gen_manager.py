@@ -327,6 +327,7 @@ class E1FormalGenManager:
         anchor_manifest_mapping: Any,
         replay_store: Optional[Mapping[str, str]] = None,
         llm_client: Any = None,
+        envcoder_llm_client: Any = None,
         archive_snapshot: Any = None,
     ) -> None:
         ctx = "e1_formal.gen_manager"
@@ -520,8 +521,9 @@ class E1FormalGenManager:
         self._max_repairs = max_repairs
         # backend: replay (SYNTAX+GUARDS+STRUCTURE) is the honest
         # production default; mock is an explicitly-authorized
-        # ablation opt-in; real stays unauthorized this round
-        # (fail-closed, never a silent downgrade)
+        # ablation opt-in; real is authorized ONLY when the craftax
+        # runtime is actually importable (fail-closed, never a silent
+        # downgrade)
         backend_name = envcoder_block.get("backend")
         if backend_name is None:
             backend_name = EB.BACKEND_REPLAY
@@ -537,18 +539,26 @@ class E1FormalGenManager:
                 f"got {backend_name!r}",
             )
         if backend_name == EB.BACKEND_REAL:
-            raise GenManagerError(
-                GEN_MANAGER_OUT_OF_RANGE,
-                f"{ctx}.envcoder: backend {EB.BACKEND_REAL!r} is "
-                "unauthorized this round (craftax runtime absent); the "
-                "real backend never degrades silently",
-            )
+            try:
+                import importlib
+
+                importlib.import_module("craftax")
+            except Exception:
+                raise GenManagerError(
+                    GEN_MANAGER_OUT_OF_RANGE,
+                    f"{ctx}.envcoder: backend {EB.BACKEND_REAL!r} is "
+                    "unauthorized (craftax runtime absent); the real "
+                    "backend never degrades silently",
+                )
         self._envcoder_backend_name = backend_name
-        self._envcoder_backend = (
-            EB.MockBackend()
-            if backend_name == EB.BACKEND_MOCK
-            else EB.ReplayBackend()
-        )
+        #: the backend INSTANCE must match the declared name — a "real"
+        #: declaration must construct the REAL staged backend
+        #: (RealBackendAdapter: import -> instantiate -> reset -> step ->
+        #: autoreset), never silently fall back to ReplayBackend
+        #: (SYNTAX+GUARDS+STRUCTURE only). The gate above already
+        #: verified craftax is importable for the real name; make_backend
+        #: re-verifies fail-closed.
+        self._envcoder_backend = EB.make_backend(backend_name)
 
         # ---- replay identity --------------------------------------------
         replay = _require_block(teacher, "replay", ctx)
@@ -584,6 +594,10 @@ class E1FormalGenManager:
             self._llm = ReplayLLMClient(
                 replay_store or {}, f"{ctx}.replay-client"
             )
+        # the EnvCoder uses its own dedicated transport when provided
+        # (e.g. DeepSeek for env-code generation); otherwise the board
+        # client is shared.
+        self._envcoder_llm = envcoder_llm_client or self._llm
         if archive_snapshot is None:
             self._archive_view = empty_archive_view()
         else:
@@ -729,6 +743,16 @@ class E1FormalGenManager:
         production driver never lets the teacher fall back on its
         own)."""
         return self._llm
+
+    @property
+    def envcoder_llm_client(self) -> Any:
+        """The teacher's dedicated EnvCoder transport (injected at
+        init as ``envcoder_llm_client``; falls back to the board client
+        ``self._llm`` when no separate transport is provided). The
+        one-window driver routes its EnvCoder calls through THIS client,
+        so the EnvCoder can use its own server-authorized transport
+        (e.g. DeepSeek) while the six-role board keeps its own."""
+        return self._envcoder_llm
 
     @property
     def last_review_window(self) -> Any:
@@ -906,7 +930,7 @@ class E1FormalGenManager:
             )
             try:
                 artifact, repairs = run_envcoder_with_repair(
-                    self._llm,
+                    self._envcoder_llm,
                     spec=representative,
                     seed_examples=self._seed_examples,
                     backend=self._envcoder_backend,
@@ -2346,7 +2370,8 @@ def _consume_seed_examples(raw: Any, ctx: str) -> Tuple[Dict[str, str], ...]:
         example_ctx = f"{ctx}.seed_examples[{i}]"
         example = _require_mapping(example, example_ctx)
         unknown = sorted(
-            k for k in example if k not in ("task_id", "description")
+            k for k in example
+            if k not in ("task_id", "description", "code")
         )
         if unknown:
             raise GenManagerError(
@@ -2365,7 +2390,18 @@ def _consume_seed_examples(raw: Any, ctx: str) -> Tuple[Dict[str, str], ...]:
                 GEN_MANAGER_MISSING_FIELD,
                 f"{example_ctx}: needs non-empty description",
             )
-        cleaned.append(
-            {"task_id": task_id.strip(), "description": description.strip()}
-        )
+        entry: Dict[str, str] = {
+            "task_id": task_id.strip(),
+            "description": description.strip(),
+        }
+        code = example.get("code")
+        if code is not None:
+            if not isinstance(code, str) or not code.strip():
+                raise GenManagerError(
+                    GEN_MANAGER_BAD_TYPE,
+                    f"{example_ctx}: code must be a non-empty str when "
+                    "present",
+                )
+            entry["code"] = code
+        cleaned.append(entry)
     return tuple(cleaned)

@@ -1,64 +1,30 @@
-# @package _global_
-# E1 formal teacher: Behavior-Aware Regret-Guided LLM-UED (plan C10).
-# Usage: append `+teacher=e1_formal` to the command line; config.yaml is
-# untouched. All scientific identity/threshold values are
-# supervisor-frozen artifacts: NOTHING here carries a usable default.
-# Until the frozen values arrive, the teacher constructs fully
-# degraded (anchors + REUSE only) and fail-closed:
-#   reference_contract.frozen=false  -> REFERENCE_CONTRACT_UNFROZEN
-#   learnability.*=null              -> LEARNABILITY_THRESHOLD_MISSING
-#   invocation.thresholds.*=null     -> INVOCATION_THRESHOLD_MISSING
-# The first two codes surface in status_report() AND the blocked
-# training gates, never a guess. The third is a window-invocation
-# degradation only (it surfaces in status_report() and as the explicit
-# reason on every threshold-driven gate signal): it governs when a
-# review WINDOW opens, and by design it never blocks the C13 training
-# gate, whose evidence chain is the verified dual-probe/anchor-manifest
-# snapshot. With invocation thresholds unfrozen the gate signals are
-# COMPUTED honestly from real facts (every threshold-driven signal is
-# False with an explicit INVOCATION_THRESHOLD_MISSING reason), never
-# hardcoded.
-
 teacher:
   teacher_type: e1_formal
-
-  # D7: REAL_* flags — declared here AND pinned in the frozen manifest
-  # configs/e1_formal_ued.yaml; init fails closed on any mismatch
-  # (FLAG_MANIFEST_MISMATCH). No code path sets these true this round.
   flags:
     real_envcoder_used: false
     real_student_reference_eval: false
     real_training_update_executed: false
-
-  # Strong Student identity (CC4 consumes the real checkpoint; E1 only
-  # carries the pinned candidate id).
   strong_student:
     candidate_id: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304
-
-  # G1: ReferenceIdentityContract — every identity field has NO default.
-  # The supervisor freezes the values; until then frozen stays false and
-  # the evaluation seam remains blocked (E1 never guesses a Reference).
   reference_contract:
-    frozen: false
-    candidate_id: null
-    checkpoint_ref: null
-    file_sha256: null
-    params_sha256: null
-    architecture_family: null
-    architecture_version: null
-    architecture_config_hash: null
-    memory_semantics: null
-    memory_semantics_hash: null
-    global_step: null
-    source_commit: null
-    seed: null
-    episode_reset_protocol_id: null
-    episode_reset_protocol_hash: null
-    frozen_manifest_hash: null
-
-  # G2: learnability thresholds — NO defaults; every null here fails
-  # closed as LEARNABILITY_THRESHOLD_MISSING until frozen by the
-  # supervisor.
+    frozen: true
+    candidate_id: RESET128_RMT16_ORIGINAL_VTRACE_98304
+    checkpoint_ref: /home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl
+    file_sha256: de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638
+    params_sha256: 78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2
+    architecture_family: RMT16
+    architecture_version: rmt16-vtrace-cc2
+    architecture_config_hash: e7010df153c4bfddc81150c78a04e15159733d2115690811c364d5dfb229d36f
+    memory_semantics: reset-to-128-window-memory
+    memory_semantics_hash: 22eafa255e62372b149c514ac634a63f98cc1a3eb1afb0b1bf07d4adc04c19c9
+    episode_reset_protocol_id: mechanism_UED.episode_reset.v1
+    episode_reset_protocol_hash: 214ea203330b0655e0f1d5909eaca2be221560c9f163bbfaf985903f4917a55f
+    global_step: 98304
+    total_env_steps: 98304
+    seed: 42
+    source_commit: src-sha256:453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc
+    frozen_manifest_hash: 2d96a1827f86e2a50daf495dff631bc01a7b864eef910e70d1ea2de2023fb66c
+    provenance: TRAINING
   learnability:
     tau_saturated: null
     tau_reachable: null
@@ -66,12 +32,6 @@ teacher:
     delta_min: null
     min_episodes: null
     ci_level: null
-
-  # P0-3: review-window invocation thresholds — NO defaults. Every null
-  # fails closed as INVOCATION_THRESHOLD_MISSING: threshold-driven gate
-  # signals are COMPUTED False with an explicit reason (never
-  # hardcoded) until the supervisor freezes the values. The
-  # threshold_version is pinned against configs/e1_formal_ued.yaml.
   invocation:
     threshold_version: e1-gate-thresholds-v1
     thresholds:
@@ -81,66 +41,34 @@ teacher:
       forgetting_regression_drop: null
       intervention_exhaustion_max_reuses: null
       exploration_slot_period: null
-
-  # Selection knobs (mechanical determinism, explicitly pinned — not
-  # scientific defaults). k must equal the 12 dynamic slots; seed is the
-  # audit-date determinism pin for this branch. family_cap (round-3
-  # P0-5) bounds how many of the k slots one intervention family may
-  # take in the criterion-wise selector (1..k; the formal selector
-  # itself REQUIRES it).
   selection:
     critic_policy: hard_veto
     k: 12
     seed: 20260803
     family_cap: 3
-
-  # 12 dynamic + 4 standard-reset anchors (original_craftax ALWAYS last;
-  # beta=1/4, s=2/5 are pinned rationals inside layout.py).
   anchors:
     task_ids:
-      - task_1
-      - task_2
-      - task_3
-      - original_craftax
+    - task_1
+    - task_2
+    - task_3
+    - original_craftax
     manifest_path: configs/e1_formal_ued_anchor_manifest.DRAFT.json
-
-  # EnvCoder prompt whitelist input. The EnvCoder is template-keyed
-  # (one call per unique family template), so seeds enter in FIXED
-  # order — the envelope is variant-independent by construction.
-  #
-  # Round-3 P0-4 bounded repair scope: max_repairs is the per-template
-  # repair-call bound (F1), hard-capped at 2 (values outside [0, 2]
-  # fail closed). backend selects the staged validation surface:
-  # `replay` = SYNTAX + GUARDS + STRUCTURE (stdlib-AST entry-surface
-  # check; craftax import/reset/step honestly NOT executed — craftax is
-  # absent from the audit venv); `mock` = SYNTAX + GUARDS only and is
-  # an explicitly-authorized ablation opt-in, never the production
-  # default; `real` fails closed as unauthorized this round (it never
-  # degrades silently).
   envcoder:
     max_repairs: 2
     backend: replay
     seed_examples:
-      - task_id: task_1
-        description: "collect coal near spawn"
-      - task_id: task_2
-        description: "cross a narrow gap"
-      - task_id: task_3
-        description: "defeat the orc soldier"
-
-  # Replay provider identity (plan D11); record mode is DISABLED this
-  # round — no paid API, no real LLM, REAL_ENVCODER_USED stays false.
+    - task_id: task_1
+      description: collect coal near spawn
+    - task_id: task_2
+      description: cross a narrow gap
+    - task_id: task_3
+      description: defeat the orc soldier
   replay:
     provider: replay
     model_id: e1-replay-mock-v1
     record: disabled
-
-  # Candidate evaluation seam (C11): disabled until the G1 contract is
-  # frozen AND the CC4 StudentAdapter exists; the seam fails closed
-  # regardless of this knob.
   candidate_eval:
     enabled: false
-
 hydra:
   run:
     dir: outputs/e1_formal_ued/${now:%Y-%m-%d}_${now:%H-%M-%S}

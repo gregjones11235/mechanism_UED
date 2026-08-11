@@ -1,12 +1,12 @@
-"""CC2-Repair-2: architecture RMT16."""
-"""architecture_family must be RMT16."""
+"""CC2-Repair-2: architecture RMT16 or SLOWGRU."""
+"""architecture_family must be RMT16 or SLOWGRU."""
 from types import SimpleNamespace
 import pytest
 from dicode.teachers.e1_formal import runtime_bundle as RB
 
 
-class TestArchitectureRmt16:
-    def test_non_rmt16_rejected(self):
+class TestArchitectureRmt16OrSlowgru:
+    def test_non_allowed_architecture_rejected(self):
         b = RB.build_test_only_runtime_bundle(
             source_commit="TEST_ONLY_SYNTHETIC_SOURCE_COMMIT",
             capabilities={c: SimpleNamespace(kind=c, identity_id=f"t-{c}")

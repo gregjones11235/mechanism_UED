@@ -32,7 +32,7 @@ rejected result — the pool is refused whole.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .canonical import canonical_sha256
 from .executable_candidates import ExecutableCandidate
@@ -130,6 +130,12 @@ class CandidateProbeResult:
     signer_id: str
     attestation_hash: str
     test_only: bool
+    #: the plaintext aggregate_metrics carried for downstream signal
+    #: derivation (NOT part of attestation_hash/provenance_hash — those
+    #: bind only aggregate_metrics_hash; the plaintext is an audit/
+    #: consumption convenience so the signal issuer can derive
+    #: criterion signals without re-rolling)
+    aggregate_metrics: Optional[Mapping[str, Any]] = None
 
 
 def compute_probe_attestation_hash(
@@ -360,6 +366,7 @@ def issue_candidate_probe_result(
         signer_id=signer_id,
         attestation_hash=attestation_hash,
         test_only=test_only,
+        aggregate_metrics=dict(aggregate_metrics),
     )
 
 

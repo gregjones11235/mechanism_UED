@@ -208,15 +208,14 @@ class ReplayBackend:
 
 
 class RealBackendAdapter:
-    """Full-stage real execution adapter — BLOCKED while unauthorized.
+    """Full-stage REAL execution adapter (craftax runtime required).
 
-    Declares the COMPLETE stage ladder, but this round no real
-    craftax runtime exists, so ``validate`` raises
-    ``ENVCODER_BACKEND_BLOCKED`` fail-closed. It NEVER silently
-    degrades to mock/replay semantics and never fabricates a pass; a
-    future authorized round replaces the raise with real staged
-    execution (import -> instantiate -> reset -> step ->
-    terminal/autoreset) under the same report contract.
+    Runs the COMPLETE ladder against the real craftax runtime:
+    SYNTAX -> GUARDS -> STRUCTURE -> IMPORT -> INSTANTIATE -> RESET ->
+    STEP -> TERMINAL_AUTORESET. A failure at any stage fails closed with
+    the stage name; stages are never skipped silently and a pass is
+    never fabricated. When the craftax runtime is absent, ``validate``
+    raises ``ENVCODER_BACKEND_BLOCKED`` fail-closed (never degrades).
     """
 
     name = BACKEND_REAL
@@ -224,20 +223,131 @@ class RealBackendAdapter:
     stages_blocked = ()  # declares the full ladder; blocked at runtime
 
     def validate(self, code: Any) -> ValidationReport:
-        raise EnvCoderBackendError(
-            ENVCODER_BACKEND_BLOCKED,
-            "the real EnvCoder backend is unauthorized this round: "
-            "craftax runtime absent, no import/instantiate/reset/step "
-            "validation exists. The adapter never degrades to weaker "
-            "stages and never fabricates a pass.",
+        try:
+            import craftax  # noqa: F401
+        except Exception as exc:
+            raise EnvCoderBackendError(
+                ENVCODER_BACKEND_BLOCKED,
+                "the real EnvCoder backend requires the craftax runtime "
+                f"(import failed: {exc!r}); the adapter never degrades "
+                "to weaker stages and never fabricates a pass.",
+            )
+
+        stages_run = []
+        ok, error = _syntax_and_guards(code, self.name)
+        if not ok:
+            return self._report(stages_run, error)
+        stages_run += [SYNTAX, GUARDS]
+
+        tree = ast.parse(code)
+        has_entry = any(
+            isinstance(node, ast.FunctionDef)
+            and node.name == ENV_ENTRY_SURFACE
+            for node in tree.body
         )
+        if not has_entry:
+            return self._report(
+                stages_run,
+                f"{STRUCTURE}: env-code defines no {ENV_ENTRY_SURFACE} "
+                "entry surface",
+            )
+        stages_run.append(STRUCTURE)
+
+        namespace: dict = {}
+        try:
+            exec(compile(code, "<e1-real-backend>", "exec"), namespace)
+        except Exception as exc:
+            return self._report(stages_run, f"{IMPORT}: {exc!r}")
+        stages_run.append(IMPORT)
+
+        make_env = namespace.get(ENV_ENTRY_SURFACE)
+        if not callable(make_env):
+            return self._report(
+                stages_run,
+                f"{INSTANTIATE}: {ENV_ENTRY_SURFACE} is not callable",
+            )
+        try:
+            env = make_env()
+        except Exception as exc:
+            return self._report(stages_run, f"{INSTANTIATE}: {exc!r}")
+        stages_run.append(INSTANTIATE)
+
+        handle = _RealEnvHandle(env)
+        try:
+            handle.reset()
+        except Exception as exc:
+            return self._report(stages_run, f"{RESET}: {exc!r}")
+        stages_run.append(RESET)
+        try:
+            handle.step(0)
+        except Exception as exc:
+            return self._report(stages_run, f"{STEP}: {exc!r}")
+        stages_run.append(STEP)
+        try:
+            handle.step(0)
+        except Exception as exc:
+            return self._report(
+                stages_run, f"{TERMINAL_AUTORESET}: {exc!r}")
+        stages_run.append(TERMINAL_AUTORESET)
+        return self._report(stages_run, "", passed=True)
+
+    def _report(self, stages_run: list, error: str, *,
+                passed: bool = False) -> ValidationReport:
+        blocked = tuple(
+            (stage, "not reached: an earlier stage failed fail-closed")
+            for stage in STAGES if stage not in stages_run
+        )
+        return ValidationReport(
+            backend=self.name,
+            passed=passed,
+            stages_run=tuple(stages_run),
+            stages_blocked=blocked,
+            error=error,
+        )
+
+
+class _RealEnvHandle:
+    """Normalizes reset/step across gymnax-style craftax envs."""
+
+    def __init__(self, env: Any):
+        self._env = env
+        self._key = None
+        self._state = None
+        self._params = getattr(env, "default_params", None)
+
+    def reset(self):
+        import jax
+
+        self._key = jax.random.PRNGKey(0)
+        self._key, sub = jax.random.split(self._key)
+        if self._params is not None:
+            result = self._env.reset(sub, self._params)
+        else:
+            result = self._env.reset(sub)
+        if isinstance(result, tuple) and len(result) == 2:
+            obs, self._state = result
+            return obs
+        return result
+
+    def step(self, action: int):
+        import jax
+
+        self._key, sub = jax.random.split(self._key)
+        if self._params is not None:
+            result = self._env.step(sub, self._state, action, self._params)
+        else:
+            result = self._env.step(sub, self._state, action)
+        obs, self._state, reward, done, _info = result
+        return obs, reward, done
 
 
 def make_backend(name: Any) -> Any:
     """Resolve a backend identity to its instance (fail-closed).
 
-    ``real`` raises ``ENVCODER_BACKEND_BLOCKED`` while unauthorized;
-    unknown names raise ``ENVCODER_BACKEND_UNKNOWN_BACKEND``.
+    ``real`` returns the REAL staged backend ONLY when the craftax
+    runtime is importable; otherwise it raises
+    ``ENVCODER_BACKEND_BLOCKED`` (never degrades silently). Unknown
+    names raise ``ENVCODER_BACKEND_UNKNOWN_BACKEND``.
     """
     if not isinstance(name, str) or not name.strip():
         raise EnvCoderBackendError(
@@ -249,11 +359,15 @@ def make_backend(name: Any) -> Any:
     if name == BACKEND_REPLAY:
         return ReplayBackend()
     if name == BACKEND_REAL:
-        raise EnvCoderBackendError(
-            ENVCODER_BACKEND_BLOCKED,
-            "the real EnvCoder backend is unauthorized this round "
-            "(craftax runtime absent); it never degrades silently",
-        )
+        try:
+            import craftax  # noqa: F401
+        except Exception:
+            raise EnvCoderBackendError(
+                ENVCODER_BACKEND_BLOCKED,
+                "the real EnvCoder backend is unauthorized this round "
+                "(craftax runtime absent); it never degrades silently",
+            )
+        return RealBackendAdapter()
     raise EnvCoderBackendError(
         ENVCODER_BACKEND_UNKNOWN_BACKEND,
         f"unknown envcoder backend {name!r}; expected one of "

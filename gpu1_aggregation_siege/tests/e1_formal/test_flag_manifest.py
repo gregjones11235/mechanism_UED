@@ -120,21 +120,29 @@ class TestCommittedConfigConsistency:
         )
 
 
-class TestReferenceContractBlockStaysUnfrozen:
-    def test_yaml_block_is_explicitly_unfrozen_with_no_defaults(self):
-        block = _teacher_config()["teacher"]["reference_contract"]
-        assert block["frozen"] is False
-        # every identity field is present but null => NO hidden default
-        for name, value in block.items():
-            if name == "frozen":
-                continue
-            assert value is None, f"field {name!r} carries a value"
+class TestReferenceContractBlockFrozenReal:
+    """The Reference is frozen with REAL recomputed identity values (the
+    supervisor freeze via scripts/freeze_e1_reference_contract.py)."""
 
-    def test_consuming_the_yaml_block_fails_closed_unfrozen(self):
+    def test_yaml_block_is_frozen_with_real_identity(self):
         block = _teacher_config()["teacher"]["reference_contract"]
-        with pytest.raises(RC.ReferenceContractError) as excinfo:
-            RC.consume_reference_identity_contract(block, "test")
-        assert excinfo.value.code == "REFERENCE_CONTRACT_UNFROZEN"
+        assert block["frozen"] is True
+        # every hash field is a real 64-hex sha256 (never null/placeholder)
+        for name in ("file_sha256", "params_sha256",
+                     "architecture_config_hash", "memory_semantics_hash",
+                     "episode_reset_protocol_hash", "frozen_manifest_hash"):
+            value = block[name]
+            assert isinstance(value, str) and len(value) == 64, name
+        assert block["candidate_id"] == \
+            "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+        assert block["architecture_family"] == "RMT16"
+
+    def test_consuming_the_yaml_block_verifies_frozen(self):
+        block = _teacher_config()["teacher"]["reference_contract"]
+        contract = RC.consume_reference_identity_contract(block, "test")
+        assert contract.candidate_id == \
+            "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+        assert contract.params_sha256 == block["params_sha256"]
 
 
 class TestLearnabilityBlockStaysEmpty:
@@ -212,7 +220,9 @@ class TestTeacherFromCommittedFiles:
             anchor_manifest_mapping=_draft_manifest(),
         )
         blocked = manager.current_blocked_codes()
-        assert "REFERENCE_CONTRACT_UNFROZEN" in blocked
+        # the Reference contract is now frozen with REAL identity values
+        # (scripts/freeze_e1_reference_contract.py) — no longer a blocker
+        assert "REFERENCE_CONTRACT_UNFROZEN" not in blocked
         assert "LEARNABILITY_THRESHOLD_MISSING" in blocked
         assert AM.BLOCKED_SHARED_ANCHOR_MANIFEST in blocked
         assert "SELECTION_BLOCKED_NO_REAL_EVIDENCE" in blocked

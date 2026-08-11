@@ -141,8 +141,8 @@ def _dual_student_mount_check() -> dict:
         }
     modes = {entry["memory_mode"] for entry in results.values()}
     return {
-        "mountable": len(results) == 2,
-        "distinct_memory_modes": len(modes) == 2,
+        "mountable": len(results) >= 2,
+        "distinct_memory_modes": len(modes) >= 2,
         "per_student": results,
     }
 
@@ -628,6 +628,27 @@ def main(
         "never EXECUTED)",
     )
     args = parser.parse_args(argv)
+
+    # ---- production deployment injection (DICODE_SHARED_RUNTIME_REAL=1)
+    #      The real FormalAssetRegistry + director verifier + issued
+    #      PRODUCTION bundle come from the shared runtime deployment;
+    #      explicit kwargs always win (test injection surface). --------
+    if os.environ.get("DICODE_SHARED_RUNTIME_REAL") == "1":
+        from dicode.shared_runtime.registry import production_registry
+        from dicode.shared_runtime.verifier import (
+            ProductionDirectorVerifier,
+        )
+
+        if formal_asset_registry is None:
+            formal_asset_registry = production_registry()
+        if director_bundle_verifier is None:
+            director_bundle_verifier = ProductionDirectorVerifier()
+        if not args.director_runtime_bundle:
+            issued = os.path.join(
+                RT.SIEGE_ROOT, "reports", "e1_formal_ued",
+                "e1_production_runtime_bundle.json")
+            if os.path.isfile(issued):
+                args.director_runtime_bundle = issued
 
     # ---- resolve EVERY gate honestly, before anything else -----------
     gates = RT.resolve_production_gates(

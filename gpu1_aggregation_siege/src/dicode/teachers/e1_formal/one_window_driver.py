@@ -383,15 +383,26 @@ def execute_real_envcoder_and_compile(
             for spec in compile_result.specs
             if spec.template_hash == template.template_hash
         )
-        artifact, repairs = run_envcoder_with_repair(
-            teacher.llm_client,
-            spec=representative,
-            seed_examples=teacher.seed_examples,
-            backend=teacher.envcoder_backend,
-            max_repairs=teacher.max_repairs,
-            ledger=teacher.ledger,
-            window_id=window_result.window.window_id,
-        )
+        try:
+            artifact, repairs = run_envcoder_with_repair(
+                teacher.envcoder_llm_client,
+                spec=representative,
+                seed_examples=teacher.seed_examples,
+                backend=teacher.envcoder_backend,
+                max_repairs=teacher.max_repairs,
+                ledger=teacher.ledger,
+                window_id=window_result.window.window_id,
+            )
+        except EnvCoderError as e:
+            # a template whose env-code fails the real ladder after the
+            # bounded repair loop is REFUSED per-template (never padded,
+            # never silently accepted); the window continues to the other
+            # templates and is refused as a whole only when fewer than
+            # 12 dynamic artifacts compile.
+            print(f"[e1-driver] envcoder template "
+                  f"{template.template_hash[:12]} refused: {e.code}",
+                  flush=True)
+            continue
         require_real_object(
             artifact, f"envcoder_artifact[{template.template_hash}]", ctx
         )

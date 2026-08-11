@@ -58,18 +58,27 @@ def _test_only_bundle():
 # legacy surface: the canonical eight stay honestly unbound
 # ---------------------------------------------------------------------------
 class TestLegacyCanonicalEight:
-    def test_all_eight_contracts_resolve_unbound_this_round(self):
+    def test_all_eight_contracts_resolve_honest_state(self):
+        """All eight canonical contracts resolve with honest state:
+        bound when the shared runtime is importable (DICODE_SHARED_RUNTIME_REAL=1),
+        unbound with honest BLOCKED codes otherwise."""
         resolutions = SRS.resolve_all_shared_runtime()
         assert sorted(resolutions) == sorted(SRS.SHARED_CONTRACTS)
         assert len(resolutions) == 8
         for contract, resolution in resolutions.items():
-            assert resolution.bound is False
-            assert resolution.code == SRS._CONTRACT_CODES[contract]
-            assert resolution.code.startswith(
-                "BLOCKED_WAITING_SHARED_RUNTIME_"
-            )
-            assert resolution.object_ref is None  # NEVER a placeholder
-            assert resolution.object_identity_hash == ""
+            if resolution.bound:
+                # shared runtime is available: object is bound
+                assert resolution.object_ref is not None
+                assert len(resolution.object_identity_hash) == 64
+                assert resolution.code == ""
+            else:
+                # shared runtime is gated: honest unbound report
+                assert resolution.code == SRS._CONTRACT_CODES[contract]
+                assert resolution.code.startswith(
+                    "BLOCKED_WAITING_SHARED_RUNTIME_"
+                )
+                assert resolution.object_ref is None
+                assert resolution.object_identity_hash == ""
 
     def test_per_contract_resolvers_carry_their_codes(self):
         expected = {
@@ -109,8 +118,12 @@ class TestLegacyCanonicalEight:
         for name, (contract, code) in expected.items():
             resolution = getattr(SRS, name)()
             assert resolution.contract == contract
-            assert resolution.code == code
-            assert resolution.bound is False
+            if resolution.bound:
+                # shared runtime available: code is empty
+                assert resolution.code == ""
+            else:
+                assert resolution.code == code
+                assert resolution.bound is False
 
     def test_backward_compatible_alias_and_construction(self):
         assert SRS.SeamResolution is SRS.SharedRuntimeResolution

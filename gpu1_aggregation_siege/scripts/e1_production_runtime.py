@@ -96,7 +96,7 @@ E1_REAL_LLM_NOT_AUTHORIZED = "E1_REAL_LLM_NOT_AUTHORIZED"
 TEACHER_CONFIG_PATH = os.path.join("conf", "teacher", "e1_formal.yaml")
 FROZEN_MANIFEST_PATH = os.path.join("configs", "e1_formal_ued.yaml")
 ANCHOR_MANIFEST_PATH = os.path.join(
-    "configs", "e1_formal_ued_anchor_manifest.DRAFT.json"
+    "configs", "e1_formal_ued_anchor_manifest.FROZEN.json"
 )
 
 
