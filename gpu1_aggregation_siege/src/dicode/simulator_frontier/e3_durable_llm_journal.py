@@ -185,46 +185,53 @@ class DurablePaidCallJournal:
         The source response is copied without changing content/output hashes;
         only the composite identity is re-keyed for the current signed run.
         """
-        source_entry = dict(source_entry)
-        identity = dict(identity)
-        if source_entry.get("role") != "frontier_evidence_diagnostician":
-            raise ValueError("preseed must contain diagnostician success")
-        old_key = str(source_entry.get("key", ""))
-        if not old_key or not self._valid_entry(old_key, source_entry):
-            raise ValueError("preseed diagnostician entry invalid")
-        required = ("source_commit", "candidate", "session", "evidence_hash",
-                    "role", "provider", "requested_model",
-                    "client_implementation_hash")
-        if any(k not in identity for k in required):
-            raise ValueError("preseed identity incomplete")
-        key = self.composite_key(**identity)
-        if identity["role"] != "frontier_evidence_diagnostician":
-            raise ValueError("preseed role mismatch")
-        if identity["session"] != 1:
-            raise ValueError("preseed session must be 1")
+        installed = self.install_preseed_entries(
+            entries=[source_entry], identities=[identity], provenance=provenance)
+        return installed[0]
+
+    def install_preseed_entries(self, *, entries: list[Mapping[str, Any]],
+                                identities: list[Mapping[str, Any]],
+                                provenance: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """Atomically install one or two validated session-1 role successes."""
+        if len(entries) != len(identities) or not entries or len(entries) > 2:
+            raise ValueError("preseed entries must contain one or two roles")
+        source_entries = [dict(item) for item in entries]
+        identities = [dict(item) for item in identities]
+        roles = []
+        for source_entry, identity in zip(source_entries, identities):
+            old_key = str(source_entry.get("key", ""))
+            if not old_key or not self._valid_entry(old_key, source_entry):
+                raise ValueError("preseed entry invalid")
+            role = str(source_entry.get("role", ""))
+            if role not in ROLE_COMPLETION_CAPS or role in roles:
+                raise ValueError("preseed roles must be unique diagnostician/planner")
+            roles.append(role)
+            required = ("source_commit", "candidate", "session", "evidence_hash",
+                        "role", "provider", "requested_model",
+                        "client_implementation_hash")
+            if any(k not in identity for k in required):
+                raise ValueError("preseed identity incomplete")
+            if identity["role"] != role or identity["session"] != 1:
+                raise ValueError("preseed role/session mismatch")
         if not isinstance(provenance, Mapping) or not provenance:
             raise ValueError("preseed migration provenance missing")
+        if "frontier_evidence_diagnostician" not in roles:
+            raise ValueError("preseed must contain diagnostician success")
         with self._file_lock():
             payload = self._load()
             if payload.get("entries"):
                 raise ValueError("preseed target journal is not empty")
-            entry = dict(source_entry)
-            entry.update({
-                "key": key,
-                "source_commit": identity["source_commit"],
-                "candidate": identity["candidate"],
-                "session": identity["session"],
-                "evidence_hash": identity["evidence_hash"],
-                "role": identity["role"],
-                "provider": identity["provider"],
-                "requested_model": identity["requested_model"],
-                "client_implementation_hash": identity["client_implementation_hash"],
-                "key_identity": identity,
-                "returned_model": identity["requested_model"],
-            })
-            if not self._valid_entry(key, entry):
-                raise ValueError("rekeyed preseed entry invalid")
-            payload = {"schema": SCHEMA, "entries": {key: entry},
+            new_entries = {}
+            installed = []
+            for source_entry, identity in zip(source_entries, identities):
+                key = self.composite_key(**identity)
+                entry = dict(source_entry)
+                entry.update({"key": key, **identity, "key_identity": identity})
+                if not self._valid_entry(key, entry):
+                    raise ValueError("rekeyed preseed entry invalid")
+                new_entries[key] = entry
+                installed.append(dict(entry))
+            payload = {"schema": SCHEMA, "entries": new_entries,
                        "preseed_provenance": dict(provenance)}
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(prefix=self.path.name + ".", dir=str(self.path.parent))
@@ -237,7 +244,7 @@ class DurablePaidCallJournal:
             finally:
                 if os.path.exists(tmp_name):
                     os.unlink(tmp_name)
-            return dict(entry)
+            return installed
 
     @contextmanager
     def _file_lock(self):

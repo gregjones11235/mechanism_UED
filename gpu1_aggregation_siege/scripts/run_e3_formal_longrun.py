@@ -375,13 +375,18 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
     source_journal = DurablePaidCallJournal(preseed_path)
     payload = source_journal._load()
     entries = payload.get("entries", {})
-    if len(entries) != 1:
-        raise ValueError("preseed journal must contain exactly one success")
-    source_key, source_entry = next(iter(entries.items()))
-    if source_entry.get("role") != "frontier_evidence_diagnostician":
-        raise ValueError("preseed journal may only contain diagnostician")
-    if int(source_entry.get("session", 0)) != 1:
-        raise ValueError("preseed diagnostician must be session 1")
+    if len(entries) not in (1, 2):
+        raise ValueError("preseed journal must contain one or two successes")
+    ordered = sorted(entries.items(), key=lambda item: str(item[1].get("role", "")))
+    if {str(entry.get("role", "")) for _, entry in ordered} != {
+            "frontier_evidence_diagnostician"} and len(ordered) == 1:
+        raise ValueError("single preseed entry must be diagnostician")
+    roles = [str(entry.get("role", "")) for _, entry in ordered]
+    if len(ordered) == 2 and set(roles) != {
+            "frontier_evidence_diagnostician", "curriculum_search_planner"}:
+        raise ValueError("dual preseed roles must be diagnostician and planner")
+    if any(int(entry.get("session", 0)) != 1 for _, entry in ordered):
+        raise ValueError("preseed entries must be session 1")
     provenance = payload.get("preseed_provenance")
     if not isinstance(provenance, Mapping):
         raise ValueError("preseed migration provenance missing")
@@ -389,28 +394,63 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
                   "source_commit", "source_client_implementation_hash"):
         if not provenance.get(field):
             raise ValueError(f"preseed provenance missing {field}")
-    old_identity = dict(source_entry.get("key_identity", {}))
-    identity = {
-        "source_commit": source_commit, "candidate": candidate_id,
-        "session": 1, "evidence_hash": old_identity.get("evidence_hash", ""),
-        "role": "frontier_evidence_diagnostician",
-        "provider": str(old_identity.get("provider", "dashscope")),
-        "requested_model": str(old_identity.get("requested_model", "")),
-        "client_implementation_hash": client_hash,
-    }
-    if not identity["evidence_hash"] or not identity["requested_model"]:
-        raise ValueError("preseed diagnostician identity incomplete")
     target_path = os.path.join(run_dir, "LLM_PAID_CALL_JOURNAL.json")
     target = DurablePaidCallJournal(target_path)
     provenance = dict(provenance)
-    provenance.update({"installed_source_key": source_key,
+    provenance.update({"installed_source_keys": [key for key, _ in ordered],
                        "installed_source_journal_sha256": auth.preseed_journal_sha256})
-    entry = target.install_preseed(source_entry=source_entry,
-                                   identity=identity, provenance=provenance)
-    new_key = entry["key"]
-    os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = new_key
-    return {"sha256": auth.preseed_journal_sha256, "source_key": source_key,
-            "installed_key": new_key, "provenance": provenance}
+    identities = []
+    source_keys = []
+    source_identity_anchor = None
+    for source_key, source_entry in ordered:
+        old_identity = dict(source_entry.get("key_identity", {}))
+        if not old_identity:
+            raise ValueError("preseed key identity missing")
+        for field in ("source_commit", "candidate", "session", "evidence_hash",
+                      "role", "provider", "requested_model",
+                      "client_implementation_hash"):
+            if source_entry.get(field) != old_identity.get(field):
+                raise ValueError(f"preseed identity mismatch: {field}")
+        if source_entry.get("returned_model") != source_entry.get("requested_model"):
+            raise ValueError("preseed returned/requested model mismatch")
+        if source_entry.get("candidate") != candidate_id:
+            raise ValueError("preseed candidate mismatch")
+        if source_identity_anchor is None:
+            source_identity_anchor = old_identity
+        else:
+            for field in ("source_commit", "candidate", "provider",
+                          "requested_model", "client_implementation_hash"):
+                if old_identity.get(field) != source_identity_anchor.get(field):
+                    raise ValueError(f"preseed cross-entry identity mismatch: {field}")
+        signed_provider = str(getattr(auth, "provider", "dashscope") or "dashscope")
+        signed_model = str(getattr(auth, "requested_model", "qwen-plus") or "qwen-plus")
+        if old_identity.get("provider") != signed_provider or old_identity.get("requested_model") != signed_model:
+            raise ValueError("preseed provider/model mismatch")
+        identity = {
+            "source_commit": source_commit, "candidate": candidate_id,
+            "session": 1, "evidence_hash": old_identity.get("evidence_hash", ""),
+            "role": str(source_entry.get("role", "")),
+            "provider": str(old_identity.get("provider", "dashscope")),
+            "requested_model": str(old_identity.get("requested_model", "")),
+            "client_implementation_hash": client_hash,
+        }
+        if not identity["evidence_hash"] or not identity["requested_model"]:
+            raise ValueError("preseed identity incomplete")
+        identities.append(identity); source_keys.append(source_key)
+    installed = target.install_preseed_entries(
+        entries=[entry for _, entry in ordered], identities=identities,
+        provenance=provenance)
+    diag = next((entry for entry in installed
+                 if entry["role"] == "frontier_evidence_diagnostician"), None)
+    if diag is None:
+        raise ValueError("preseed diagnostician missing")
+    os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = diag["key"]
+    result = {"sha256": auth.preseed_journal_sha256, "source_keys": source_keys,
+              "installed_keys": [entry["key"] for entry in installed],
+              "provenance": provenance}
+    if len(installed) == 1:
+        result.update({"source_key": source_keys[0], "installed_key": installed[0]["key"]})
+    return result
 
 
 def _metadata_payload(*, source_commit, runner_sha256, auth, candidate_id, sessions,

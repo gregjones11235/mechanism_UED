@@ -157,6 +157,59 @@ def test_runner_preseed_install_rekeys_and_tamper_blocks(tmp_path, monkeypatch):
             source_commit="new", candidate_id="SLOWGRU_PERSISTENT_CANONICAL_98304", client_hash="new-client")
 
 
+def test_dual_preseed_entries_atomically_rekey(tmp_path):
+    J = _journal_cls(); source = J(str(tmp_path / "source.json"))
+    entries = []; identities = []
+    for role, evidence_hash in (("frontier_evidence_diagnostician", "diag"),
+                                ("curriculum_search_planner", "plan")):
+        ident = dict(source_commit="old", candidate="SLOWGRU_PERSISTENT_CANONICAL_98304",
+                     session=1, evidence_hash=evidence_hash, role=role,
+                     provider="dashscope", requested_model="qwen-plus", client_implementation_hash="old")
+        key = source.composite_key(**ident)
+        source.record_success(key=key, identity=ident, returned_model="qwen-plus",
+            usage={"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+            validated_output={"role": role}, response_content=role)
+        entries.append(source._load()["entries"][key])
+        identities.append({**ident, "source_commit": "new", "client_implementation_hash": "new"})
+    target = J(str(tmp_path / "target.json"))
+    installed = target.install_preseed_entries(entries=entries, identities=identities,
+        provenance={"source_run":"old", "source_key":"diag", "source_journal_sha256":"x",
+                    "source_commit":"old", "source_client_implementation_hash":"old"})
+    assert {entry["role"] for entry in installed} == {
+        "frontier_evidence_diagnostician", "curriculum_search_planner"}
+    assert len(target._load()["entries"]) == 2
+
+
+def test_dual_preseed_client_path_reuses_both_without_transport(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    J = _journal_cls(); path = tmp_path / "dual.json"; journal = J(str(path))
+    evidence = {"feasibility": {"state_id": "s"}, "archive_summary": {"bucket_id": "b", "evidence_ids": ["e"]}}
+    diag = {"state_id":"s","bucket_id":"b","frontier_class":"LEARNABLE_FRONTIER","confidence":.8,
+            "dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,
+            "evidence_ids":["e"],"recommended_evidence_action":"x"}
+    dh = clients._canonical_sha256({"evidence":{"feasibility":{"state_id":"s"},"data_source":""}})
+    planner_input = {**evidence, "diagnostician_summary": diag}
+    ph = clients._canonical_sha256(planner_input)
+    identities=[]; entries=[]
+    for role, eh, out in (("frontier_evidence_diagnostician", dh, diag), ("curriculum_search_planner", ph, {"plan_hash":"p"})):
+        old = dict(source_commit="old", candidate="b", session=1, evidence_hash=eh, role=role,
+                   provider="dashscope", requested_model="m", client_implementation_hash="old")
+        key = journal.composite_key(**old)
+        journal.record_success(key=key, identity=old, returned_model="m",
+            usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},
+            validated_output=out, response_content="{}")
+        entries.append(journal._load()["entries"][key])
+        identities.append({**old, "source_commit":"new", "client_implementation_hash":"new"})
+    target = J(str(tmp_path / "dual_target.json")); target.install_preseed_entries(entries=entries, identities=identities,
+        provenance={"source_run":"old","source_key":"k","source_journal_sha256":"x","source_commit":"old","source_client_implementation_hash":"old"})
+    target_path = tmp_path / "dual_target.json"
+    monkeypatch.setenv("QWEN_MODEL","m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH",str(target_path)); monkeypatch.setenv("E3_SOURCE_COMMIT","new"); monkeypatch.setenv("E3_CANDIDATE_ID","b"); monkeypatch.setenv("E3_SESSION_IDX","1"); monkeypatch.setenv("E3_CLIENT_FACTORY_IMPLEMENTATION_HASH","new")
+    calls=[]; monkeypatch.setattr(clients,"_call_qwen",lambda *a,**k: calls.append(1))
+    clients.clear_audit_events(); d=clients._DiagnosticianClient("s","b").complete(evidence); p=clients._PlannerClient("s",4,16).complete(planner_input)
+    events=clients.drain_audit_events(); assert not calls and len(events)==2 and all(e["reused"] for e in events)
+
+
 def test_preseed_reuse_diag_only_planner_transport(tmp_path, monkeypatch):
     pytest.importorskip("jax")
     monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
@@ -184,7 +237,7 @@ def test_preseed_reuse_diag_only_planner_transport(tmp_path, monkeypatch):
         "source_commit":"old","source_client_implementation_hash":"old-client"}
     source_path.write_text(json.dumps(payload))
     target_dir=tmp_path / "target"; target_dir.mkdir()
-    auth=SimpleNamespace(preseed_journal_sha256=hashlib.sha256(source_path.read_bytes()).hexdigest())
+    auth=SimpleNamespace(preseed_journal_sha256=hashlib.sha256(source_path.read_bytes()).hexdigest(), provider="dashscope", requested_model="m")
     runner._install_preseed_journal(preseed_path=str(source_path), run_dir=str(target_dir), auth=auth,
         source_commit="new", candidate_id="SLOWGRU_PERSISTENT_CANONICAL_98304", client_hash="new-client")
     monkeypatch.setenv("QWEN_MODEL","m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH",str(target_dir / "LLM_PAID_CALL_JOURNAL.json"))
