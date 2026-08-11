@@ -1,0 +1,206 @@
+{
+  "status": "canonical_v2 new Schema is NOT visible at any path under mechanism_UED_continuation_20260715 (verified by find + grep). The new-field column is therefore marked UNAVAILABLE and MUST be completed by the canonical_v2 owner. Old-side fields are enumerated from the frozen candidate pool and the judgment/profile artifacts.",
+  "candidate_fields": [
+    {
+      "old_field": "task_id (e.g. d052_r3_0007)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "maybe",
+      "needs_transform": "remap to canonical_v2 task namespace",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 id scheme unknown"
+    },
+    {
+      "old_field": "description",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "likely",
+      "needs_transform": "none (free text)",
+      "must_discard": "no",
+      "missing_info": "whether canonical_v2 keeps free-text desc"
+    },
+    {
+      "old_field": "target_achievements (SALTED-HASH PLACEHOLDERS)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "NO",
+      "needs_transform": "MUST be regenerated canonically",
+      "must_discard": "YES as-is",
+      "missing_info": "these are salted hash() placeholders, semantically invalid; cannot migrate; need canonical target derivation"
+    },
+    {
+      "old_field": "difficulty_tier",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "maybe",
+      "needs_transform": "map to canonical_v2 difficulty ontology",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 tiers unknown"
+    },
+    {
+      "old_field": "task_params.passive_spawn_multiplier",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "maybe",
+      "needs_transform": "numeric passthrough",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 param schema"
+    },
+    {
+      "old_field": "task_params.mob_health_multiplier",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "maybe",
+      "needs_transform": "numeric passthrough",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 param schema"
+    },
+    {
+      "old_field": "task_params.mob_damage_multiplier",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "maybe",
+      "needs_transform": "numeric passthrough",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 param schema"
+    },
+    {
+      "old_field": "_prov (provenance)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "likely",
+      "needs_transform": "preserve/extend",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 provenance convention"
+    }
+  ],
+  "old_candidate_field_set": [
+    "_prov",
+    "chash",
+    "description",
+    "difficulty_tier",
+    "label",
+    "short_reason",
+    "snapshot_hash",
+    "source",
+    "target_achievements",
+    "task_id",
+    "task_params"
+  ],
+  "old_task_params_field_set": [
+    "mob_damage_multiplier",
+    "mob_health_multiplier",
+    "passive_spawn_multiplier"
+  ],
+  "judgment_fields": [
+    {
+      "old_field": "judgment.task_id (anon C001..C032)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "map anon->real->canonical_v2 id",
+      "must_discard": "no",
+      "missing_info": "anon mapping is pool-local"
+    },
+    {
+      "old_field": "judgment.role (tutor/critic/explorer)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "judgment.scores.progression_score / learnability_score",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none (0-10)",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 score ranges"
+    },
+    {
+      "old_field": "judgment.scores.critic_penalty",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none (0-1)",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "judgment.scores.novelty_score / diversity_score",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none (0-10)",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "judgment.decision (accept/hold/reject)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "judgment.flags",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "judgment.short_reason",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none (free text)",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "role_label echo (glm builder/survivor quirk)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "NO",
+      "needs_transform": "normalize to role",
+      "must_discard": "YES (decorative)",
+      "missing_info": "documented in normalization_log; not consumed by selector"
+    }
+  ],
+  "profile_fields": [
+    {
+      "old_field": "student_profile.machine_facts.*",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none (deterministic)",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 evidence schema"
+    },
+    {
+      "old_field": "student_profile.llm_interpretation (frozen profile)",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none (verbatim)",
+      "must_discard": "no",
+      "missing_info": "canonical_v2 profile schema"
+    },
+    {
+      "old_field": "profile skills[].current_sr",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "yes",
+      "needs_transform": "none",
+      "must_discard": "no",
+      "missing_info": ""
+    },
+    {
+      "old_field": "profile skills[].best_sr / recent_delta",
+      "new_schema_field": "UNAVAILABLE (canonical_v2 schema not present on this server; must be supplied by canonical_v2 owner / CC3)",
+      "directly_migratable": "NO (null)",
+      "needs_transform": "n/a",
+      "must_discard": "keep null",
+      "missing_info": "INSUFFICIENT_EVIDENCE (no longitudinal eval); do not fabricate"
+    }
+  ],
+  "must_discard_summary": [
+    "target_achievements salted-hash placeholders (regenerate canonically)",
+    "glm role-echo mislabels (normalize; decorative only)",
+    "any intended-target SR derived from salted hash (UNDEFINED)"
+  ],
+  "missing_info_summary": [
+    "canonical_v2 candidate/task Schema (ids, params, difficulty ontology)",
+    "canonical_v2 judgment/score Schema (ranges, required fields)",
+    "canonical_v2 StudentProfile/evidence Schema",
+    "canonical_v2 canonical achievement enum + name->enum table (for target regeneration)"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "n_candidates": 8,
+  "determinism_self_check": "PASS (OLD & NEW recompute identical across 2 runs)",
+  "spearman_old_vs_new_rank": 0.0952,
+  "mean_abs_delta": {
+    "progression": 3.3712,
+    "critic_penalty": 0.5238,
+    "novelty": 2.5438
+  },
+  "decision_flips_of_24": 12,
+  "top4_subpool_old": [
+    "d052_r3_0005",
+    "d052_r3_0008",
+    "d052_r3_0022",
+    "d052_r3_0027"
+  ],
+  "top4_subpool_new": [
+    "d052_r3_0000",
+    "d052_r3_0005",
+    "d052_r3_0012",
+    "d052_r3_0022"
+  ],
+  "top4_overlap": 2,
+  "old_selection_hash_sub8": "cc392cddfcaf5d05",
+  "new_selection_hash_sub8": "cc392cddfcaf5d05"
+}

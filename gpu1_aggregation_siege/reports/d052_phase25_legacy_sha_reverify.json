@@ -1,0 +1,302 @@
+{
+  "baseline_head": "9eca2de",
+  "prior_freeze_baseline": "a983259",
+  "total_frozen": 48,
+  "unchanged_byte_identical": 47,
+  "removed_by_committed_act_9eca2de": [
+    "experiments/henry_dicode_student_upgrade/01_d052/raw_sources/home/oseasy/experiments/d052_unified_eval_20260722/evaluator/obsdim_probe.py"
+  ],
+  "removal_commit_message": "docs(henry): remove obsolete D052 archive",
+  "note": "the single removed file is an obsolete archived raw_source copy intentionally removed by committed act 9eca2de; recorded not silenced (NO_SILENT_FALLBACK). A second copy of obsdim_probe.py logic remains frozen under 08_p9_authentic_reset.",
+  "sha_drift": [],
+  "files": [
+    {
+      "path": "dicode_src/auction/craftax_achievements.py",
+      "frozen_sha256": "e43302aeb9095458605b3c10c51c4fa34ceb35ba3ea6ac670feadf0a0decacff",
+      "current_sha256": "e43302aeb9095458605b3c10c51c4fa34ceb35ba3ea6ac670feadf0a0decacff",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_src/auction/modeler.py",
+      "frozen_sha256": "d6fa8f9636344803c769c842eeaaea1477eb93432084f979f71c566487ce8df4",
+      "current_sha256": "d6fa8f9636344803c769c842eeaaea1477eb93432084f979f71c566487ce8df4",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_src/auction/student_profile_log.py",
+      "frozen_sha256": "11ccf0a5ce06c4168cae812a426a7e27dd57b97cd6bb21056524e35ac2aac1f8",
+      "current_sha256": "11ccf0a5ce06c4168cae812a426a7e27dd57b97cd6bb21056524e35ac2aac1f8",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_src/src/dicode/evaluation/online_evaluation.py",
+      "frozen_sha256": "417e2bf7d843aa101079cb5f3e603fb0796095cc62ba995326e04d0d39a71be5",
+      "current_sha256": "417e2bf7d843aa101079cb5f3e603fb0796095cc62ba995326e04d0d39a71be5",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_src/src/dicode/task_utils.py",
+      "frozen_sha256": "006a1b47bf123147ba4a3ce3f887047ec4587aff126198ff131cb715bb341b24",
+      "current_sha256": "006a1b47bf123147ba4a3ce3f887047ec4587aff126198ff131cb715bb341b24",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_src/src/minicraftax/envs/multitask.py",
+      "frozen_sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+      "current_sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/ambition.py",
+      "frozen_sha256": "20efcab628001edeab5618b4555b913d985e8180cf386028964a64bf45f02a7b",
+      "current_sha256": "20efcab628001edeab5618b4555b913d985e8180cf386028964a64bf45f02a7b",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/completed_gate.py",
+      "frozen_sha256": "d1b73abc43163bff5fd501088ceb3aefb90a6ed7187046f05a63cdc2081c3ae4",
+      "current_sha256": "d1b73abc43163bff5fd501088ceb3aefb90a6ed7187046f05a63cdc2081c3ae4",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/craftax_achievements.py",
+      "frozen_sha256": "e43302aeb9095458605b3c10c51c4fa34ceb35ba3ea6ac670feadf0a0decacff",
+      "current_sha256": "e43302aeb9095458605b3c10c51c4fa34ceb35ba3ea6ac670feadf0a0decacff",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/level_meta.py",
+      "frozen_sha256": "c86f4c73ae6803ce71b3a6cd7f44ae4fe8a098bf6ec368cd42f081a41ea3987f",
+      "current_sha256": "c86f4c73ae6803ce71b3a6cd7f44ae4fe8a098bf6ec368cd42f081a41ea3987f",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/mock_proposals.py",
+      "frozen_sha256": "604d0a1e7392a24ddd033689edc2f800724358f802d9660596a1ee240b229da4",
+      "current_sha256": "604d0a1e7392a24ddd033689edc2f800724358f802d9660596a1ee240b229da4",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/modeler.py",
+      "frozen_sha256": "8e37f9420666625aa49c68f173e9af561a4602578a6ae318123ff8c90b9a42fb",
+      "current_sha256": "8e37f9420666625aa49c68f173e9af561a4602578a6ae318123ff8c90b9a42fb",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/proposal.py",
+      "frozen_sha256": "0081a4264c4e8028febfc41ba5d6fd2abcb87d2b2648fbaa0e591c4445fefe63",
+      "current_sha256": "0081a4264c4e8028febfc41ba5d6fd2abcb87d2b2648fbaa0e591c4445fefe63",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/auction/student_profile_log.py",
+      "frozen_sha256": "11214218d0f4ea282afff745c284c12ccd1be01b7d154c7bf369e14b1ccf1495",
+      "current_sha256": "11214218d0f4ea282afff745c284c12ccd1be01b7d154c7bf369e14b1ccf1495",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/conf/config.yaml",
+      "frozen_sha256": "a237c1ffa4593ae20ccfbcef9641be86578d78d4760295aed86dd5959e8c0f15",
+      "current_sha256": "a237c1ffa4593ae20ccfbcef9641be86578d78d4760295aed86dd5959e8c0f15",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/conf/gen_manager/auction_c_v6siege.yaml",
+      "frozen_sha256": "5aa05438cae27c97a61ec3ce9eac88f4c39876c182530ac9a6a77cbe5161e8fd",
+      "current_sha256": "5aa05438cae27c97a61ec3ce9eac88f4c39876c182530ac9a6a77cbe5161e8fd",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/conf/training/default.yaml",
+      "frozen_sha256": "ca13c9c8c2337f5b1993e6810eb2a7f981caf75a80ade0dbe2fcb9a5fef05df4",
+      "current_sha256": "ca13c9c8c2337f5b1993e6810eb2a7f981caf75a80ade0dbe2fcb9a5fef05df4",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/experiments/training/run_dicode.py",
+      "frozen_sha256": "3e0220ce023537231fd057e4e48fc48f2dc96bf19ce9a8f77d8d86448f19f443",
+      "current_sha256": "3e0220ce023537231fd057e4e48fc48f2dc96bf19ce9a8f77d8d86448f19f443",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/auction_integration.py",
+      "frozen_sha256": "c75c27a1ff337232b4953b48c4218ed74a2e916db10b6bcec4084dbcb59b13b0",
+      "current_sha256": "c75c27a1ff337232b4953b48c4218ed74a2e916db10b6bcec4084dbcb59b13b0",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/src/dicode/dreaming/gen_manager.py",
+      "frozen_sha256": "4c0a5bafce21199f37cd99c363de98b5c540c66ad1f7095e794ee7e96466c0c8",
+      "current_sha256": "4c0a5bafce21199f37cd99c363de98b5c540c66ad1f7095e794ee7e96466c0c8",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/src/dicode/evaluation/online_evaluation.py",
+      "frozen_sha256": "9b835c371b655f3ed9dd4dfdacd6f9f24282103eb85942aa20e41f0ee4925b22",
+      "current_sha256": "9b835c371b655f3ed9dd4dfdacd6f9f24282103eb85942aa20e41f0ee4925b22",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/src/minicraftax/craftax_state.py",
+      "frozen_sha256": "7ed6eed02495fa6f0992ebe3e7a2c89b56d2c8d0798915fed76c60e3a5be770b",
+      "current_sha256": "7ed6eed02495fa6f0992ebe3e7a2c89b56d2c8d0798915fed76c60e3a5be770b",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/src/minicraftax/envs/multitask.py",
+      "frozen_sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+      "current_sha256": "c8f2d5c3c23476c92ab3897f47bef4df7f202a3bd57360fc1bd4cb92b9498bae",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "dicode_v6/src/minicraftax/tasks/base_task.py",
+      "frozen_sha256": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa",
+      "current_sha256": "9b2cb995a807c625fde933a5edf8266dfbf32af3aac9c767f40e41e50586b1fa",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "experiments/henry_dicode_student_upgrade/01_d052/raw_sources/home/oseasy/experiments/d052_unified_eval_20260722/evaluator/obsdim_probe.py",
+      "frozen_sha256": "1c611b8aa68911d29b6dee844a3833530fc1c10752fd417128360d71b724bfed",
+      "current_sha256": null,
+      "status": "REMOVED_FROM_WORKTREE"
+    },
+    {
+      "path": "experiments/henry_dicode_student_upgrade/08_p9_authentic_reset/raw_sources/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu3_p9_authentic_reset/src/run_p9_authentic_98304.py",
+      "frozen_sha256": "565296c6249689f81c44be13dc412ddee03892118df3376205849a8673f2ea1f",
+      "current_sha256": "565296c6249689f81c44be13dc412ddee03892118df3376205849a8673f2ea1f",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/aggregation/default.yaml",
+      "frozen_sha256": "72220815ae68a9388d07626fddc4f80bdf42f74929c6196f02cf0125fec6d8a1",
+      "current_sha256": "72220815ae68a9388d07626fddc4f80bdf42f74929c6196f02cf0125fec6d8a1",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/llm/providers.yaml",
+      "frozen_sha256": "c62a29660b6fb3753a3bd298235aa47bb6224427949b7c5a254b429cda0194be",
+      "current_sha256": "c62a29660b6fb3753a3bd298235aa47bb6224427949b7c5a254b429cda0194be",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/llm/roles/curriculum_roles.yaml",
+      "frozen_sha256": "033574f19a5fc0b1df439867a01d95b4a04f192d0a0cab954154ebd410bbee70",
+      "current_sha256": "033574f19a5fc0b1df439867a01d95b4a04f192d0a0cab954154ebd410bbee70",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/conf/training/default.yaml",
+      "frozen_sha256": "ca13c9c8c2337f5b1993e6810eb2a7f981caf75a80ade0dbe2fcb9a5fef05df4",
+      "current_sha256": "ca13c9c8c2337f5b1993e6810eb2a7f981caf75a80ade0dbe2fcb9a5fef05df4",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/scripts/run_data_plane_preflight_v3.py",
+      "frozen_sha256": "8e64fb1028c0470557e4bf42bb80587e838c05ec57dfb3c74280f0230a101511",
+      "current_sha256": "8e64fb1028c0470557e4bf42bb80587e838c05ec57dfb3c74280f0230a101511",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/scripts/run_gate_r0_final.py",
+      "frozen_sha256": "a77b96358d08d68ef1543a90704b5f57f360da72b673aa488380eac8ec367083",
+      "current_sha256": "a77b96358d08d68ef1543a90704b5f57f360da72b673aa488380eac8ec367083",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/immutable_cache.py",
+      "frozen_sha256": "ce1f74e929075bfa7f6ac6e7f74fb1825b2cf10f5a9cadd10de06d7d7d31df72",
+      "current_sha256": "ce1f74e929075bfa7f6ac6e7f74fb1825b2cf10f5a9cadd10de06d7d7d31df72",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/aggregation.py",
+      "frozen_sha256": "590fcef42ea44db5aae753582956b8558772c931acba5a3c11468c12da4e66ec",
+      "current_sha256": "590fcef42ea44db5aae753582956b8558772c931acba5a3c11468c12da4e66ec",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/auction.py",
+      "frozen_sha256": "c1503ac116ae65b9f51680b0a26b1f797e4cbbb98a1ac87e01b85a24cd6d331f",
+      "current_sha256": "c1503ac116ae65b9f51680b0a26b1f797e4cbbb98a1ac87e01b85a24cd6d331f",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/immutable_cache.py",
+      "frozen_sha256": "ce1f74e929075bfa7f6ac6e7f74fb1825b2cf10f5a9cadd10de06d7d7d31df72",
+      "current_sha256": "ce1f74e929075bfa7f6ac6e7f74fb1825b2cf10f5a9cadd10de06d7d7d31df72",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_cache.py",
+      "frozen_sha256": "2ce8231a14961078b0eeb68978681bd9c0323a708f8ea578c282907fe63d0e7f",
+      "current_sha256": "2ce8231a14961078b0eeb68978681bd9c0323a708f8ea578c282907fe63d0e7f",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_costs.py",
+      "frozen_sha256": "62c0e6e305876426832d0a72515b88ae5fb9d487688ee3ef63b1746d2951be3e",
+      "current_sha256": "62c0e6e305876426832d0a72515b88ae5fb9d487688ee3ef63b1746d2951be3e",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_providers.py",
+      "frozen_sha256": "edb920972437dc56e11d94fe8e47b7a2dbb0be75f3c9942d542ddc10fb5fd895",
+      "current_sha256": "edb920972437dc56e11d94fe8e47b7a2dbb0be75f3c9942d542ddc10fb5fd895",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/llm_roles.py",
+      "frozen_sha256": "4ed252ce08f0443bdadf8ebaf0cef49c815220a25a9bb90343f0522a1f7a90e2",
+      "current_sha256": "4ed252ce08f0443bdadf8ebaf0cef49c815220a25a9bb90343f0522a1f7a90e2",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/mechanisms/model_manifest.py",
+      "frozen_sha256": "4869eb16eec68a455a2b8f0e83446d2f2a75627db11cfbc628b4b4d3331874d5",
+      "current_sha256": "4869eb16eec68a455a2b8f0e83446d2f2a75627db11cfbc628b4b4d3331874d5",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/model_manifest.py",
+      "frozen_sha256": "4869eb16eec68a455a2b8f0e83446d2f2a75627db11cfbc628b4b4d3331874d5",
+      "current_sha256": "4869eb16eec68a455a2b8f0e83446d2f2a75627db11cfbc628b4b4d3331874d5",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/selection.py",
+      "frozen_sha256": "2f7f9f5a3bfe071cae5178dcc9f98f0aee4459412daf4c128eccc46263dc8b1b",
+      "current_sha256": "2f7f9f5a3bfe071cae5178dcc9f98f0aee4459412daf4c128eccc46263dc8b1b",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/aggregation_integration.py",
+      "frozen_sha256": "a4afa02853e03b16b5e38581e7c5c1933846b3b8dd450b05e5f2738e455c873f",
+      "current_sha256": "a4afa02853e03b16b5e38581e7c5c1933846b3b8dd450b05e5f2738e455c873f",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/production_dispatcher.py",
+      "frozen_sha256": "cc63e76bdafa498dc0ed81d839adf433cc3837c620ffb5437fbc727a0f9643a6",
+      "current_sha256": "cc63e76bdafa498dc0ed81d839adf433cc3837c620ffb5437fbc727a0f9643a6",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/siege_notebook.py",
+      "frozen_sha256": "68571fee426de8a78fc591ed7a5ac3366dece9b0b7b949007d43e3c6ffca8015",
+      "current_sha256": "68571fee426de8a78fc591ed7a5ac3366dece9b0b7b949007d43e3c6ffca8015",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/src/dicode/siege/student_profile.py",
+      "frozen_sha256": "bebb526c264304f99fceeaf4570f6e5a0cc902757951a591e69c7930d9149304",
+      "current_sha256": "bebb526c264304f99fceeaf4570f6e5a0cc902757951a591e69c7930d9149304",
+      "status": "UNCHANGED"
+    },
+    {
+      "path": "gpu1_aggregation_siege/tests/test_v3_hard_gates.py",
+      "frozen_sha256": "20316b0c6c3f480ee99039ba26940cecb32b26cdad3fe535331abea3772cb7e7",
+      "current_sha256": "20316b0c6c3f480ee99039ba26940cecb32b26cdad3fe535331abea3772cb7e7",
+      "status": "UNCHANGED"
+    }
+  ]
+}

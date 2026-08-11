@@ -1,0 +1,47 @@
+{
+  "arm_label": "C",
+  "judgment_cache_hash": "d36d00bd89ea37d814c7976fef46a024e5e791a0a002e8d0605e3c99d726a088",
+  "modeler_bonus_weight": 0.07,
+  "modeler_context_hash": "0b32191741608bab1ffdebafb44d731bc33117181887447559144d3b1ca6e3af",
+  "modeler_enabled": true,
+  "pool_hash": "189e13ef2435a5462ef4bef87a994bfa1d05d70654471ada4ed0089e6d3d1c80",
+  "prompt_set_hash": "e1346e8418d87590ca3adfc6e007b4db30950925c79111b67fcf7fa6533c4eb6",
+  "protocol_version": "canonical_v2",
+  "selection_result": {
+    "candidate_count_in": 16,
+    "critic_policy": "hard_veto",
+    "eligible_count": 16,
+    "k_requested": 8,
+    "protocol_version": "canonical_v2",
+    "rejected_by_critic": [],
+    "seed": 20260726,
+    "selected_ids": [
+      "cand_00",
+      "cand_01",
+      "cand_02",
+      "cand_03",
+      "cand_04",
+      "cand_05",
+      "cand_06",
+      "cand_08"
+    ],
+    "selection_hash": "e4dcd966a40b3b44cf24557c7abb3004bb70f77cfaa737fb295f7505a11932bc",
+    "selection_status": "OK",
+    "selector": "S2_FOUR_ROLE_MODELER",
+    "shortfall_note": ""
+  },
+  "selector": {
+    "budget": null,
+    "critic_policy": "hard_veto",
+    "k": 8,
+    "protocol_version": "canonical_v2",
+    "roles": [
+      "tutor",
+      "critic",
+      "explorer"
+    ],
+    "seed": 20260726,
+    "selector": "S2_FOUR_ROLE_MODELER"
+  },
+  "student_profile_hash": "dbd74ed7dbcdf2daaa558a6dbecd4a91be89d13addcd7a8feb0ba10dc10c2abe"
+}

@@ -1,0 +1,42 @@
+{
+  "protocol_id": "d052_phase25_matched_counterfactual_v1",
+  "purpose": "Isolate the net effect of the frozen Modeler StudentProfile on Tutor/Critic/Explorer judgments and the Soft-Copeland selected-8, controlling for model/prompt/provider/config drift between historical and current judgments.",
+  "arms": {
+    "B_NO_MODELER": "Deterministic raw Student numerical summary ONLY; NO Modeler interpretive fields.",
+    "C_WITH_MODELER": "Identical raw numerical summary PLUS the frozen Phase-2 StudentProfile."
+  },
+  "controlled_invariants": {
+    "candidate_pool": "same 32 candidates (frozen_candidate_pool.json round_4)",
+    "candidate_order": "sorted(task_id)",
+    "anonymized_ids": "C001..C032 via sorted(task_id) -> identical mapping both arms",
+    "raw_student_summary": "identical deterministic numbers from student_evidence_base.json both arms",
+    "prompt_templates": "identical role instruction + output schema both arms",
+    "models": {
+      "tutor": "qw/qwen-flash-2025-07-28",
+      "critic": "ds/deepseek-v4-pro",
+      "explorer": "glm-4-flash"
+    },
+    "temperature": 0,
+    "top_p": "provider default",
+    "http_timeout_s": 180,
+    "max_attempts": 8,
+    "output_schema": "identical per role (see prompt_registry.json)",
+    "normalization": "robust median/IQR (dicode.mechanisms.aggregation.robust_normalize)",
+    "selector": "_aggregate_soft_copeland (Soft Copeland pairwise), weights 0.34/0.33/0.33/0.01/0.01",
+    "seed": "none (aggregation is fully deterministic; no RNG)",
+    "tie_break": "within-signal equal values -> +/-0.5w; final top-8 via np.argsort(-scores)[:8]"
+  },
+  "only_allowed_variation": "whether the frozen StudentProfile JSON is appended after the raw summary (arm C yes, arm B no).",
+  "call_budget": "exactly 6 batched calls: {B,C} x {tutor,critic,explorer}, one per role per arm; no per-candidate calls.",
+  "freshness": "B arm judgments are FRESH calls (NOT historical D052 judgments).",
+  "forbidden": [
+    "training",
+    "subagents/background agents",
+    "fixing the legacy salted-hash launcher",
+    "treating legacy selected-8 as production tasks",
+    "modifying canonical_v2 main branch",
+    "whole-branch merge",
+    "a second D052 framework"
+  ],
+  "determinism_self_check": "B and C each recomputed twice -> identical selected-8 and scores."
+}

@@ -90,6 +90,31 @@ See `d052_canonical_frozen_labels.json`. Headline:
 `D052_4096_SMOKE_AUTHORIZED=false`, `D052_24576_AUTHORIZED=false`,
 `D052_98304_AUTHORIZED=false`.
 
+### 7b. Critic-policy label disambiguation (D052_PREMERGE_SEMANTIC_CLEANUP_V3)
+
+The original label `D052_CRITIC_POLICY=PASS` was ambiguous: it conflated the
+**synthetic fixture engineering test** (the canonical selector machinery works
+end-to-end over deterministic offline fixtures) with a **frozen real canonical
+scientific policy**. It is now `DEPRECATED_AMBIGUOUS_DO_NOT_USE`
+(`deprecated=true`, `replacement_fields` listed in the JSON) and no auto-gate
+consumes it. The split, scoped labels are:
+
+* `D052_SYNTHETIC_CRITIC_SELECTOR_ENGINEERING=PASS` — engineering layer only;
+  must NEVER be promoted to a frozen real policy.
+* `REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE=UNDECIDED` — dimension A: how
+  the canonical `critic_reject` boolean is derived from a judgment (candidates
+  `decision_reject` / `flags_too_hard`; owned by `reconciliation/judgment_adapter.py`).
+* `REAL_CANONICAL_CRITIC_SELECTION_POLICY=UNDECIDED` — dimension B: how the
+  selector consumes the critic signal (candidates `hard_veto` / `soft_penalty` /
+  `score_only`; owned by `schemas/selector.py` + `selectors/` — the "critic policy"
+  in the `selectors/` row above refers to THIS dimension only).
+* `DEFAULT_CRITIC_REJECT_DERIVATION_RULE=NONE`, `DEFAULT_CRITIC_SELECTION_POLICY=NONE`,
+  `REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_RULE=BLOCKED`,
+  `REAL_CANONICAL_SELECTION_WITHOUT_CRITIC_POLICY=BLOCKED`.
+
+The two dimensions are independent and must not substitute for each other;
+`reconciliation/tier_c_gate.py` fails closed unless BOTH are explicitly frozen.
+
 ## 8. Audit artifacts (this directory)
 
 - `d052_canonical_legacy_reuse_map.md/.json` — 85 modules classified (+ selector addendum)

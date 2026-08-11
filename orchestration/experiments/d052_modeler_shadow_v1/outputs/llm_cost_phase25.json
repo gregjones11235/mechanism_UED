@@ -1,0 +1,56 @@
+{
+  "B_tutor": {
+    "provider": "qw",
+    "model_rq": "qwen-flash-2025-07-28",
+    "model_rt": "qwen-flash-2025-07-28",
+    "attempts": 1,
+    "itok": 2470,
+    "otok": 2328,
+    "err": null
+  },
+  "B_critic": {
+    "provider": "ds",
+    "model_rq": "deepseek-v4-pro",
+    "model_rt": "deepseek-v4-pro",
+    "attempts": 3,
+    "itok": 7517,
+    "otok": 5623,
+    "err": null
+  },
+  "B_explorer": {
+    "provider": "gl",
+    "model_rq": "glm-4-flash",
+    "model_rt": "glm-4-flash",
+    "attempts": 1,
+    "itok": 2452,
+    "otok": 1776,
+    "err": null
+  },
+  "C_tutor": {
+    "provider": "qw",
+    "model_rq": "qwen-flash-2025-07-28",
+    "model_rt": "qwen-flash-2025-07-28",
+    "attempts": 1,
+    "itok": 3337,
+    "otok": 2298,
+    "err": null
+  },
+  "C_critic": {
+    "provider": "ds",
+    "model_rq": "deepseek-v4-pro",
+    "model_rt": "deepseek-v4-pro",
+    "attempts": 2,
+    "itok": 6734,
+    "otok": 4043,
+    "err": null
+  },
+  "C_explorer": {
+    "provider": "gl",
+    "model_rq": "glm-4-flash",
+    "model_rt": "glm-4-flash",
+    "attempts": 1,
+    "itok": 3319,
+    "otok": 1747,
+    "err": null
+  }
+}

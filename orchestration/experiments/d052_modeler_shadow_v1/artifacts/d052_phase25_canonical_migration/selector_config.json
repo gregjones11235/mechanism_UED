@@ -1,0 +1,50 @@
+{
+  "selector": "dicode.mechanisms.aggregation._aggregate_soft_copeland (ORIGINAL, reused not rewritten)",
+  "selector_source_sha256": "27492e8a513a94df81a43a341926a6dc5b3e5869b2be13a96c8528e7d19e2888",
+  "wrapper_source_sha256": "1a27ee42da73922011b945e8cb70ae11bfeb2c73114464159f94227c958f853c",
+  "normalization": {
+    "method": "robust median/IQR",
+    "fn": "robust_normalize",
+    "clip": 3.0,
+    "nan_handling": "nan_to_num(nan=0,posinf=clip,neginf=-clip)",
+    "applied_per_signal": [
+      "progression",
+      "retention",
+      "novelty",
+      "critic_penalty",
+      "monopoly_penalty"
+    ]
+  },
+  "soft_copeland": {
+    "method": "pairwise Copeland: i beats j on signal s if norm_i>norm_j (+w); equal -> +0.5w; penalties subtract",
+    "weights": {
+      "w_progression": 0.34,
+      "w_retention": 0.33,
+      "w_novelty": 0.33,
+      "w_critic": 0.01,
+      "w_monopoly": 0.01
+    },
+    "signal_keys": [
+      "progression",
+      "retention",
+      "novelty"
+    ],
+    "penalty_keys": [
+      "critic_penalty",
+      "monopoly_penalty"
+    ],
+    "retention_definition": "retention = 1.0 - critic_penalty",
+    "temperature": 1.0,
+    "final_normalization": "min-max to [0,1]; if range<1e-8 -> uniform 1/n"
+  },
+  "rng_seed": null,
+  "rng_seed_note": "Aggregation is fully deterministic; NO RNG is used anywhere in scoring or selection.",
+  "tie_break": {
+    "within_signal": "equal normalized values contribute +/-0.5*w",
+    "final_selection": "np.argsort(-scores)[:8] (numpy quicksort; deterministic for a fixed score array; ties in the final normalized score broken by argsort index order)",
+    "recommendation": "canonical_v2 should add an explicit stable tie-break (e.g. kind='stable' + task_id) and a recorded seed for auditability."
+  },
+  "selection_rule": "top-8 by Soft-Copeland score",
+  "selection_hash_fn": "sha256(json.dumps(sorted(selected_ids)))[:16]",
+  "pool_hash_fn": "sha256(json.dumps(sorted([{id,tp,achs(sorted),prov}], key=id), sort_keys=True))[:16]"
+}

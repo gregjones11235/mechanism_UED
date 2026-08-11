@@ -1,0 +1,345 @@
+{
+  "candidate_count": 16,
+  "candidates": [
+    {
+      "chash": "ec25ace1d7f0f34e033c8cac399943d92c87d475bb3ff05e19164a929c332965",
+      "legacy_short_id": "4f6a4e8fddd008ff",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 56,
+          "goal_vector_index": 56,
+          "name": "cast_fireball",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_00",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "df0a356a4a774968421c260b630d06450b70d015be84d8a42ea84934f379fa4c",
+      "legacy_short_id": "b22bbedf17ab96f3",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 58,
+          "goal_vector_index": 58,
+          "name": "cast_iceball",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_01",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "94e85869a3bf760bb74414ff3e43462a4aac7a6e3bbe69f59e462b685f890709",
+      "legacy_short_id": "d4472c6679696db7",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 17,
+          "goal_vector_index": 17,
+          "name": "collect_coal",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_02",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "a07a7f2303e2d3a00eb97b273c01907f0f8228bffe57ebcb59bbfdc0ce696081",
+      "legacy_short_id": "d00f5b3007980fa6",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 19,
+          "goal_vector_index": 19,
+          "name": "collect_diamond",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_03",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "5f7c95e4bb5ba2f4a1700607c755bff8bb4989b40e71ff4e4c2c23ea7a93a3e8",
+      "legacy_short_id": "96a820a3e42dd45f",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 4,
+          "goal_vector_index": 4,
+          "name": "collect_drink",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_04",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "c0020d94da058539b9fe25e73c8e0ce9074867c3fda7d075b8e834a7da80cc31",
+      "legacy_short_id": "fabc95e7d173e29e",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 18,
+          "goal_vector_index": 18,
+          "name": "collect_iron",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_05",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "4e421aac58e6ee6e5627de4e8150bc1f904c6a2a98d686b3a2fa735e366cc264",
+      "legacy_short_id": "6908bb988adaa52f",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 59,
+          "goal_vector_index": 59,
+          "name": "collect_ruby",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_06",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "cfd8c56a5ea49de4135d13c57bd87a40f97038b5516b937b0b25fe110d4d34ef",
+      "legacy_short_id": "3be74109f913ba26",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 3,
+          "goal_vector_index": 3,
+          "name": "collect_sapling",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_07",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "0683e7a397cec7cce6b4b7ad53204a7ceba90f0009b61efb8f823a4399cf81c2",
+      "legacy_short_id": "a240c7c7e5500fda",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 54,
+          "goal_vector_index": 54,
+          "name": "collect_sapphire",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_08",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "02e64c1c092e69e1118ce05d13dedc17d0d94b5ca9f40c67a651e23cd29ea024",
+      "legacy_short_id": "c9da2648d7614fed",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 9,
+          "goal_vector_index": 9,
+          "name": "collect_stone",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_09",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "077936e1ae1b3639b12035b4d2ab5cac37be46b063834af06d76fffaabae6ef8",
+      "legacy_short_id": "092b53ad2ffc27d8",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 0,
+          "goal_vector_index": 0,
+          "name": "collect_wood",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_10",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "17e42f6b63f8d74aa7485ee27c1239319dd207867d4a1027a0c19547371526a6",
+      "legacy_short_id": "2023be876de93042",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 48,
+          "goal_vector_index": 48,
+          "name": "damage_necromancer",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_11",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "d16aa26243ef49abdf2f3ee7597340b368fddd22c0e7ba5096b6df111ab9d368",
+      "legacy_short_id": "3c98fc7c57f9489a",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 66,
+          "goal_vector_index": 66,
+          "name": "defeat_archer",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_12",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "129ceb394819413437f6a28bd719001778ac3391b5adf8371db4b2ee2721d420",
+      "legacy_short_id": "ec59f55a2938c053",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 43,
+          "goal_vector_index": 43,
+          "name": "defeat_deep_thing",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_13",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "8e6b832ae7ea0b6f44fc7bd16f1667a35c1de8b4c9755c4124e8ccdda33aa52b",
+      "legacy_short_id": "41414ed0f5de6bd9",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 45,
+          "goal_vector_index": 45,
+          "name": "defeat_fire_elemental",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_14",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    },
+    {
+      "chash": "7d052fbd9cd1b76d542635360dde8aadf9296965c16ec0cdbbeef3b51607cd4a",
+      "legacy_short_id": "2bde37db9f422d33",
+      "protocol_version": "canonical_v2",
+      "target_achievements": [
+        {
+          "canonical_id": 46,
+          "goal_vector_index": 46,
+          "name": "defeat_frost_troll",
+          "protocol_version": "canonical_v2"
+        }
+      ],
+      "task_id": "cand_15",
+      "task_params": {
+        "melee_spawn_multiplier": 1.0,
+        "mob_damage_multiplier": 1.0,
+        "mob_health_multiplier": 1.0,
+        "passive_spawn_multiplier": 1.0,
+        "protocol_version": "canonical_v2"
+      }
+    }
+  ],
+  "frozen": true,
+  "pool_hash": "189e13ef2435a5462ef4bef87a994bfa1d05d70654471ada4ed0089e6d3d1c80",
+  "pool_id": "phase25_canonical_shared_frozen_v1",
+  "protocol_version": "canonical_v2"
+}

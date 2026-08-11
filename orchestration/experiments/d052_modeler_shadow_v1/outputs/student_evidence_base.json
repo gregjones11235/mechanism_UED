@@ -1,0 +1,278 @@
+{
+  "cell": "soft_copeland_x_original",
+  "checkpoint_step": 98304,
+  "dominant_breakpoints": [
+    {
+      "achievement_id": "PLACE_TABLE",
+      "canonical_depth": 1,
+      "completion_rate": 0.0625,
+      "note": "low_completion_relative_to_chain"
+    },
+    {
+      "achievement_id": "COLLECT_DRINK",
+      "canonical_depth": 4,
+      "completion_rate": 0.1094,
+      "note": "low_completion_relative_to_chain"
+    },
+    {
+      "achievement_id": "MAKE_WOOD_PICKAXE",
+      "canonical_depth": 5,
+      "completion_rate": 0.0156,
+      "note": "low_completion_relative_to_chain"
+    },
+    {
+      "achievement_id": "PLACE_PLANT",
+      "canonical_depth": 7,
+      "completion_rate": 0.2031,
+      "note": "low_completion_relative_to_chain"
+    }
+  ],
+  "episode_level": {
+    "death_rate": 1.0,
+    "max_achievement_count": 5,
+    "max_episode_length": 400,
+    "max_return": 4.1,
+    "mean_achievement_count": 2.047,
+    "mean_episode_length": 280.69,
+    "mean_return": 1.14688,
+    "min_episode_length": 66,
+    "min_return": -0.9,
+    "timeout_rate": 0.0
+  },
+  "evidence_boundaries": {
+    "best_sr": "INSUFFICIENT_EVIDENCE (single snapshot; no longitudinal eval)",
+    "eval_coverage": "round_4 selected-8 tasks only (8 tasks x 8 episodes); 24 non-selected candidates NOT evaluated",
+    "intended_target_success_rate": "UNDEFINED (salted hash mapping unrecoverable; d052_eval_pilot.py L139)",
+    "recent_delta": "INSUFFICIENT_EVIDENCE (rounds 1-3 have no per-episode eval)",
+    "retention": "INSUFFICIENT_EVIDENCE (no repeated measurement)",
+    "trajectory_status_improving_stalled_forgetting": "INSUFFICIENT_EVIDENCE (single cross-sectional snapshot)"
+  },
+  "per_achievement_completion": [
+    {
+      "achievement_id": "COLLECT_WOOD",
+      "canonical_depth": 0,
+      "completion_rate": 0.3594,
+      "episodes_completed": 23
+    },
+    {
+      "achievement_id": "PLACE_TABLE",
+      "canonical_depth": 1,
+      "completion_rate": 0.0625,
+      "episodes_completed": 4
+    },
+    {
+      "achievement_id": "COLLECT_SAPLING",
+      "canonical_depth": 3,
+      "completion_rate": 0.3125,
+      "episodes_completed": 20
+    },
+    {
+      "achievement_id": "COLLECT_DRINK",
+      "canonical_depth": 4,
+      "completion_rate": 0.1094,
+      "episodes_completed": 7
+    },
+    {
+      "achievement_id": "MAKE_WOOD_PICKAXE",
+      "canonical_depth": 5,
+      "completion_rate": 0.0156,
+      "episodes_completed": 1
+    },
+    {
+      "achievement_id": "PLACE_PLANT",
+      "canonical_depth": 7,
+      "completion_rate": 0.2031,
+      "episodes_completed": 13
+    },
+    {
+      "achievement_id": "WAKE_UP",
+      "canonical_depth": 15,
+      "completion_rate": 0.9844,
+      "episodes_completed": 63
+    }
+  ],
+  "per_task": [
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_DRINK",
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "PLACE_PLANT",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 1.875,
+      "mean_episode_length": 273.38,
+      "mean_return": 0.975,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0005",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_DRINK",
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "PLACE_PLANT",
+        "PLACE_TABLE",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 2.0,
+      "mean_episode_length": 248.0,
+      "mean_return": 1.1,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0008",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_DRINK",
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "PLACE_PLANT",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 2.125,
+      "mean_episode_length": 257.25,
+      "mean_return": 1.225,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "eat_food",
+        "survive_3_days"
+      ],
+      "task_id": "d052_r3_0012",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "MAKE_WOOD_PICKAXE",
+        "PLACE_PLANT",
+        "PLACE_TABLE",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 2.0,
+      "mean_episode_length": 333.62,
+      "mean_return": 1.1,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "defeat_zombie",
+        "survive"
+      ],
+      "task_id": "d052_r3_0016",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_DRINK",
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "PLACE_PLANT",
+        "PLACE_TABLE",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 1.875,
+      "mean_episode_length": 328.5,
+      "mean_return": 0.975,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "craft_wooden_pickaxe"
+      ],
+      "task_id": "d052_r3_0022",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_DRINK",
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "PLACE_PLANT",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 2.25,
+      "mean_episode_length": 268.38,
+      "mean_return": 1.35,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "cave_navigator",
+        "passive_collector"
+      ],
+      "task_id": "d052_r3_0024",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_DRINK",
+        "COLLECT_SAPLING",
+        "PLACE_PLANT",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 1.875,
+      "mean_episode_length": 230.5,
+      "mean_return": 0.975,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0026",
+      "timeout_rate": 0.0
+    },
+    {
+      "death_rate": 1.0,
+      "distinct_achievements": [
+        "COLLECT_SAPLING",
+        "COLLECT_WOOD",
+        "PLACE_PLANT",
+        "PLACE_TABLE",
+        "WAKE_UP"
+      ],
+      "mean_achievement_count": 2.375,
+      "mean_episode_length": 305.88,
+      "mean_return": 1.475,
+      "n_episodes": 8,
+      "target_achievement_raw": [
+        "A",
+        "B"
+      ],
+      "task_id": "d052_r3_0027",
+      "timeout_rate": 0.0
+    }
+  ],
+  "provenance": {
+    "architecture_note": "enhanced_selected8_eye8: all-32 eval architecturally UNDEFINED; only selected-8 evaluable",
+    "checkpoint_sha256": "159621b47105589a721de496dfe67e63c8471158a47bc5d26f78224caa69f920",
+    "eval_sha256": "8963f377fef058aa59d6680068c1651e7fdade68e22aafea20783ffef3285451",
+    "eval_source": "/home/oseasy/experiments/mechanism_UED_continuation_20260715/single_director_20260722/d052_eval/soft_copeland_x_original/round4_selected8.jsonl",
+    "evaluator_sha256": "537500bc22a23f76cecd159e81104312e9242cadb21f543ffe636ddb572d73af",
+    "n_episodes": 64,
+    "n_tasks_evaluated": 8,
+    "tasks_are": "round_4_selected8_only"
+  },
+  "round": 4,
+  "schema_version": "d052_modeler_evidence_base_v1",
+  "seed": "seed0_1784462982",
+  "skill_chain": {
+    "canonical_order_source": "craftax.craftax.constants.Achievement (enum order)",
+    "frontier_ever_achieved": "WAKE_UP",
+    "frontier_ever_depth": 15,
+    "n_canonical_achievements": 67,
+    "reliable_frontier_ach": "WAKE_UP",
+    "reliable_frontier_depth": 15
+  }
+}

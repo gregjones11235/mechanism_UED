@@ -1,0 +1,118 @@
+{
+  "task": "D052_PHASE25_REAL_BUNDLE_RECONCILIATION §8 — three evidence tiers (amended by D052_PREMERGE_CORRECTION_V2 + D052_PREMERGE_SEMANTIC_CLEANUP_V3)",
+  "date": "2026-07-26",
+  "branch_head": "henry/d052-canonical-refactor @ 49f9121 + V3 semantic cleanup (local, not pushed)",
+  "separation_rule": "Tiers A/B/C are NEVER mixed in a claim. No tier may be promoted without NEW real data of the stated kind. Synthetic engineering success (B) is not scientific evidence; legacy mechanism confirmation (A) is not a training-ready or performance claim; the real canonical experiment (C) has NOT run.",
+  "critic_policy_two_dimensions": {
+    "note": "V3 split: 'critic policy' was ambiguous. It is now TWO INDEPENDENT dimensions that must NEVER substitute for each other, and TWO evidence layers (synthetic engineering PASS vs real canonical UNDECIDED). A synthetic engineering PASS must not be read as a frozen real policy.",
+    "D052_SYNTHETIC_CRITIC_SELECTOR_ENGINEERING": "PASS",
+    "synthetic_pass_scope": "engineering PASS over the synthetic deterministic fixture only; does NOT freeze either real dimension",
+    "synthetic_pass_does_not_freeze_real_policy": true,
+    "dimension_A_derivation": {
+      "REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE": "UNDECIDED",
+      "DEFAULT_CRITIC_REJECT_DERIVATION_RULE": "NONE",
+      "REAL_CANONICAL_CONVERSION_WITHOUT_CRITIC_RULE": "BLOCKED",
+      "question": "how the canonical critic_reject boolean is DERIVED from a legacy/LLM judgment",
+      "candidates_NOT_approved": ["decision_reject (B+C True=40)", "flags_too_hard (B+C True=38)"],
+      "owner": "d052/reconciliation/judgment_adapter.py (CRITIC_REJECT_DERIVATION_RULES; fail-closed: missing rule -> AdapterError CRITIC_POLICY_REQUIRED; unknown string -> UNKNOWN_RULE; non-critic records never carry a derivation)"
+    },
+    "dimension_B_selection_consumption": {
+      "REAL_CANONICAL_CRITIC_SELECTION_POLICY": "UNDECIDED",
+      "DEFAULT_CRITIC_SELECTION_POLICY": "NONE",
+      "REAL_CANONICAL_SELECTION_WITHOUT_CRITIC_POLICY": "BLOCKED",
+      "question": "how the SELECTOR consumes critic_reject / the critic score",
+      "candidates_NOT_approved": ["hard_veto", "soft_penalty", "score_only"],
+      "owner": "d052/schemas/selector.py (CriticPolicy) + d052/selectors/; Tier-C fail-closed gate: d052/reconciliation/tier_c_gate.py (either dimension missing -> BLOCKED)"
+    },
+    "execution_evidence_must_record_both_fields": true,
+    "historical_replay_independence": "the legacy B/C replay consumes raw critic_penalty only; neither dimension can alter any historical anchor",
+    "unfreeze_requirements": "director freezes dimension A (ONE derivation rule) AND dimension B (ONE selection policy) INDEPENDENTLY; until both are frozen: no real canonical judgment conversion, no real canonical selection, no D052 training authorization"
+  },
+
+  "tier_A_REAL_LEGACY_PHASE25": {
+    "kind": "REAL data, LEGACY mechanism (soft copeland, robust median/IQR, salted-hash targets)",
+    "evidence_base": {
+      "bundle": "orchestration/experiments/d052_modeler_shadow_v1/artifacts/d052_phase25_canonical_migration/ (14 files; SHA256SUMS 13/13 verified server+local+recursive 75/75)",
+      "provenance": "server untracked worktree henry/d052-modeler-shadow-v1 @ e6765fb; GIT_COMMIT_PROVENANCE_CLAIMED=false",
+      "replay": "reports/phase25/real_bundle_replay_result.json — ALL_ANCHORS_PASS=true (offline, no LLM)",
+      "tamper_evidence": "judgment_hash_sha256 = sha256(canon_json(original judgment)); 192/192 verified vs outputs/ originals"
+    },
+    "frozen_labels": {
+      "MODELER_MATCHED_SELECTION_EFFECT": "CONFIRMED",
+      "LEGACY_MATCHED_SELECTED_SET_CHANGE": "4/8",
+      "LEGACY_MATCHED_JACCARD": 0.333,
+      "MODELER_LEARNING_VALUE": "UNTESTED",
+      "LEGACY_PHASE25_SELECTION_EVIDENCE": "MECHANISM_ONLY",
+      "LEGACY_PHASE25_SELECTED8_TRAINING_READY": false,
+      "LEGACY_PHASE25_PERFORMANCE_INTERPRETATION_ALLOWED": false
+    },
+    "anchors": {
+      "REAL_PHASE25_BUNDLE_REPLAY": "PASS",
+      "REAL_PHASE25_B_SELECTION_HASH": "82571538e5299ea9",
+      "REAL_PHASE25_C_SELECTION_HASH": "868a57268d66b90b",
+      "REAL_PHASE25_SELECTED_CHANGE": "4/8",
+      "REAL_PHASE25_MATCHED_PROTOCOL": "PASS"
+    },
+    "hard_limits": [
+      "targets are salted-hash placeholders (18/21 distinct names UNKNOWN; mapping hash()-modulo) -> ExecutionMapping executed_as_intended=False for all 32 -> NO training on this pool, ever",
+      "no longitudinal eval -> best_sr/recent_delta/retention INSUFFICIENT_EVIDENCE",
+      "one checkpoint, one round, 8 of 32 tasks evaluated -> no generalization claim",
+      "role-leave-one-out (role_ablation.json) shows critic-driven flips; effect attribution stays MECHANISM_ONLY"
+    ]
+  },
+
+  "tier_B_SYNTHETIC_CANONICAL_FIXTURE": {
+    "kind": "SYNTHETIC deterministic fixture over a NEW legal canonical pool (engineering test of the canonical_v2 protocol machinery)",
+    "evidence_base": {
+      "commit": "968768e feat(d052): Phase 2.5 canonical_v2 counterfactual integration (offline B/C, no training)",
+      "artifacts": "reports/phase25/{pool,arm_b,arm_c,selection_b,selection_c,certificates_b,certificates_c,judgment_cache,modeler_context,matched_counterfactual_manifest,summary}.json (UNCHANGED by this reconciliation; real-bundle outputs use distinct real_bundle_* names)",
+      "label_in_artifacts": "SYNTHETIC_FIXTURE_deterministic_offline_v1",
+      "tests": "d052/tests/test_counterfactual_*.py (part of the 283-test baseline; retained untouched)"
+    },
+    "frozen_labels": {
+      "CANONICAL_SYNTHETIC_FIXTURE_ENGINEERING_TEST": "PASS",
+      "CANONICAL_SYNTHETIC_MODELER_SELECTION_CHANGE": "1/8",
+      "CANONICAL_SYNTHETIC_RESULT_IS_SCIENTIFIC_EVIDENCE": false
+    },
+    "hard_limits": [
+      "judgments/modeler output are deterministic fixtures, NOT real LLM outputs",
+      "proves schema/hash/firewall/matched-protocol machinery end-to-end; says nothing about a real modeler's effect"
+    ]
+  },
+
+  "tier_C_REAL_CANONICAL_POOL": {
+    "kind": "FUTURE real experiment: matched B/C over a real canonical pool with canonical targets and real (pinned-model) judgments",
+    "frozen_labels": {
+      "REAL_CANONICAL_POOL_EXPERIMENT": "NOT_RUN",
+      "REAL_CANONICAL_POOL_TRAINING_TIMESTEPS": 0,
+      "REAL_CANONICAL_POOL_SCIENTIFIC_EVIDENCE": "NONE_YET"
+    },
+    "cell_templates": [
+      "CELL_PHASE25_REAL_CANONICAL_B (BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS)",
+      "CELL_PHASE25_REAL_CANONICAL_C (BLOCKED_PENDING_REAL_CANONICAL_JUDGMENTS)"
+    ],
+    "template_location": "gpu1_aggregation_siege/phase25_real_canonical_cell_templates/",
+    "registration_status": "NOT registered in any CellRegistry; templates only; cannot become DRAFT until unblocked",
+    "blockers": [
+      "real judgments (LLM calls) over a canonical pool — forbidden this round (NO_UNAUTHORIZED_TRAINING / no new LLM)",
+      "canonical pool with canonical targets + recomputed 64-char chash/pool_hash (legacy pool is invalid)",
+      "dimension A: REAL_CANONICAL_CRITIC_REJECT_DERIVATION_RULE=UNDECIDED; adapter is fail-closed (CRITIC_POLICY_REQUIRED); director must freeze ONE of decision_reject (40) / flags_too_hard (38) before any conversion",
+      "dimension B: REAL_CANONICAL_CRITIC_SELECTION_POLICY=UNDECIDED; director must freeze ONE of hard_veto / soft_penalty / score_only; tier_c_gate fails closed until both dimensions are frozen",
+      "director decision: ROLE_REGISTRY model pins vs real-bundle model ids",
+      "task_params policy incl. required melee_spawn_multiplier"
+    ]
+  },
+
+  "constraint_compliance": {
+    "NO_UNAUTHORIZED_TRAINING": true,
+    "no_new_llm_calls": true,
+    "no_push": true,
+    "NO_LEGACY_ARTIFACT_OVERWRITE": true,
+    "NO_SILENT_FALLBACK": true,
+    "NO_RAW_DATA_NO_STRONG_CLAIM": true,
+    "synthetic_not_substituted_for_real": true,
+    "no_implicit_critic_derivation_rule_default": true,
+    "no_implicit_critic_selection_policy_default": true,
+    "henry_invalid_archive_preserved": true
+  }
+}

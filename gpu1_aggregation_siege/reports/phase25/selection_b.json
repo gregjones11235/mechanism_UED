@@ -1,0 +1,23 @@
+{
+  "candidate_count_in": 16,
+  "critic_policy": "hard_veto",
+  "eligible_count": 16,
+  "k_requested": 8,
+  "protocol_version": "canonical_v2",
+  "rejected_by_critic": [],
+  "seed": 20260726,
+  "selected_ids": [
+    "cand_00",
+    "cand_01",
+    "cand_02",
+    "cand_03",
+    "cand_04",
+    "cand_05",
+    "cand_06",
+    "cand_07"
+  ],
+  "selection_hash": "3a1665decf1d092a0fe18d81e579c0334a04094734d394506a7db7561a71a66e",
+  "selection_status": "OK",
+  "selector": "S1_THREE_ROLE",
+  "shortfall_note": ""
+}

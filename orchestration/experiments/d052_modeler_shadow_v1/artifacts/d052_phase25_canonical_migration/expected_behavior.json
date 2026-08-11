@@ -1,0 +1,38 @@
+{
+  "scope": "HISTORICAL MECHANISM ANCHORS ONLY. These values characterize the legacy D052 round-4 pool and the Phase 2.5 B/C matched counterfactual. canonical_v2 uses a NEW pool and is NOT required to reproduce the same selected-8; it is required to reproduce the DETERMINISM and the MATCHED-PROTOCOL invariants.",
+  "legacy_pool_hash": "1902b71a5d86fa00",
+  "B_selection_hash": "82571538e5299ea9",
+  "C_selection_hash": "868a57268d66b90b",
+  "B_selected8": [
+    "d052_r3_0000",
+    "d052_r3_0006",
+    "d052_r3_0007",
+    "d052_r3_0011",
+    "d052_r3_0014",
+    "d052_r3_0022",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "C_selected8": [
+    "d052_r3_0000",
+    "d052_r3_0003",
+    "d052_r3_0010",
+    "d052_r3_0014",
+    "d052_r3_0017",
+    "d052_r3_0024",
+    "d052_r3_0025",
+    "d052_r3_0028"
+  ],
+  "selected_set_change": "4/8",
+  "jaccard": 0.333,
+  "full_rank_spearman_B_vs_C": 0.4373,
+  "decision_flips_of_96": 34,
+  "determinism_expectation": "recomputing B (or C) from judgments_{B,C}.jsonl with selector_config.json yields the same selection_hash byte-for-byte.",
+  "matched_selection_effect": "CONFIRMED (4/8 change under a protocol whose only variation is the frozen profile)",
+  "learning_value": "UNTESTED (offline cannot distinguish beneficial recalibration from destabilizing over-correction; and legacy training path is INVALID due to salted hash)",
+  "not_required_for_canonical": [
+    "reproducing these exact selected-8",
+    "reproducing legacy pool_hash",
+    "reusing legacy salted-hash targets"
+  ]
+}

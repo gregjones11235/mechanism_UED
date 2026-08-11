@@ -1,0 +1,476 @@
+[
+  {
+    "rank": 1,
+    "task_id": "d052_r3_0014",
+    "progression": 8.0,
+    "critic_penalty": 0.05,
+    "novelty": 7.0,
+    "soft_copeland_score": 1.0,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 2,
+    "task_id": "d052_r3_0028",
+    "progression": 8.0,
+    "critic_penalty": 0.3,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.9646,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 3,
+    "task_id": "d052_r3_0007",
+    "progression": 8.0,
+    "critic_penalty": 0.35,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.9504,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 4,
+    "task_id": "d052_r3_0025",
+    "progression": 7.5,
+    "critic_penalty": 0.2,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.9362,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "place_table"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 5,
+    "task_id": "d052_r3_0022",
+    "progression": 8.0,
+    "critic_penalty": 0.5,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.9362,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "craft_wooden_pickaxe"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 6,
+    "task_id": "d052_r3_0000",
+    "progression": 8.5,
+    "critic_penalty": 0.9,
+    "novelty": 7.5,
+    "soft_copeland_score": 0.8881,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood",
+      "craft_planks"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 7,
+    "task_id": "d052_r3_0001",
+    "progression": 7.0,
+    "critic_penalty": 0.1,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.8582,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 8,
+    "task_id": "d052_r3_0011",
+    "progression": 7.5,
+    "critic_penalty": 0.6,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.8582,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "craft_table",
+      "place_table"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": true
+  },
+  {
+    "rank": 9,
+    "task_id": "d052_r3_0021",
+    "progression": 7.5,
+    "critic_penalty": 0.8,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.7803,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood",
+      "place_table"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 10,
+    "task_id": "d052_r3_0015",
+    "progression": 7.0,
+    "critic_penalty": 0.75,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.759,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 11,
+    "task_id": "d052_r3_0018",
+    "progression": 6.0,
+    "critic_penalty": 0.05,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.7307,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "collect_wood",
+      "place_table"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 12,
+    "task_id": "d052_r3_0003",
+    "progression": 7.5,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6881,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 13,
+    "task_id": "d052_r3_0004",
+    "progression": 6.0,
+    "critic_penalty": 0.75,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6314,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "place_table",
+      "survive"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 14,
+    "task_id": "d052_r3_0002",
+    "progression": 6.5,
+    "critic_penalty": 0.8,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6314,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 15,
+    "task_id": "d052_r3_0016",
+    "progression": 6.5,
+    "critic_penalty": 0.8,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6314,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie",
+      "survive"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 16,
+    "task_id": "d052_r3_0023",
+    "progression": 6.5,
+    "critic_penalty": 0.8,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6314,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie",
+      "zombie_slayer"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 17,
+    "task_id": "d052_r3_0010",
+    "progression": 7.0,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6102,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "enter_cave",
+      "explore_cave_depth1"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 18,
+    "task_id": "d052_r3_0017",
+    "progression": 7.0,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6102,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "cave_explore",
+      "find_exit"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 19,
+    "task_id": "d052_r3_0024",
+    "progression": 7.0,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.6102,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "cave_navigator",
+      "passive_collector"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 20,
+    "task_id": "d052_r3_0030",
+    "progression": 6.0,
+    "critic_penalty": 0.8,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.5747,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 21,
+    "task_id": "d052_r3_0009",
+    "progression": 6.0,
+    "critic_penalty": 0.8,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.5747,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "defeat_zombie",
+      "survive_10_steps"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 22,
+    "task_id": "d052_r3_0031",
+    "progression": 7.5,
+    "critic_penalty": 0.95,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.5322,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 23,
+    "task_id": "d052_r3_0029",
+    "progression": 7.0,
+    "critic_penalty": 0.9,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.518,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 24,
+    "task_id": "d052_r3_0005",
+    "progression": 5.5,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.4401,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 25,
+    "task_id": "d052_r3_0008",
+    "progression": 8.5,
+    "critic_penalty": 0.95,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.4253,
+    "difficulty_tier": "medium",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 26,
+    "task_id": "d052_r3_0019",
+    "progression": 5.0,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.4046,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 27,
+    "task_id": "d052_r3_0026",
+    "progression": 5.0,
+    "critic_penalty": 0.85,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.4046,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 28,
+    "task_id": "d052_r3_0012",
+    "progression": 5.0,
+    "critic_penalty": 0.9,
+    "novelty": 7.0,
+    "soft_copeland_score": 0.3125,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "eat_food",
+      "survive_3_days"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 29,
+    "task_id": "d052_r3_0020",
+    "progression": 6.5,
+    "critic_penalty": 0.9,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.2339,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "craft_sword",
+      "enchant_weapon"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 30,
+    "task_id": "d052_r3_0013",
+    "progression": 5.5,
+    "critic_penalty": 0.9,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.1347,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 31,
+    "task_id": "d052_r3_0027",
+    "progression": 4.0,
+    "critic_penalty": 0.9,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.0638,
+    "difficulty_tier": "easy",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": true,
+    "in_new_selected8": false
+  },
+  {
+    "rank": 32,
+    "task_id": "d052_r3_0006",
+    "progression": 4.0,
+    "critic_penalty": 0.95,
+    "novelty": 6.5,
+    "soft_copeland_score": 0.0,
+    "difficulty_tier": "medium",
+    "target_achievements": [
+      "A",
+      "B"
+    ],
+    "in_old_selected8": false,
+    "in_new_selected8": false
+  }
+]

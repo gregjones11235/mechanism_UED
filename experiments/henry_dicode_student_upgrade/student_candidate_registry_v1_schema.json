@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "student_candidate_registry_v1_schema.json",
+  "title": "Student Candidate Registry v1",
+  "description": "Machine-readable registry of REAL Craftax Student candidates, performance-screened for CC3 (CC3_ALL_EXISTING_STUDENT_CANDIDATE_REGISTRY_AND_PERFORMANCE_PRIORITY). Checkpoints entities are NOT in this git repo (excluded by archive policy); *_sha256 fields are transcribed from archived reports/manifests when recorded, otherwise NONE_RECORDED, and are NOT locally verifiable here. Identity/readiness judgments are conservative: anything whose observation/action or params cannot be confirmed is BLOCKED_IDENTITY, never ELIGIBLE. Correction round (2026-07-30): EXTERNAL_VERIFIED_ARTIFACT candidates with a verified CC handoff chain (engineering gates all PASS + SHA chain + accessible artifact handoff + real forward/interface smoke) MAY be ELIGIBLE_NOW; a checkpoint not committed to git is not itself a disqualifier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task",
+    "generated_from",
+    "canonical_constants",
+    "counts",
+    "round_1_candidate_order",
+    "cc2_recommendation",
+    "d052_boundary",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "student_candidate_registry/v1" },
+    "task": { "type": "string" },
+    "generated_from": {
+      "type": "string",
+      "description": "Provenance of the registry: which archive/handoff material it was derived from."
+    },
+    "date": { "type": "string" },
+    "source_archive_root": { "type": "string" },
+    "canonical_constants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["student_obs_dim", "conditioning_dim", "base_obs_dim"],
+      "properties": {
+        "student_obs_dim": { "type": "integer", "const": 8335 },
+        "conditioning_dim": { "type": "integer", "const": 67 },
+        "base_obs_dim": { "type": "integer", "const": 8268 },
+        "student_obs_dim_source": { "type": "string" },
+        "action_dim_note": { "type": "string" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_candidates_found",
+        "eligible_now",
+        "eligible_after_thin_adapter",
+        "eligible_after_matched_98304",
+        "blocked_identity",
+        "rejected"
+      ],
+      "properties": {
+        "total_candidates_found": { "type": "integer", "minimum": 0 },
+        "eligible_now": { "type": "integer", "minimum": 0 },
+        "eligible_after_thin_adapter": { "type": "integer", "minimum": 0 },
+        "eligible_after_matched_98304": { "type": "integer", "minimum": 0 },
+        "blocked_identity": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "round_1_candidate_order": {
+      "type": "array",
+      "description": "Performance-priority ordered candidate_id list (target 4-8). Correction round: every member's cc4_adapter_family must be in fast_adapter_priority.",
+      "items": { "type": "string" },
+      "minItems": 4,
+      "maxItems": 8
+    },
+    "round_1_alternates": {
+      "type": "array",
+      "description": "Correction round: documented alternates just outside the fast lane (e.g. whose adapter family is DEFERRED_AFTER_FAST_SCREEN), in priority order.",
+      "items": { "type": "string" }
+    },
+    "cc2_recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary_new_training_candidate", "secondary_new_training_candidate", "rationale"],
+      "properties": {
+        "primary_new_training_candidate": { "type": ["string", "null"] },
+        "secondary_new_training_candidate": { "type": ["string", "null"] },
+        "rationale": { "type": "string" },
+        "matched_98304_already_exists": { "type": "boolean" }
+      }
+    },
+    "d052_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "d052_real_pool",
+        "d052_student_profile",
+        "d052_curriculum",
+        "winner_candidate_id",
+        "winner_profile_input_schema"
+      ],
+      "properties": {
+        "d052_real_pool": { "type": "string", "const": "NOT_STARTED" },
+        "d052_student_profile": { "type": "string", "const": "NOT_FINALIZED" },
+        "d052_curriculum": { "type": "string", "const": "NOT_GENERATED" },
+        "winner_candidate_id": { "type": ["string", "null"] },
+        "winner_profile_input_schema": { "type": ["string", "null"] }
+      }
+    },
+    "primary_artifact_recovery": {
+      "type": ["string", "null"],
+      "description": "Correction round: highest-priority EXISTING artifact to recover/replay for the ROUND_1 fast lane."
+    },
+    "secondary_artifact_recovery": {
+      "type": ["string", "null"],
+      "description": "Correction round: second-priority existing artifact to recover/replay."
+    },
+    "fast_adapter_priority": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Correction round: adapter families authorized for the ROUND_1 fast lane, in priority order."
+    },
+    "deferred_adapter_families": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Correction round: adapter families marked DEFERRED_AFTER_FAST_SCREEN."
+    },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/candidate" }
+    }
+  },
+  "definitions": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "display_name",
+        "network_family",
+        "memory_family",
+        "carry_mode",
+        "replay_mode",
+        "hindsight",
+        "awr",
+        "training_task",
+        "training_steps",
+        "training_seed",
+        "base_checkpoint",
+        "checkpoint_path_or_reference",
+        "checkpoint_file_sha256",
+        "params_sha256",
+        "source_commit",
+        "driver_source_sha256",
+        "policy_source_sha256",
+        "observation_shape",
+        "action_dim",
+        "checkpoint_format",
+        "cc4_adapter_family",
+        "evidence_class",
+        "budget_class",
+        "readiness",
+        "blockers"
+      ],
+      "properties": {
+        "candidate_id": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9_]*$" },
+        "display_name": { "type": "string" },
+        "network_family": { "type": "string" },
+        "memory_family": { "type": "string" },
+        "carry_mode": {
+          "type": "string",
+          "enum": ["PERSISTENT", "RESET128", "NONE", "NA", "UNKNOWN"]
+        },
+        "replay_mode": { "type": "string" },
+        "hindsight": { "type": ["boolean", "string"] },
+        "awr": { "type": ["boolean", "string"] },
+        "training_task": { "type": "string" },
+        "training_steps": { "type": ["integer", "string", "null"] },
+        "training_seed": { "type": ["integer", "string", "null"] },
+        "base_checkpoint": { "type": ["string", "null"] },
+        "checkpoint_path_or_reference": { "type": ["string", "null"] },
+        "checkpoint_file_sha256": { "type": "string" },
+        "params_sha256": { "type": "string" },
+        "source_commit": { "type": ["string", "null"] },
+        "driver_source_sha256": { "type": "string" },
+        "policy_source_sha256": { "type": "string" },
+        "observation_shape": {
+          "type": ["array", "null"],
+          "items": { "type": "integer" }
+        },
+        "action_dim": { "type": ["integer", "null"] },
+        "checkpoint_format": { "type": "string" },
+        "cc4_adapter_family": { "type": "string" },
+        "evidence_class": {
+          "type": "string",
+          "enum": [
+            "REAL_CHECKPOINT_VERIFIED",
+            "REAL_CHECKPOINT_REPORTED",
+            "REPORT_ONLY",
+            "ENGINEERING_ONLY",
+            "ABLATION_ONLY",
+            "INVALIDATED",
+            "SYNTHETIC"
+          ]
+        },
+        "budget_class": {
+          "type": "string",
+          "enum": ["MATCHED_98304", "UNMATCHED_REFERENCE", "UNKNOWN_BUDGET"]
+        },
+        "readiness": {
+          "type": "string",
+          "enum": [
+            "ELIGIBLE_NOW",
+            "ELIGIBLE_AFTER_THIN_ADAPTER",
+            "ELIGIBLE_AFTER_MATCHED_98304",
+            "BLOCKED_IDENTITY",
+            "REJECTED_SYNTHETIC"
+          ]
+        },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "performance": {
+          "type": ["object", "null"],
+          "description": "Optional recorded performance; null when not formally measured.",
+          "properties": {
+            "full_tier3_sr": { "type": ["number", "string", "null"] },
+            "front_sr": { "type": ["number", "string", "null"] },
+            "back_sr": { "type": ["number", "string", "null"] },
+            "stage4_native_dk_sr": { "type": ["number", "string", "null"] },
+            "vs_control": { "type": ["string", "null"] },
+            "source": { "type": ["string", "null"] }
+          }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Repo-relative paths of archived reports/manifests backing this entry (for EXTERNAL_VERIFIED_ARTIFACT candidates these may be local control-plane paths outside this repo, annotated as such)."
+        },
+        "evidence_location_class": {
+          "type": "string",
+          "enum": [
+            "EXTERNAL_VERIFIED_ARTIFACT",
+            "SERVER_REPORT_LEVEL",
+            "IN_REPO_MANIFEST_MIRRORED",
+            "IN_REPO_VERIFIABLE"
+          ],
+          "description": "Correction round: where the checkpoint evidence physically lives and how it was verified. EXTERNAL_VERIFIED_ARTIFACT = server-side artifact owned by another CC with a verified handoff chain (engineering gates all PASS + SHA chain + accessible handoff + real forward/interface smoke); qualifies for ELIGIBLE_NOW even though the checkpoint is not committed to git."
+        },
+        "artifact_owner": {
+          "type": ["string", "null"],
+          "description": "Correction round: which CC owns/stewards the artifact (e.g. CC4), null when not applicable."
+        },
+        "artifact_handoff_required": {
+          "type": "boolean",
+          "description": "Correction round: true when downstream use requires an artifact handoff from the owner CC."
+        },
+        "priority": {
+          "type": ["string", "null"],
+          "description": "Correction round: optional priority annotation, e.g. DEPRIORITIZED_KNOWN_UNDERPERFORMER."
+        }
+      }
+    }
+  }
+}

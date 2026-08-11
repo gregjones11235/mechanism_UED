@@ -1,0 +1,52 @@
+{
+  "schema_version": "d052_pilot8_manifest_v1",
+  "seed": 52,
+  "cell": "soft_copeland_x_original",
+  "round": 4,
+  "selection_rule": "2 high-rank + 2 low-rank + 2 max-role-disagreement(zscore-pstdev) + 2 skill-family-diversity(greedy)",
+  "tie_break": "task_id ascending (deterministic)",
+  "chosen": [
+    "d052_r3_0027",
+    "d052_r3_0005",
+    "d052_r3_0010",
+    "d052_r3_0000",
+    "d052_r3_0008",
+    "d052_r3_0002",
+    "d052_r3_0022",
+    "d052_r3_0012"
+  ],
+  "rationale": {
+    "d052_r3_0027": "high_old_rank(1)",
+    "d052_r3_0005": "high_old_rank(2)",
+    "d052_r3_0010": "low_old_rank(32)",
+    "d052_r3_0000": "low_old_rank(31)",
+    "d052_r3_0008": "max_role_disagreement(zstd=2.19)",
+    "d052_r3_0002": "max_role_disagreement(zstd=1.26)",
+    "d052_r3_0022": "skill_family_diversity(tools)",
+    "d052_r3_0012": "skill_family_diversity(survival)"
+  },
+  "families_covered": [
+    "explore",
+    "other",
+    "resource",
+    "survival",
+    "tools"
+  ],
+  "old_ranks": {
+    "d052_r3_0027": 1,
+    "d052_r3_0005": 2,
+    "d052_r3_0010": 32,
+    "d052_r3_0000": 31,
+    "d052_r3_0008": 3,
+    "d052_r3_0002": 14,
+    "d052_r3_0022": 4,
+    "d052_r3_0012": 6
+  },
+  "old_selected8_overlap": [
+    "d052_r3_0027",
+    "d052_r3_0005",
+    "d052_r3_0008",
+    "d052_r3_0022",
+    "d052_r3_0012"
+  ]
+}

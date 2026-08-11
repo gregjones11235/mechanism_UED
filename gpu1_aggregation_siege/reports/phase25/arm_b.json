@@ -1,0 +1,47 @@
+{
+  "arm_label": "B",
+  "judgment_cache_hash": "d36d00bd89ea37d814c7976fef46a024e5e791a0a002e8d0605e3c99d726a088",
+  "modeler_bonus_weight": 0.07,
+  "modeler_context_hash": null,
+  "modeler_enabled": false,
+  "pool_hash": "189e13ef2435a5462ef4bef87a994bfa1d05d70654471ada4ed0089e6d3d1c80",
+  "prompt_set_hash": "0d04aa69af84a9d6b8408363f75a687c43758b22b1393c147fa28cccca7c555e",
+  "protocol_version": "canonical_v2",
+  "selection_result": {
+    "candidate_count_in": 16,
+    "critic_policy": "hard_veto",
+    "eligible_count": 16,
+    "k_requested": 8,
+    "protocol_version": "canonical_v2",
+    "rejected_by_critic": [],
+    "seed": 20260726,
+    "selected_ids": [
+      "cand_00",
+      "cand_01",
+      "cand_02",
+      "cand_03",
+      "cand_04",
+      "cand_05",
+      "cand_06",
+      "cand_07"
+    ],
+    "selection_hash": "3a1665decf1d092a0fe18d81e579c0334a04094734d394506a7db7561a71a66e",
+    "selection_status": "OK",
+    "selector": "S1_THREE_ROLE",
+    "shortfall_note": ""
+  },
+  "selector": {
+    "budget": null,
+    "critic_policy": "hard_veto",
+    "k": 8,
+    "protocol_version": "canonical_v2",
+    "roles": [
+      "tutor",
+      "critic",
+      "explorer"
+    ],
+    "seed": 20260726,
+    "selector": "S1_THREE_ROLE"
+  },
+  "student_profile_hash": null
+}

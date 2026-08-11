@@ -1,0 +1,31 @@
+{
+  "all_certificates_executed_as_intended": true,
+  "canonical_b_selected8": [
+    "cand_00",
+    "cand_01",
+    "cand_02",
+    "cand_03",
+    "cand_04",
+    "cand_05",
+    "cand_06",
+    "cand_07"
+  ],
+  "canonical_c_selected8": [
+    "cand_00",
+    "cand_01",
+    "cand_02",
+    "cand_03",
+    "cand_04",
+    "cand_05",
+    "cand_06",
+    "cand_08"
+  ],
+  "manifest_hash": "b88cafc462de0b8b18d2786e6c57db549fa516e8a9bde0a2dae3a99af47e3ab2",
+  "modeler_canonical_selection_change": "1/8",
+  "pool_hash": "189e13ef2435a5462ef4bef87a994bfa1d05d70654471ada4ed0089e6d3d1c80",
+  "pool_id": "phase25_canonical_shared_frozen_v1",
+  "selection_hash_b": "3a1665decf1d092a0fe18d81e579c0334a04094734d394506a7db7561a71a66e",
+  "selection_hash_c": "e4dcd966a40b3b44cf24557c7abb3004bb70f77cfaa737fb295f7505a11932bc",
+  "synthetic_label": "SYNTHETIC_FIXTURE_deterministic_offline_v1",
+  "training_timesteps": 0
+}

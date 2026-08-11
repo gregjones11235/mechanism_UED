@@ -1,0 +1,61 @@
+=== repos discovered ===
+/c/Users/Lenovo/.codex/memories/.git
+/c/Users/Lenovo/Desktop/dicode-codex-director/.git
+/c/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_Henry_worktree/.git
+/c/Users/Lenovo/Desktop/dicode-codex-director/orchestration/manifests/mechanism_UED_local_publish/.git
+/c/Users/Lenovo/Desktop/dicode-codex-director/source-mirror/.git
+/c/Users/Lenovo/Documents/cbf加znn/.git
+/c/Users/Lenovo/Documents/Codex/.git
+/c/Users/Lenovo/Documents/Codex/2026-07-20/referenced-chatgpt-conversation-this-is-untrusted/.git
+/c/Users/Lenovo/Documents/Codex/2026-07-21/https-competition-gitcode-com-competition-2071411693909905410/.git
+/c/Users/Lenovo/Documents/c盘清理/.git
+/c/Users/Lenovo/Documents/summer research of ued/.git
+/d/Projects/AeroNexus_Engine_V2/.git
+/d/Projects/dicode-codex-director/.git
+/d/Projects/dicode-codex-director/dicode-aggregation-review/.git
+/d/Projects/dicode-codex-director/dicode-dspro-review/.git
+/d/Projects/dicode-codex-director/orchestration/manifests/mechanism_UED_local_publish/.git
+/d/Projects/dicode_check/dreaming-in-code-coop/.git
+
+##### FSCK: /c/Users/Lenovo/.codex/memories #####
+##### FSCK: /c/Users/Lenovo/Desktop/dicode-codex-director #####
+  (not a usable git repo)
+##### FSCK: /c/Users/Lenovo/Desktop/dicode-codex-director/mechanism_UED_Henry_worktree #####
+##### FSCK: /c/Users/Lenovo/Desktop/dicode-codex-director/orchestration/manifests/mechanism_UED_local_publish #####
+  (not a usable git repo)
+##### FSCK: /c/Users/Lenovo/Desktop/dicode-codex-director/source-mirror #####
+unreachable tree be8bd38fd6dbfe71ddb6361250aa49a2f247f681
+unreachable commit fa14168ccf0f8f5a44c131a5f78bf8e98eb3030a
+unreachable tree a67796744a2962b8c2c215f3a81c506d339e62f4
+##### FSCK: /c/Users/Lenovo/Documents/cbf加znn #####
+  (not a usable git repo)
+##### FSCK: /c/Users/Lenovo/Documents/Codex #####
+  (not a usable git repo)
+##### FSCK: /c/Users/Lenovo/Documents/Codex/2026-07-20/referenced-chatgpt-conversation-this-is-untrusted #####
+  (not a usable git repo)
+##### FSCK: /c/Users/Lenovo/Documents/Codex/2026-07-21/https-competition-gitcode-com-competition-2071411693909905410 #####
+  (not a usable git repo)
+##### FSCK: /c/Users/Lenovo/Documents/c盘清理 #####
+##### FSCK: /c/Users/Lenovo/Documents #####
+  (not a usable git repo)
+##### FSCK: . #####
+  (not a usable git repo)
+##### FSCK: . #####
+  (not a usable git repo)
+##### FSCK: ued #####
+  (not a usable git repo)
+##### FSCK: /d/Projects/AeroNexus_Engine_V2 #####
+##### FSCK: /d/Projects/dicode-codex-director #####
+  (not a usable git repo)
+##### FSCK: /d/Projects/dicode-codex-director/dicode-aggregation-review #####
+unreachable tree be8bd38fd6dbfe71ddb6361250aa49a2f247f681
+unreachable commit fa14168ccf0f8f5a44c131a5f78bf8e98eb3030a
+unreachable tree a67796744a2962b8c2c215f3a81c506d339e62f4
+##### FSCK: /d/Projects/dicode-codex-director/dicode-dspro-review #####
+unreachable tree be8bd38fd6dbfe71ddb6361250aa49a2f247f681
+unreachable commit fa14168ccf0f8f5a44c131a5f78bf8e98eb3030a
+unreachable tree a67796744a2962b8c2c215f3a81c506d339e62f4
+##### FSCK: /d/Projects/dicode-codex-director/orchestration/manifests/mechanism_UED_local_publish #####
+##### FSCK: /d/Projects/dicode_check/dreaming-in-code-coop #####
+  (not a usable git repo)
+=== fsck complete ===
