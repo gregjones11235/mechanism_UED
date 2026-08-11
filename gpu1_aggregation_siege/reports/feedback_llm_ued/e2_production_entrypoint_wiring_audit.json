@@ -1,0 +1,32 @@
+{
+  "audit": "E2 production entrypoint wiring (objects resolved fail closed)",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "main_signature": "main(argv=None, *, director_bundle_verifier=None, formal_asset_registry=None)",
+  "injected_gates": {
+    "PRODUCTION_BUNDLE_VERIFIER_UNBOUND": "shared DirectorBundleVerifier not injected -> fail closed",
+    "FORMAL_ASSET_REGISTRY_UNBOUND": "shared FormalAssetRegistry not injected -> fail closed"
+  },
+  "resolve_director_runtime_objects": {
+    "resolves_from": "FormalAssetRegistry",
+    "identity_rule": "resolved_object.registry_identity == manifest-declared identity; implementation hash verified by the registry",
+    "fail_closed": ["object is None", "identity string only", "Mapping impersonation", "identity mismatch", "implementation-hash drift", "selected-student mismatch"]
+  },
+  "run_e2_object_level_check": "available for the director's object-level Persistent check (verifier + registry + selected_candidate_id)",
+  "object_resolution_status": {
+    "PERSISTENT_STUDENT": "REQUIRED",
+    "REFERENCE": "REQUIRED",
+    "CANDIDATE_PROBE_RUNNER": "REQUIRED",
+    "ANCHOR_MANIFEST": "REQUIRED (frozen)",
+    "CANONICAL_DICODE_ONE_UPDATE_RUNTIME": "REQUIRED",
+    "CANONICAL_DICODE_RUN_STATE_CHECKPOINT": "REQUIRED",
+    "AUTHORIZED_SIX_ROLE_LLM_RUNTIME": "REQUIRED (not called)",
+    "LLM_TRANSPORT_CLOSURE": "REQUIRED (resolved, not called)",
+    "AUXILIARY_COMPUTE_LEDGER": "REQUIRED",
+    "STUDENT_ADAPTER": "REQUIRED",
+    "REFERENCE_ADAPTER": "REQUIRED"
+  },
+  "not_resolved_yet": "ALL real callable objects (objects are director-injected; this worktree holds none) — check-only honestly BLOCKED (OBJECT_LEVEL_CHECK_BLOCKED) until injected",
+  "auto_test_only_rollback": "REMOVED — the production controller never sets test_only; missing dicode batch binding -> REAL_DICODE_BATCH_PLAN_REQUIRED",
+  "cli_bundle_override": "FORBIDDEN (all four CLI knobs are consistency-only or rejected)"
+}

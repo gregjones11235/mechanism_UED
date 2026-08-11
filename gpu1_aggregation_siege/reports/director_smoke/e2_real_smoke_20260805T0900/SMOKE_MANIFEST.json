@@ -1,0 +1,8 @@
+{
+  "feedback_k_frozen": false,
+  "run_id": "e2_real_smoke_20260805T0900",
+  "status": "BLOCKED_EXTERNAL",
+  "two_window_smoke_policy": "updates_expected_total=1, update_window_index=1",
+  "window_k": "NOT_EXECUTED (no real transport/registry)",
+  "window_k1_update": "NOT_EXECUTED (canonical DiCode runtime requires jax)"
+}

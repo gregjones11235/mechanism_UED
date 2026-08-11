@@ -72,3 +72,8 @@ class ReviewBoardOutput(CanonicalModel):
     #: FormalEvaluationLeakageGuard verdict over the board INPUT context
     leakage_guard_status: str = "NOT_CHECKED"
     real_llm_calls: int = Field(ge=0)
+    #: CC3 fix3 (§10): hash of the SHARED symbolic clip payload batch the
+    #: board consumed — the controller certificate must bind the SAME hash,
+    #: proving board and certificate reviewed ONE identical batch. Empty only
+    #: for a board that ran with zero clips.
+    symbolic_clip_batch_hash: str = ""

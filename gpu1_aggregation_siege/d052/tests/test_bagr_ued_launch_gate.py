@@ -40,14 +40,43 @@ from d052.bagr_ued.batch_planner import BatchPlanner
 from d052.bagr_ued.budget_allocator import BudgetPlan
 from d052.bagr_ued.controller import BAGRUEdController
 from d052.bagr_ued.environment_proposer import TaskParamsDescriptor
+from d052.bagr_ued.hashing import canonical_sha256
 from d052.bagr_ued.launch_gate import (
+    CONTEXT_VERSION,
     GATE_VERSION,
+    LaunchContext,
     LaunchGate,
     compute_batch_plan_hash,
     compute_selected_descriptor_hash,
+    evaluate_launch_context,
     evaluate_launch_gate,
 )
 from d052.bagr_ued.synthetic_traces import build_unsafe_rest_raw_rollout
+
+
+def _context(gate, board=None):
+    """The LaunchContext assembled from the SAME gate (dry-run conditions)."""
+    return evaluate_launch_context(gate, board or _board(),
+                                   symbolic_payloads=())
+
+
+def _all_true_context(gate):
+    """SYNTHETIC fully-authorized context (unit tests ONLY — the package
+    flags stay false; the archive backstop still refuses the commit)."""
+    return LaunchContext(
+        structural_batch_ready=True, review_certificate_valid=True,
+        provenance_valid=True, guards_passed=True,
+        simulator_probe_complete=True, selection_complete=True,
+        director_training_authorized=True,
+        final_training_launch_authorized=True,
+        batch_plan_hash=gate.batch_plan_hash,
+        selected_descriptor_hash=gate.selected_descriptor_hash,
+        legality_report_hash=gate.legality_report_hash,
+        guard_report_hash=gate.guard_report_hash,
+        critic_report_hash=gate.critic_report_hash,
+        director_authorization_hash=gate.director_authorization_hash,
+        clip_batch_hash=canonical_sha256([]),
+        reasons=())
 
 
 def _ued_ids(n):
@@ -104,8 +133,8 @@ def test_case_a_structural_ready_but_director_unauthorized():
     assert C.TRAINING_AUTHORIZED is False
     with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_REJECTED"):
         ProposalArchive().commit(
-            selected, {}, launch_gate=gate, batch_plan=BATCH,
-            board_out=_board(),
+            selected, {}, launch_gate=gate, launch_context=_context(gate),
+            batch_plan=BATCH, board_out=_board(),
             legal_ids=[d.descriptor_id for d in selected])
 
 
@@ -127,11 +156,14 @@ def test_case_b_director_true_synthetic_gate_verifies():
     assert gate.director_training_authorized is True
     assert gate.final_training_launch_authorized is True
     # hash verification passes (no ARCHIVE_COMMIT_REJECTED); the refusal is
-    # the package-level authorization backstop, proving separation of layers
+    # the package-level authorization backstop, proving separation of layers.
+    # CC3 fix3: the SYNTHETIC all-true context rides along with the gate —
+    # commit requires BOTH (a gate-only commit path no longer exists).
     with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_UNAUTHORIZED"):
         ProposalArchive().commit(
-            selected, {}, launch_gate=gate, batch_plan=BATCH,
-            board_out=_board(), legal_ids=legal_ids)
+            selected, {}, launch_gate=gate,
+            launch_context=_all_true_context(gate),
+            batch_plan=BATCH, board_out=_board(), legal_ids=legal_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +200,25 @@ def test_case_d_commit_without_gate_is_type_error():
 
 def test_case_e_commit_with_none_gate_fails_closed():
     with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_REJECTED"):
-        ProposalArchive().commit([], {}, launch_gate=None)
+        ProposalArchive().commit([], {}, launch_gate=None,
+                                 launch_context=None)
     # a plain dict gate (the fix1 shape) is rejected too — strong type only
     with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_REJECTED"):
-        ProposalArchive().commit([], {}, launch_gate={"batch_plan_ready": True})
+        ProposalArchive().commit([], {}, launch_gate={"batch_plan_ready": True},
+                                 launch_context=None)
+    # CC3 fix3 (§3): a dict / None context is rejected the same way even
+    # next to a structurally perfect gate (constructed in test_case_b shape)
+    plan = _ok_plan(12)
+    selected = [_descriptor(e) for e in plan.ued_slots]
+    legal_ids = [d.descriptor_id for d in selected]
+    gate = evaluate_launch_gate(plan, BATCH, selected, [], _board(),
+                                director_training_authorized=True,
+                                legal_ids=legal_ids)
+    with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_REJECTED"):
+        ProposalArchive().commit(selected, {}, launch_gate=gate,
+                                 launch_context=None,
+                                 batch_plan=BATCH, board_out=_board(),
+                                 legal_ids=legal_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +248,9 @@ def test_case_g_batch_plan_hash_mismatch_fails_closed():
     with pytest.raises(AssertionError,
                        match="ARCHIVE_COMMIT_REJECTED.*batch_plan_hash"):
         ProposalArchive().commit(
-            selected, {}, launch_gate=gate, batch_plan=other_batch,
+            selected, {}, launch_gate=gate,
+            launch_context=_all_true_context(gate),
+            batch_plan=other_batch,
             board_out=_board(), legal_ids=legal_ids)
 
 
@@ -222,7 +271,9 @@ def test_case_h_gate_from_another_descriptor_batch_fails_closed():
     with pytest.raises(AssertionError,
                        match="ARCHIVE_COMMIT_REJECTED.*selected_descriptor"):
         ProposalArchive().commit(
-            foreign, {}, launch_gate=gate, batch_plan=BATCH,
+            foreign, {}, launch_gate=gate,
+            launch_context=_all_true_context(gate),
+            batch_plan=BATCH,
             board_out=_board(), legal_ids=legal_ids)
 
 
@@ -249,6 +300,7 @@ def test_case_i_selected_illegal_descriptor_blocks_structural_gate():
     assert gate2.final_training_launch_authorized is False
     with pytest.raises(AssertionError, match="ARCHIVE_COMMIT_REJECTED"):
         ProposalArchive().commit(selected, {}, launch_gate=gate2,
+                                 launch_context=_context(gate2),
                                  batch_plan=BATCH, board_out=_board(),
                                  legal_ids=legal_ids)
 
@@ -343,6 +395,28 @@ def test_full_dry_run_gate_ready_but_training_forbidden():
     assert all(len(gate[k]) == 64 for k in (
         "batch_plan_hash", "selected_descriptor_hash",
         "guard_report_hash", "legality_report_hash"))
+    # CC3 fix3 (§2): the gate now carries the FULL six-way hash binding
+    assert len(gate["critic_report_hash"]) == 64
+    assert len(gate["director_authorization_hash"]) == 64
+    # CC3 fix3 (§1): the strong-typed LaunchContext rides with the result —
+    # assembled from the SAME gate (one binding, never two records), with the
+    # extra window conditions fail-closed FALSE in a dry run
+    ctx = result.launch_context
+    assert ctx["context_version"] == CONTEXT_VERSION
+    assert ctx["structural_batch_ready"] is True
+    assert ctx["director_training_authorized"] is False
+    assert ctx["final_training_launch_authorized"] is False
+    assert ctx["review_certificate_valid"] is False
+    assert ctx["provenance_valid"] is False
+    assert ctx["guards_passed"] is True      # both board guards PASS here
+    assert ctx["simulator_probe_complete"] is False
+    assert ctx["selection_complete"] is False
+    assert len(ctx["clip_batch_hash"]) == 64
+    assert ctx["reasons"]                    # fail-closed reasons recorded
+    for key in ("batch_plan_hash", "selected_descriptor_hash",
+                "legality_report_hash", "guard_report_hash",
+                "critic_report_hash", "director_authorization_hash"):
+        assert ctx[key] == gate[key]         # ONE identical binding
     cert = result.dry_run_certificate
     assert cert["run_class"] == "ENGINEERING_DRY_RUN"
     assert cert["structural_batch_ready"] is True
@@ -353,6 +427,31 @@ def test_full_dry_run_gate_ready_but_training_forbidden():
     assert cert["launch_block_reasons"] == []
     assert cert["real_llm_calls"] == 0
     assert cert["real_environment_rollouts"] == 0
+    # CC3 fix3 (§2/§1): certificate mirrors the six-way binding + context
+    assert cert["gate_critic_report_hash"] == gate["critic_report_hash"]
+    assert cert["gate_director_authorization_hash"] == \
+        gate["director_authorization_hash"]
+    assert cert["context_version"] == CONTEXT_VERSION
+    assert cert["context_review_certificate_valid"] is False
+    assert cert["context_provenance_valid"] is False
+    assert cert["context_guards_passed"] is True
+    assert cert["context_simulator_probe_complete"] is False
+    assert cert["context_selection_complete"] is False
+    assert cert["context_final_training_launch_authorized"] is False
+    # CC3 fix3 (§10): board and certificate bind ONE shared clip batch
+    assert cert["clip_payload_batch_hash"] == ctx["clip_batch_hash"]
+    assert cert["board_symbolic_clip_batch_hash"] == ctx["clip_batch_hash"]
+    assert cert["board_and_certificate_share_clip_batch"] is True
+    # CC3 fix3 (§7): clip caps surfaced with an explicit drop count
+    assert cert["clips_dropped_by_caps"] == result.clips_dropped
+    assert cert["max_clips_per_episode"] == C.MAX_CLIPS_PER_EPISODE
+    assert cert["max_clips_per_review_window"] == \
+        C.MAX_CLIPS_PER_REVIEW_WINDOW
+    assert cert["symbolic_behavior_clip_count"] == \
+        len(result.symbolic_behavior_clips)
+    assert cert["symbolic_behavior_clip_count"] <= \
+        C.MAX_CLIPS_PER_REVIEW_WINDOW
     # the forbidden double-meaning field name must not exist anywhere
     assert "training_launch_authorized" not in cert
     assert "training_launch_authorized" not in gate
+    assert "training_launch_authorized" not in ctx

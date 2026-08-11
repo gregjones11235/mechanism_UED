@@ -21,6 +21,17 @@ CC3 fix2 (task §6-§7) — the commit path is UNBYPASSABLE:
     reports training_authorized=false and does NOT touch the archive.
   * even a fully authorized gate still meets the package-level
     TRAINING_AUTHORIZED backstop (false this round -> ARCHIVE_COMMIT_UNAUTHORIZED).
+
+CC3 fix3 (task §1/§2/§3/§10) — the commit path now additionally REQUIRES the
+strong-typed LaunchContext alongside the LaunchGate:
+
+  * ``commit`` / ``refresh(dry_run=False)`` without a LaunchContext fail
+    closed (TypeError / REFRESH_CONTEXT_REQUIRED — never a bypass);
+  * the FULL six-way hash binding (batch / descriptor / legality / guard /
+    critic / director authorization) plus the SHARED symbolic clip batch hash
+    are re-verified against the CURRENT state objects;
+  * the gate and the context must carry ONE identical binding (divergence ->
+    ARCHIVE_COMMIT_REJECTED).
 """
 from __future__ import annotations
 
@@ -30,9 +41,14 @@ from d052.bagr_ued import constants as C
 from d052.bagr_ued.environment_proposer import TaskParamsDescriptor
 from d052.bagr_ued.hashing import canonical_sha256
 from d052.bagr_ued.launch_gate import (
+    CONTEXT_VERSION,
     GATE_VERSION,
+    LaunchContext,
     LaunchGate,
     compute_batch_plan_hash,
+    compute_clip_batch_hash,
+    compute_critic_report_hash,
+    compute_director_authorization_hash,
     compute_guard_report_hash,
     compute_legality_report_hash,
     compute_selected_descriptor_hash,
@@ -52,18 +68,28 @@ class ProposalArchive:
     def refresh(self, descriptors: List[TaskParamsDescriptor],
                 score_by_descriptor_id: Dict[str, float],
                 *, dry_run: bool,
-                launch_gate: LaunchGate | None = None) -> dict:
-        """Plan (dry_run=True) or gate+commit (dry_run=False) an archive refresh.
+                launch_gate: LaunchGate | None = None,
+                launch_context: LaunchContext | None = None) -> dict:
+        """Plan (dry_run=True) or gate+context+commit (dry_run=False) a refresh.
 
         CC3 fix2 §7: dry_run=True permits launch_gate=None but then MUST NOT
         commit and reports training_authorized=false; dry_run=False requires
         the gate up-front (None -> fail closed; never a rebuilt default gate).
+
+        CC3 fix3 §3: dry_run=False ADDITIONALLY requires the strong-typed
+        LaunchContext alongside the gate — a gate-only non-dry refresh fails
+        closed (REFRESH_CONTEXT_REQUIRED). Both travel together into commit.
         """
         if not dry_run and launch_gate is None:
             raise AssertionError(
                 "REFRESH_GATE_REQUIRED: refresh(dry_run=False) requires a "
                 "strong-typed LaunchGate; the archive never rebuilds a "
                 "default-PASS gate internally")
+        if not dry_run and launch_context is None:
+            raise AssertionError(
+                "REFRESH_CONTEXT_REQUIRED: refresh(dry_run=False) requires a "
+                "strong-typed LaunchContext alongside the LaunchGate "
+                "(CC3 fix3 §3); a gate-only non-dry refresh is not a bypass")
         would_add, would_update, unchanged = [], [], []
         for d in sorted(descriptors, key=lambda x: x.descriptor_id):
             score = score_by_descriptor_id.get(d.descriptor_id, 0.0)
@@ -90,24 +116,32 @@ class ProposalArchive:
                          "unchanged": sorted(unchanged)}))
         if not dry_run:
             self.commit(descriptors, score_by_descriptor_id,
-                        launch_gate=launch_gate)
+                        launch_gate=launch_gate,
+                        launch_context=launch_context)
         return plan
 
     def commit(self, descriptors: List[TaskParamsDescriptor],
                score_by_descriptor_id: Dict[str, float],
                *, launch_gate: LaunchGate,
+               launch_context: LaunchContext,
                batch_plan=None, board_out=None,
                legal_ids: Sequence[str] = (),
-               rejected_descriptors: Sequence[dict] = ()) -> None:
-        """Active-archive commit — UNBYPASSABLE gate + hash binding (fix2 §6).
+               rejected_descriptors: Sequence[dict] = (),
+               symbolic_payloads: Sequence = (),
+               director_authorization_record: dict | None = None) -> None:
+        """Active-archive commit — UNBYPASSABLE gate + context + hash binding.
 
-        ``launch_gate`` is keyword-REQUIRED with no default: calling commit
-        without it is a TypeError (runtime fail closed). None / any
-        non-LaunchGate value fails closed as ARCHIVE_COMMIT_REJECTED, as does
-        a version mismatch, a gate whose final authorization is false, or a
-        gate whose four hashes do not match the CURRENT values. When the
-        current-state objects (batch_plan / board_out / legality inputs) are
-        supplied, the hashes are recomputed and compared literally.
+        CC3 fix2 §6: ``launch_gate`` is keyword-REQUIRED with no default;
+        None / non-LaunchGate fails closed; version mismatch, false
+        authorization, or a hash that does not match the CURRENT state fails
+        closed as ARCHIVE_COMMIT_REJECTED.
+
+        CC3 fix3 (§1/§3): ``launch_context`` is keyword-REQUIRED the same
+        way — commit without it is a TypeError, None/dict/non-LaunchContext
+        fails closed, and EVERY context condition plus the FULL six-way hash
+        binding (batch / descriptor / legality / guard / critic / director
+        authorization) plus the shared clip batch hash are re-verified
+        against the CURRENT state objects when they are supplied.
         """
         # 1. strong-type verification — no bypass interface exists
         if not isinstance(launch_gate, LaunchGate):
@@ -119,6 +153,16 @@ class ProposalArchive:
             raise AssertionError(
                 "ARCHIVE_COMMIT_REJECTED: gate_version mismatch: "
                 f"{launch_gate.gate_version!r} != {GATE_VERSION!r}")
+        if not isinstance(launch_context, LaunchContext):
+            raise AssertionError(
+                "ARCHIVE_COMMIT_REJECTED: launch_context must be a "
+                f"strong-typed LaunchContext, got "
+                f"{type(launch_context).__name__!r}; "
+                f"commit(launch_context=None) is not a bypass (CC3 fix3 §3)")
+        if launch_context.context_version != CONTEXT_VERSION:
+            raise AssertionError(
+                "ARCHIVE_COMMIT_REJECTED: context_version mismatch: "
+                f"{launch_context.context_version!r} != {CONTEXT_VERSION!r}")
 
         # 2. authorization: structural AND director AND final, all true
         if not launch_gate.structural_batch_ready:
@@ -132,6 +176,27 @@ class ProposalArchive:
             raise AssertionError(
                 "ARCHIVE_COMMIT_REJECTED: final_training_launch_authorized="
                 "false")
+
+        # 2b. CC3 fix3 (§1): EVERY context condition must hold — the context
+        #     is not decorative; a false condition blocks the commit
+        for name in ("structural_batch_ready", "review_certificate_valid",
+                     "provenance_valid", "guards_passed",
+                     "simulator_probe_complete", "selection_complete",
+                     "director_training_authorized",
+                     "final_training_launch_authorized"):
+            if not getattr(launch_context, name):
+                raise AssertionError(
+                    f"ARCHIVE_COMMIT_REJECTED: launch_context.{name}=false "
+                    f"(reasons={list(launch_context.reasons)})")
+
+        # 2c. CC3 fix3 (§3): gate and context must carry ONE identical binding
+        for name in ("batch_plan_hash", "selected_descriptor_hash",
+                     "legality_report_hash", "guard_report_hash",
+                     "critic_report_hash", "director_authorization_hash"):
+            if getattr(launch_gate, name) != getattr(launch_context, name):
+                raise AssertionError(
+                    f"ARCHIVE_COMMIT_REJECTED: gate/context {name} diverge — "
+                    "the LaunchContext must be assembled from the SAME gate")
 
         # 3. hash binding: every gate hash must match the CURRENT state
         if batch_plan is not None:
@@ -147,6 +212,27 @@ class ProposalArchive:
                 raise AssertionError(
                     "ARCHIVE_COMMIT_REJECTED: guard_report_hash mismatch — "
                     "guard state changed after the gate was issued")
+            # CC3 fix3 (§2): critic envelope hash bound to the CURRENT board
+            cur = compute_critic_report_hash(board_out)
+            if cur != launch_gate.critic_report_hash:
+                raise AssertionError(
+                    "ARCHIVE_COMMIT_REJECTED: critic_report_hash mismatch — "
+                    "the critic envelope changed after the gate was issued")
+            # CC3 fix3 (§10): the SHARED clip batch the board consumed
+            if symbolic_payloads:
+                cur = compute_clip_batch_hash(symbolic_payloads)
+                if cur != launch_context.clip_batch_hash:
+                    raise AssertionError(
+                        "ARCHIVE_COMMIT_REJECTED: clip_batch_hash mismatch — "
+                        "the symbolic clip payload batch presented to commit "
+                        "is not the batch the context/board bound")
+                board_bound = getattr(board_out, "symbolic_clip_batch_hash",
+                                      "")
+                if board_bound and board_bound != cur:
+                    raise AssertionError(
+                        "ARCHIVE_COMMIT_REJECTED: board symbolic_clip_batch_"
+                        "hash mismatch — board and commit consumed different "
+                        "clip payload batches")
         if legal_ids or rejected_descriptors:
             cur = compute_legality_report_hash(legal_ids,
                                                rejected_descriptors)
@@ -154,6 +240,15 @@ class ProposalArchive:
                 raise AssertionError(
                     "ARCHIVE_COMMIT_REJECTED: legality_report_hash mismatch — "
                     "legality evidence changed after the gate was issued")
+        if director_authorization_record is not None:
+            cur = compute_director_authorization_hash(
+                launch_gate.director_training_authorized,
+                director_authorization_record)
+            if cur != launch_gate.director_authorization_hash:
+                raise AssertionError(
+                    "ARCHIVE_COMMIT_REJECTED: director_authorization_hash "
+                    "mismatch — the director authorization record changed "
+                    "after the gate was issued")
         cur_sel = compute_selected_descriptor_hash(descriptors)
         if cur_sel != launch_gate.selected_descriptor_hash:
             raise AssertionError(

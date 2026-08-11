@@ -1,0 +1,15 @@
+{
+  "external_dependencies_verified": {
+    "craftax": "NOT_IMPORTABLE",
+    "dicode_shared_runtime": "MISSING",
+    "formal_asset_registry_concrete": "MISSING",
+    "gpu": "GPU-63493c36-721b-a8de-1a35-43c5b623964f",
+    "jax": "NOT_IMPORTABLE",
+    "llm_transport": "NOT_AUTHORIZED",
+    "real_persistent_student_checkpoint": "NOT_INJECTED"
+  },
+  "final_status": "BLOCKED_EXTERNAL",
+  "reason": "E2 real smoke blocked externally: (1) dicode.shared_runtime (FormalAssetRegistry, real StudentAdapter/checkpoint) is absent from every branch/worktree - resolve_director_runtime_objects fails FORMAL_ASSET_REGISTRY_UNBOUND; (2) jax/craftax not importable (jaxlib Windows DLL failure) so the canonical DiCode one-update runtime cannot run; (3) no LLM credentials for the six-role board. BLOCKED_EXTERNAL, evidence preserved, no forged PASS.",
+  "result": "NOT_PASS",
+  "run_id": "e2_real_smoke_20260805T0900"
+}

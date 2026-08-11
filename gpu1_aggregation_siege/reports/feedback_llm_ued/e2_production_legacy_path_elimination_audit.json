@@ -1,0 +1,18 @@
+{
+  "audit": "Production legacy-optimizer path elimination",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "controller": {
+    "execution_mode": "Literal['PRODUCTION', 'TEST_ONLY'] explicit; entrypoint pins PRODUCTION",
+    "auto_test_only_rollback": "REMOVED — the controller NEVER derives test_only from missing objects",
+    "missing_dicode_batch_binding": "REAL_DICODE_BATCH_PLAN_REQUIRED",
+    "missing_training_runtime": "REAL_DICODE_RUNTIME_MISSING",
+    "missing_runstate_checkpoint": "REAL_DICODE_RUNSTATE_CHECKPOINT_MISSING"
+  },
+  "production_training_path_only": ["CanonicalDiCodeTrainingBatchPlan", "CanonicalDiCodeOneUpdateRuntime.run_one_dicode_update", "DirectorVerifiedRunStateRoundTrip"],
+  "legacy_interface": ["run_one_optimizer_update", "save_checkpoint", "load_checkpoint"],
+  "legacy_interface_status": "TEST_ONLY_LEGACY_ADAPTER only (explicit test_only=True at an independent TEST_ONLY entry; the production run_e2_real_two_window.py never passes test_only=True)",
+  "original_task": {"id": "original_craftax", "in_sampled_task_ids": false, "not_duplicated": true, "appended_once_internally": true},
+  "batch_plan_binds": ["selected Student", "runtime bundle hash", "Anchor Manifest"],
+  "window_updates": {"window_k": 0, "window_k_plus_1": 1, "total": 1}
+}

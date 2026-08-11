@@ -1,0 +1,29 @@
+{
+  "audit": "E2 bundle authentication (trusted verification boundary)",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "production_signer_removed": "sign_director_runtime_bundle removed from director_runtime_bundle.py (tests-only helper in d052/tests/e2_test_sign_helpers.py)",
+  "shared_verifier_consumed": {
+    "type": "DirectorBundleVerifier (Protocol)",
+    "checks": [
+      "signer_id in the director's trusted signer registry (signer_trusted)",
+      "manifest payload hash / signature (verify_manifest)",
+      "FormalAssetRegistry identity",
+      "bundle schema / version",
+      "bundle hash (recomputed-and-compared)",
+      "each object's registry identity",
+      "source commit (verify_source_commit)",
+      "implementation hash"
+    ]
+  },
+  "verifier_unbound": {
+    "code": "PRODUCTION_BUNDLE_VERIFIER_UNBOUND",
+    "behavior": "fail closed when the shared DirectorBundleVerifier is not injected (a local content hash is NOT a signature)"
+  },
+  "bundle_hash_cross_binding": {
+    "rule": "manifest.student_init_contract.runtime_bundle_hash == manifest.bundle_hash",
+    "self_reference_resolution": "the Student contract's runtime_bundle_hash binds the bundle's OWN hash; it is excluded from the canonical hash body so the binding is constructible and tamper-evident",
+    "mismatch": "E2_RUNTIME_BUNDLE_HASH_MISMATCH"
+  },
+  "no_local_crypto_invention": true
+}

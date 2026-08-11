@@ -1,0 +1,41 @@
+{
+  "matrix": "E2 check-only levels (MANIFEST_ONLY vs OBJECT_LEVEL)",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "levels": {
+    "MANIFEST_ONLY_CHECK": {
+      "description": "validates the signed manifest + declared identities + data flow; NO real object resolution",
+      "blocker_behavior": "object slots remain DECLARED_NOT_RESOLVED -> BLOCKED_WAITING_SHARED_RUNTIME (honest, not a handoff)"
+    },
+    "OBJECT_LEVEL_CHECK": {
+      "description": "the ONLY level that can form a director Smoke handoff",
+      "requires": [
+        "trusted Bundle Verifier passes",
+        "one of the two allowed Students really selected",
+        "runtime_bundle_hash cross-bound",
+        "Student object resolved",
+        "Reference object resolved",
+        "Probe Runner object non-None",
+        "Training Runtime object non-None",
+        "Anchor Manifest truly frozen",
+        "LLM Runtime object exists",
+        "transport closure object exists",
+        "jax/craftax importable",
+        "15+1 contract holds",
+        "window0 delta=0; window1 delta=1; total update=1",
+        "no LLM / probe / training executed"
+      ],
+      "blocked_code": "OBJECT_LEVEL_CHECK_BLOCKED"
+    }
+  },
+  "production_training_path": {
+    "requires": ["CanonicalDiCodeTrainingBatchPlan", "CanonicalDiCodeOneUpdateRuntime", "DirectorVerifiedRunStateRoundTrip"],
+    "no_plan_failure": "REAL_DICODE_BATCH_PLAN_REQUIRED",
+    "legacy_optimizer_surface": "TEST_ONLY_LEGACY_ADAPTER (test_only=True) only — never the production path"
+  },
+  "per_student_check_only": {
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": "MANIFEST_ONLY -> BLOCKED (objects not resolved); OBJECT_LEVEL would require all objects + jax/craftax",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": "MANIFEST_ONLY -> BLOCKED (objects not resolved); OBJECT_LEVEL would require all objects + jax/craftax"
+  },
+  "honest_note": "Without the injected real objects + local jax/craftax, check-only honestly BLOCKS for BOTH Students — no DIRECTOR_SMOKE_HANDOFF_READY is claimed."
+}

@@ -29,10 +29,12 @@ from d052.bagr_ued.behavior_clip_selector import BehaviorClipSelector
 from d052.bagr_ued.controller import BAGRUEdController
 from d052.bagr_ued.event_extractor import DeterministicEventExtractor
 from d052.bagr_ued.symbolic_behavior_clip import (
+    ClipProvenanceIdentity,
     SymbolicBehaviorClipError,
     SymbolicBehaviorClipPayload,
     build_symbolic_clip_payload,
     clip_payload_hash,
+    identity_bound,
     mock_clip_provenance,
     validate_symbolic_clip_payload,
 )
@@ -238,18 +240,37 @@ def test_case_f2_full_trajectory_never_reaches_a_role():
 def test_case_g_provenance_hash_mismatch_fails_closed():
     bundle, anomalies, clips = _evidence()
     payload = build_symbolic_clip_payload(bundle, clips[0])
-    expected = mock_clip_provenance()
+    # CC3 fix3 (§9): expected provenance must be IDENTITY_BOUND — a bound
+    # carrier format-verifies every value at construction
+    expected = identity_bound(mock_clip_provenance())
     assert validate_symbolic_clip_payload(
         payload, expected_provenance=expected)["passed"] is True
 
+    # a plain DICT of expected values is refused fail-closed — never
+    # silently compared as strings (CC3 fix3 §9)
+    report_dict = validate_symbolic_clip_payload(
+        payload, expected_provenance=mock_clip_provenance())
+    assert report_dict["passed"] is False
+    assert any(f["code"] ==
+               SymbolicBehaviorClipError.CLIP_EXPECTED_PROVENANCE_NOT_BOUND
+               for f in report_dict["findings"])
+
     # a payload stamped with a DIFFERENT student checkpoint fails closed
-    other = dict(expected)
-    other["student_checkpoint_sha256"] = "0" * 64
+    other = ClipProvenanceIdentity(
+        **{**expected.as_dict(), "student_checkpoint_sha256": "0" * 64})
     report = validate_symbolic_clip_payload(payload,
                                             expected_provenance=other)
     assert report["passed"] is False
     assert any(f["code"] == SymbolicBehaviorClipError.CLIP_PROVENANCE_MISMATCH
                for f in report["findings"])
+
+    # the IDENTITY_BOUND carrier itself refuses malformed identities
+    with pytest.raises(ValueError, match="CLIP_IDENTITY_NOT_BOUND"):
+        ClipProvenanceIdentity(
+            **{**expected.as_dict(), "taskparams_hash": "ABC"})
+    with pytest.raises(ValueError, match="CLIP_IDENTITY_NOT_BOUND"):
+        identity_bound({**mock_clip_provenance(),
+                        "rollout_runner_sha256": "0" * 63})
 
     # tampering with the payload content breaks the payload hash too:
     # a payload that keeps the OLD recorded hash over CHANGED content is a

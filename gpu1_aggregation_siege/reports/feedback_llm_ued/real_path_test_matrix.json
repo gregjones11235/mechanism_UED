@@ -1,0 +1,81 @@
+{
+  "matrix": "Section-19 mandated NEW test modules covering every production seam added this round",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "round_head": "88283cb1d7f41c73d64c081456770639046d5ee7",
+  "all_passing": true,
+  "modules": [
+    {
+      "file": "d052/tests/test_feedback_llm_ued_real_call_journal.py",
+      "tests": 56,
+      "commit": "f05362f",
+      "seams": ["transport entry", "schema-outcome entry (PARSED/SCHEMA_FAILED)", "hash chain", "duplicate-success refusal", "retry cap", "persistence round-trip + tamper ladder", "six-role journaling"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_envcoder_sequence.py",
+      "tests": 7,
+      "commit": "37877bc",
+      "seams": ["n_calls exact sequence consumption", "missing-count fail closed", "failed-artifact consumption", "snapshot/restore exact head continuation", "grants restore"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_shared_runtime_identity.py",
+      "tests": 51,
+      "commit": "4e460f2",
+      "seams": ["bindings_hash folds real identities not status strings", "registry-issued only ladders", "manifest tamper", "wrong Student/Reference", "smuggled bound-without-identity slots", "absence stays blocked"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_signed_probe_result.py",
+      "tests": 57,
+      "commit": "3ded1b4",
+      "seams": ["immutable registry-signed CandidateProbeResult", "unsigned/tamper/accounting ladders", "issuer/stage/request identity substitution", "completed-only CI samples", "adapter-level signed consumption", "feedback-binding hardening", "entrypoint guards (duplicate/missing-evidence/unknown-hypothesis)", "forbidden KeyError skip removed"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_two_window_update_count.py",
+      "tests": 17,
+      "commit": "18e7e09",
+      "seams": ["exactly one optimizer update (window0 delta=0, window1 delta=1)", "final-batch consumption", "checkpoint round-trip wrapping", "unreachable update window fail-closed", "policy validation", "no-policy regression contrast"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_full_state_round_trip.py",
+      "tests": 37,
+      "commit": "2a29e94",
+      "seams": ["director-verifier FullStateRoundTripResult only", "sign/tamper/unsigned/state-mismatch/not-verified ladders", "window/checkpoint binding", "seam-level attestation-only enforcement", "training-slot surface requirement", "CHECKPOINT_ROUND_TRIP_PASS semantics"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_masked_feedback_control.py",
+      "tests": 15,
+      "commit": "2cd1fa2",
+      "seams": ["shape-matched mask (same item count/field set)", "controlled NULL/MASK values", "evidence consistency", "citation fail-closed", "cross-mode compute match", "lifecycle query in static", "prompt field-set match"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_runtime_compute_ledger.py",
+      "tests": 11,
+      "commit": "ced1f82",
+      "seams": ["post-run RealComputeLedger", "COMPUTE_MATCH_EXECUTION_INCOMPLETE on cut-short run", "verify against frozen budget", "config-drift COMPUTE_MATCH_BROKEN", "cross-mode ledger equality", "training-budget semantics gate + launcher refusal"]
+    },
+    {
+      "file": "d052/tests/test_arm_c_tie_resolution.py",
+      "tests": 9,
+      "commit": "bfa6d39",
+      "seams": ["exact tie at k=8 boundary", "quicksort-vs-stable divergence", "rank-column-vs-selection contradiction", "classification FROZEN_EVIDENCE_INTERNALLY_INCONSISTENT", "frozen-evidence byte immutability", "historical replay anchors still green"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_real_authorization.py",
+      "tests": 16,
+      "commit": "88283cb",
+      "seams": ["layered grant ladder (INCONSISTENT_RUNTIME_GRANTS)", "servicable fail-closed (no transport / missing assets)", "controller rejects mock backend in real mode", "grants snapshot/restore boundary"]
+    },
+    {
+      "file": "d052/tests/test_feedback_llm_ued_real_path_blockers.py",
+      "tests": 11,
+      "commit": "88283cb",
+      "seams": ["discover_blockers enumerates all 10 codes", "fully bound bundle still blocks on local modules", "non-callable transport refused", "main(--check-only) report + exit 1 + no fallback"]
+    }
+  ],
+  "totals": {
+    "section19_modules": 224,
+    "feedback_llm_ued_glob": 863,
+    "full_d052_suite": 1432,
+    "modules_new_this_round": 11
+  },
+  "posture": "Every passing test uses TEST_ONLY / SYNTHETIC / NOT_REAL_EXECUTION fixtures and flips NO REAL_* flag."
+}

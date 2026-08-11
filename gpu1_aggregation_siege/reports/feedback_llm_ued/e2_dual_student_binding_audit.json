@@ -1,0 +1,67 @@
+{
+  "audit": "E2 dual-Student binding (director smoke handoff, dual Student round)",
+  "final_state_max": "E2_DUAL_STUDENT_CONSUMER_READY",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "c7cdcad",
+  "remote_state": "REMOTE_STATE_UNVERIFIED (github direct connect reset; head is the local verified HEAD)",
+  "allowed_students": [
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+  ],
+  "default_student": "NONE (E2_STUDENT_NO_DIRECTOR_SELECTION if unselected)",
+  "student_profiles": {
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": {
+      "memory_mode": "PERSISTENT", "carry_mode": "persistent"},
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": {
+      "memory_mode": "RESET128", "carry_mode": "reset128"}
+  },
+  "per_student": {
+    "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304": {
+      "check_only_consumed": true,
+      "memory_identity": "PERSISTENT/persistent",
+      "identity_hash_distinct": true},
+    "RESET128_RMT16_ORIGINAL_VTRACE_98304": {
+      "check_only_consumed": true,
+      "memory_identity": "RESET128/reset128",
+      "identity_hash_distinct": true}
+  },
+  "continuity": {
+    "rule": "window k and window k+1 share the SAME director-selected Student (selected_candidate_id / params hash / memory spec hash / adapter identity / checkpoint identity / runtime bundle hash)",
+    "enforcement": "E2_TWO_WINDOW_STUDENT_CONTINUITY_VIOLATION: window k+1 may only consume feedback under the SAME Student; a switch stops the loop with NO feedback and NO training"
+  },
+  "feedback_binding": {
+    "stamped_fields": [
+      "student_candidate_id", "student_identity_hash",
+      "student_checkpoint_hash/step", "student_memory_mode",
+      "student_memory_spec_hash", "source_window", "runtime_bundle_hash"],
+    "cross_student_reuse": "REFUSED (both directions tested)"
+  },
+  "entrypoint": {
+    "flags": ["--director-runtime-bundle", "--student-candidate-id",
+              "--check-only", "--report-out"],
+    "fixed_empty_bundle_removed": true,
+    "cli_cannot_override_bundle": "E2_STUDENT_CANDIDATE_CLI_OVERRIDE_FORBIDDEN"
+  },
+  "read_only_vs_training": {
+    "student_read_only_mount_ready": true,
+    "student_training_runtime_ready": false,
+    "note": "REAL_CHECKPOINT_LOADED never implies REAL_TRAINING_UPDATE_EXECUTED; training requires the CanonicalDiCodeOneUpdateRuntime OBJECT, checkpoints the CanonicalDiCodeRunStateCheckpoint"
+  },
+  "flags_all_false": {
+    "REAL_CHECKPOINT_LOADED": false,
+    "REAL_SIMULATOR_PROBE": false,
+    "REAL_TRAINING_UPDATE_EXECUTED": false,
+    "E2_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false
+  },
+  "tests": {
+    "full_d052_suite": 1551,
+    "new_dual_student_tests": 35,
+    "all_passing": true
+  },
+  "honesty_notes": [
+    "NO real smoke started; NO formal experiment started; no frozen D052 historical evidence modified.",
+    "The director Runtime Bundle declares the Student profile / checkpoint / RMT16 adapter / Reference / probe runner / training runtime / run-state checkpoint; direction two consumes only and never builds a loader/registry.",
+    "CLI candidate id cannot override the bundle's signed identity."
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "matrix": "Persistent runtime object resolution matrix",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "objects": [
+    {"object": "StudentInitContract", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "StudentIdentity", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "StudentAdapter", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "ReferenceIdentity", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "ReferenceAdapter", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "CandidateProbeRunner", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "SharedAnchorManifest", "required": true, "status": "BOUND_OBJECT (data from manifest, frozen verified)"},
+    {"object": "CanonicalDiCodeOneUpdateRuntime", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "CanonicalDiCodeRunStateCheckpoint", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "AuthorizedSixRoleLLMRuntime", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "LLM transport closure", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "AuxiliaryComputeLedger", "required": true, "status": "REQUIRED (unresolved without registry)"},
+    {"object": "FormalAssetRegistry identity", "required": true, "status": "REQUIRED (unbound -> FORMAL_ASSET_REGISTRY_UNBOUND)"}
+  ],
+  "registry_surface": ["registry_identity", "registry_hash", "resolve_asset(identity, contract)", "verify_implementation(identity, obj, expected_implementation_hash)"],
+  "fail_closed": ["None", "bare string", "dict/Mapping impersonation", "unverified implementation hash", "registry identity mismatch", "TestRegistry", "Synthetic object", "locally constructed object"],
+  "resolved_in_this_worktree": [],
+  "status": "DECLARED_NOT_RESOLVED for all callable objects (honest: no real objects injected)"
+}

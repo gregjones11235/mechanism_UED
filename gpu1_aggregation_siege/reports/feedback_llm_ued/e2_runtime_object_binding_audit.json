@@ -1,0 +1,34 @@
+{
+  "audit": "E2 runtime object binding (REQUEST_CHANGES repair)",
+  "max_status": "E2_OBJECT_LEVEL_CONSUMER_READY",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "three_state_slots": {
+    "EMPTY": "not declared",
+    "DECLARED_NOT_RESOLVED": "manifest identity recorded, object NOT resolved from the FormalAssetRegistry",
+    "BOUND_OBJECT": "real object resolved and identity == manifest (the ONLY handoff state)"
+  },
+  "resolve_shared_runtime": {
+    "accepts_only": "BOUND_OBJECT",
+    "mechanical_checks": ["probe_runner.runner is not None", "training.contract is not None"],
+    "manifest_only_bundle": "BLOCKED (DECLARED_NOT_RESOLVED object slots)"
+  },
+  "no_bound_but_none": true,
+  "probe_runner_required_surface": [
+    "real_simulator=True", "runner_id", "registry_identity",
+    "observation_abi_hash", "action_abi_hash", "reward_contract_hash",
+    "reset_protocol_hash", "step_protocol_hash"],
+  "training_runtime_required_surface": ["registry_identity", "run_one_dicode_update", "verify_director_round_trip"],
+  "resolve_director_runtime_objects": {
+    "consumes": "manifest + FormalAssetRegistry",
+    "objects": ["StudentInitContract", "StudentAdapter", "ReferenceIdentity", "ReferenceAdapter", "CandidateProbeRunner", "SharedAnchorManifest", "CanonicalDiCodeOneUpdateRuntime", "CanonicalDiCodeRunStateCheckpoint", "AuthorizedSixRoleLLMRuntime", "transport closure", "AuxiliaryComputeLedger"],
+    "rule": "resolved_object.registry_identity == manifest-declared identity; implementation hash verified by the registry"
+  },
+  "cli_lock": {
+    "--student-candidate-id": "consistency-only; conflict -> E2_STUDENT_CANDIDATE_CLI_OVERRIDE_FORBIDDEN",
+    "--backend-id/--model-id": "must equal the bundle-signed identity",
+    "--transport": "production transport must come from the FormalAssetRegistry; no arbitrary module.attr dynamic import on the production path"
+  },
+  "tests_full": 1551,
+  "all_passing": true
+}

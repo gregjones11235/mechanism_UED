@@ -1,0 +1,29 @@
+{
+  "audit": "E2 Persistent production entrypoint wiring (actual calls)",
+  "max_status": "E2_PERSISTENT_OBJECT_CONSUMER_IMPLEMENTED",
+  "branch": "henry/ba-bagr-ued-review-board-v2",
+  "head_after": "<this-commit>",
+  "main_signature": "main(argv=None, *, director_bundle_verifier=None, formal_asset_registry=None)",
+  "core_functions": ["run_e2_entrypoint", "run_e2_object_level_check", "run_e2_production_two_window"],
+  "production_chain": [
+    "load_director_runtime_bundle",
+    "strict schema validation",
+    "bundle_hash recompute + verify",
+    "require_trusted_verifier(director_bundle_verifier, manifest)",
+    "assert_runtime_bundle_hash_cross_bound(manifest)",
+    "build_shared_bundle(manifest) -> DECLARED_NOT_RESOLVED object slots",
+    "resolve_director_runtime_objects(manifest, formal_asset_registry, bundle)",
+    "resolve_shared_runtime(...)",
+    "Persistent Student full identity verification",
+    "discover_blockers(...)",
+    "check-only -> object-level report + stop",
+    "non-check-only -> construct Backend + Controller (execution_mode=PRODUCTION) -> run_two_real_windows"
+  ],
+  "fail_before": ["LLM call", "Probe", "Simulator", "optimizer update"],
+  "cli_allowed": ["--director-runtime-bundle", "--student-candidate-id", "--check-only", "--report-out"],
+  "cli_forbidden_as_object_channels": ["--transport=module.attr", "--backend-id", "--model-id"],
+  "execution_mode": "Controller pinned to PRODUCTION by the entrypoint; ILLEGAL_EXECUTION_MODE rejected",
+  "tests_full": 1552,
+  "call_tracing_tests": 9,
+  "all_passing": true
+}

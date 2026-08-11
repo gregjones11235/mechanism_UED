@@ -50,7 +50,14 @@ from d052.bagr_ued.diversity import compute_diversity
 from d052.bagr_ued.environment_proposer import GlobalTaskParamsProposer
 from d052.bagr_ued.event_extractor import DeterministicEventExtractor
 from d052.bagr_ued.hashing import canonical_sha256
-from d052.bagr_ued.launch_gate import LaunchGate, evaluate_launch_gate
+from d052.bagr_ued.launch_gate import (
+    CONTEXT_VERSION,
+    LaunchContext,
+    LaunchGate,
+    compute_clip_batch_hash,
+    evaluate_launch_context,
+    evaluate_launch_gate,
+)
 from d052.bagr_ued.legality_gate import LegalityGate
 from d052.bagr_ued.learnability import compute_learnability
 from d052.bagr_ued.learning_progress import compute_learning_progress
@@ -168,6 +175,11 @@ class DryRunResult(CanonicalModel):
     #: director_training_authorized / final_training_launch_authorized (= the
     #: first two ANDed) — plus the four hash bindings archive.commit verifies.
     launch_gate: dict = Field(default_factory=dict)
+    #: CC3 fix3 (§1): the strong-typed LaunchContext, serialized — the whole
+    #: review-window decision state (seven conditions + the FULL six-way hash
+    #: binding + the shared clip batch hash). commit/refresh(non-dry) require
+    #: it alongside the gate.
+    launch_context: dict = Field(default_factory=dict)
     dry_run_certificate: dict = Field(default_factory=dict)
 
 
@@ -207,6 +219,10 @@ class BAGRUEdController:
         # clip payloads — built + validated fail-closed (both guards +
         # raw-exposure scan + source admissibility + payload hash + limits)
         # BEFORE the board and the certificate may rely on them.
+        #
+        # CC3 fix3 (§10): the payload batch is built EXACTLY ONCE here and
+        # shared verbatim with the board and the certificate — the board does
+        # not rebuild its own copy. One batch, one hash, two consumers.
         symbolic_payloads = [build_symbolic_clip_payload(bundle, c)
                              for c in clips]
         symbolic_clips: List[dict] = []
@@ -215,11 +231,33 @@ class BAGRUEdController:
             assert report["passed"], (
                 f"SYMBOLIC_CLIP_VALIDATION_FAILED: {report['findings']}")
             symbolic_clips.append(payload.model_dump())
+        # CC3 fix3 (§7): per-window clip cap re-asserted over the payload
+        # batch (the selector already enforces it; defense in depth)
+        if len(symbolic_payloads) > C.MAX_CLIPS_PER_REVIEW_WINDOW:
+            raise AssertionError(
+                f"CLIP_PER_WINDOW_LIMIT_EXCEEDED: {len(symbolic_payloads)} "
+                f"clip payloads > MAX_CLIPS_PER_REVIEW_WINDOW="
+                f"{C.MAX_CLIPS_PER_REVIEW_WINDOW}")
+        per_episode_count: Dict[str, int] = {}
+        for p in symbolic_payloads:
+            per_episode_count[p.episode_id] = \
+                per_episode_count.get(p.episode_id, 0) + 1
+        for episode_id, count in sorted(per_episode_count.items()):
+            assert count <= C.MAX_CLIPS_PER_EPISODE, (
+                f"CLIP_PER_EPISODE_LIMIT_EXCEEDED: episode {episode_id} "
+                f"carries {count} clips > MAX_CLIPS_PER_EPISODE="
+                f"{C.MAX_CLIPS_PER_EPISODE}")
+        clip_batch_hash = compute_clip_batch_hash(symbolic_payloads)
 
-        # 4-5. review board + reconciliation (the board context now carries
-        # the symbolic clip evidence; provisional out-of-taxonomy hypotheses
-        # are surfaced by the auditor but never enter the selector chain)
-        board_out = self.board.run(bundle, anomalies, clips, manifest)
+        # 4-5. review board + reconciliation (the board consumes the SHARED
+        # payload batch and binds its hash; provisional out-of-taxonomy
+        # hypotheses are surfaced by the auditor but never enter the selector
+        # chain)
+        board_out = self.board.run(bundle, anomalies, clips, manifest,
+                                   symbolic_payloads=symbolic_payloads)
+        assert board_out.symbolic_clip_batch_hash == clip_batch_hash, (
+            "SYMBOLIC_CLIP_BATCH_DIVERGENCE: the board bound a different "
+            "clip batch hash than the controller-built batch (CC3 fix3 §10)")
         reconciliation = self.reconciler.reconcile(board_out)
         provisional = list(self.board.parsed(
             board_out, C.ROLE_BEHAVIOR_AUDITOR).get(
@@ -306,6 +344,15 @@ class BAGRUEdController:
             budget_plan, batch_plan, selected_descriptors, rejected,
             board_out, legal_ids=legal_ids)
 
+        # CC3 fix3 (§1): the strong-typed LaunchContext assembled from the
+        # SAME gate (one binding, never two divergent records). In the dry
+        # run the extra window conditions stay FALSE (fail-closed defaults) —
+        # review certificate / provenance chain / simulator probe / selection
+        # completion must be positively established by the real-simulator
+        # path before final authorization can ever become true.
+        launch_context: LaunchContext = evaluate_launch_context(
+            launch_gate, board_out, symbolic_payloads=symbolic_payloads)
+
         # UED-nature assertions (section: NOT an action-guidance system)
         ued_nature = self._ued_nature_assertions(board_out, legal)
 
@@ -336,11 +383,14 @@ class BAGRUEdController:
             batch_plan=batch_plan.model_dump(),
             ued_nature_assertions=ued_nature,
             launch_gate=dataclasses.asdict(launch_gate),
+            launch_context=dataclasses.asdict(launch_context),
         )
         sup = self.supervision_guard.assert_clean(
             result.model_dump(), label="full_dry_run_result")
         cert = self._certificate(board_out, budget_plan, sup, student_load,
-                                 launch_gate, symbolic_clips, provisional)
+                                 launch_gate, launch_context,
+                                 clip_batch_hash, dropped,
+                                 symbolic_clips, provisional)
         cert["certificate_hash"] = canonical_sha256(
             {k: v for k, v in cert.items() if k != "certificate_hash"})
         result.dry_run_certificate.update(cert)
@@ -380,6 +430,8 @@ class BAGRUEdController:
 
     def _certificate(self, board_out, budget_plan, supervision_report,
                      student_load, launch_gate: LaunchGate,
+                     launch_context: LaunchContext,
+                     clip_batch_hash: str, clips_dropped: int,
                      symbolic_clips: List[dict],
                      provisional: List[dict]) -> dict:
         # CC3 fix2 (§4-§8): a gate that is not STRUCTURALLY ready relabels
@@ -430,6 +482,33 @@ class BAGRUEdController:
             gate_selected_descriptor_hash=launch_gate.selected_descriptor_hash,
             gate_guard_report_hash=launch_gate.guard_report_hash,
             gate_legality_report_hash=launch_gate.legality_report_hash,
+            # CC3 fix3 (§2): the full six-way binding also carries critic +
+            # director-authorization hashes
+            gate_critic_report_hash=launch_gate.critic_report_hash,
+            gate_director_authorization_hash=
+                launch_gate.director_authorization_hash,
+            # CC3 fix3 (§1): the LaunchContext state of this window
+            context_version=launch_context.context_version,
+            context_review_certificate_valid=
+                launch_context.review_certificate_valid,
+            context_provenance_valid=launch_context.provenance_valid,
+            context_guards_passed=launch_context.guards_passed,
+            context_simulator_probe_complete=
+                launch_context.simulator_probe_complete,
+            context_selection_complete=launch_context.selection_complete,
+            context_final_training_launch_authorized=
+                launch_context.final_training_launch_authorized,
+            launch_context_reasons=list(launch_context.reasons),
+            # CC3 fix3 (§10): board and certificate bind ONE shared batch
+            clip_payload_batch_hash=clip_batch_hash,
+            board_symbolic_clip_batch_hash=
+                board_out.symbolic_clip_batch_hash,
+            board_and_certificate_share_clip_batch=
+                (board_out.symbolic_clip_batch_hash == clip_batch_hash),
+            # CC3 fix3 (§7): clip caps enforced with an explicit drop count
+            clips_dropped_by_caps=clips_dropped,
+            max_clips_per_episode=C.MAX_CLIPS_PER_EPISODE,
+            max_clips_per_review_window=C.MAX_CLIPS_PER_REVIEW_WINDOW,
             # CC3 fix2 (§12): symbolic behavior clip evidence claims
             behavior_review_has_symbolic_clips=bool(symbolic_clips),
             symbolic_behavior_clip_count=len(symbolic_clips),
