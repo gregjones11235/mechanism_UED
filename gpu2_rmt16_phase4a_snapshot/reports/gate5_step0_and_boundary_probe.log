@@ -1,0 +1,14 @@
+===== IN-RUN STEP0 SHA (gate 5 terminal confirmation) =====
+[PERSISTENT] full_state.pkl top-level type=dict keys=['manifest', 'params']
+[PERSISTENT] STEP0_SHA=2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b MATCH=True n_leaves=101
+[RESET128] full_state.pkl top-level type=dict keys=['manifest', 'params']
+[RESET128] STEP0_SHA=2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b MATCH=True n_leaves=101
+
+===== BOUNDARY-IMMEDIATE MEM_TOKEN PROBE (frozen rmt16 mechanics) =====
+[persistent] pre_b1=0.0000e+00 post_b1_imm=2.4692e+00 mid_win=2.4692e+00 post_b2_imm=3.4036e+00
+[reset128] pre_b1=0.0000e+00 post_b1_imm=0.0000e+00 mid_win=0.0000e+00 post_b2_imm=0.0000e+00
+
+BOUNDARY_VERDICT={"PERSISTENT_post_boundary_nonzero": true, "RESET128_post_boundary1_exactly_zero": true, "RESET128_post_boundary2_exactly_zero": true, "RESET128_mid_window_zero": true, "RESET128_BOUNDARY_CLEAR_VERIFIED": true, "PERSISTENT_CARRY_VERIFIED": true}
+
+FINAL_VERIFY_JSON={"step0": {"PERSISTENT": {"step0_sha": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b", "matches_prefreeze": true, "n_param_leaves": 101}, "RESET128": {"step0_sha": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b", "matches_prefreeze": true, "n_param_leaves": 101}}, "boundary": {"persistent": {"pre_boundary_step_minus1": 0.0, "post_boundary1_immediate": 2.4692270755767822, "mid_window_after_boundary1": 2.4692270755767822, "post_boundary2_immediate": 3.4036102294921875, "full_trace_maxabs": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.469227, 2.469227, 2.469227, 2.469227, 2.469227, 2.469227, 2.469227, 2.469227, 3.40361]}, "reset128": {"pre_boundary_step_minus1": 0.0, "post_boundary1_immediate": 0.0, "mid_window_after_boundary1": 0.0, "post_boundary2_immediate": 0.0, "full_trace_maxabs": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}}, "boundary_verdict": {"PERSISTENT_post_boundary_nonzero": true, "RESET128_post_boundary1_exactly_zero": true, "RESET128_post_boundary2_exactly_zero": true, "RESET128_mid_window_zero": true, "RESET128_BOUNDARY_CLEAR_VERIFIED": true, "PERSISTENT_CARRY_VERIFIED": true}, "EXPECTED_STEP0": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b"}
+FINAL_VERIFY_ALL_OK=True

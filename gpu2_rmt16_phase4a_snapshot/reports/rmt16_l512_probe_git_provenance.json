@@ -1,0 +1,41 @@
+{
+  "probe_branch": "henry/rmt16-l512-reachability-probe",
+  "probe_remote": "https://github.com/gregjones11235/mechanism_UED.git",
+  "source_snapshot_commit": "0b405dd85224a368d4029ff6f7818c3855d9487b",
+  "source_snapshot_commit_note": "code the probe executed; runtime byte-parity vs this commit = PASS",
+  "base_commit": "64546e0be9ae0aafd235bb8db1f6675460d22adf",
+  "evidence_commit": "(this commit; see `git log` \u2014 'rmt16: L512 probe evidence')",
+  "checkpoint_sha256_ckpt17500": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "frozen_step0_params_sha256": "2f8cd875993ae10385dbb5dae530a557a0eb1008541b98de416cc7ae7ba2d93b",
+  "runtime_source_manifest_sha256": "06d6c8bd75c22bda3331beccaedf3c9c9b3d9461c865c816bb6046801875c8e9",
+  "runtime_git_head": null,
+  "runtime_git_head_note": "absent BY DESIGN: runtime trees are not git repositories",
+  "seed": 42,
+  "gpu_uuid": {
+    "persistent": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "reset128": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+  },
+  "gpu_note": "GPU0/GPU1 untouched throughout",
+  "start_utc": "2026-07-26T11:26:35Z",
+  "end_utc": {
+    "PERSISTENT": "2026-07-26T11:41:25Z",
+    "RESET128": "2026-07-26T11:40:31Z"
+  },
+  "two_arm_commands": {
+    "persistent": "nohup $PY src/train_rmt16_p2replay.py --carry_mode persistent --replay off --probe --early_stop_len 0 --ckpt17500 $CKPT --out runs/RMT16-PERSISTENT-PROBE-L512-16384 --gpu_uuid GPU-8df11537-ab79-722d-606f-411966196c4c --total_updates 8 --seed 42 > logs/RMT16-PERSISTENT-PROBE-L512-16384.log 2>&1 &",
+    "reset128": "nohup $PY src/train_rmt16_p2replay.py --carry_mode reset128 --replay off --probe --early_stop_len 0 --ckpt17500 $CKPT --out runs/RMT16-RESET128-PROBE-L512-16384 --gpu_uuid GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd --total_updates 8 --seed 42 > logs/RMT16-RESET128-PROBE-L512-16384.log 2>&1 &",
+    "env": {
+      "PY": "/home/oseasy/miniconda3/envs/dicode310/bin/python",
+      "CKPT": "/home/oseasy/incoming/henry_work_20260721T105300/extracted/Henry_work/base_ckpt_v7fix55_armA_s0/rl_checkpoints/17500",
+      "cwd": "/home/oseasy/experiments/rmt16_replay_phase4a"
+    }
+  },
+  "exit_codes": {
+    "PERSISTENT": "not captured to file; exit 0 inferred (PROBE_SUMMARY + 8/8 updates + clean logs)",
+    "RESET128": "not captured to file; exit 0 inferred (PROBE_SUMMARY + 8/8 updates + clean logs)"
+  },
+  "output_paths": {
+    "PERSISTENT": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-PERSISTENT-PROBE-L512-16384",
+    "RESET128": "/home/oseasy/experiments/rmt16_replay_phase4a/runs/RMT16-RESET128-PROBE-L512-16384"
+  }
+}
