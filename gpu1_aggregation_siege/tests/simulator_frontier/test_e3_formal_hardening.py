@@ -157,6 +157,19 @@ def test_journal_contiguous_dual_prefix_rekeys(tmp_path):
     assert installed[-1]["role"] == "frontier_evidence_diagnostician"
 
 
+def test_preseed_role_maps_partial_prefix(monkeypatch):
+    import run_e3_formal_longrun as runner
+    mandatory, opportunistic = runner._preseed_role_maps([
+        {"session": 1, "role": "frontier_evidence_diagnostician", "key": "d1"},
+        {"session": 1, "role": "curriculum_search_planner", "key": "p1"},
+        {"session": 2, "role": "frontier_evidence_diagnostician", "key": "d2"},
+    ])
+    assert mandatory == {1: "d1"} and opportunistic == {2: "d2"}
+    assert runner._preseed_role_maps([
+        {"session": 1, "role": "frontier_evidence_diagnostician", "key": "d1"},
+    ]) == ({}, {1: "d1"})
+
+
 def test_runner_preseed_install_rekeys_and_tamper_blocks(tmp_path, monkeypatch):
     import run_e3_formal_longrun as runner
     J = _journal_cls(); source_path = tmp_path / "preseed.json"

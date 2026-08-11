@@ -477,16 +477,33 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
                  if entry["role"] == "frontier_evidence_diagnostician"), None)
     if diag is None:
         raise ValueError("preseed diagnostician missing")
-    diagnostic_keys_by_session = {int(entry["session"]): entry["key"] for entry in installed
-                                  if entry["role"] == "frontier_evidence_diagnostician"}
-    os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = diagnostic_keys_by_session.get(1, diag["key"])
-    os.environ["E3_PRESEEDED_DIAGNOSTIC_SESSION"] = "1"
+    diagnostic_keys_by_session, opportunistic_diagnostic_keys_by_session = _preseed_role_maps(installed)
+    if 1 in diagnostic_keys_by_session:
+        os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = diagnostic_keys_by_session[1]
+        os.environ["E3_PRESEEDED_DIAGNOSTIC_SESSION"] = "1"
+    else:
+        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
+        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
     result = {"sha256": auth.preseed_journal_sha256, "source_keys": source_keys,
               "installed_keys": [entry["key"] for entry in installed],
-              "provenance": provenance, "diagnostic_keys_by_session": diagnostic_keys_by_session}
+              "provenance": provenance, "diagnostic_keys_by_session": diagnostic_keys_by_session,
+              "opportunistic_diagnostic_keys_by_session": opportunistic_diagnostic_keys_by_session}
     if len(installed) == 1:
         result.update({"source_key": source_keys[0], "installed_key": installed[0]["key"]})
     return result
+
+
+def _preseed_role_maps(installed: list[Mapping[str, Any]]) -> tuple[dict[int, str], dict[int, str]]:
+    roles_by_session = {}
+    for entry in installed:
+        roles_by_session.setdefault(int(entry["session"]), set()).add(entry["role"])
+    mandatory = {int(entry["session"]): entry["key"] for entry in installed
+                 if entry["role"] == "frontier_evidence_diagnostician"
+                 and "curriculum_search_planner" in roles_by_session.get(int(entry["session"]), set())}
+    opportunistic = {int(entry["session"]): entry["key"] for entry in installed
+                     if entry["role"] == "frontier_evidence_diagnostician"
+                     and "curriculum_search_planner" not in roles_by_session.get(int(entry["session"]), set())}
+    return mandatory, opportunistic
 
 
 def _metadata_payload(*, source_commit, runner_sha256, auth, candidate_id, sessions,
