@@ -67,6 +67,12 @@ class DurablePaidCallJournal:
             if not self._valid_entry(key, entry):
                 raise ValueError(f"durable LLM journal entry tampered: {key}")
         result = {"schema": SCHEMA, "entries": entries}
+        installed = payload.get("installed_target_keys", [])
+        if not isinstance(installed, list) or len(installed) != len(set(installed)):
+            raise ValueError("installed preseed key list invalid")
+        if any(k not in entries for k in installed):
+            raise ValueError("installed preseed key missing from entries")
+        result["installed_target_keys"] = list(installed)
         provenance = payload.get("preseed_provenance")
         if provenance is not None:
             if not isinstance(provenance, Mapping):
@@ -147,7 +153,8 @@ class DurablePaidCallJournal:
                 if not self._valid_entry(key, entries[key]) or dict(entries[key].get("key_identity", {})) != identity:
                     raise ValueError("existing durable journal entry is invalid/tampered")
                 return dict(entries[key])
-            if len(entries) >= self.max_success_keys:
+            installed_count = len(payload.get("installed_target_keys", []))
+            if len(entries) - installed_count >= self.max_success_keys:
                 raise ValueError("E3 durable paid-call journal success ceiling exceeded")
             entry = {
             "schema": SCHEMA, "status": "SUCCESS", "key": key,
@@ -245,6 +252,7 @@ class DurablePaidCallJournal:
                 new_entries[key] = entry
                 installed.append(dict(entry))
             payload = {"schema": SCHEMA, "entries": new_entries,
+                       "installed_target_keys": list(new_entries),
                        "preseed_provenance": dict(provenance)}
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(prefix=self.path.name + ".", dir=str(self.path.parent))

@@ -30,6 +30,82 @@ VALID_TASKPARAM_RANGES = {
 VALID_START_DISTRIBUTION = {f"D{i:02d}": {"s": 1.0} for i in range(12)}
 
 
+def test_validate_formal_journal_151x2_and_tamper_matrix(monkeypatch):
+    import run_e3_formal_longrun as runner
+    entries = {}
+    results = []
+    for session in range(1, 152):
+        refs = []
+        for role in ("frontier_evidence_diagnostician", "curriculum_search_planner"):
+            key = f"k{session:03d}{role[0]}"
+            event = {"key": key, "role": role, "paid_new": True,
+                     "reused": False, "requested_model": "m",
+                     "returned_model": "m", "usage": {"total_tokens": 1},
+                     "response_content_hash": "c", "validated_output_hash": "v"}
+            ident = {"session": session, "role": role,
+                     "candidate": "C", "source_commit": "S"}
+            entries[key] = {"key_identity": ident, "requested_model": "m",
+                            "returned_model": "m", "usage": event["usage"],
+                            "response_content_hash": "c",
+                            "validated_output_hash": "v"}
+            refs.append(event)
+        results.append({"session_idx": session, "candidate_id": "C",
+                        "source_commit": "S", "durable_role_journal_refs": refs})
+    journal = {"entries": entries, "installed_target_keys": []}
+    assert runner._validate_formal_journal(results, journal)
+    bad = json.loads(json.dumps(results)); bad[0]["durable_role_journal_refs"][1]["key"] = "missing"
+    assert not runner._validate_formal_journal(bad, journal)
+    bad = json.loads(json.dumps(results)); bad[0]["durable_role_journal_refs"][0]["reused"] = True
+    assert not runner._validate_formal_journal(bad, journal)
+    bad = json.loads(json.dumps(results)); bad[0]["durable_role_journal_refs"] = bad[0]["durable_role_journal_refs"][:1]
+    assert not runner._validate_formal_journal(bad, journal)
+    journal2 = {"entries": dict(entries), "installed_target_keys": ["old"]}
+    assert not runner._validate_formal_journal(results, journal2)
+
+
+def test_journal_installed_preseed_ceiling(tmp_path):
+    cls = _journal_cls()
+    j = cls(str(tmp_path / "j.json"), max_success_keys=302)
+    # Seed metadata-only installed keys to exercise the adjusted current ceiling.
+    payload = {"schema": j._load()["schema"], "entries": {
+        f"i{i}": {"status": "SUCCESS", "key": f"i{i}"} for i in range(3)},
+        "installed_target_keys": [f"i{i}" for i in range(3)]}
+    (tmp_path / "j.json").write_text(json.dumps(payload))
+    # Tamper is fail-closed on load; this test documents that synthetic entries
+    # must still be fully validated by install_preseed_entries in real use.
+    with pytest.raises(ValueError):
+        j._load()
+
+
+def test_journal_three_installed_plus_302_current_ceiling(tmp_path, monkeypatch):
+    cls = _journal_cls()
+    path = tmp_path / "ceiling.json"
+    j = cls(str(path), max_success_keys=302)
+    installed = {f"i{i}": {"status": "SUCCESS", "key": f"i{i}"} for i in range(3)}
+    path.write_text(json.dumps({"schema": j._load()["schema"], "entries": installed,
+                                "installed_target_keys": list(installed)}))
+    monkeypatch.setattr(j, "_valid_entry", lambda key, entry: True)
+    usage = {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+    for session in range(1, 303):
+        identity = {"source_commit": "S", "candidate": "C", "session": session,
+                    "evidence_hash": f"e{session}", "role": "frontier_evidence_diagnostician",
+                    "provider": "p", "requested_model": "m",
+                    "client_implementation_hash": "h"}
+        key = j.composite_key(**identity)
+        j.record_success(key=key, identity=identity, returned_model="m",
+                         usage=usage, validated_output={"ok": True},
+                         response_content="x")
+    with pytest.raises(ValueError):
+        identity = {"source_commit": "S", "candidate": "C", "session": 303,
+                    "evidence_hash": "e303", "role": "frontier_evidence_diagnostician",
+                    "provider": "p", "requested_model": "m",
+                    "client_implementation_hash": "h"}
+        j.record_success(key=j.composite_key(**identity), identity=identity,
+                         returned_model="m", usage=usage,
+                         validated_output={"ok": True}, response_content="x")
+    assert len(j._load()["entries"]) == 305
+
+
 def _journal_cls():
     p = Path(__file__).resolve().parents[2] / "src" / "dicode" / "simulator_frontier" / "e3_durable_llm_journal.py"
     spec = importlib.util.spec_from_file_location("e3dj", p)

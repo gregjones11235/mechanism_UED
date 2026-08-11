@@ -478,12 +478,10 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
     if diag is None:
         raise ValueError("preseed diagnostician missing")
     diagnostic_keys_by_session, opportunistic_diagnostic_keys_by_session = _preseed_role_maps(installed)
-    if 1 in diagnostic_keys_by_session:
-        os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = diagnostic_keys_by_session[1]
-        os.environ["E3_PRESEEDED_DIAGNOSTIC_SESSION"] = "1"
-    else:
-        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
-        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
+    # Formal preseed entries are opportunistic cache only; exact composite-key
+    # lookup decides reuse.  Never pin an evidence hash as a mandatory key.
+    os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
+    os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
     result = {"sha256": auth.preseed_journal_sha256, "source_keys": source_keys,
               "installed_keys": [entry["key"] for entry in installed],
               "provenance": provenance, "diagnostic_keys_by_session": diagnostic_keys_by_session,
@@ -504,6 +502,54 @@ def _preseed_role_maps(installed: list[Mapping[str, Any]]) -> tuple[dict[int, st
                      if entry["role"] == "frontier_evidence_diagnostician"
                      and "curriculum_search_planner" not in roles_by_session.get(int(entry["session"]), set())}
     return mandatory, opportunistic
+
+
+def _validate_formal_journal(results: list[Mapping[str, Any]], journal: Mapping[str, Any]) -> bool:
+    """Validate the exact 151x2 logical audit event contract."""
+    if len(results) != 151 or not isinstance(journal, Mapping):
+        return False
+    entries = journal.get("entries", {})
+    installed = set(journal.get("installed_target_keys", []))
+    if not isinstance(entries, Mapping) or not isinstance(installed, set):
+        return False
+    if any(not isinstance(k, str) for k in installed) or not installed <= set(entries):
+        return False
+    events = []
+    for report in results:
+        refs = report.get("durable_role_journal_refs", [])
+        if not isinstance(refs, list) or len(refs) != 2:
+            return False
+        roles = {str(e.get("role")) for e in refs if isinstance(e, Mapping)}
+        if roles != {"frontier_evidence_diagnostician", "curriculum_search_planner"}:
+            return False
+        for event in refs:
+            if not isinstance(event, Mapping) or not event.get("key"):
+                return False
+            if bool(event.get("paid_new")) == bool(event.get("reused")):
+                return False
+            key = str(event["key"])
+            entry = entries.get(key)
+            if not isinstance(entry, Mapping):
+                return False
+            ident = entry.get("key_identity", {})
+            if (ident.get("session") != report.get("session_idx")
+                    or ident.get("role") != event.get("role")
+                    or ident.get("candidate") != report.get("candidate_id")
+                    or ident.get("source_commit") != report.get("source_commit")):
+                return False
+            for field in ("requested_model", "returned_model", "usage",
+                          "response_content_hash", "validated_output_hash"):
+                if field in event and event.get(field) != entry.get(field):
+                    return False
+            events.append(key)
+    if len(events) != 302 or len(set(events)) != 302:
+        return False
+    if sum(1 for r in results for e in r["durable_role_journal_refs"] if e.get("paid_new")) + \
+       sum(1 for r in results for e in r["durable_role_journal_refs"] if e.get("reused")) != 302:
+        return False
+    if set(entries) - set(events) - installed:
+        return False
+    return len(entries) <= 302 + len(installed)
 
 
 def _metadata_payload(*, source_commit, runner_sha256, auth, candidate_id, sessions,
@@ -1351,14 +1397,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
         os.environ["E3_LLM_PROVIDER"] = "dashscope"
         os.environ["E3_LLM_JOURNAL_PATH"] = os.path.join(run_dir, "LLM_PAID_CALL_JOURNAL.json")
         os.environ["E3_CLIENT_FACTORY_IMPLEMENTATION_HASH"] = getattr(auth, "client_factory_implementation_hash", "") or ""
-        preseed_diag = ((preseed_info or {}).get("diagnostic_keys_by_session", {}).get(s)
-                        if preseed_info else None)
-        if preseed_diag:
-            os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = preseed_diag
-            os.environ["E3_PRESEEDED_DIAGNOSTIC_SESSION"] = str(s)
-        else:
-            os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
-            os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
+        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
+        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
         report = run_one_session(
             candidate_id=candidate_id, session_idx=s, run_dir=run_dir,
             prev_runstate=prev_runstate, source_commit=source_commit,
@@ -1406,8 +1446,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
         journal_path = os.path.join(run_dir, "LLM_PAID_CALL_JOURNAL.json")
         try:
             from dicode.simulator_frontier.e3_durable_llm_journal import DurablePaidCallJournal
-            entries = DurablePaidCallJournal(journal_path)._load().get("entries", {})
-            formal_journal_ok = len(entries) == 302 and logical_role_events == 302
+            journal = DurablePaidCallJournal(journal_path)._load()
+            formal_journal_ok = _validate_formal_journal(results, journal)
         except Exception:
             formal_journal_ok = False
     final["journal_complete"] = formal_journal_ok
