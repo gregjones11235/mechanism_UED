@@ -1,0 +1,1257 @@
+{
+  "descriptors": [
+    {
+      "descriptor_hash": "3596f01c65c0e717d685d4195f4116d47c8b47f8af46091e8797416be3cbce63",
+      "descriptor_id": "tpd:variant:control",
+      "distinguishes_hypothesis_ids": [],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {},
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:control",
+      "mock_variant_kind": "control",
+      "mutation_axes": [],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:action_semantics_confusion:00",
+          "itv:environment_ambiguity:01",
+          "itv:exploration_noise:02",
+          "itv:memory_or_context_retention:03",
+          "itv:perception_or_observability:04",
+          "itv:resource_planning_failure:05",
+          "itv:value_or_risk_misestimation:06"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "0754c0db10962c24332ee0734575009baa31f6af20f24b5e3249ebf3be1df7c9",
+      "descriptor_id": "tpd:variant:factorial:6320a0c6cc73",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "long_term_memory_requirement": "low",
+        "resource_pressure": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "multi_threat_interference": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:factorial:6320a0c6cc73",
+      "mock_variant_kind": "factorial",
+      "mutation_axes": [
+        "long_term_memory_requirement",
+        "resource_pressure"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:memory_or_context_retention:03",
+          "itv:resource_planning_failure:05"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "9c52e4616d383419c56797d5c760e5d11b1058f56cdccf55778be74b64a9fe38",
+      "descriptor_id": "tpd:variant:single:134ee8a48410",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "safe_rest_area_availability": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:134ee8a48410",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "safe_rest_area_availability"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:action_semantics_confusion:00",
+          "itv:environment_ambiguity:01"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "a75194aca2f32c7e8d206b85fe869e6d1376f434a181a84175c166c318f23097",
+      "descriptor_id": "tpd:variant:single:24e4cb8530cc",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "view_occlusion": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:24e4cb8530cc",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "view_occlusion"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:perception_or_observability:04"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "fe675b45b83142e08d5b54f32c192a6f1ad647017be88305cbc27158e5c7cbe4",
+      "descriptor_id": "tpd:variant:single:3ac89be526d6",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "rest_need_pressure": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:3ac89be526d6",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "rest_need_pressure"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:resource_planning_failure:05"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "ab03dbcf3c442ae21014fc9a55c1baad688e3b8b13d6cd7dc50fca8dbcff3e27",
+      "descriptor_id": "tpd:variant:single:3d6a73cad1c1",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+        "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "threat_distance_grading": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:3d6a73cad1c1",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "threat_distance_grading"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:exploration_noise:02",
+          "itv:value_or_risk_misestimation:06"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "e7e46b145911a3cc6a7d6277eef027dd133d5246a969e94b8698d86a625bb505",
+      "descriptor_id": "tpd:variant:single:463aa7560109",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "resource_pressure": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:463aa7560109",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "resource_pressure"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:resource_planning_failure:05"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "5ab8903295faf94a3bca855c226a15a217d0e37e531f87cc85482d5fb7c85064",
+      "descriptor_id": "tpd:variant:single:4811d94d38ce",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "visibility": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:4811d94d38ce",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "visibility"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:perception_or_observability:04"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "26ec045efd304e01797d7423351371911658d8eccf66bf916f1458a963b40c0a",
+      "descriptor_id": "tpd:variant:single:4fac27636400",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "visibility": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:4fac27636400",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "visibility"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:perception_or_observability:04"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "37cf0492b8a571e4628c4460242a6edfed4c4558cd2f7f3ff5889df358db0b10",
+      "descriptor_id": "tpd:variant:single:5bb809ea18b7",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "view_occlusion": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:5bb809ea18b7",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "view_occlusion"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:perception_or_observability:04"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "563ab13290eb9b35dcb9fe425273026b4f554899e0102bffc0a0a19f11ea1087",
+      "descriptor_id": "tpd:variant:single:62e8b7c38cf5",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "long_term_memory_requirement": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:62e8b7c38cf5",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "long_term_memory_requirement"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:memory_or_context_retention:03"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "7ea3a1484306a8f1ec4047afbe0fde2d880e056ad1d3999c48caba81630be222",
+      "descriptor_id": "tpd:variant:single:633b6fe67fbe",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "resource_pressure": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:633b6fe67fbe",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "resource_pressure"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:resource_planning_failure:05"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "7dfc1fa750f5c9a1680ac79622713d2fd738c9bc7cae55636d6542696f19ba27",
+      "descriptor_id": "tpd:variant:single:6ea834a5f328",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "threat_count": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:6ea834a5f328",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "threat_count"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:value_or_risk_misestimation:06"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "d4670e37068434680ecdd4d771786bf7f60c2be850f83d2b1008a7b05acde7d5",
+      "descriptor_id": "tpd:variant:single:a2d48737ff27",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "rest_need_pressure": "high"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:a2d48737ff27",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "rest_need_pressure"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:resource_planning_failure:05"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "a4d87816cb106a47010839baf526c85bdb976a7c3737e40fc344ed3197a06fa0",
+      "descriptor_id": "tpd:variant:single:b46267ebd439",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "threat_count": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:b46267ebd439",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "threat_count"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:value_or_risk_misestimation:06"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "53aaac781e839352d269e4f20de82ef5b45caa7a100c2489607486f05ca20775",
+      "descriptor_id": "tpd:variant:single:c4d9e776c49b",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "safe_rest_area_availability": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:c4d9e776c49b",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "safe_rest_area_availability"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:action_semantics_confusion:00",
+          "itv:environment_ambiguity:01"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "7786392d1bf9b01255b2a60469e460e4b325cbdf94bb05d7f77ece5f48e5a045",
+      "descriptor_id": "tpd:variant:single:d91443c445b7",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "long_term_memory_requirement": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "threat_distance_grading": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:d91443c445b7",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "long_term_memory_requirement"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:memory_or_context_retention:03"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    },
+    {
+      "descriptor_hash": "3aee1f83f7359ea29f6a917c2785a321c8363d140ecf06209d8bb531a7c5695f",
+      "descriptor_id": "tpd:variant:single:fee75eed9227",
+      "distinguishes_hypothesis_ids": [
+        "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+        "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise",
+        "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+      ],
+      "legality_hint": "MOCK_ONLY — convert through the real TaskParams adapter once unblocked; do not execute directly",
+      "mock_axis_values": {
+        "threat_distance_grading": "low"
+      },
+      "mock_control_values": {
+        "day_night_rest_need": "baseline",
+        "global_task_conflict": "baseline",
+        "long_term_memory_requirement": "baseline",
+        "multi_threat_interference": "baseline",
+        "resource_pressure": "baseline",
+        "rest_need_pressure": "baseline",
+        "safe_rest_area_availability": "baseline",
+        "threat_count": "baseline",
+        "view_occlusion": "baseline",
+        "visibility": "baseline"
+      },
+      "mock_env_family": "generative_training_env_family",
+      "mock_variant_id": "variant:single:fee75eed9227",
+      "mock_variant_kind": "single_axis",
+      "mutation_axes": [
+        "threat_distance_grading"
+      ],
+      "protocol_version": "canonical_v2",
+      "provenance": {
+        "bundle_id": "synthetic_unsafe_rest_window",
+        "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+        "source_intervention_ids": [
+          "itv:exploration_noise:02",
+          "itv:value_or_risk_misestimation:06"
+        ]
+      },
+      "real_adapter_status": "BLOCKED_EXTERNAL_DEPENDENCY"
+    }
+  ],
+  "plan": {
+    "base_env_family": "generative_training_env_family",
+    "bundle_id": "synthetic_unsafe_rest_window",
+    "control": {
+      "axis_values": {},
+      "base_env_family": "generative_training_env_family",
+      "controlled_variables": [
+        "day_night_rest_need",
+        "global_task_conflict",
+        "long_term_memory_requirement",
+        "multi_threat_interference",
+        "resource_pressure",
+        "rest_need_pressure",
+        "safe_rest_area_availability",
+        "threat_count",
+        "threat_distance_grading",
+        "view_occlusion",
+        "visibility"
+      ],
+      "distinguishes_hypothesis_ids": [],
+      "kind": "control",
+      "protocol_version": "canonical_v2",
+      "source_intervention_ids": [
+        "itv:action_semantics_confusion:00",
+        "itv:environment_ambiguity:01",
+        "itv:exploration_noise:02",
+        "itv:memory_or_context_retention:03",
+        "itv:perception_or_observability:04",
+        "itv:resource_planning_failure:05",
+        "itv:value_or_risk_misestimation:06"
+      ],
+      "variant_id": "variant:control"
+    },
+    "factorial_degree_cap": 2,
+    "plan_hash": "0649e08e96ddd50bbfcf66966d5d9cba837f69a57aac088fecbd6804ff094dfc",
+    "protocol_version": "canonical_v2",
+    "variants": [
+      {
+        "axis_values": {
+          "long_term_memory_requirement": "low",
+          "resource_pressure": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "multi_threat_interference",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+        ],
+        "kind": "factorial",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:memory_or_context_retention:03",
+          "itv:resource_planning_failure:05"
+        ],
+        "variant_id": "variant:factorial:6320a0c6cc73"
+      },
+      {
+        "axis_values": {
+          "safe_rest_area_availability": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:action_semantics_confusion:00",
+          "itv:environment_ambiguity:01"
+        ],
+        "variant_id": "variant:single:134ee8a48410"
+      },
+      {
+        "axis_values": {
+          "view_occlusion": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:perception_or_observability:04"
+        ],
+        "variant_id": "variant:single:24e4cb8530cc"
+      },
+      {
+        "axis_values": {
+          "rest_need_pressure": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:resource_planning_failure:05"
+        ],
+        "variant_id": "variant:single:3ac89be526d6"
+      },
+      {
+        "axis_values": {
+          "threat_distance_grading": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+          "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:exploration_noise:02",
+          "itv:value_or_risk_misestimation:06"
+        ],
+        "variant_id": "variant:single:3d6a73cad1c1"
+      },
+      {
+        "axis_values": {
+          "resource_pressure": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:resource_planning_failure:05"
+        ],
+        "variant_id": "variant:single:463aa7560109"
+      },
+      {
+        "axis_values": {
+          "visibility": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:perception_or_observability:04"
+        ],
+        "variant_id": "variant:single:4811d94d38ce"
+      },
+      {
+        "axis_values": {
+          "visibility": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:perception_or_observability:04"
+        ],
+        "variant_id": "variant:single:4fac27636400"
+      },
+      {
+        "axis_values": {
+          "view_occlusion": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:perception_or_observability:04"
+        ],
+        "variant_id": "variant:single:5bb809ea18b7"
+      },
+      {
+        "axis_values": {
+          "long_term_memory_requirement": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:memory_or_context_retention:03"
+        ],
+        "variant_id": "variant:single:62e8b7c38cf5"
+      },
+      {
+        "axis_values": {
+          "resource_pressure": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:resource_planning_failure:05"
+        ],
+        "variant_id": "variant:single:633b6fe67fbe"
+      },
+      {
+        "axis_values": {
+          "threat_count": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:value_or_risk_misestimation:06"
+        ],
+        "variant_id": "variant:single:6ea834a5f328"
+      },
+      {
+        "axis_values": {
+          "rest_need_pressure": "high"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:environment_ambiguity:01",
+          "itv:resource_planning_failure:05"
+        ],
+        "variant_id": "variant:single:a2d48737ff27"
+      },
+      {
+        "axis_values": {
+          "threat_count": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:value_or_risk_misestimation:06"
+        ],
+        "variant_id": "variant:single:b46267ebd439"
+      },
+      {
+        "axis_values": {
+          "safe_rest_area_availability": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:action_semantics_confusion:00",
+          "itv:environment_ambiguity:01"
+        ],
+        "variant_id": "variant:single:c4d9e776c49b"
+      },
+      {
+        "axis_values": {
+          "long_term_memory_requirement": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "threat_distance_grading",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:memory_or_context_retention:03"
+        ],
+        "variant_id": "variant:single:d91443c445b7"
+      },
+      {
+        "axis_values": {
+          "threat_distance_grading": "low"
+        },
+        "base_env_family": "generative_training_env_family",
+        "controlled_variables": [
+          "day_night_rest_need",
+          "global_task_conflict",
+          "long_term_memory_requirement",
+          "multi_threat_interference",
+          "resource_pressure",
+          "rest_need_pressure",
+          "safe_rest_area_availability",
+          "threat_count",
+          "view_occlusion",
+          "visibility"
+        ],
+        "distinguishes_hypothesis_ids": [
+          "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+          "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise",
+          "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+        ],
+        "kind": "single_axis",
+        "protocol_version": "canonical_v2",
+        "source_intervention_ids": [
+          "itv:exploration_noise:02",
+          "itv:value_or_risk_misestimation:06"
+        ],
+        "variant_id": "variant:single:fee75eed9227"
+      }
+    ]
+  },
+  "proposal_distribution_hash": "8cc5a5e0bf3b78eb67f6f026c737be29818aee24236ae13d30668dfd874642d0",
+  "rejected_descriptors": [],
+  "schema": "bagr_ued.counterfactual_plan.v1"
+}

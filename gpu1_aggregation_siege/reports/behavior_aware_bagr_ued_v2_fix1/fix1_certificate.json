@@ -1,0 +1,33 @@
+{
+  "bagr_ued_tests_passed": 143,
+  "bagr_ued_tests_total": 143,
+  "bagr_ued_version": "d052_v2.bagr_ued.v1",
+  "base_commit": "1efcceb9660a5c4f33edbf2175983ce5bc22b7f0",
+  "certificate_hash": "fd32b53bb187fb65c17a3b4cbf6ae25d315eb80c7e381b0fd0d1518bcdfc2f77",
+  "checkpoints_modified": false,
+  "fixed_items": [
+    "§1 UnsafeRest condition-based finding contract",
+    "§3 controller shortfall launch gate",
+    "§5/§6/§7 supervision guard hardening",
+    "§8 alpha_front structural <1"
+  ],
+  "formal_back_bank_used": false,
+  "formal_banks_used": false,
+  "formal_evaluation_authorized": false,
+  "formal_evaluation_started": false,
+  "formal_front_bank_used": false,
+  "formal_full_profile_used": false,
+  "independent_reaudit_required": true,
+  "new_regressions_introduced": 0,
+  "real_canonical_critic_reject_derivation_rule": "PENDING",
+  "real_canonical_critic_selection_policy": "PENDING",
+  "real_environment_rollouts": 0,
+  "real_llm_calls": 0,
+  "real_llm_calls_authorized": false,
+  "real_taskparams_adapter": "BLOCKED_EXTERNAL_DEPENDENCY",
+  "record_version": "bagr_ued.fix1_certificate.v1",
+  "run_class": "ENGINEERING_FIX_VALIDATION",
+  "target_branch": "henry/ba-bagr-ued-review-board-v2",
+  "training_authorized": false,
+  "training_started": false
+}

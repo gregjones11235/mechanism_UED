@@ -1,0 +1,15 @@
+{
+  "EXACT_RESUME_PROOF_PASS": true,
+  "bit_exact_determinism": true,
+  "entropy_28672_runA": 0.7833553552627563,
+  "entropy_28672_runB": 0.7833553552627563,
+  "entropy_in_engineering_range": true,
+  "grad_norm_finite": true,
+  "grad_norm_max_28672_runA": 8.383306503295898,
+  "params_finite": true,
+  "params_sha256_28672_runA": "27bf524950c537b8b89a18b655ddc232a8d280a08cf1dbf67a03c862ee005e9f",
+  "params_sha256_28672_runB": "27bf524950c537b8b89a18b655ddc232a8d280a08cf1dbf67a03c862ee005e9f",
+  "resume_file_sha256": "d4e7008da7d2a78a7765b32379704719165288015d031856850ad7c8a0e7495e",
+  "resume_params_sha256": "1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2",
+  "resume_source": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru/train_24576/ckpt/24576/full_state.pkl"
+}

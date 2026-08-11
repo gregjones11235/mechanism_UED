@@ -1,0 +1,10 @@
+{
+  "runtime_family": "slowgru_cc3",
+  "arm": "reset128",
+  "checkpoint_path": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_slowgru_reset128_longrun/train/ckpt/98304/full_state.pkl",
+  "checkpoint_contract_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_RESET128_CANONICAL_98304/checkpoint_contract.json",
+  "observation_shape": [8335],
+  "action_dim": 43,
+  "owner": "CC3",
+  "note": "CC3 binding contract for the common evaluator CLI attempt"
+}

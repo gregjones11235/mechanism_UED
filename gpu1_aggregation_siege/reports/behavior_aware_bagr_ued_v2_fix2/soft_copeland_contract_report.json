@@ -1,0 +1,286 @@
+{
+  "contract": "criterion-wise Soft Copeland (CC3 fix2 §1-§3)",
+  "weights_version": "bagr_ued.soft_copeland.weights.v2",
+  "temperatures_version": "bagr_ued.soft_copeland.temperatures.v1",
+  "raw_dimensions": [
+    "front_regret",
+    "global_regret",
+    "behavioral_gap",
+    "learning_progress",
+    "learnability",
+    "diversity",
+    "global_retention",
+    "critic_penalty"
+  ],
+  "dimension_weight_table": {
+    "behavioral_gap": 1.0,
+    "learning_progress": 0.8,
+    "learnability": 0.8,
+    "diversity": 0.6,
+    "global_retention": 0.6,
+    "critic_penalty": 1.0
+  },
+  "front_global_weight_resolution": "front_weight = alpha_front, global_weight = 1 - alpha_front, resolved AT THE PAIRWISE LEVEL (never before normalization)",
+  "dimension_temperatures": {
+    "front_regret": 1.0,
+    "global_regret": 1.0,
+    "behavioral_gap": 1.0,
+    "learning_progress": 1.0,
+    "learnability": 1.0,
+    "diversity": 1.0,
+    "global_retention": 1.0,
+    "critic_penalty": 1.0
+  },
+  "tie_break_rule": "copeland_score_desc__environment_id_asc",
+  "live_alpha_075_audit_trail": {
+    "protocol_version": "canonical_v2",
+    "weights_version": "bagr_ued.soft_copeland.weights.v2",
+    "temperatures_version": "bagr_ued.soft_copeland.temperatures.v1",
+    "alpha_front_used": 0.75,
+    "dimension_weights": {
+      "front_regret": 0.75,
+      "global_regret": 0.25,
+      "behavioral_gap": 1.0,
+      "learning_progress": 0.8,
+      "learnability": 0.8,
+      "diversity": 0.6,
+      "global_retention": 0.6,
+      "critic_penalty": 1.0
+    },
+    "dimension_temperatures": {
+      "front_regret": 1.0,
+      "global_regret": 1.0,
+      "behavioral_gap": 1.0,
+      "learning_progress": 1.0,
+      "learnability": 1.0,
+      "diversity": 1.0,
+      "global_retention": 1.0,
+      "critic_penalty": 1.0
+    },
+    "environment_order": [
+      "A",
+      "B",
+      "C"
+    ],
+    "normalization_provenance": {
+      "front_regret": {
+        "min": 0.1,
+        "max": 0.9,
+        "constant": false,
+        "normalized": [
+          1.0,
+          0.0,
+          0.5
+        ]
+      },
+      "global_regret": {
+        "min": 0.1,
+        "max": 0.9,
+        "constant": false,
+        "normalized": [
+          0.0,
+          1.0,
+          0.5
+        ]
+      },
+      "behavioral_gap": {
+        "min": 0.3,
+        "max": 0.3,
+        "constant": true,
+        "normalized": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "learning_progress": {
+        "min": 0.5,
+        "max": 0.5,
+        "constant": true,
+        "normalized": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "learnability": {
+        "min": 0.5,
+        "max": 0.5,
+        "constant": true,
+        "normalized": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "diversity": {
+        "min": 0.5,
+        "max": 0.5,
+        "constant": true,
+        "normalized": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "global_retention": {
+        "min": 0.5,
+        "max": 0.5,
+        "constant": true,
+        "normalized": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "critic_penalty": {
+        "min": 0.1,
+        "max": 0.1,
+        "constant": true,
+        "normalized": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    },
+    "pairwise_preference": [
+      [
+        0.5,
+        0.519918843,
+        0.510556839
+      ],
+      [
+        0.480081157,
+        0.5,
+        0.489443161
+      ],
+      [
+        0.489443161,
+        0.510556839,
+        0.5
+      ]
+    ],
+    "pairwise_margin": [
+      [
+        0.0,
+        0.019918843,
+        0.010556839
+      ],
+      [
+        -0.019918843,
+        0.0,
+        -0.010556839
+      ],
+      [
+        -0.010556839,
+        0.010556839,
+        0.0
+      ]
+    ],
+    "tie_break_rule": "copeland_score_desc__environment_id_asc",
+    "entries": [
+      {
+        "protocol_version": "canonical_v2",
+        "environment_id": "A",
+        "copeland_score": 0.515237841,
+        "copeland_margin_sum": 0.030475682,
+        "rank": 1,
+        "components": {
+          "front_regret": 1.0,
+          "global_regret": 0.0,
+          "behavioral_gap": 0.5,
+          "learning_progress": 0.5,
+          "learnability": 0.5,
+          "diversity": 0.5,
+          "global_retention": 0.5,
+          "critic_penalty": 0.5,
+          "critic_penalty_raw": 0.1,
+          "alpha_front_used": 0.75,
+          "pairwise_weight_front_regret": 0.75,
+          "pairwise_weight_global_regret": 0.25
+        }
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "environment_id": "C",
+        "copeland_score": 0.5,
+        "copeland_margin_sum": 0.0,
+        "rank": 2,
+        "components": {
+          "front_regret": 0.5,
+          "global_regret": 0.5,
+          "behavioral_gap": 0.5,
+          "learning_progress": 0.5,
+          "learnability": 0.5,
+          "diversity": 0.5,
+          "global_retention": 0.5,
+          "critic_penalty": 0.5,
+          "critic_penalty_raw": 0.1,
+          "alpha_front_used": 0.75,
+          "pairwise_weight_front_regret": 0.75,
+          "pairwise_weight_global_regret": 0.25
+        }
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "environment_id": "B",
+        "copeland_score": 0.484762159,
+        "copeland_margin_sum": -0.030475682,
+        "rank": 3,
+        "components": {
+          "front_regret": 0.0,
+          "global_regret": 1.0,
+          "behavioral_gap": 0.5,
+          "learning_progress": 0.5,
+          "learnability": 0.5,
+          "diversity": 0.5,
+          "global_retention": 0.5,
+          "critic_penalty": 0.5,
+          "critic_penalty_raw": 0.1,
+          "alpha_front_used": 0.75,
+          "pairwise_weight_front_regret": 0.75,
+          "pairwise_weight_global_regret": 0.25
+        }
+      }
+    ],
+    "ranking_hash": "a167c9aa6092a6230c189302f518a8df0afdf58144657ff767ce79ab4d87dbd9"
+  },
+  "checks": [
+    {
+      "check": "NO_PRE_AGGREGATED_STRENGTH",
+      "passed": true,
+      "evidence": "CopelandEntry.components keys: alpha_front_used, behavioral_gap, critic_penalty, critic_penalty_raw, diversity, front_regret, global_regret, global_retention, learnability, learning_progress, pairwise_weight_front_regret, pairwise_weight_global_regret"
+    },
+    {
+      "check": "ALPHA_NOT_APPLIED_BEFORE_NORMALIZATION",
+      "passed": true,
+      "evidence": "normalization_provenance identical for alpha=0.75 and alpha=0.25 on identical raw data"
+    },
+    {
+      "check": "EIGHT_DIMENSIONS_NORMALIZED_INDEPENDENTLY",
+      "passed": true,
+      "evidence": "provenance dims: behavioral_gap, critic_penalty, diversity, front_regret, global_regret, global_retention, learnability, learning_progress"
+    },
+    {
+      "check": "PAIRWISE_PREFERENCE_AND_MARGIN_MATRICES_RECORDED",
+      "passed": true,
+      "evidence": "3x3 matrices aligned to environment_order ['A', 'B', 'C']"
+    },
+    {
+      "check": "COPELAND_EQUALS_MEAN_PAIRWISE_PREFERENCE",
+      "passed": true,
+      "evidence": "copeland_score == mean_{j!=i} P(i>j) verified for both runs"
+    },
+    {
+      "check": "WEIGHTS_RESOLVED_FROM_ALPHA_AT_PAIRWISE_LEVEL",
+      "passed": true,
+      "evidence": "resolved weights: front=0.75, global=0.25"
+    },
+    {
+      "check": "RANKING_HASH_BINDS_FULL_AUDIT_TRAIL",
+      "passed": true,
+      "evidence": "ranking_hash=a167c9aa6092a623…"
+    }
+  ]
+}

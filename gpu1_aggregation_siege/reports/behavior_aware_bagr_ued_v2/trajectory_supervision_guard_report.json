@@ -1,0 +1,45 @@
+{
+  "fail_closed_demonstrations": {
+    "direct_action_advice": {
+      "findings": [
+        {
+          "code": "DIRECT_ACTION_ADVICE_FORBIDDEN",
+          "detail": "direct action advice pattern \"en: don't sleep/rest/attack\"",
+          "path": "$.note"
+        }
+      ],
+      "guard": "TrajectorySupervisionGuard",
+      "label": "demo_action_advice",
+      "passed": false
+    },
+    "supervision_key": {
+      "findings": [
+        {
+          "code": "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN",
+          "detail": "forbidden supervision key 'recommended_actions' present",
+          "path": "$.recommended_actions"
+        }
+      ],
+      "guard": "TrajectorySupervisionGuard",
+      "label": "demo_supervision_key",
+      "passed": false
+    }
+  },
+  "forbidden_supervision_keys": [
+    "action_sequence_to_follow",
+    "expert_demonstration",
+    "hidden_state_override",
+    "policy_override",
+    "recommended_actions",
+    "reward_delta",
+    "reward_shaping",
+    "waypoints"
+  ],
+  "full_dry_run_result": {
+    "findings": [],
+    "guard": "TrajectorySupervisionGuard",
+    "label": "full_dry_run_result",
+    "passed": true
+  },
+  "guard": "TrajectorySupervisionGuard"
+}

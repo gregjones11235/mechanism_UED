@@ -1,0 +1,33 @@
+{
+  "bagr_ued_existing_tests": 61,
+  "bagr_ued_existing_tests_passing": 61,
+  "bagr_ued_new_tests": 82,
+  "base_commit": "1efcceb9660a5c4f33edbf2175983ce5bc22b7f0",
+  "checkpoints_modified": false,
+  "formal_banks_used": false,
+  "formal_evaluation_started": false,
+  "method": "same-test parent-vs-new-commit comparison runs of test_real_bundle_reconciliation.py in both worktrees + full d052 suite in the fix worktree",
+  "new_regressions_introduced": 0,
+  "real_bundle_environmental_failures_identical": true,
+  "real_environment_rollouts": 0,
+  "real_llm_calls": 0,
+  "schema": "bagr_ued.fix1.regression_report.v1",
+  "scientific_boundaries_preserved": [
+    "six-role fixed order",
+    "RoleEnvelope provenance",
+    "competing-causal-hypothesis contract",
+    "Tutor env-level boundary",
+    "Explorer difference requirement",
+    "Critic reject/selection separation",
+    "Reconciler rules",
+    "front/global regret separation",
+    "behavioral_gap=max(0,student-reference)",
+    "Soft Copeland pairwise semantics",
+    "12 UED + 4 anchors",
+    "2048 transitions/update",
+    "8192/review",
+    "formal leakage source policy",
+    "both REAL_CANONICAL critic rules PENDING"
+  ],
+  "training_started": false
+}

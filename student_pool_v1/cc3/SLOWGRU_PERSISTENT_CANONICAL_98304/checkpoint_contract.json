@@ -1,0 +1,62 @@
+{
+  "contract_version": "cc3_checkpoint_contract/v1",
+  "candidate_id": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "network_family": "SlowGRU",
+  "carry_mode": "PERSISTENT",
+  "checkpoint_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
+  "checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+  "params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+  "canonical_base_params_sha256": "d4e85af58b7f87d689fadea12eec70c852fa098a09f5ea8907448684b3bf60f5",
+  "global_step": 98304,
+  "update_step": 48,
+  "opt_step": 96,
+  "training_seed": 42,
+  "arm_src": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru/src",
+  "network_module": "slowgru_network",
+  "network_src_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+  "canonical_trainer_src_sha256": "7918333c63bdb6c8917bf423dfb8484942fb46edc6a7c8fa7e36c769cada2545",
+  "canonical_trainer_note": "SHA of the trainer AS RUN (code_sha256.launcher embedded in the saved pkl). A bookkeeping-only fix (production chunk-loop bound computed from the post-proof update counter) was applied afterwards; it changes no computation path and cannot alter any saved tensor.",
+  "s4_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+  "constructor": {
+    "action_dim": 43,
+    "activation": "relu",
+    "hidden_layers": 256,
+    "encoder_size": 256,
+    "num_heads": 8,
+    "qkv_features": 256,
+    "num_layers": 2,
+    "gating": true,
+    "gating_bias": 2.0,
+    "use_longmem": true
+  },
+  "memory_layout": {
+    "window_mem": 128,
+    "num_heads": 8,
+    "num_layers": 2,
+    "embed_size": 256,
+    "slow_interval": 32,
+    "slow_dim": 256
+  },
+  "obs_dim": 8335,
+  "action_dim": 43,
+  "boundary_semantics": "PERSISTENT: slow longstate + fast window memories fully carried across 128-step segment boundaries; the slow state is cleared ONLY by the per-episode true_done reset signal inside the rollout (and explicit reset_memory). Trainer _update_step has NO boundary-clear block (identical to historical persistent driver run_slowgru_24576.py, SHA 86bb12c4...).",
+  "provenance_class": "EXACT_RESUME_CONTINUATION",
+  "resume_source": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru/train_24576/ckpt/24576/full_state.pkl",
+  "resume_source_file_sha256": "d4e7008da7d2a78a7765b32379704719165288015d031856850ad7c8a0e7495e",
+  "resume_source_params_sha256": "1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2",
+  "resume_identity_verified_by": "CC3 recovery_probe 36/36 (SLOWGRU_PERSISTENT_24576 RECOVERED) + pre-training identity gates (file SHA, params SHA, opt_step=24/update_step=12, opt_state + longstate leaf hashes vs embedded manifest, finiteness)",
+  "exact_resume_proof_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/out/exact_resume_proof.json",
+  "exact_resume_proof": "EXACT_RESUME_PROOF_PASS=true — two independent 4096-step continuations from the restored 24576 state produced BIT-IDENTICAL params SHA 27bf524950c537b8b89a18b655ddc232a8d280a08cf1dbf67a03c862ee005e9f at 28672 (entropy identical to 13 decimals; params/opt finite; grad norm finite)",
+  "training_run_disclosure": "Production run saved the canonical node at global_step=98304 (update_count=48, roundtrip_ok=True). A bookkeeping bug in the first-run chunk-loop bound then executed 2 unsaved updates to 102400 before stopping (STATUS TRAIN_INCOMPLETE refers to that overshoot ONLY); nothing past 98304 was saved and the 98304 artifact was written + bit-exact roundtrip-verified BEFORE the overshoot. Trainer fixed afterwards (loop bound from post-proof counter). No 28672 pkl node was saved; the 4096 engineering gate artifact is exact_resume_proof.json.",
+  "recovery_probe_sha256": "f5118788844b684282f3074d9668d5c276ba9091354acf322ae6b4d5c0e23358",
+  "gpu_allowed": [
+    "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+  ],
+  "gpu_forbidden": [
+    "GPU-e8c08612",
+    "GPU-3c7a2864"
+  ],
+  "smoke_seed": 777,
+  "formal_eval_binding": "WAITING_CC4_COMMON_CONTRACT"
+}

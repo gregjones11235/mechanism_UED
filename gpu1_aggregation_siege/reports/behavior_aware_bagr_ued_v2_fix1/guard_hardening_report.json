@@ -1,0 +1,318 @@
+{
+  "alias_hardening": {
+    "alias_count": 14,
+    "aliases": [
+      "bank_blob",
+      "expert_plan",
+      "formal_state_blob",
+      "formal_state_payload",
+      "navigation_route",
+      "path_to_follow",
+      "recommended_action",
+      "recommended_actions",
+      "recommended_move",
+      "recommended_policy",
+      "route",
+      "state_payload",
+      "suggested_action",
+      "suggested_actions"
+    ],
+    "normalization": "casefold + separator stripping (kept), nested mapping/sequence scans (kept)",
+    "payload_aliases_mirrored_into_leakage_guard": {
+      "bank_blob": {
+        "passed": false
+      },
+      "formal_state_blob": {
+        "passed": false
+      },
+      "formal_state_payload": {
+        "passed": false
+      },
+      "state_payload": {
+        "passed": false
+      }
+    },
+    "per_alias_rejected": {
+      "bank_blob": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "expert_plan": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "formal_state_blob": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "formal_state_payload": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "navigation_route": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "path_to_follow": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "recommended_action": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "recommended_actions": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "recommended_move": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "recommended_policy": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "route": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "state_payload": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "suggested_action": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "suggested_actions": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      }
+    },
+    "spelling_variants_rejected": {
+      "Navigation_Route": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "RECOMMENDED ACTION": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "RewardDelta": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "State-Payload": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "Suggested-Actions": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "expert  plan": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      }
+    }
+  },
+  "natural_language_advice": {
+    "all_rejected": true,
+    "allowed_behavior_descriptions": {
+      "Rest frequency should respond to graded threat distance.": {
+        "codes": [],
+        "passed": true
+      },
+      "The student repeatedly attacks without effect.": {
+        "codes": [],
+        "passed": true
+      },
+      "The trace contains a sleep action near a hostile.": {
+        "codes": [],
+        "passed": true
+      },
+      "学生在危险区域附近休息后死亡。": {
+        "codes": [],
+        "passed": true
+      },
+      "智能体重复攻击但没有效果。": {
+        "codes": [],
+        "passed": true
+      }
+    },
+    "none_false_rejected": true,
+    "rejected": {
+      "attack the monster": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "don't sleep": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "go left": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "head north": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "move toward the ladder": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "you should flee": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "不要睡觉": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "你应该逃跑": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "向左走": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "往北走": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "攻击怪物": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "朝梯子移动": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      }
+    }
+  },
+  "regression_tests": "d052/tests/test_bagr_ued_guard_hardening.py (46 tests incl. parametrized) — all PASS",
+  "schema": "bagr_ued.fix1.guard_hardening.v1",
+  "serialized_string_parsing": {
+    "cases": {
+      "invalid_json_clean_text": {
+        "codes": [],
+        "passed": true
+      },
+      "invalid_json_with_advice": {
+        "codes": [
+          "DIRECT_ACTION_ADVICE_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "over_container_items": {
+        "codes": [
+          "SERIALIZED_GUARD_LIMIT_EXCEEDED"
+        ],
+        "passed": false
+      },
+      "over_depth_14_levels": {
+        "codes": [
+          "SERIALIZED_GUARD_LIMIT_EXCEEDED"
+        ],
+        "passed": false
+      },
+      "over_length": {
+        "codes": [
+          "SERIALIZED_GUARD_LIMIT_EXCEEDED"
+        ],
+        "passed": false
+      },
+      "{\"a\": {\"b\": {\"c\": {\"reward_shaping\": {}}}}}": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "{\"reward_delta\": 1.0}": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      },
+      "{\"suggested_actions\": [\"wait here\"]}": {
+        "codes": [
+          "TRAJECTORY_SUPERVISION_KEY_FORBIDDEN"
+        ],
+        "passed": false
+      }
+    },
+    "limits": {
+      "MAX_SERIALIZED_CONTAINER_ITEMS": 4096,
+      "MAX_SERIALIZED_PARSE_DEPTH": 12,
+      "MAX_SERIALIZED_STRING_LENGTH": 65536
+    },
+    "policy": "trim-then-JSON-looking strings (object/array, plus JSON string literals to close double-encoding evasion) are parsed and the FULL guard re-runs inside; parse failure falls back to plain-text NL patterns — NEVER a lenient skip; limit excess fails closed"
+  }
+}

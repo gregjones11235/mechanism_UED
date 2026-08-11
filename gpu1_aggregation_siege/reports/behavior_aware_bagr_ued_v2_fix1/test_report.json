@@ -1,0 +1,76 @@
+{
+  "bagr_ued_passed": 143,
+  "bagr_ued_tests": {
+    "counts": {
+      "failed": 0,
+      "passed": 143
+    },
+    "failed_tests": []
+  },
+  "bagr_ued_total": 143,
+  "existing_61_bagr_tests_still_pass": true,
+  "full_d052_suite_in_fix_worktree": {
+    "counts": {
+      "failed": 6,
+      "passed": 449
+    },
+    "failed_tests": [
+      "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+      "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+      "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors"
+    ]
+  },
+  "no_skip_xfail_deletion_to_hide_failures": true,
+  "non_bagr_d052_tests": {
+    "counts": {
+      "failed": 6,
+      "passed": 306
+    },
+    "failed_tests": [
+      "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+      "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+      "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors"
+    ]
+  },
+  "python": "3.12.4",
+  "real_bundle_same_test_comparison": {
+    "fix_worktree": {
+      "counts": {
+        "failed": 6,
+        "passed": 23
+      },
+      "failed_tests": [
+        "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+        "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+        "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+        "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+        "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged",
+        "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors"
+      ]
+    },
+    "identical_failure_sets": true,
+    "new_regressions_introduced": 0,
+    "parent_commit_worktree_1efcceb": {
+      "counts": {
+        "failed": 6,
+        "passed": 23
+      },
+      "failed_tests": [
+        "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+        "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+        "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+        "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+        "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged",
+        "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors"
+      ]
+    },
+    "root_cause": "environmental: orchestration/experiments/d052_modeler_shadow_v1/outputs/ data dir absent from worktrees (agg_source_sha_matches_bundle=False); present in BOTH commits' runs -> NOT a regression"
+  },
+  "schema": "bagr_ued.fix1.test_report.v1"
+}

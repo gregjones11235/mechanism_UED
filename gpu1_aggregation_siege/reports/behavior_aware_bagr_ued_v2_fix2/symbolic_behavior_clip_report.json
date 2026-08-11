@@ -1,0 +1,355 @@
+{
+  "contract": "symbolic behavior clips for the Review Board (CC3 fix2 §9-§14)",
+  "schema_version": "bagr_ued.symbolic_clip.v1",
+  "limits": {
+    "MAX_CLIP_STEPS": 24,
+    "MAX_CLIPS_PER_EPISODE": 4,
+    "MAX_CLIPS_PER_REVIEW_WINDOW": 32,
+    "MAX_EVENT_SEMANTICS_PER_STEP": 8,
+    "MAX_RESOURCE_FIELDS": 4,
+    "MAX_SERIALIZED_PAYLOAD_BYTES": 65536
+  },
+  "roles_receiving_clips": [
+    "student_modeler",
+    "behavior_auditor",
+    "causal_failure_analyst",
+    "intervention_tutor",
+    "explorer",
+    "critic_skeptic"
+  ],
+  "live_clip_count": 2,
+  "sample_clip": {
+    "protocol_version": "canonical_v2",
+    "clip_id": "clip:2e587ce264a1",
+    "episode_id": "ep_no_effect_02",
+    "source": "SYNTHETIC_TEST_TRACE",
+    "start_step": 0,
+    "end_step": 12,
+    "steps": [
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 0,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unknown",
+        "resource_delta_bands": {
+          "resource": "unknown"
+        },
+        "progress_delta_band": "unknown",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 1,
+        "action_semantic_classes": [],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [
+          "no_effect"
+        ],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 2,
+        "action_semantic_classes": [],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [
+          "no_effect"
+        ],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 3,
+        "action_semantic_classes": [],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [
+          "no_effect"
+        ],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 4,
+        "action_semantic_classes": [],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [
+          "no_effect"
+        ],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 5,
+        "action_semantic_classes": [
+          "resource_class",
+          "equipment_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 6,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "worsened"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 7,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 8,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 9,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 10,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 11,
+        "action_semantic_classes": [
+          "move_class"
+        ],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "unchanged"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "none"
+      },
+      {
+        "protocol_version": "canonical_v2",
+        "step_offset": 12,
+        "action_semantic_classes": [],
+        "hostile_distance_band": "none",
+        "safety_status": "unsafe",
+        "health_delta_band": "unchanged",
+        "resource_delta_bands": {
+          "resource": "improved"
+        },
+        "progress_delta_band": "unchanged",
+        "event_semantics": [],
+        "terminal_category": "timeout"
+      }
+    ],
+    "student_checkpoint_sha256": "1b13078bf82bafb612ed6d3d022eb5ee68cd7ec01eb813387749c887674e07e4",
+    "environment_descriptor_hash": "898b8e261fc28173e61882044254dadc00e1931f3eaf94c74f2aa9c18a106256",
+    "taskparams_hash": "17aea8ce05d84dceea5eefbd3e6368858e5a558d5a54d7c2a7eed957b83685b6",
+    "generator_provenance_hash": "87e69fbca2427a4a82647c39aca53a565db707445fd318e5ed5ec416cf1bf052",
+    "rollout_runner_sha256": "256a803907306d1cb678b80e93b4e57fadc69eec1a0a3c1254d7cfd94182350d",
+    "environment_lock_sha256": "2943c740573d7b96a0cb8fa4759571945137dcf178f88cd264eac71d7700ea5e",
+    "clip_payload_sha256": "23c1ecb18e0a9a0eceb8b35eed0b33f87c2a19f56d9c73c51dc49a1cc17e1bd3",
+    "truncation_applied": false,
+    "schema_version": "bagr_ued.symbolic_clip.v1"
+  },
+  "provisional_hypotheses": [
+    {
+      "protocol_version": "canonical_v2",
+      "hypothesis_id": "provisional:out_of_taxonomy:stall_without_negative_event",
+      "provisional": true,
+      "taxonomy_status": "out_of_taxonomy",
+      "evidence_clip_ids": [
+        "clip:2e587ce264a1"
+      ],
+      "observed_pattern": "repeated action semantics with flat progress delta bands and NO negative env event — a stall pattern the detector taxonomy only covers as repeated_no_effect",
+      "confidence": 0.35,
+      "alternative_explanation": "incidental exploration noise or an adapter discretization artifact; must be ruled out by deterministic validation before any downstream use",
+      "requires_deterministic_validation": true,
+      "selector_or_batch_entry_forbidden": true
+    }
+  ],
+  "certificate_claims": {
+    "behavior_review_has_symbolic_clips": true,
+    "symbolic_behavior_clip_count": 2,
+    "raw_action_integer_exposed": false,
+    "raw_state_exposed": false,
+    "formal_trajectory_exposed": false,
+    "symbolic_clip_schema_version": "bagr_ued.symbolic_clip.v1",
+    "provisional_anomaly_hypotheses_surfaced": 1,
+    "provisional_anomaly_hypotheses_in_selector": 0
+  },
+  "checks": [
+    {
+      "check": "PER_STEP_SYMBOLIC_EVIDENCE_FOR_BOTH_EPISODES",
+      "passed": true,
+      "evidence": "clips=2, steps per clip=[13, 13]"
+    },
+    {
+      "check": "SYMBOLIC_STEP_SCHEMA_COMPLETE",
+      "passed": true,
+      "evidence": "keys: action_semantic_classes, event_semantics, health_delta_band, hostile_distance_band, progress_delta_band, protocol_version, resource_delta_bands, safety_status, step_offset, terminal_category"
+    },
+    {
+      "check": "BOUNDED_LIMITS_ENFORCED",
+      "passed": true,
+      "evidence": "MAX_CLIP_STEPS=24, MAX_CLIPS_PER_EPISODE=4, MAX_CLIPS_PER_REVIEW_WINDOW=32"
+    },
+    {
+      "check": "GUARD_PROVENANCE_HASH_VALIDATION_PASS",
+      "passed": true,
+      "evidence": "both guards + raw-exposure scan + payload hash recomputation"
+    },
+    {
+      "check": "PAYLOAD_HASH_RECORDED",
+      "passed": true,
+      "evidence": "clip_payload_sha256 present on every clip"
+    },
+    {
+      "check": "RAW_ACTION_INTEGER_REJECTED",
+      "passed": true,
+      "evidence": "findings=['RAW_ACTION_INTEGER_EXPOSED']"
+    },
+    {
+      "check": "RAW_STATE_REJECTED",
+      "passed": true,
+      "evidence": "findings=['RAW_STATE_EXPOSED']"
+    },
+    {
+      "check": "PAYLOAD_HASH_TAMPER_REJECTED",
+      "passed": true,
+      "evidence": "findings=['CLIP_PAYLOAD_HASH_MISMATCH']"
+    },
+    {
+      "check": "PROVENANCE_MISMATCH_REJECTED",
+      "passed": true,
+      "evidence": "findings=['CLIP_PROVENANCE_MISMATCH']"
+    },
+    {
+      "check": "MATCHING_PROVENANCE_ACCEPTED",
+      "passed": true,
+      "evidence": "same provenance validates clean"
+    },
+    {
+      "check": "FORMAL_FRONT_SOURCE_REJECTED",
+      "passed": true,
+      "evidence": "raised: [CLIP_SOURCE_NOT_ADMISSIBLE] clip clip:2e587ce264a1: source 'FORMAL_FRONT' is not an allowed training source (['GENERATI"
+    },
+    {
+      "check": "OVERSIZE_CLIP_REJECTED_AT_SCHEMA",
+      "passed": true,
+      "evidence": "raised: [CLIP_STEP_LIMIT_EXCEEDED] clip clip:2e587ce264a1: 325 steps > MAX_CLIP_STEPS=24"
+    },
+    {
+      "check": "CERTIFICATE_HAS_SYMBOLIC_CLIPS",
+      "passed": true,
+      "evidence": "count=2"
+    },
+    {
+      "check": "CERTIFICATE_NO_RAW_EXPOSURE",
+      "passed": true,
+      "evidence": "raw_action_integer_exposed=false, raw_state_exposed=false, formal_trajectory_exposed=false"
+    },
+    {
+      "check": "PROVISIONAL_HYPOTHESIS_SURFACED_WITH_FLAGS",
+      "passed": true,
+      "evidence": "hypothesis_id=provisional:out_of_taxonomy:stall_without_negative_event"
+    },
+    {
+      "check": "PROVISIONAL_FORBIDDEN_IN_SELECTOR",
+      "passed": true,
+      "evidence": "surfaced=1, in_selector=0"
+    }
+  ]
+}

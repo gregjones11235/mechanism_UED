@@ -1,0 +1,10 @@
+{
+  "runtime_family": "slowgru_cc3",
+  "arm": "persistent",
+  "checkpoint_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
+  "checkpoint_contract_path": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/checkpoint_contract.json",
+  "observation_shape": [8335],
+  "action_dim": 43,
+  "owner": "CC3",
+  "note": "CC3 binding contract for the common evaluator CLI attempt"
+}

@@ -1,0 +1,46 @@
+{
+  "command": "python -m pytest d052/tests/test_bagr_ued_guards.py test_bagr_ued_event_extractor.py test_bagr_ued_review_board.py test_bagr_ued_scoring.py test_bagr_ued_end_to_end.py -q",
+  "cwd": "gpu1_aggregation_siege",
+  "exit_code": 0,
+  "note": "d052/tests/test_real_bundle_reconciliation.py 的 6 个失败为 worktree 环境性既有失败（依赖 orchestration/experiments/ 真实 bundle 数据目录，worktree 中不存在），与 BA-BAGR-UED 代码无关；其余 d052 测试 367 通过。",
+  "per_file": {
+    "test_bagr_ued_end_to_end.py": {
+      "failed": 0,
+      "passed": 6
+    },
+    "test_bagr_ued_event_extractor.py": {
+      "failed": 0,
+      "passed": 6
+    },
+    "test_bagr_ued_guards.py": {
+      "failed": 0,
+      "passed": 31
+    },
+    "test_bagr_ued_review_board.py": {
+      "failed": 0,
+      "passed": 9
+    },
+    "test_bagr_ued_scoring.py": {
+      "failed": 0,
+      "passed": 9
+    }
+  },
+  "schema": "bagr_ued.test_report.v1",
+  "section_15_coverage": [
+    "EventExtractor identifies unsafe_rest_near_hostile",
+    "BehaviorAuditor marks unsafe rest",
+    "CausalAnalyst emits multiple competing causes",
+    "InterventionTutor counterfactual environment induction",
+    "Explorer alternative environment families (disjoint from Tutor)",
+    "Critic rejects direct action advice; canonical rules stay PENDING",
+    "Reconciler keeps verifiable provenance-bound hypotheses",
+    "Proposer mock Global TaskParams candidates (all legal)",
+    "Soft Copeland receives behavioral_gap",
+    "Budget 12 UED + 4 global anchors",
+    "guards fail closed (supervision key / action advice / FORMAL_FRONT)",
+    "generative-training source ALLOWED"
+  ],
+  "suite_status": "PASS",
+  "total_failed": 0,
+  "total_passed": 61
+}

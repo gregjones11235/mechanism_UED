@@ -1,0 +1,1494 @@
+{
+  "board": {
+    "bundle_id": "synthetic_unsafe_rest_window",
+    "envelopes": [
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "model_id": "deterministic-rule-synth.v1",
+        "parsed_json": {
+          "confidence": 0.8,
+          "evidence_clip_ids": [
+            "clip:2e587ce264a1",
+            "clip:b152ec48c058"
+          ],
+          "protocol_version": "canonical_v2",
+          "readiness_for_counterfactual_tests": 0.7,
+          "recurring_difficulties": [
+            "premature_terminal: severity up to 0.80, recurrence up to 7 (global scope, not Tier3-only)",
+            "repeated_no_effect: severity up to 0.70, recurrence up to 4 (global scope, not Tier3-only)",
+            "resource_neglect: severity up to 0.60, recurrence up to 6 (global scope, not Tier3-only)",
+            "unsafe_rest_near_hostile: severity up to 1.00, recurrence up to 4 (global scope, not Tier3-only)"
+          ],
+          "student_capability_summary": "Current Student shows 4 recurring behavior pattern group(s) across 2 episode(s) of generative-training evidence; patterns: premature_terminal, repeated_no_effect, resource_neglect, unsafe_rest_near_hostile."
+        },
+        "prompt_version": "bagr_ued.roles.v1.student_modeler",
+        "protocol_version": "canonical_v2",
+        "raw_response": "{\"confidence\":0.8,\"evidence_clip_ids\":[\"clip:2e587ce264a1\",\"clip:b152ec48c058\"],\"readiness_for_counterfactual_tests\":0.7,\"recurring_difficulties\":[\"premature_terminal: severity up to 0.80, recurrence up to 7 (global scope, not Tier3-only)\",\"repeated_no_effect: severity up to 0.70, recurrence up to 4 (global scope, not Tier3-only)\",\"resource_neglect: severity up to 0.60, recurrence up to 6 (global scope, not Tier3-only)\",\"unsafe_rest_near_hostile: severity up to 1.00, recurrence up to 4 (global scope, not Tier3-only)\"],\"student_capability_summary\":\"Current Student shows 4 recurring behavior pattern group(s) across 2 episode(s) of generative-training evidence; patterns: premature_terminal, repeated_no_effect, resource_neglect, unsafe_rest_near_hostile.\"}",
+        "request_hash": "535272c56135b8f8c0defcc9d420c7b490196646c8bdb5373f7ecb2d77baaccb",
+        "response_hash": "d2da9ca5707eba9e7cc12417bdf07064bea44b8a6cd31825b5d4e14b3581f559",
+        "role": "student_modeler",
+        "sequence": 0
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "model_id": "deterministic-rule-synth.v1",
+        "parsed_json": {
+          "behavior_findings": [
+            {
+              "behavior_pattern": "premature_terminal",
+              "confidence": 1.0,
+              "counter_evidence": [
+                "no progress/achievement event in terminal window"
+              ],
+              "evidence_span_ids": [
+                "clip:b152ec48c058"
+              ],
+              "finding_id": "finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44",
+              "protocol_version": "canonical_v2",
+              "recurrence": 7,
+              "severity": 0.8,
+              "supporting_fields": [
+                "terminal_risk@step5:{\"action\": \"REST\", \"hostile_band\": \"near\"}",
+                "terminal_risk@step6:{\"action\": \"SLEEP\", \"hostile_band\": \"adjacent\"}",
+                "terminal_risk@step7:{\"action\": \"MOVE_AWAY\", \"hostile_band\": \"adjacent\"}",
+                "terminal_risk@step9:{\"action\": \"REST\", \"hostile_band\": \"near\"}",
+                "terminal_risk@step10:{\"action\": \"DO_NOTHING\", \"hostile_band\": \"adjacent\"}",
+                "terminal_risk@step11:{\"action\": \"DO_NOTHING\", \"hostile_band\": \"adjacent\"}",
+                "terminal_risk@step12:{\"action\": \"DO_NOTHING\", \"hostile_band\": \"adjacent\"}"
+              ]
+            },
+            {
+              "behavior_pattern": "repeated_no_effect",
+              "confidence": 1.0,
+              "counter_evidence": [
+                "no counter-evidence: each listed action produced no observable state change"
+              ],
+              "evidence_span_ids": [
+                "clip:2e587ce264a1"
+              ],
+              "finding_id": "finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222",
+              "protocol_version": "canonical_v2",
+              "recurrence": 4,
+              "severity": 0.7,
+              "supporting_fields": [
+                "no_effect@step1:{\"action\": \"DO_NOTHING\"}",
+                "no_effect@step2:{\"action\": \"DO_NOTHING\"}",
+                "no_effect@step3:{\"action\": \"DO_NOTHING\"}",
+                "no_effect@step4:{\"action\": \"DO_NOTHING\"}"
+              ]
+            },
+            {
+              "behavior_pattern": "resource_neglect",
+              "confidence": 1.0,
+              "counter_evidence": [
+                "no resource-class action inside window"
+              ],
+              "evidence_span_ids": [
+                "clip:2e587ce264a1"
+              ],
+              "finding_id": "finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43",
+              "protocol_version": "canonical_v2",
+              "recurrence": 6,
+              "severity": 0.6,
+              "supporting_fields": [
+                "need_unmet@step6:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step7:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step8:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step9:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step10:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step11:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}"
+              ]
+            },
+            {
+              "behavior_pattern": "unsafe_rest_near_hostile",
+              "confidence": 1.0,
+              "counter_evidence": [],
+              "evidence_span_ids": [
+                "clip:b152ec48c058"
+              ],
+              "finding_id": "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b",
+              "protocol_version": "canonical_v2",
+              "recurrence": 4,
+              "severity": 1.0,
+              "supporting_fields": [
+                "rest_near_hostile@step4:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step5:{\"action\": \"REST\"}",
+                "damage_taken@step6:{\"action\": \"SLEEP\"}",
+                "chased@step7:{\"action\": \"MOVE_AWAY\"}",
+                "chased@step8:{\"action\": \"MOVE_AWAY\"}",
+                "damage_taken@step9:{\"action\": \"REST\"}",
+                "damage_taken@step11:{\"action\": \"DO_NOTHING\"}",
+                "died@step12:{\"action\": \"DO_NOTHING\"}",
+                "rest_near_hostile@step5:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step5:{\"action\": \"REST\"}",
+                "damage_taken@step6:{\"action\": \"SLEEP\"}",
+                "chased@step7:{\"action\": \"MOVE_AWAY\"}",
+                "chased@step8:{\"action\": \"MOVE_AWAY\"}",
+                "damage_taken@step9:{\"action\": \"REST\"}",
+                "damage_taken@step11:{\"action\": \"DO_NOTHING\"}",
+                "died@step12:{\"action\": \"DO_NOTHING\"}",
+                "rest_near_hostile@step6:{\"action\": \"SLEEP\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"adjacent\"}",
+                "damage_taken@step6:{\"action\": \"SLEEP\"}",
+                "chased@step7:{\"action\": \"MOVE_AWAY\"}",
+                "chased@step8:{\"action\": \"MOVE_AWAY\"}",
+                "damage_taken@step9:{\"action\": \"REST\"}",
+                "damage_taken@step11:{\"action\": \"DO_NOTHING\"}",
+                "died@step12:{\"action\": \"DO_NOTHING\"}",
+                "rest_near_hostile@step9:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step9:{\"action\": \"REST\"}",
+                "damage_taken@step11:{\"action\": \"DO_NOTHING\"}",
+                "died@step12:{\"action\": \"DO_NOTHING\"}"
+              ]
+            }
+          ],
+          "protocol_version": "canonical_v2"
+        },
+        "prompt_version": "bagr_ued.roles.v1.behavior_auditor",
+        "protocol_version": "canonical_v2",
+        "raw_response": "{\"behavior_findings\":[{\"behavior_pattern\":\"premature_terminal\",\"confidence\":1.0,\"counter_evidence\":[\"no progress/achievement event in terminal window\"],\"evidence_span_ids\":[\"clip:b152ec48c058\"],\"finding_id\":\"finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44\",\"recurrence\":7,\"severity\":0.8,\"supporting_fields\":[\"terminal_risk@step5:{\\\"action\\\": \\\"REST\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"terminal_risk@step6:{\\\"action\\\": \\\"SLEEP\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\",\"terminal_risk@step7:{\\\"action\\\": \\\"MOVE_AWAY\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\",\"terminal_risk@step9:{\\\"action\\\": \\\"REST\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"terminal_risk@step10:{\\\"action\\\": \\\"DO_NOTHING\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\",\"terminal_risk@step11:{\\\"action\\\": \\\"DO_NOTHING\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\",\"terminal_risk@step12:{\\\"action\\\": \\\"DO_NOTHING\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\"]},{\"behavior_pattern\":\"repeated_no_effect\",\"confidence\":1.0,\"counter_evidence\":[\"no counter-evidence: each listed action produced no observable state change\"],\"evidence_span_ids\":[\"clip:2e587ce264a1\"],\"finding_id\":\"finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222\",\"recurrence\":4,\"severity\":0.7,\"supporting_fields\":[\"no_effect@step1:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"no_effect@step2:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"no_effect@step3:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"no_effect@step4:{\\\"action\\\": \\\"DO_NOTHING\\\"}\"]},{\"behavior_pattern\":\"resource_neglect\",\"confidence\":1.0,\"counter_evidence\":[\"no resource-class action inside window\"],\"evidence_span_ids\":[\"clip:2e587ce264a1\"],\"finding_id\":\"finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43\",\"recurrence\":6,\"severity\":0.6,\"supporting_fields\":[\"need_unmet@step6:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step7:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step8:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step9:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step10:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step11:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\"]},{\"behavior_pattern\":\"unsafe_rest_near_hostile\",\"confidence\":1.0,\"counter_evidence\":[],\"evidence_span_ids\":[\"clip:b152ec48c058\"],\"finding_id\":\"finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b\",\"recurrence\":4,\"severity\":1.0,\"supporting_fields\":[\"rest_near_hostile@step4:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step5:{\\\"action\\\": \\\"REST\\\"}\",\"damage_taken@step6:{\\\"action\\\": \\\"SLEEP\\\"}\",\"chased@step7:{\\\"action\\\": \\\"MOVE_AWAY\\\"}\",\"chased@step8:{\\\"action\\\": \\\"MOVE_AWAY\\\"}\",\"damage_taken@step9:{\\\"action\\\": \\\"REST\\\"}\",\"damage_taken@step11:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"died@step12:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"rest_near_hostile@step5:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step5:{\\\"action\\\": \\\"REST\\\"}\",\"damage_taken@step6:{\\\"action\\\": \\\"SLEEP\\\"}\",\"chased@step7:{\\\"action\\\": \\\"MOVE_AWAY\\\"}\",\"chased@step8:{\\\"action\\\": \\\"MOVE_AWAY\\\"}\",\"damage_taken@step9:{\\\"action\\\": \\\"REST\\\"}\",\"damage_taken@step11:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"died@step12:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"rest_near_hostile@step6:{\\\"action\\\": \\\"SLEEP\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\",\"damage_taken@step6:{\\\"action\\\": \\\"SLEEP\\\"}\",\"chased@step7:{\\\"action\\\": \\\"MOVE_AWAY\\\"}\",\"chased@step8:{\\\"action\\\": \\\"MOVE_AWAY\\\"}\",\"damage_taken@step9:{\\\"action\\\": \\\"REST\\\"}\",\"damage_taken@step11:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"died@step12:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"rest_near_hostile@step9:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step9:{\\\"action\\\": \\\"REST\\\"}\",\"damage_taken@step11:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"died@step12:{\\\"action\\\": \\\"DO_NOTHING\\\"}\"]}]}",
+        "request_hash": "d5dcb0ab2856c06b37a716ecbffe90cb8bc7a7b88ec7bf71608e298f6aeeec17",
+        "response_hash": "e0047f165ce22f8cd95d62800dac92aef5417fa2213eab7e6186546dd13f27c5",
+        "role": "behavior_auditor",
+        "sequence": 1
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "model_id": "deterministic-rule-synth.v1",
+        "parsed_json": {
+          "causal_hypotheses": [
+            {
+              "alternative_explanations": [
+                "perception_or_observability",
+                "unknown"
+              ],
+              "causal_statement": "The behavior is consistent with the Student over-weighting the immediate need value relative to survival risk.",
+              "cause_category": "value_or_risk_misestimation",
+              "confidence": 0.6,
+              "contradicting_evidence": [
+                "no progress/achievement event in terminal window"
+              ],
+              "finding_id": "finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44",
+              "hypothesis_id": "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "threat_distance_grading",
+                "threat_count"
+              ],
+              "supporting_evidence": [
+                "pattern=premature_terminal",
+                "severity=0.8",
+                "recurrence=7",
+                "terminal_risk@step5:{\"action\": \"REST\", \"hostile_band\": \"near\"}",
+                "terminal_risk@step6:{\"action\": \"SLEEP\", \"hostile_band\": \"adjacent\"}"
+              ],
+              "testable_prediction": "If threat-distance grading is varied, the behavior should concentrate at the short-distance grades."
+            },
+            {
+              "alternative_explanations": [
+                "value_or_risk_misestimation",
+                "unknown"
+              ],
+              "causal_statement": "The behavior is consistent with the relevant threat/safety signal being poorly discriminable from the Student's observation.",
+              "cause_category": "perception_or_observability",
+              "confidence": 0.48,
+              "contradicting_evidence": [
+                "no progress/achievement event in terminal window"
+              ],
+              "finding_id": "finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44",
+              "hypothesis_id": "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "view_occlusion",
+                "visibility"
+              ],
+              "supporting_evidence": [
+                "pattern=premature_terminal",
+                "severity=0.8",
+                "recurrence=7",
+                "terminal_risk@step5:{\"action\": \"REST\", \"hostile_band\": \"near\"}",
+                "terminal_risk@step6:{\"action\": \"SLEEP\", \"hostile_band\": \"adjacent\"}"
+              ],
+              "testable_prediction": "If observability (occlusion/visibility) is graded while threat structure is held constant, the occurrence rate should vary monotonically with observability."
+            },
+            {
+              "alternative_explanations": [
+                "value_or_risk_misestimation",
+                "perception_or_observability"
+              ],
+              "causal_statement": "The current evidence does not narrow the cause class.",
+              "cause_category": "unknown",
+              "confidence": 0.36,
+              "contradicting_evidence": [
+                "no progress/achievement event in terminal window"
+              ],
+              "finding_id": "finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44",
+              "hypothesis_id": "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:unknown",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [],
+              "supporting_evidence": [
+                "pattern=premature_terminal",
+                "severity=0.8",
+                "recurrence=7",
+                "terminal_risk@step5:{\"action\": \"REST\", \"hostile_band\": \"near\"}",
+                "terminal_risk@step6:{\"action\": \"SLEEP\", \"hostile_band\": \"adjacent\"}"
+              ],
+              "testable_prediction": "No targeted prediction; the counterfactual design is exploratory."
+            },
+            {
+              "alternative_explanations": [
+                "implementation_or_adapter_bug",
+                "exploration_noise"
+              ],
+              "causal_statement": "The behavior is consistent with a misassociation between an action and its effect.",
+              "cause_category": "action_semantics_confusion",
+              "confidence": 0.6,
+              "contradicting_evidence": [
+                "no counter-evidence: each listed action produced no observable state change"
+              ],
+              "finding_id": "finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222",
+              "hypothesis_id": "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "safe_rest_area_availability"
+              ],
+              "supporting_evidence": [
+                "pattern=repeated_no_effect",
+                "severity=0.7",
+                "recurrence=4",
+                "no_effect@step1:{\"action\": \"DO_NOTHING\"}",
+                "no_effect@step2:{\"action\": \"DO_NOTHING\"}"
+              ],
+              "testable_prediction": "If a safe variant of the relevant action context is made available, the behavior rate should drop."
+            },
+            {
+              "alternative_explanations": [
+                "action_semantics_confusion",
+                "exploration_noise"
+              ],
+              "causal_statement": "The behavior may be an artifact of an observation/action adapter bug; this requires code inspection, not an environment intervention.",
+              "cause_category": "implementation_or_adapter_bug",
+              "confidence": 0.48,
+              "contradicting_evidence": [
+                "no counter-evidence: each listed action produced no observable state change"
+              ],
+              "finding_id": "finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222",
+              "hypothesis_id": "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:implementation_or_adapter_bug",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [],
+              "supporting_evidence": [
+                "pattern=repeated_no_effect",
+                "severity=0.7",
+                "recurrence=4",
+                "no_effect@step1:{\"action\": \"DO_NOTHING\"}",
+                "no_effect@step2:{\"action\": \"DO_NOTHING\"}"
+              ],
+              "testable_prediction": "No environment intervention applies; the prediction is that adapter code inspection reproduces the anomaly deterministically."
+            },
+            {
+              "alternative_explanations": [
+                "action_semantics_confusion",
+                "implementation_or_adapter_bug"
+              ],
+              "causal_statement": "The behavior may be incidental exploration noise rather than a systematic policy defect.",
+              "cause_category": "exploration_noise",
+              "confidence": 0.36,
+              "contradicting_evidence": [
+                "no counter-evidence: each listed action produced no observable state change"
+              ],
+              "finding_id": "finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222",
+              "hypothesis_id": "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "threat_distance_grading"
+              ],
+              "supporting_evidence": [
+                "pattern=repeated_no_effect",
+                "severity=0.7",
+                "recurrence=4",
+                "no_effect@step1:{\"action\": \"DO_NOTHING\"}",
+                "no_effect@step2:{\"action\": \"DO_NOTHING\"}"
+              ],
+              "testable_prediction": "If the same situation is replayed with different exploration seeds, the occurrence rate should fluctuate rather than persist."
+            },
+            {
+              "alternative_explanations": [
+                "memory_or_context_retention",
+                "perception_or_observability"
+              ],
+              "causal_statement": "The behavior is consistent with a failure to plan resource acquisition ahead of need.",
+              "cause_category": "resource_planning_failure",
+              "confidence": 0.6,
+              "contradicting_evidence": [
+                "no resource-class action inside window"
+              ],
+              "finding_id": "finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43",
+              "hypothesis_id": "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "resource_pressure",
+                "rest_need_pressure"
+              ],
+              "supporting_evidence": [
+                "pattern=resource_neglect",
+                "severity=0.6",
+                "recurrence=6",
+                "need_unmet@step6:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step7:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}"
+              ],
+              "testable_prediction": "If need pressure is varied while threat structure is held constant, the behavior should scale with pressure."
+            },
+            {
+              "alternative_explanations": [
+                "resource_planning_failure",
+                "perception_or_observability"
+              ],
+              "causal_statement": "The behavior is consistent with the Student failing to retain the recent threat/need context across steps.",
+              "cause_category": "memory_or_context_retention",
+              "confidence": 0.48,
+              "contradicting_evidence": [
+                "no resource-class action inside window"
+              ],
+              "finding_id": "finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43",
+              "hypothesis_id": "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "long_term_memory_requirement"
+              ],
+              "supporting_evidence": [
+                "pattern=resource_neglect",
+                "severity=0.6",
+                "recurrence=6",
+                "need_unmet@step6:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step7:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}"
+              ],
+              "testable_prediction": "If the long-term memory requirement is increased while local cues are held constant, recurrence should increase."
+            },
+            {
+              "alternative_explanations": [
+                "resource_planning_failure",
+                "memory_or_context_retention"
+              ],
+              "causal_statement": "The behavior is consistent with the relevant threat/safety signal being poorly discriminable from the Student's observation.",
+              "cause_category": "perception_or_observability",
+              "confidence": 0.36,
+              "contradicting_evidence": [
+                "no resource-class action inside window"
+              ],
+              "finding_id": "finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43",
+              "hypothesis_id": "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "view_occlusion",
+                "visibility"
+              ],
+              "supporting_evidence": [
+                "pattern=resource_neglect",
+                "severity=0.6",
+                "recurrence=6",
+                "need_unmet@step6:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}",
+                "need_unmet@step7:{\"action\": \"SCOUT\", \"resource_band\": \"critical\"}"
+              ],
+              "testable_prediction": "If observability (occlusion/visibility) is graded while threat structure is held constant, the occurrence rate should vary monotonically with observability."
+            },
+            {
+              "alternative_explanations": [
+                "perception_or_observability",
+                "memory_or_context_retention",
+                "environment_ambiguity"
+              ],
+              "causal_statement": "The behavior is consistent with the Student over-weighting the immediate need value relative to survival risk.",
+              "cause_category": "value_or_risk_misestimation",
+              "confidence": 0.6,
+              "contradicting_evidence": [
+                "no recorded counter-evidence for this category"
+              ],
+              "finding_id": "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b",
+              "hypothesis_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "threat_distance_grading",
+                "threat_count"
+              ],
+              "supporting_evidence": [
+                "pattern=unsafe_rest_near_hostile",
+                "severity=1.0",
+                "recurrence=4",
+                "rest_near_hostile@step4:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step5:{\"action\": \"REST\"}"
+              ],
+              "testable_prediction": "If threat-distance grading is varied, the behavior should concentrate at the short-distance grades."
+            },
+            {
+              "alternative_explanations": [
+                "value_or_risk_misestimation",
+                "memory_or_context_retention",
+                "environment_ambiguity"
+              ],
+              "causal_statement": "The behavior is consistent with the relevant threat/safety signal being poorly discriminable from the Student's observation.",
+              "cause_category": "perception_or_observability",
+              "confidence": 0.48,
+              "contradicting_evidence": [
+                "no recorded counter-evidence for this category"
+              ],
+              "finding_id": "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b",
+              "hypothesis_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "view_occlusion",
+                "visibility"
+              ],
+              "supporting_evidence": [
+                "pattern=unsafe_rest_near_hostile",
+                "severity=1.0",
+                "recurrence=4",
+                "rest_near_hostile@step4:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step5:{\"action\": \"REST\"}"
+              ],
+              "testable_prediction": "If observability (occlusion/visibility) is graded while threat structure is held constant, the occurrence rate should vary monotonically with observability."
+            },
+            {
+              "alternative_explanations": [
+                "value_or_risk_misestimation",
+                "perception_or_observability",
+                "environment_ambiguity"
+              ],
+              "causal_statement": "The behavior is consistent with the Student failing to retain the recent threat/need context across steps.",
+              "cause_category": "memory_or_context_retention",
+              "confidence": 0.36,
+              "contradicting_evidence": [
+                "no recorded counter-evidence for this category"
+              ],
+              "finding_id": "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b",
+              "hypothesis_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "long_term_memory_requirement"
+              ],
+              "supporting_evidence": [
+                "pattern=unsafe_rest_near_hostile",
+                "severity=1.0",
+                "recurrence=4",
+                "rest_near_hostile@step4:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step5:{\"action\": \"REST\"}"
+              ],
+              "testable_prediction": "If the long-term memory requirement is increased while local cues are held constant, recurrence should increase."
+            },
+            {
+              "alternative_explanations": [
+                "value_or_risk_misestimation",
+                "perception_or_observability",
+                "memory_or_context_retention"
+              ],
+              "causal_statement": "The behavior may be explained by the environment itself lacking a discriminable safety signal (not a Student defect).",
+              "cause_category": "environment_ambiguity",
+              "confidence": 0.24,
+              "contradicting_evidence": [
+                "no recorded counter-evidence for this category"
+              ],
+              "finding_id": "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b",
+              "hypothesis_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity",
+              "protocol_version": "canonical_v2",
+              "required_counterfactual_variables": [
+                "safe_rest_area_availability",
+                "rest_need_pressure",
+                "view_occlusion"
+              ],
+              "supporting_evidence": [
+                "pattern=unsafe_rest_near_hostile",
+                "severity=1.0",
+                "recurrence=4",
+                "rest_near_hostile@step4:{\"action\": \"REST\", \"env_confirmed_safe\": \"False\", \"hostile_band\": \"near\"}",
+                "damage_taken@step5:{\"action\": \"REST\"}"
+              ],
+              "testable_prediction": "If an explicit safety signal is added to the environment, the behavior should diminish even with an unchanged Student."
+            }
+          ],
+          "protocol_version": "canonical_v2"
+        },
+        "prompt_version": "bagr_ued.roles.v1.causal_failure_analyst",
+        "protocol_version": "canonical_v2",
+        "raw_response": "{\"causal_hypotheses\":[{\"alternative_explanations\":[\"perception_or_observability\",\"unknown\"],\"causal_statement\":\"The behavior is consistent with the Student over-weighting the immediate need value relative to survival risk.\",\"cause_category\":\"value_or_risk_misestimation\",\"confidence\":0.6,\"contradicting_evidence\":[\"no progress/achievement event in terminal window\"],\"finding_id\":\"finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44\",\"hypothesis_id\":\"hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation\",\"required_counterfactual_variables\":[\"threat_distance_grading\",\"threat_count\"],\"supporting_evidence\":[\"pattern=premature_terminal\",\"severity=0.8\",\"recurrence=7\",\"terminal_risk@step5:{\\\"action\\\": \\\"REST\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"terminal_risk@step6:{\\\"action\\\": \\\"SLEEP\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\"],\"testable_prediction\":\"If threat-distance grading is varied, the behavior should concentrate at the short-distance grades.\"},{\"alternative_explanations\":[\"value_or_risk_misestimation\",\"unknown\"],\"causal_statement\":\"The behavior is consistent with the relevant threat/safety signal being poorly discriminable from the Student's observation.\",\"cause_category\":\"perception_or_observability\",\"confidence\":0.48,\"contradicting_evidence\":[\"no progress/achievement event in terminal window\"],\"finding_id\":\"finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44\",\"hypothesis_id\":\"hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability\",\"required_counterfactual_variables\":[\"view_occlusion\",\"visibility\"],\"supporting_evidence\":[\"pattern=premature_terminal\",\"severity=0.8\",\"recurrence=7\",\"terminal_risk@step5:{\\\"action\\\": \\\"REST\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"terminal_risk@step6:{\\\"action\\\": \\\"SLEEP\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\"],\"testable_prediction\":\"If observability (occlusion/visibility) is graded while threat structure is held constant, the occurrence rate should vary monotonically with observability.\"},{\"alternative_explanations\":[\"value_or_risk_misestimation\",\"perception_or_observability\"],\"causal_statement\":\"The current evidence does not narrow the cause class.\",\"cause_category\":\"unknown\",\"confidence\":0.36,\"contradicting_evidence\":[\"no progress/achievement event in terminal window\"],\"finding_id\":\"finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44\",\"hypothesis_id\":\"hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:unknown\",\"required_counterfactual_variables\":[],\"supporting_evidence\":[\"pattern=premature_terminal\",\"severity=0.8\",\"recurrence=7\",\"terminal_risk@step5:{\\\"action\\\": \\\"REST\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"terminal_risk@step6:{\\\"action\\\": \\\"SLEEP\\\", \\\"hostile_band\\\": \\\"adjacent\\\"}\"],\"testable_prediction\":\"No targeted prediction; the counterfactual design is exploratory.\"},{\"alternative_explanations\":[\"implementation_or_adapter_bug\",\"exploration_noise\"],\"causal_statement\":\"The behavior is consistent with a misassociation between an action and its effect.\",\"cause_category\":\"action_semantics_confusion\",\"confidence\":0.6,\"contradicting_evidence\":[\"no counter-evidence: each listed action produced no observable state change\"],\"finding_id\":\"finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222\",\"hypothesis_id\":\"hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion\",\"required_counterfactual_variables\":[\"safe_rest_area_availability\"],\"supporting_evidence\":[\"pattern=repeated_no_effect\",\"severity=0.7\",\"recurrence=4\",\"no_effect@step1:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"no_effect@step2:{\\\"action\\\": \\\"DO_NOTHING\\\"}\"],\"testable_prediction\":\"If a safe variant of the relevant action context is made available, the behavior rate should drop.\"},{\"alternative_explanations\":[\"action_semantics_confusion\",\"exploration_noise\"],\"causal_statement\":\"The behavior may be an artifact of an observation/action adapter bug; this requires code inspection, not an environment intervention.\",\"cause_category\":\"implementation_or_adapter_bug\",\"confidence\":0.48,\"contradicting_evidence\":[\"no counter-evidence: each listed action produced no observable state change\"],\"finding_id\":\"finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222\",\"hypothesis_id\":\"hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:implementation_or_adapter_bug\",\"required_counterfactual_variables\":[],\"supporting_evidence\":[\"pattern=repeated_no_effect\",\"severity=0.7\",\"recurrence=4\",\"no_effect@step1:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"no_effect@step2:{\\\"action\\\": \\\"DO_NOTHING\\\"}\"],\"testable_prediction\":\"No environment intervention applies; the prediction is that adapter code inspection reproduces the anomaly deterministically.\"},{\"alternative_explanations\":[\"action_semantics_confusion\",\"implementation_or_adapter_bug\"],\"causal_statement\":\"The behavior may be incidental exploration noise rather than a systematic policy defect.\",\"cause_category\":\"exploration_noise\",\"confidence\":0.36,\"contradicting_evidence\":[\"no counter-evidence: each listed action produced no observable state change\"],\"finding_id\":\"finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222\",\"hypothesis_id\":\"hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise\",\"required_counterfactual_variables\":[\"threat_distance_grading\"],\"supporting_evidence\":[\"pattern=repeated_no_effect\",\"severity=0.7\",\"recurrence=4\",\"no_effect@step1:{\\\"action\\\": \\\"DO_NOTHING\\\"}\",\"no_effect@step2:{\\\"action\\\": \\\"DO_NOTHING\\\"}\"],\"testable_prediction\":\"If the same situation is replayed with different exploration seeds, the occurrence rate should fluctuate rather than persist.\"},{\"alternative_explanations\":[\"memory_or_context_retention\",\"perception_or_observability\"],\"causal_statement\":\"The behavior is consistent with a failure to plan resource acquisition ahead of need.\",\"cause_category\":\"resource_planning_failure\",\"confidence\":0.6,\"contradicting_evidence\":[\"no resource-class action inside window\"],\"finding_id\":\"finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43\",\"hypothesis_id\":\"hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure\",\"required_counterfactual_variables\":[\"resource_pressure\",\"rest_need_pressure\"],\"supporting_evidence\":[\"pattern=resource_neglect\",\"severity=0.6\",\"recurrence=6\",\"need_unmet@step6:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step7:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\"],\"testable_prediction\":\"If need pressure is varied while threat structure is held constant, the behavior should scale with pressure.\"},{\"alternative_explanations\":[\"resource_planning_failure\",\"perception_or_observability\"],\"causal_statement\":\"The behavior is consistent with the Student failing to retain the recent threat/need context across steps.\",\"cause_category\":\"memory_or_context_retention\",\"confidence\":0.48,\"contradicting_evidence\":[\"no resource-class action inside window\"],\"finding_id\":\"finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43\",\"hypothesis_id\":\"hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention\",\"required_counterfactual_variables\":[\"long_term_memory_requirement\"],\"supporting_evidence\":[\"pattern=resource_neglect\",\"severity=0.6\",\"recurrence=6\",\"need_unmet@step6:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step7:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\"],\"testable_prediction\":\"If the long-term memory requirement is increased while local cues are held constant, recurrence should increase.\"},{\"alternative_explanations\":[\"resource_planning_failure\",\"memory_or_context_retention\"],\"causal_statement\":\"The behavior is consistent with the relevant threat/safety signal being poorly discriminable from the Student's observation.\",\"cause_category\":\"perception_or_observability\",\"confidence\":0.36,\"contradicting_evidence\":[\"no resource-class action inside window\"],\"finding_id\":\"finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43\",\"hypothesis_id\":\"hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability\",\"required_counterfactual_variables\":[\"view_occlusion\",\"visibility\"],\"supporting_evidence\":[\"pattern=resource_neglect\",\"severity=0.6\",\"recurrence=6\",\"need_unmet@step6:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\",\"need_unmet@step7:{\\\"action\\\": \\\"SCOUT\\\", \\\"resource_band\\\": \\\"critical\\\"}\"],\"testable_prediction\":\"If observability (occlusion/visibility) is graded while threat structure is held constant, the occurrence rate should vary monotonically with observability.\"},{\"alternative_explanations\":[\"perception_or_observability\",\"memory_or_context_retention\",\"environment_ambiguity\"],\"causal_statement\":\"The behavior is consistent with the Student over-weighting the immediate need value relative to survival risk.\",\"cause_category\":\"value_or_risk_misestimation\",\"confidence\":0.6,\"contradicting_evidence\":[\"no recorded counter-evidence for this category\"],\"finding_id\":\"finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b\",\"hypothesis_id\":\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation\",\"required_counterfactual_variables\":[\"threat_distance_grading\",\"threat_count\"],\"supporting_evidence\":[\"pattern=unsafe_rest_near_hostile\",\"severity=1.0\",\"recurrence=4\",\"rest_near_hostile@step4:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step5:{\\\"action\\\": \\\"REST\\\"}\"],\"testable_prediction\":\"If threat-distance grading is varied, the behavior should concentrate at the short-distance grades.\"},{\"alternative_explanations\":[\"value_or_risk_misestimation\",\"memory_or_context_retention\",\"environment_ambiguity\"],\"causal_statement\":\"The behavior is consistent with the relevant threat/safety signal being poorly discriminable from the Student's observation.\",\"cause_category\":\"perception_or_observability\",\"confidence\":0.48,\"contradicting_evidence\":[\"no recorded counter-evidence for this category\"],\"finding_id\":\"finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b\",\"hypothesis_id\":\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability\",\"required_counterfactual_variables\":[\"view_occlusion\",\"visibility\"],\"supporting_evidence\":[\"pattern=unsafe_rest_near_hostile\",\"severity=1.0\",\"recurrence=4\",\"rest_near_hostile@step4:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step5:{\\\"action\\\": \\\"REST\\\"}\"],\"testable_prediction\":\"If observability (occlusion/visibility) is graded while threat structure is held constant, the occurrence rate should vary monotonically with observability.\"},{\"alternative_explanations\":[\"value_or_risk_misestimation\",\"perception_or_observability\",\"environment_ambiguity\"],\"causal_statement\":\"The behavior is consistent with the Student failing to retain the recent threat/need context across steps.\",\"cause_category\":\"memory_or_context_retention\",\"confidence\":0.36,\"contradicting_evidence\":[\"no recorded counter-evidence for this category\"],\"finding_id\":\"finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b\",\"hypothesis_id\":\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention\",\"required_counterfactual_variables\":[\"long_term_memory_requirement\"],\"supporting_evidence\":[\"pattern=unsafe_rest_near_hostile\",\"severity=1.0\",\"recurrence=4\",\"rest_near_hostile@step4:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step5:{\\\"action\\\": \\\"REST\\\"}\"],\"testable_prediction\":\"If the long-term memory requirement is increased while local cues are held constant, recurrence should increase.\"},{\"alternative_explanations\":[\"value_or_risk_misestimation\",\"perception_or_observability\",\"memory_or_context_retention\"],\"causal_statement\":\"The behavior may be explained by the environment itself lacking a discriminable safety signal (not a Student defect).\",\"cause_category\":\"environment_ambiguity\",\"confidence\":0.24,\"contradicting_evidence\":[\"no recorded counter-evidence for this category\"],\"finding_id\":\"finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b\",\"hypothesis_id\":\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity\",\"required_counterfactual_variables\":[\"safe_rest_area_availability\",\"rest_need_pressure\",\"view_occlusion\"],\"supporting_evidence\":[\"pattern=unsafe_rest_near_hostile\",\"severity=1.0\",\"recurrence=4\",\"rest_near_hostile@step4:{\\\"action\\\": \\\"REST\\\", \\\"env_confirmed_safe\\\": \\\"False\\\", \\\"hostile_band\\\": \\\"near\\\"}\",\"damage_taken@step5:{\\\"action\\\": \\\"REST\\\"}\"],\"testable_prediction\":\"If an explicit safety signal is added to the environment, the behavior should diminish even with an unchanged Student.\"}]}",
+        "request_hash": "ca18150f602f49573e2cf77daa3ae18e9c7ef30eea28552a2d1b4709d2f82a86",
+        "response_hash": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+        "role": "causal_failure_analyst",
+        "sequence": 2
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "model_id": "deterministic-rule-synth.v1",
+        "parsed_json": {
+          "intervention_hypotheses": [
+            {
+              "confidence": 0.54,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "long_term_memory_requirement",
+                "multi_threat_interference",
+                "resource_pressure",
+                "rest_need_pressure",
+                "threat_count",
+                "threat_distance_grading",
+                "view_occlusion",
+                "visibility"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:safe_rest_area_availability"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222'] should respond monotonically to graded axes ['safe_rest_area_availability'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:action_semantics_confusion:00",
+              "mutation_axes": [
+                "safe_rest_area_availability"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion"
+              ],
+              "ued_justification": "Discriminates cause category 'action_semantics_confusion' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            },
+            {
+              "confidence": 0.216,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "long_term_memory_requirement",
+                "multi_threat_interference",
+                "resource_pressure",
+                "threat_count",
+                "threat_distance_grading",
+                "visibility"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:rest_need_pressure",
+                "single_axis:safe_rest_area_availability",
+                "single_axis:view_occlusion",
+                "factorial:rest_need_pressurexsafe_rest_area_availability"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['rest_need_pressure', 'safe_rest_area_availability', 'view_occlusion'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:environment_ambiguity:01",
+              "mutation_axes": [
+                "rest_need_pressure",
+                "safe_rest_area_availability",
+                "view_occlusion"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity"
+              ],
+              "ued_justification": "Discriminates cause category 'environment_ambiguity' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            },
+            {
+              "confidence": 0.324,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "long_term_memory_requirement",
+                "multi_threat_interference",
+                "resource_pressure",
+                "rest_need_pressure",
+                "safe_rest_area_availability",
+                "threat_count",
+                "view_occlusion",
+                "visibility"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:threat_distance_grading"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222'] should respond monotonically to graded axes ['threat_distance_grading'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:exploration_noise:02",
+              "mutation_axes": [
+                "threat_distance_grading"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise"
+              ],
+              "ued_justification": "Discriminates cause category 'exploration_noise' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            },
+            {
+              "confidence": 0.378,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "multi_threat_interference",
+                "resource_pressure",
+                "rest_need_pressure",
+                "safe_rest_area_availability",
+                "threat_count",
+                "threat_distance_grading",
+                "view_occlusion",
+                "visibility"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:long_term_memory_requirement"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43', 'finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['long_term_memory_requirement'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:memory_or_context_retention:03",
+              "mutation_axes": [
+                "long_term_memory_requirement"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+                "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention"
+              ],
+              "ued_justification": "Discriminates cause category 'memory_or_context_retention' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            },
+            {
+              "confidence": 0.396,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "long_term_memory_requirement",
+                "multi_threat_interference",
+                "resource_pressure",
+                "rest_need_pressure",
+                "safe_rest_area_availability",
+                "threat_count",
+                "threat_distance_grading"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:view_occlusion",
+                "single_axis:visibility",
+                "factorial:view_occlusionxvisibility"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44', 'finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43', 'finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['view_occlusion', 'visibility'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:perception_or_observability:04",
+              "mutation_axes": [
+                "view_occlusion",
+                "visibility"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+                "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+                "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability"
+              ],
+              "ued_justification": "Discriminates cause category 'perception_or_observability' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            },
+            {
+              "confidence": 0.54,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "long_term_memory_requirement",
+                "multi_threat_interference",
+                "safe_rest_area_availability",
+                "threat_count",
+                "threat_distance_grading",
+                "view_occlusion",
+                "visibility"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:resource_pressure",
+                "single_axis:rest_need_pressure",
+                "factorial:resource_pressurexrest_need_pressure"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43'] should respond monotonically to graded axes ['resource_pressure', 'rest_need_pressure'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:resource_planning_failure:05",
+              "mutation_axes": [
+                "resource_pressure",
+                "rest_need_pressure"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure"
+              ],
+              "ued_justification": "Discriminates cause category 'resource_planning_failure' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            },
+            {
+              "confidence": 0.54,
+              "controlled_variables": [
+                "day_night_rest_need",
+                "global_task_conflict",
+                "long_term_memory_requirement",
+                "multi_threat_interference",
+                "resource_pressure",
+                "rest_need_pressure",
+                "safe_rest_area_availability",
+                "view_occlusion",
+                "visibility"
+              ],
+              "counterfactual_groups": [
+                "control",
+                "single_axis:threat_count",
+                "single_axis:threat_distance_grading",
+                "factorial:threat_countxthreat_distance_grading"
+              ],
+              "expected_behavior_change": "Occurrence rate of behaviors behind findings ['finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44', 'finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['threat_count', 'threat_distance_grading'], with the control group holding all other axes constant.",
+              "expected_global_effect": "Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.",
+              "intervention_id": "itv:value_or_risk_misestimation:06",
+              "mutation_axes": [
+                "threat_count",
+                "threat_distance_grading"
+              ],
+              "protocol_version": "canonical_v2",
+              "target_hypothesis_ids": [
+                "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+                "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation"
+              ],
+              "ued_justification": "Discriminates cause category 'value_or_risk_misestimation' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions."
+            }
+          ],
+          "protocol_version": "canonical_v2"
+        },
+        "prompt_version": "bagr_ued.roles.v1.intervention_tutor",
+        "protocol_version": "canonical_v2",
+        "raw_response": "{\"intervention_hypotheses\":[{\"confidence\":0.54,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"long_term_memory_requirement\",\"multi_threat_interference\",\"resource_pressure\",\"rest_need_pressure\",\"threat_count\",\"threat_distance_grading\",\"view_occlusion\",\"visibility\"],\"counterfactual_groups\":[\"control\",\"single_axis:safe_rest_area_availability\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222'] should respond monotonically to graded axes ['safe_rest_area_availability'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:action_semantics_confusion:00\",\"mutation_axes\":[\"safe_rest_area_availability\"],\"target_hypothesis_ids\":[\"hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion\"],\"ued_justification\":\"Discriminates cause category 'action_semantics_confusion' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"},{\"confidence\":0.216,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"long_term_memory_requirement\",\"multi_threat_interference\",\"resource_pressure\",\"threat_count\",\"threat_distance_grading\",\"visibility\"],\"counterfactual_groups\":[\"control\",\"single_axis:rest_need_pressure\",\"single_axis:safe_rest_area_availability\",\"single_axis:view_occlusion\",\"factorial:rest_need_pressurexsafe_rest_area_availability\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['rest_need_pressure', 'safe_rest_area_availability', 'view_occlusion'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:environment_ambiguity:01\",\"mutation_axes\":[\"rest_need_pressure\",\"safe_rest_area_availability\",\"view_occlusion\"],\"target_hypothesis_ids\":[\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity\"],\"ued_justification\":\"Discriminates cause category 'environment_ambiguity' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"},{\"confidence\":0.324,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"long_term_memory_requirement\",\"multi_threat_interference\",\"resource_pressure\",\"rest_need_pressure\",\"safe_rest_area_availability\",\"threat_count\",\"view_occlusion\",\"visibility\"],\"counterfactual_groups\":[\"control\",\"single_axis:threat_distance_grading\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222'] should respond monotonically to graded axes ['threat_distance_grading'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:exploration_noise:02\",\"mutation_axes\":[\"threat_distance_grading\"],\"target_hypothesis_ids\":[\"hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise\"],\"ued_justification\":\"Discriminates cause category 'exploration_noise' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"},{\"confidence\":0.378,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"multi_threat_interference\",\"resource_pressure\",\"rest_need_pressure\",\"safe_rest_area_availability\",\"threat_count\",\"threat_distance_grading\",\"view_occlusion\",\"visibility\"],\"counterfactual_groups\":[\"control\",\"single_axis:long_term_memory_requirement\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43', 'finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['long_term_memory_requirement'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:memory_or_context_retention:03\",\"mutation_axes\":[\"long_term_memory_requirement\"],\"target_hypothesis_ids\":[\"hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention\",\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention\"],\"ued_justification\":\"Discriminates cause category 'memory_or_context_retention' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"},{\"confidence\":0.396,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"long_term_memory_requirement\",\"multi_threat_interference\",\"resource_pressure\",\"rest_need_pressure\",\"safe_rest_area_availability\",\"threat_count\",\"threat_distance_grading\"],\"counterfactual_groups\":[\"control\",\"single_axis:view_occlusion\",\"single_axis:visibility\",\"factorial:view_occlusionxvisibility\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44', 'finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43', 'finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['view_occlusion', 'visibility'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:perception_or_observability:04\",\"mutation_axes\":[\"view_occlusion\",\"visibility\"],\"target_hypothesis_ids\":[\"hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability\",\"hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability\",\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability\"],\"ued_justification\":\"Discriminates cause category 'perception_or_observability' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"},{\"confidence\":0.54,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"long_term_memory_requirement\",\"multi_threat_interference\",\"safe_rest_area_availability\",\"threat_count\",\"threat_distance_grading\",\"view_occlusion\",\"visibility\"],\"counterfactual_groups\":[\"control\",\"single_axis:resource_pressure\",\"single_axis:rest_need_pressure\",\"factorial:resource_pressurexrest_need_pressure\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43'] should respond monotonically to graded axes ['resource_pressure', 'rest_need_pressure'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:resource_planning_failure:05\",\"mutation_axes\":[\"resource_pressure\",\"rest_need_pressure\"],\"target_hypothesis_ids\":[\"hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure\"],\"ued_justification\":\"Discriminates cause category 'resource_planning_failure' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"},{\"confidence\":0.54,\"controlled_variables\":[\"day_night_rest_need\",\"global_task_conflict\",\"long_term_memory_requirement\",\"multi_threat_interference\",\"resource_pressure\",\"rest_need_pressure\",\"safe_rest_area_availability\",\"view_occlusion\",\"visibility\"],\"counterfactual_groups\":[\"control\",\"single_axis:threat_count\",\"single_axis:threat_distance_grading\",\"factorial:threat_countxthreat_distance_grading\"],\"expected_behavior_change\":\"Occurrence rate of behaviors behind findings ['finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44', 'finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b'] should respond monotonically to graded axes ['threat_count', 'threat_distance_grading'], with the control group holding all other axes constant.\",\"expected_global_effect\":\"Measured as movement in GLOBAL regret and the behavioral gap across global scenarios — not a floor-specific metric.\",\"intervention_id\":\"itv:value_or_risk_misestimation:06\",\"mutation_axes\":[\"threat_count\",\"threat_distance_grading\"],\"target_hypothesis_ids\":[\"hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation\",\"hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation\"],\"ued_justification\":\"Discriminates cause category 'value_or_risk_misestimation' from its competing categories via a single-axis counterfactual contrast; induces environment structure, never Student actions.\"}]}",
+        "request_hash": "5d146de72e46eeb49d17ee492513cc1b6e094a07d54ae4557f5b76fcbd4115af",
+        "response_hash": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99",
+        "role": "intervention_tutor",
+        "sequence": 3
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "model_id": "deterministic-rule-synth.v1",
+        "parsed_json": {
+          "alternative_environment_proposals": [
+            {
+              "confidence": 0.5,
+              "difference_from_existing": "Differs from Tutor interventions (axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']) and from other Explorer families by its primary structure ['multi_threat_interference'].",
+              "environment_family": "multi_threat_interference_family",
+              "global_ued_value": "Extends global-regret coverage beyond the Tier3 threat axis; supports GLOBAL, not Tier3-only, curriculum pressure.",
+              "novelty_statement": "multi_threat_interference_family is not among the families implied by the Tutor's mutated axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']; it probes an orthogonal global structure.",
+              "potential_side_effects": "May raise episode difficulty variance; must be balanced by the control group in the counterfactual design.",
+              "proposal_id": "exp:multi_threat_interference_family:00",
+              "protocol_version": "canonical_v2",
+              "testable_prediction": "Combat-freeze behaviors should increase with the number of interfering threats."
+            },
+            {
+              "confidence": 0.5,
+              "difference_from_existing": "Differs from Tutor interventions (axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']) and from other Explorer families by its primary structure ['global_task_conflict'].",
+              "environment_family": "global_task_conflict_family",
+              "global_ued_value": "Extends global-regret coverage beyond the Tier3 threat axis; supports GLOBAL, not Tier3-only, curriculum pressure.",
+              "novelty_statement": "global_task_conflict_family is not among the families implied by the Tutor's mutated axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']; it probes an orthogonal global structure.",
+              "potential_side_effects": "May raise episode difficulty variance; must be balanced by the control group in the counterfactual design.",
+              "proposal_id": "exp:global_task_conflict_family:01",
+              "protocol_version": "canonical_v2",
+              "testable_prediction": "Resource-neglect and planning failures should increase with inter-objective conflict."
+            }
+          ],
+          "protocol_version": "canonical_v2"
+        },
+        "prompt_version": "bagr_ued.roles.v1.explorer",
+        "protocol_version": "canonical_v2",
+        "raw_response": "{\"alternative_environment_proposals\":[{\"confidence\":0.5,\"difference_from_existing\":\"Differs from Tutor interventions (axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']) and from other Explorer families by its primary structure ['multi_threat_interference'].\",\"environment_family\":\"multi_threat_interference_family\",\"global_ued_value\":\"Extends global-regret coverage beyond the Tier3 threat axis; supports GLOBAL, not Tier3-only, curriculum pressure.\",\"novelty_statement\":\"multi_threat_interference_family is not among the families implied by the Tutor's mutated axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']; it probes an orthogonal global structure.\",\"potential_side_effects\":\"May raise episode difficulty variance; must be balanced by the control group in the counterfactual design.\",\"proposal_id\":\"exp:multi_threat_interference_family:00\",\"testable_prediction\":\"Combat-freeze behaviors should increase with the number of interfering threats.\"},{\"confidence\":0.5,\"difference_from_existing\":\"Differs from Tutor interventions (axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']) and from other Explorer families by its primary structure ['global_task_conflict'].\",\"environment_family\":\"global_task_conflict_family\",\"global_ued_value\":\"Extends global-regret coverage beyond the Tier3 threat axis; supports GLOBAL, not Tier3-only, curriculum pressure.\",\"novelty_statement\":\"global_task_conflict_family is not among the families implied by the Tutor's mutated axes ['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']; it probes an orthogonal global structure.\",\"potential_side_effects\":\"May raise episode difficulty variance; must be balanced by the control group in the counterfactual design.\",\"proposal_id\":\"exp:global_task_conflict_family:01\",\"testable_prediction\":\"Resource-neglect and planning failures should increase with inter-objective conflict.\"}]}",
+        "request_hash": "589e51331a601c419999fd9385f4f0ffe755c7bd4f5a39d32ea62ba615f67c51",
+        "response_hash": "b4a58d5e37a2df9c755f25251e905cdaaf0db5cc0bda2ea41bcf62778dff9cf4",
+        "role": "explorer",
+        "sequence": 4
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "model_id": "deterministic-rule-synth.v1",
+        "parsed_json": {
+          "critic_penalty_by_intervention": {
+            "itv:action_semantics_confusion:00": 0.15,
+            "itv:environment_ambiguity:01": 0.15,
+            "itv:exploration_noise:02": 0.15,
+            "itv:memory_or_context_retention:03": 0.15,
+            "itv:perception_or_observability:04": 0.15,
+            "itv:resource_planning_failure:05": 0.15,
+            "itv:value_or_risk_misestimation:06": 0.15
+          },
+          "critic_reject_hypothesis_ids": [],
+          "critic_reject_intervention_ids": [],
+          "critique_items": [
+            {
+              "dimension": "evidence_sufficiency",
+              "evidence": [
+                "all 4 findings have confidence >= 0.5"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [
+                "finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44",
+                "finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222",
+                "finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43",
+                "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b"
+              ],
+              "status": "pass"
+            },
+            {
+              "dimension": "causal_over_attribution",
+              "evidence": [
+                "no hypothesis asserts strong confidence on thin support; statements are hedged with contradicting evidence"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [],
+              "status": "pass"
+            },
+            {
+              "dimension": "implementation_bug_coverage",
+              "evidence": [
+                "an implementation_or_adapter_bug hypothesis is present (requires code inspection, not environment induction)"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [
+                "action_semantics_confusion",
+                "environment_ambiguity",
+                "exploration_noise",
+                "implementation_or_adapter_bug",
+                "memory_or_context_retention",
+                "perception_or_observability",
+                "resource_planning_failure",
+                "unknown",
+                "value_or_risk_misestimation"
+              ],
+              "status": "pass"
+            },
+            {
+              "dimension": "legal_taskparams_convertibility",
+              "evidence": [
+                "all intervention axes are within the legal mutation-axis vocabulary; REAL_TASKPARAMS_ADAPTER=BLOCKED_EXTERNAL_DEPENDENCY (mock adapter only)"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [
+                "itv:action_semantics_confusion:00",
+                "itv:environment_ambiguity:01",
+                "itv:exploration_noise:02",
+                "itv:memory_or_context_retention:03",
+                "itv:perception_or_observability:04",
+                "itv:resource_planning_failure:05",
+                "itv:value_or_risk_misestimation:06"
+              ],
+              "status": "pass"
+            },
+            {
+              "dimension": "action_guidance_leakage",
+              "evidence": [
+                "TrajectorySupervisionGuard: no supervision keys and no direct action advice in any upstream role output"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [],
+              "status": "pass"
+            },
+            {
+              "dimension": "formal_info_usage",
+              "evidence": [
+                "FormalEvaluationLeakageGuard: no FORMAL_FRONT/BACK/FULL, FROZEN_BANK, or certificate-private-state provenance in the context"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [],
+              "status": "pass"
+            },
+            {
+              "dimension": "tier3_only_bias",
+              "evidence": [
+                "explorer families=['global_task_conflict_family', 'multi_threat_interference_family']; tutor axes=['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']; scope=GLOBAL (tier3_only_training=False)"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [
+                "global_task_conflict_family",
+                "multi_threat_interference_family"
+              ],
+              "status": "concern"
+            },
+            {
+              "dimension": "counterfactual_controls",
+              "evidence": [
+                "every intervention carries a 'control' group plus single-axis groups"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [],
+              "status": "pass"
+            },
+            {
+              "dimension": "falsifiability",
+              "evidence": [
+                "every non-implementation hypothesis carries a testable prediction and counterfactual variables"
+              ],
+              "protocol_version": "canonical_v2",
+              "references": [],
+              "status": "pass"
+            }
+          ],
+          "protocol_version": "canonical_v2",
+          "real_canonical_critic_reject_derivation_rule": "PENDING",
+          "real_canonical_critic_selection_policy": "PENDING",
+          "reject_derivation_evidence": {
+            "basis": [
+              "causal_over_attribution",
+              "action_guidance_leakage",
+              "counterfactual_controls",
+              "falsifiability",
+              "legal_taskparams_convertibility"
+            ],
+            "note": "This block derives REJECTIONS only. It must not be merged with selection_recommendation_evidence.",
+            "rejected_hypotheses": [],
+            "rejected_interventions": []
+          },
+          "selection_recommendation_evidence": {
+            "critic_penalty_by_intervention": {
+              "itv:action_semantics_confusion:00": 0.15,
+              "itv:environment_ambiguity:01": 0.15,
+              "itv:exploration_noise:02": 0.15,
+              "itv:memory_or_context_retention:03": 0.15,
+              "itv:perception_or_observability:04": 0.15,
+              "itv:resource_planning_failure:05": 0.15,
+              "itv:value_or_risk_misestimation:06": 0.15
+            },
+            "global_family_coverage": [
+              "global_task_conflict_family",
+              "multi_threat_interference_family"
+            ],
+            "note": "This block is a soft selection signal only. It must not be merged with reject_derivation_evidence. Consumption of this signal by a real selector awaits REAL_CANONICAL_CRITIC_SELECTION_POLICY (PENDING).",
+            "tutor_axis_coverage": [
+              "long_term_memory_requirement",
+              "resource_pressure",
+              "rest_need_pressure",
+              "safe_rest_area_availability",
+              "threat_count",
+              "threat_distance_grading",
+              "view_occlusion",
+              "visibility"
+            ]
+          }
+        },
+        "prompt_version": "bagr_ued.roles.v1.critic_skeptic",
+        "protocol_version": "canonical_v2",
+        "raw_response": "{\"critic_penalty_by_intervention\":{\"itv:action_semantics_confusion:00\":0.15,\"itv:environment_ambiguity:01\":0.15,\"itv:exploration_noise:02\":0.15,\"itv:memory_or_context_retention:03\":0.15,\"itv:perception_or_observability:04\":0.15,\"itv:resource_planning_failure:05\":0.15,\"itv:value_or_risk_misestimation:06\":0.15},\"critic_reject_hypothesis_ids\":[],\"critic_reject_intervention_ids\":[],\"critique_items\":[{\"dimension\":\"evidence_sufficiency\",\"evidence\":[\"all 4 findings have confidence >= 0.5\"],\"references\":[\"finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44\",\"finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222\",\"finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43\",\"finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b\"],\"status\":\"pass\"},{\"dimension\":\"causal_over_attribution\",\"evidence\":[\"no hypothesis asserts strong confidence on thin support; statements are hedged with contradicting evidence\"],\"references\":[],\"status\":\"pass\"},{\"dimension\":\"implementation_bug_coverage\",\"evidence\":[\"an implementation_or_adapter_bug hypothesis is present (requires code inspection, not environment induction)\"],\"references\":[\"action_semantics_confusion\",\"environment_ambiguity\",\"exploration_noise\",\"implementation_or_adapter_bug\",\"memory_or_context_retention\",\"perception_or_observability\",\"resource_planning_failure\",\"unknown\",\"value_or_risk_misestimation\"],\"status\":\"pass\"},{\"dimension\":\"legal_taskparams_convertibility\",\"evidence\":[\"all intervention axes are within the legal mutation-axis vocabulary; REAL_TASKPARAMS_ADAPTER=BLOCKED_EXTERNAL_DEPENDENCY (mock adapter only)\"],\"references\":[\"itv:action_semantics_confusion:00\",\"itv:environment_ambiguity:01\",\"itv:exploration_noise:02\",\"itv:memory_or_context_retention:03\",\"itv:perception_or_observability:04\",\"itv:resource_planning_failure:05\",\"itv:value_or_risk_misestimation:06\"],\"status\":\"pass\"},{\"dimension\":\"action_guidance_leakage\",\"evidence\":[\"TrajectorySupervisionGuard: no supervision keys and no direct action advice in any upstream role output\"],\"references\":[],\"status\":\"pass\"},{\"dimension\":\"formal_info_usage\",\"evidence\":[\"FormalEvaluationLeakageGuard: no FORMAL_FRONT/BACK/FULL, FROZEN_BANK, or certificate-private-state provenance in the context\"],\"references\":[],\"status\":\"pass\"},{\"dimension\":\"tier3_only_bias\",\"evidence\":[\"explorer families=['global_task_conflict_family', 'multi_threat_interference_family']; tutor axes=['long_term_memory_requirement', 'resource_pressure', 'rest_need_pressure', 'safe_rest_area_availability', 'threat_count', 'threat_distance_grading', 'view_occlusion', 'visibility']; scope=GLOBAL (tier3_only_training=False)\"],\"references\":[\"global_task_conflict_family\",\"multi_threat_interference_family\"],\"status\":\"concern\"},{\"dimension\":\"counterfactual_controls\",\"evidence\":[\"every intervention carries a 'control' group plus single-axis groups\"],\"references\":[],\"status\":\"pass\"},{\"dimension\":\"falsifiability\",\"evidence\":[\"every non-implementation hypothesis carries a testable prediction and counterfactual variables\"],\"references\":[],\"status\":\"pass\"}],\"real_canonical_critic_reject_derivation_rule\":\"PENDING\",\"real_canonical_critic_selection_policy\":\"PENDING\",\"reject_derivation_evidence\":{\"basis\":[\"causal_over_attribution\",\"action_guidance_leakage\",\"counterfactual_controls\",\"falsifiability\",\"legal_taskparams_convertibility\"],\"note\":\"This block derives REJECTIONS only. It must not be merged with selection_recommendation_evidence.\",\"rejected_hypotheses\":[],\"rejected_interventions\":[]},\"selection_recommendation_evidence\":{\"critic_penalty_by_intervention\":{\"itv:action_semantics_confusion:00\":0.15,\"itv:environment_ambiguity:01\":0.15,\"itv:exploration_noise:02\":0.15,\"itv:memory_or_context_retention:03\":0.15,\"itv:perception_or_observability:04\":0.15,\"itv:resource_planning_failure:05\":0.15,\"itv:value_or_risk_misestimation:06\":0.15},\"global_family_coverage\":[\"global_task_conflict_family\",\"multi_threat_interference_family\"],\"note\":\"This block is a soft selection signal only. It must not be merged with reject_derivation_evidence. Consumption of this signal by a real selector awaits REAL_CANONICAL_CRITIC_SELECTION_POLICY (PENDING).\",\"tutor_axis_coverage\":[\"long_term_memory_requirement\",\"resource_pressure\",\"rest_need_pressure\",\"safe_rest_area_availability\",\"threat_count\",\"threat_distance_grading\",\"view_occlusion\",\"visibility\"]}}",
+        "request_hash": "783995b0b3d2583e639890fa31a180a6d41be513e130e9de003f47a438858ed8",
+        "response_hash": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+        "role": "critic_skeptic",
+        "sequence": 5
+      }
+    ],
+    "leakage_guard_status": "PASS",
+    "protocol_version": "canonical_v2",
+    "real_llm_calls": 0,
+    "supervision_guard_status": "PASS"
+  },
+  "reconciliation": {
+    "accepted_behavior_findings": [
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "behavior_auditor": "e0047f165ce22f8cd95d62800dac92aef5417fa2213eab7e6186546dd13f27c5"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [
+          "2a034c257c96cfc9ac5445cb44d12b2c23fefb3ad60d865bdbcc85ffb099cada"
+        ],
+        "item_id": "finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44",
+        "item_kind": "behavior_finding",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "behavior_auditor": "bagr_ued.roles.v1.behavior_auditor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "confidence=1.0 >= 0.5 and critic evidence sufficiency pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "behavior_auditor": "e0047f165ce22f8cd95d62800dac92aef5417fa2213eab7e6186546dd13f27c5"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [
+          "86e8df771c9ff363897664d517c69f9c47b7e8ab52b22ad1731738a852921d5e"
+        ],
+        "item_id": "finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222",
+        "item_kind": "behavior_finding",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "behavior_auditor": "bagr_ued.roles.v1.behavior_auditor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "confidence=1.0 >= 0.5 and critic evidence sufficiency pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "behavior_auditor": "e0047f165ce22f8cd95d62800dac92aef5417fa2213eab7e6186546dd13f27c5"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [
+          "7603c23c8d814218966ad9e7c862a67aeaf4749ed1f91b3508c5e326fe414153"
+        ],
+        "item_id": "finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43",
+        "item_kind": "behavior_finding",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "behavior_auditor": "bagr_ued.roles.v1.behavior_auditor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "confidence=1.0 >= 0.5 and critic evidence sufficiency pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "behavior_auditor": "e0047f165ce22f8cd95d62800dac92aef5417fa2213eab7e6186546dd13f27c5"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [
+          "e743677a6c550fba9c8136832ee6455deee13fc218420c2e5f61182465855492"
+        ],
+        "item_id": "finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b",
+        "item_kind": "behavior_finding",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "behavior_auditor": "bagr_ued.roles.v1.behavior_auditor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "confidence=1.0 >= 0.5 and critic evidence sufficiency pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      }
+    ],
+    "accepted_intervention_hypotheses": [
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:action_semantics_confusion:00",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:environment_ambiguity:01",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:exploration_noise:02",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:memory_or_context_retention:03",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention', 'hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:perception_or_observability:04",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability', 'hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability', 'hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:resource_planning_failure:05",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007",
+          "intervention_tutor": "f5f0c4645566f7b97e8ae13effb8154082002157a6e76d9fc123f7fa919c6e99"
+        },
+        "decision": "accepted",
+        "evidence_span_hashes": [],
+        "item_id": "itv:value_or_risk_misestimation:06",
+        "item_kind": "intervention_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic",
+          "intervention_tutor": "bagr_ued.roles.v1.intervention_tutor"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "supported targets=['hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation', 'hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation'], control group present, critic convertibility pass",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      }
+    ],
+    "bundle_id": "synthetic_unsafe_rest_window",
+    "contested_hypotheses": [],
+    "protocol_version": "canonical_v2",
+    "reconciliation_hash": "76d87c4c4f285b2f1280fd6fdc2b9d8e070a1c7a77403e74cfe82a0b4d60c74a",
+    "reconciliation_rule_version": "bagr_ued.reconcile.v1",
+    "rejected_hypotheses": [],
+    "required_counterfactual_tests": [
+      "long_term_memory_requirement",
+      "resource_pressure",
+      "rest_need_pressure",
+      "safe_rest_area_availability",
+      "threat_count",
+      "threat_distance_grading",
+      "view_occlusion",
+      "visibility"
+    ],
+    "supported_causal_hypotheses": [
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "1419a6d269e12f55967e32a1bd4fcc5b80010f7c6393ed419055a2ee4a7ca09d"
+        ],
+        "item_id": "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:perception_or_observability",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "b50bc652c1d4f1f65c5c404229e959a426099d769460f2aeec88d68f50bfb344"
+        ],
+        "item_id": "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:unknown",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "a20cc9d1a9556eef082b4d3c71384f1dc2e2ee8c4f268692eaffc4e1ad3ba2fa"
+        ],
+        "item_id": "hyp:finding:premature_terminal_behavior:ep_unsafe_rest_01:5-12:4ad27f44:value_or_risk_misestimation",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "63487ff9d5afbf3e8c77dc7dab4fc26c5a7a5f19720c77d493e671b13d0dc253"
+        ],
+        "item_id": "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:action_semantics_confusion",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "8ff50a12f0dfd35b72c9c430ead8a55e31457d2592ac5b3f1308d81a4c7cc355"
+        ],
+        "item_id": "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:exploration_noise",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "aaf75013b001777120edac52a2cd5517a10716d3a44b1d9922c8934d70baac36"
+        ],
+        "item_id": "hyp:finding:repeated_no_effect_action:ep_no_effect_02:1-4:8a7eb222:implementation_or_adapter_bug",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "ef6ccad458fb2f2e880d0559f2f671c4d49524fb139ec8094a5a54d17f2e9937"
+        ],
+        "item_id": "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:memory_or_context_retention",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "fef39c35a26757e9ca9720bf53923b8316283c0b910c3bd129682cee26d4d503"
+        ],
+        "item_id": "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:perception_or_observability",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "21dfe83980d54e499c4e164008adbdf5b8c41b843af6d5a48a00725342239150"
+        ],
+        "item_id": "hyp:finding:resource_neglect:ep_no_effect_02:6-11:1ce7cc43:resource_planning_failure",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "43be5a6ebfb70a421832b903960cba431103e20444d49c44c0bcf73d215e72e6"
+        ],
+        "item_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:environment_ambiguity",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "af9741f5633e40a0eb1455f039ea347f3e74218bce2ef3fe9968d2de948e2072"
+        ],
+        "item_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:memory_or_context_retention",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "fcf1a7fd9664f8e6b82baaca2786f84f5e28a410b9bbb999ca9b9384685ec706"
+        ],
+        "item_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:perception_or_observability",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      },
+      {
+        "backend_id": "mock.bagr_ued.deterministic.v1",
+        "bound_role_output_hashes": {
+          "causal_failure_analyst": "e51ee0613e75a614714e30df8e64e48f6fee4c87097ce277c1a0af23464dda34",
+          "critic_skeptic": "a7e5545e37e16b7eb7e658cade5b2d4b7eb651241dc7051afc12cef5e23ac007"
+        },
+        "decision": "supported",
+        "evidence_span_hashes": [
+          "15a685e26f029c18b0768b6d713bea05c1cc67f035849c35fa825c83bfe9c0c0"
+        ],
+        "item_id": "hyp:finding:unsafe_rest_near_hostile:ep_unsafe_rest_01:4-12:91992f3b:value_or_risk_misestimation",
+        "item_kind": "causal_hypothesis",
+        "model_id": "deterministic-rule-synth.v1",
+        "prompt_versions": {
+          "causal_failure_analyst": "bagr_ued.roles.v1.causal_failure_analyst",
+          "critic_skeptic": "bagr_ued.roles.v1.critic_skeptic"
+        },
+        "protocol_version": "canonical_v2",
+        "reason": "falsifiable, critic-pass, parent finding accepted",
+        "reconciliation_rule_version": "bagr_ued.reconcile.v1"
+      }
+    ],
+    "unresolved_uncertainties": [
+      "critic_concern:tier3_only_bias"
+    ]
+  },
+  "schema": "bagr_ued.review_outputs.v1",
+  "ued_nature_assertions": {
+    "analyst_categories_within_vocabulary": true,
+    "descriptor_fields_all_mock": true,
+    "global_scope": "GLOBAL",
+    "intervention_axes_all_legal": true,
+    "method_is_environment_induction": true,
+    "no_action_guidance_to_student": true,
+    "no_expert_demonstration_used": true,
+    "no_reward_shaping_emitted": true,
+    "tier3_only_training": false
+  }
+}

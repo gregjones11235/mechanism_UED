@@ -1,0 +1,228 @@
+{
+  "arm": "LC_SLOWGRU",
+  "candidate_id": "SLOWGRU_PERSISTENT_24576",
+  "carry_mode": "PERSISTENT",
+  "check_details": [
+    {
+      "check": "checkpoint_path_exists",
+      "detail": "/home/oseasy/experiments/student_upgrade_wave1_4gpu/gpu2_lc_slowgru/train_24576/ckpt/24576/full_state.pkl (78024828 bytes)",
+      "passed": true
+    },
+    {
+      "check": "file_sha256_match_registry",
+      "detail": "recomputed=d4e7008da7d2a78a7765b32379704719165288015d031856850ad7c8a0e7495e expected=d4e7008da7d2a78a7765b32379704719165288015d031856850ad7c8a0e7495e",
+      "passed": true
+    },
+    {
+      "check": "pickle_load",
+      "detail": "keys=19",
+      "passed": true
+    },
+    {
+      "check": "pkl_key_layout",
+      "detail": "missing=[]",
+      "passed": true
+    },
+    {
+      "check": "params_sha_match_registry",
+      "detail": "recomputed=1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2 expected=1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2",
+      "passed": true
+    },
+    {
+      "check": "params_sha_match_embedded_manifest",
+      "detail": "recomputed=1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2 embedded=1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2",
+      "passed": true
+    },
+    {
+      "check": "manifest_arm",
+      "detail": "arm=LC_SLOWGRU expected=LC_SLOWGRU",
+      "passed": true
+    },
+    {
+      "check": "manifest_carry_mode",
+      "detail": "embedded=None expected=None (candidate carry_mode=PERSISTENT)",
+      "passed": true
+    },
+    {
+      "check": "manifest_rng_seed",
+      "detail": "seed=42",
+      "passed": true
+    },
+    {
+      "check": "manifest_gpu_uuid",
+      "detail": "gpu=GPU-8df11537-ab79-722d-606f-411966196c4c",
+      "passed": true
+    },
+    {
+      "check": "manifest_slow_interval",
+      "detail": "slow_interval=32",
+      "passed": true
+    },
+    {
+      "check": "manifest_slow_dim",
+      "detail": "slow_dim=256",
+      "passed": true
+    },
+    {
+      "check": "manifest_teacher_init_sha",
+      "detail": "teacher=d4e85af58b7f87d6",
+      "passed": true
+    },
+    {
+      "check": "global_step_expected",
+      "detail": "global_step=24576",
+      "passed": true
+    },
+    {
+      "check": "update_step_expected",
+      "detail": "update_step=12",
+      "passed": true
+    },
+    {
+      "check": "update_count_eq_update_step",
+      "detail": "count=12 step=12",
+      "passed": true
+    },
+    {
+      "check": "global_eq_update_x_2048",
+      "detail": "24576 vs 12*2048",
+      "passed": true
+    },
+    {
+      "check": "opt_step_expected",
+      "detail": "opt_step=24",
+      "passed": true
+    },
+    {
+      "check": "step_env_currentloop_zero_at_save_node",
+      "detail": "loop=0",
+      "passed": true
+    },
+    {
+      "check": "frozen_config_match",
+      "detail": "{}",
+      "passed": true
+    },
+    {
+      "check": "code_network_sha_embedded",
+      "detail": "network=b265210597d00321",
+      "passed": true
+    },
+    {
+      "check": "code_launcher_sha_embedded",
+      "detail": "launcher=86bb12c4b7591b0a",
+      "passed": true
+    },
+    {
+      "check": "network_src_on_disk_sha_match",
+      "detail": "disk=b265210597d00321",
+      "passed": true
+    },
+    {
+      "check": "driver_src_on_disk_sha_match",
+      "detail": "disk=86bb12c4b7591b0a expected=86bb12c4b7591b0a",
+      "passed": true
+    },
+    {
+      "check": "driver_clear_block_matches_carry_mode",
+      "detail": "has_clear=False expected=False (carry_mode=PERSISTENT)",
+      "passed": true
+    },
+    {
+      "check": "driver_longstate_carry_present",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "obs_shape_E_8335",
+      "detail": "(16, 8335)",
+      "passed": true
+    },
+    {
+      "check": "memories_shape",
+      "detail": "(16, 128, 2, 256)",
+      "passed": true
+    },
+    {
+      "check": "memories_mask_shape_bool",
+      "detail": "(16, 8, 1, 129) bool",
+      "passed": true
+    },
+    {
+      "check": "memories_mask_idx_shape",
+      "detail": "(16,)",
+      "passed": true
+    },
+    {
+      "check": "longstate_layout",
+      "detail": "[(16,), (16, 32, 256), (16, 256)]",
+      "passed": true
+    },
+    {
+      "check": "rng_shape",
+      "detail": "(2,)",
+      "passed": true
+    },
+    {
+      "check": "params_finite",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "opt_state_finite",
+      "detail": "",
+      "passed": true
+    },
+    {
+      "check": "opt_state_leaf_hash_match",
+      "detail": "recomputed=7bf9cd47b004eae9 embedded=7bf9cd47b004eae9",
+      "passed": true
+    },
+    {
+      "check": "longstate_leaf_hash_match",
+      "detail": "recomputed=96131733c1aad7a5 embedded=96131733c1aad7a5",
+      "passed": true
+    }
+  ],
+  "checks": {
+    "failed": 0,
+    "passed": 36,
+    "total": 36
+  },
+  "family": "SLOWGRU",
+  "notes": [
+    "params_sha algorithm == trainer driver _params_sha (tree_leaves order, np.ascontiguousarray(np.asarray(v)).tobytes()).",
+    "action_dim=43 not stored in pkl; verified at interface smoke via S4_dark env construction assert (driver line: action_dim==43 and obs_dim==8335)."
+  ],
+  "probe_environment": {
+    "craftax_version": "unknown",
+    "gpu_used_by_probe": "NONE",
+    "jax": "0.6.0",
+    "jax_platforms": "cpu",
+    "minicraftax_version": "unknown",
+    "platform_node": "i-00000226",
+    "python": "3.10.20"
+  },
+  "recovered_facts": {
+    "checkpoint_bytes": 78024828,
+    "driver_has_boundary_clear_block": false,
+    "driver_has_longstate_carry": true,
+    "driver_src_sha256_on_disk": "86bb12c4b7591b0a41057c131cf97848eb0c4914f00d938746fd9a6c1c1d135a",
+    "file_sha256_recomputed": "d4e7008da7d2a78a7765b32379704719165288015d031856850ad7c8a0e7495e",
+    "global_step": 24576,
+    "longstate_leaf_hash_recomputed": "96131733c1aad7a580289239f187fe0e2e7b579eac1b800dcab026354acc9dcd",
+    "network_src_sha256_on_disk": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "obs_shape": [
+      16,
+      8335
+    ],
+    "opt_state_leaf_hash_recomputed": "7bf9cd47b004eae98f790822f0a54100b59b45232ad68f65736453bc7b2db924",
+    "opt_step": 24,
+    "params_sha256_embedded_manifest": "1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2",
+    "params_sha256_recomputed": "1bd4fbfe91ab4da44c274ef20f372e04bf6a7e8367869e39e0b65f044c85e9f2",
+    "step_env_currentloop": 0,
+    "update_count": 12,
+    "update_step": 12
+  },
+  "recovery_status": "RECOVERED"
+}

@@ -1,0 +1,43 @@
+{
+  "baseline_commit": "b781f38fee2dc33ef429690962e6a98d89f27905",
+  "baseline_parent": "1efcceb (fix1 parent)",
+  "real_bundle_baseline": {
+    "commit": "b781f38 (measured in this worktree via stash/restore; identical set to 1efcceb per fix1 report)",
+    "failed": 6,
+    "passed": 23,
+    "failed_tests": [
+      "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+      "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+      "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+      "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged"
+    ],
+    "cause": "environmental: missing orchestration/experiments/d052_modeler_shadow_v1/outputs/ + agg_source_sha mismatch; fix2 touches NO orchestration/data paths"
+  },
+  "real_bundle_fix2": {
+    "failed": 6,
+    "passed": 23,
+    "failed_tests": [
+      "d052/tests/test_real_bundle_reconciliation.py::test_bundle_integrity_13_of_13",
+      "d052/tests/test_real_bundle_reconciliation.py::test_ccv2_replay_overlap_jaccard_and_anchors_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_labels",
+      "d052/tests/test_real_bundle_reconciliation.py::test_frozen_output_allowlist_matches_git",
+      "d052/tests/test_real_bundle_reconciliation.py::test_historical_replay_unchanged",
+      "d052/tests/test_real_bundle_reconciliation.py::test_r4_replay_reproduces_all_historical_anchors"
+    ]
+  },
+  "failure_sets_identical": true,
+  "bagr_ued": {
+    "fix1_baseline_passed": 143,
+    "fix2_passed": 223,
+    "delta": 80,
+    "warnings": 0
+  },
+  "full_d052_minus_real_bundle": {
+    "passed": 506,
+    "failed": 0,
+    "preexisting_warnings": "2 UserWarnings from d052/legacy/protocol_version.py (intentional legacy-forbidden tests; present at baseline; unrelated to bagr_ued)"
+  },
+  "NEW_REGRESSIONS_INTRODUCED": 0
+}
