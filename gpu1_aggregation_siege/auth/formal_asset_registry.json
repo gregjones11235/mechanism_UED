@@ -45,7 +45,7 @@
     "task_asset_manifest": {
       "kind": "task_asset_manifest",
       "path": "task_asset_manifest.json",
-      "sha256": "eff6445b5501aa46450db56e70794167e9c6d1db54edc65dfb84cd977b0e948b"
+      "sha256": "5318cc9abffef5047694a4db7ac13cf2cc0d371f90f9259114c19601a0c2e0f1"
     },
     "executable_anchor_manifest": {
       "kind": "executable_anchor_manifest",
