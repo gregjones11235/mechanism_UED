@@ -405,18 +405,21 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
     source_journal = DurablePaidCallJournal(preseed_path)
     payload = source_journal._load()
     entries = payload.get("entries", {})
-    if len(entries) not in (1, 2):
-        raise ValueError("preseed journal must contain one or two successes")
-    ordered = sorted(entries.items(), key=lambda item: str(item[1].get("role", "")))
-    if {str(entry.get("role", "")) for _, entry in ordered} != {
-            "frontier_evidence_diagnostician"} and len(ordered) == 1:
-        raise ValueError("single preseed entry must be diagnostician")
+    if len(entries) < 1 or len(entries) > 302:
+        raise ValueError("preseed journal must contain one through 302 successes")
+    ordered = sorted(entries.items(), key=lambda item: (int(item[1].get("session", 0)), str(item[1].get("role", ""))))
     roles = [str(entry.get("role", "")) for _, entry in ordered]
-    if len(ordered) == 2 and set(roles) != {
-            "frontier_evidence_diagnostician", "curriculum_search_planner"}:
-        raise ValueError("dual preseed roles must be diagnostician and planner")
-    if any(int(entry.get("session", 0)) != 1 for _, entry in ordered):
-        raise ValueError("preseed entries must be session 1")
+    if any(role not in {"frontier_evidence_diagnostician", "curriculum_search_planner"} for role in roles):
+        raise ValueError("preseed roles must be diagnostician and planner")
+    sessions_seen = sorted({int(entry.get("session", 0)) for _, entry in ordered})
+    if sessions_seen != list(range(1, max(sessions_seen) + 1)):
+        raise ValueError("preseed sessions must be contiguous")
+    for session in sessions_seen:
+        session_roles = {str(entry.get("role", "")) for _, entry in ordered if int(entry.get("session", 0)) == session}
+        if "curriculum_search_planner" in session_roles and "frontier_evidence_diagnostician" not in session_roles:
+            raise ValueError("preseed planner requires same-session diagnostician")
+        if session < max(sessions_seen) and session_roles != {"frontier_evidence_diagnostician", "curriculum_search_planner"}:
+            raise ValueError("all completed preseed sessions require both roles")
     provenance = payload.get("preseed_provenance")
     if not isinstance(provenance, Mapping):
         raise ValueError("preseed migration provenance missing")
@@ -458,7 +461,7 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
             raise ValueError("preseed provider/model mismatch")
         identity = {
             "source_commit": source_commit, "candidate": candidate_id,
-            "session": 1, "evidence_hash": old_identity.get("evidence_hash", ""),
+            "session": int(old_identity.get("session", source_entry.get("session", 0))), "evidence_hash": old_identity.get("evidence_hash", ""),
             "role": str(source_entry.get("role", "")),
             "provider": str(old_identity.get("provider", "dashscope")),
             "requested_model": str(old_identity.get("requested_model", "")),
@@ -474,10 +477,13 @@ def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
                  if entry["role"] == "frontier_evidence_diagnostician"), None)
     if diag is None:
         raise ValueError("preseed diagnostician missing")
-    os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = diag["key"]
+    diagnostic_keys_by_session = {int(entry["session"]): entry["key"] for entry in installed
+                                  if entry["role"] == "frontier_evidence_diagnostician"}
+    os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = diagnostic_keys_by_session.get(1, diag["key"])
+    os.environ["E3_PRESEEDED_DIAGNOSTIC_SESSION"] = "1"
     result = {"sha256": auth.preseed_journal_sha256, "source_keys": source_keys,
               "installed_keys": [entry["key"] for entry in installed],
-              "provenance": provenance}
+              "provenance": provenance, "diagnostic_keys_by_session": diagnostic_keys_by_session}
     if len(installed) == 1:
         result.update({"source_key": source_keys[0], "installed_key": installed[0]["key"]})
     return result
@@ -1328,6 +1334,14 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
         os.environ["E3_LLM_PROVIDER"] = "dashscope"
         os.environ["E3_LLM_JOURNAL_PATH"] = os.path.join(run_dir, "LLM_PAID_CALL_JOURNAL.json")
         os.environ["E3_CLIENT_FACTORY_IMPLEMENTATION_HASH"] = getattr(auth, "client_factory_implementation_hash", "") or ""
+        preseed_diag = ((preseed_info or {}).get("diagnostic_keys_by_session", {}).get(s)
+                        if preseed_info else None)
+        if preseed_diag:
+            os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = preseed_diag
+            os.environ["E3_PRESEEDED_DIAGNOSTIC_SESSION"] = str(s)
+        else:
+            os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
+            os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
         report = run_one_session(
             candidate_id=candidate_id, session_idx=s, run_dir=run_dir,
             prev_runstate=prev_runstate, source_commit=source_commit,

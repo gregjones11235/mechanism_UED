@@ -192,9 +192,9 @@ class DurablePaidCallJournal:
     def install_preseed_entries(self, *, entries: list[Mapping[str, Any]],
                                 identities: list[Mapping[str, Any]],
                                 provenance: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """Atomically install one or two validated session-1 role successes."""
-        if len(entries) != len(identities) or not entries or len(entries) > 2:
-            raise ValueError("preseed entries must contain one or two roles")
+        """Atomically install a validated contiguous paid-call prefix."""
+        if len(entries) != len(identities) or not entries or len(entries) > 302:
+            raise ValueError("preseed entries must contain one through 302 roles")
         source_entries = [dict(item) for item in entries]
         identities = [dict(item) for item in identities]
         roles = []
@@ -203,20 +203,33 @@ class DurablePaidCallJournal:
             if not old_key or not self._valid_entry(old_key, source_entry):
                 raise ValueError("preseed entry invalid")
             role = str(source_entry.get("role", ""))
-            if role not in ROLE_COMPLETION_CAPS or role in roles:
+            role_session = (role, int(identity.get("session", 0)))
+            if role not in ROLE_COMPLETION_CAPS or role_session in roles:
                 raise ValueError("preseed roles must be unique diagnostician/planner")
-            roles.append(role)
+            roles.append(role_session)
             required = ("source_commit", "candidate", "session", "evidence_hash",
                         "role", "provider", "requested_model",
                         "client_implementation_hash")
             if any(k not in identity for k in required):
                 raise ValueError("preseed identity incomplete")
-            if identity["role"] != role or identity["session"] != 1:
+            if identity["role"] != role or not isinstance(identity["session"], int) or identity["session"] < 1:
                 raise ValueError("preseed role/session mismatch")
         if not isinstance(provenance, Mapping) or not provenance:
             raise ValueError("preseed migration provenance missing")
-        if "frontier_evidence_diagnostician" not in roles:
+        if not any(role == "frontier_evidence_diagnostician" for role, _ in roles):
             raise ValueError("preseed must contain diagnostician success")
+        by_session = {}
+        for entry, identity in zip(source_entries, identities):
+            session = int(identity["session"])
+            by_session.setdefault(session, set()).add(str(entry.get("role", "")))
+        max_session = max(by_session)
+        if set(by_session) != set(range(1, max_session + 1)):
+            raise ValueError("preseed sessions must be contiguous")
+        for session, session_roles in by_session.items():
+            if "curriculum_search_planner" in session_roles and "frontier_evidence_diagnostician" not in session_roles:
+                raise ValueError("preseed planner requires same-session diagnostician")
+            if session < max_session and session_roles != {"frontier_evidence_diagnostician", "curriculum_search_planner"}:
+                raise ValueError("all completed preseed sessions require both roles")
         with self._file_lock():
             payload = self._load()
             if payload.get("entries"):

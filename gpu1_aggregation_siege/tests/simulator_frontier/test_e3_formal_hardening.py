@@ -130,6 +130,33 @@ def test_journal_role_caps_and_preseed_rekey(tmp_path):
             validated_output={}, response_content="x")
 
 
+def test_journal_contiguous_dual_prefix_rekeys(tmp_path):
+    J = _journal_cls(); source = J(str(tmp_path / "prefix.json"))
+    entries = []
+    for session, role in ((1, "frontier_evidence_diagnostician"),
+                          (1, "curriculum_search_planner"),
+                          (2, "frontier_evidence_diagnostician")):
+        ident = dict(source_commit="old", candidate="b", session=session,
+                     evidence_hash=f"h-{session}-{role}", role=role,
+                     provider="p", requested_model="m", client_implementation_hash="old-client")
+        key = source.composite_key(**ident)
+        cap = 1024 if role == "frontier_evidence_diagnostician" else 4096
+        source.record_success(key=key, identity=ident, returned_model="m",
+            usage={"prompt_tokens": 1, "completion_tokens": cap, "total_tokens": cap + 1},
+            validated_output={"session": session, "role": role}, response_content="{}")
+        entries.append((key, source._load()["entries"][key], ident))
+    target = J(str(tmp_path / "target-prefix.json"))
+    identities = [dict(i, source_commit="new", client_implementation_hash="new-client")
+                  for _, _, i in entries]
+    installed = target.install_preseed_entries(
+        entries=[e for _, e, _ in entries], identities=identities,
+        provenance={"source_run": "old", "source_keys": [k for k, _, _ in entries]})
+    assert [e["session"] for e in installed] == [1, 1, 2]
+    assert {e["role"] for e in installed if e["session"] == 1} == {
+        "frontier_evidence_diagnostician", "curriculum_search_planner"}
+    assert installed[-1]["role"] == "frontier_evidence_diagnostician"
+
+
 def test_runner_preseed_install_rekeys_and_tamper_blocks(tmp_path, monkeypatch):
     import run_e3_formal_longrun as runner
     J = _journal_cls(); source_path = tmp_path / "preseed.json"
@@ -390,6 +417,7 @@ def test_wrapper_session1_preseed_reused_clears_key(monkeypatch):
     monkeypatch.setitem(sys.modules, "dicode.simulator_frontier.invocation_gate", invocation_gate)
     monkeypatch.setenv("E3_SESSION_IDX", "1")
     monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "diag-key")
+    monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_SESSION", "1")
     clients.clear_audit_events = lambda: None
     clients.drain_audit_events = lambda: [
         {"role": "frontier_evidence_diagnostician", "reused": True, "paid_new": False},
@@ -419,6 +447,7 @@ def test_wrapper_session1_nonreused_preserves_key(monkeypatch):
     monkeypatch.setitem(sys.modules, "dicode.simulator_frontier.invocation_gate", invocation_gate)
     monkeypatch.setenv("E3_SESSION_IDX", "1")
     monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "diag-key")
+    monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_SESSION", "1")
     clients.clear_audit_events = lambda: None
     clients.drain_audit_events = lambda: [
         {"role": "frontier_evidence_diagnostician", "reused": False, "paid_new": True},
@@ -479,6 +508,7 @@ def test_role_specific_transport_caps_and_preseed_miss_blocks(tmp_path, monkeypa
     assert "required_current_state_id" in planner_user
     assert all(slot in planner_user for slot in ("D00", "D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10", "D11"))
     assert '"s"' in planner_user
+    assert '"taskparam_lower_bounds"' in planner_user and '"growing_plants_age": 2' in planner_user
     assert "exact required_current_state_id" in planner_system
     monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "missing-preseed.json"))
     monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "missing-key")

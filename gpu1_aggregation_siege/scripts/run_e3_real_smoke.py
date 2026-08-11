@@ -367,7 +367,9 @@ def load_controller_executable_anchor_manifest(path: str | None = None) -> dict:
 
 def run_two_real_llm_roles(runtime: Any, evidence: dict) -> dict:
     session_idx = int(os.environ.get("E3_SESSION_IDX", "0") or 0)
-    if session_idx > 1 and os.environ.get("E3_PRESEEDED_DIAGNOSTIC_KEY"):
+    preseed_key = os.environ.get("E3_PRESEEDED_DIAGNOSTIC_KEY", "")
+    preseed_session = int(os.environ.get("E3_PRESEEDED_DIAGNOSTIC_SESSION", "0") or 0)
+    if preseed_key and (preseed_session != session_idx or preseed_session <= 0):
         raise RuntimeError("PRESEEDED_SESSION_KEY_STALE")
     from dicode.simulator_frontier.invocation_gate import (
         decide_invocation, InvocationReason, evidence_hash_of)
@@ -383,12 +385,13 @@ def run_two_real_llm_roles(runtime: Any, evidence: dict) -> dict:
     if len(events) != 2 or {e.get("role") for e in events} != set(result["role_order"]):
         raise RuntimeError("E3_LLM_AUDIT_EVENT_COUNT_INVALID")
     result["audit_events"] = events
-    if session_idx == 1 and os.environ.get("E3_PRESEEDED_DIAGNOSTIC_KEY"):
+    if preseed_key:
         diag_events = [e for e in events
                        if e.get("role") == "frontier_evidence_diagnostician"]
         if len(diag_events) != 1 or not diag_events[0].get("reused"):
             raise RuntimeError("PRESEEDED_DIAGNOSTIC_NOT_REUSED")
         os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_KEY", None)
+        os.environ.pop("E3_PRESEEDED_DIAGNOSTIC_SESSION", None)
     return result
 
 

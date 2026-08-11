@@ -353,6 +353,7 @@ class _PlannerClient:
         diagnosis = validate_diagnostician_output(
             summary, evidence_hash=evidence_hash,
             expected_state_id=self._state_id)
+        from .production_task_materializer import TASKPARAM_FIELDS, LOWER_BOUNDS, resolve_taskparams
         system = (
             "You are the Curriculum & Search Planner.  Given the aggregate "
             "frontier evidence and the diagnostician summary, propose a "
@@ -367,7 +368,8 @@ class _PlannerClient:
             'growing_plants_age; each value is a scalar or [lo, hi]; the '
             'integer fields melee_trigger_distance, '
             'monsters_killed_to_clear_level, and growing_plants_age must use '
-            'JSON integer scalars/endpoints), '
+            'JSON integer scalars/endpoints), and each resolved midpoint must '
+            'be at least its canonical taskparam_lower_bounds value, '
             '"start_distribution" (object with exactly D00..D11 slots; each '
             'slot is non-empty, finite positive weights and contains the exact '
             'required_current_state_id supplied below; every D00..D11 key is mandatory), '
@@ -379,6 +381,7 @@ class _PlannerClient:
             '"reason" (short string); reply with no other keys.')
         user = json.dumps({
             "required_current_state_id": self._state_id,
+            "taskparam_lower_bounds": dict(LOWER_BOUNDS),
             "start_distribution_template": {
                 "D00": {self._state_id: 1.0}, "D01": {self._state_id: 1.0},
                 "D02": {self._state_id: 1.0}, "D03": {self._state_id: 1.0},
@@ -403,7 +406,6 @@ class _PlannerClient:
         if set(raw) != planner_keys:
             raise ValueError("planner output keys mismatch")
         taskparam = raw.get("taskparam_ranges")
-        from .production_task_materializer import TASKPARAM_FIELDS, resolve_taskparams
         if not isinstance(taskparam, Mapping) or set(taskparam) != set(TASKPARAM_FIELDS):
             raise ValueError("planner taskparam_ranges must contain exactly all 12 TaskParams fields")
         resolve_taskparams(dict(taskparam), distribution_id="planner",
