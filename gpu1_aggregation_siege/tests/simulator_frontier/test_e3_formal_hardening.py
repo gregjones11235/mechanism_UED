@@ -1,10 +1,12 @@
 import importlib.util
 import json
 import hashlib
+import os
 import pickle
 import subprocess
 import sys
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -361,6 +363,72 @@ def test_resume_helper_counter_formula():
 def test_training_metrics_lp_nan_sentinel(metrics, ok):
     import run_e3_formal_longrun as r
     assert r._training_metrics_finite(metrics) is ok
+
+
+def test_preseed_session_key_stale_fails_before_transport(monkeypatch):
+    import run_e3_real_smoke as smoke
+    monkeypatch.setenv("E3_SESSION_IDX", "2")
+    monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "stale")
+    with pytest.raises(RuntimeError, match="PRESEEDED_SESSION_KEY_STALE"):
+        smoke.run_two_real_llm_roles(object(), {"feasibility": {"state_id": "s"}})
+
+
+def test_wrapper_session1_preseed_reused_clears_key(monkeypatch):
+    smoke_path = Path(__file__).resolve().parents[2] / "scripts" / "run_e3_real_smoke.py"
+    spec = importlib.util.spec_from_file_location("e3_smoke_wrapper_test", smoke_path)
+    smoke = importlib.util.module_from_spec(spec); spec.loader.exec_module(smoke)
+    clients = types.ModuleType("_e3_real_llm_clients")
+    llm_contracts = types.ModuleType("llm_contracts")
+    invocation_gate = types.ModuleType("invocation_gate")
+    invocation_gate.InvocationReason = types.SimpleNamespace(REVISION_REQUIRED="REVISION_REQUIRED")
+    invocation_gate.decide_invocation = lambda *a, **k: object()
+    invocation_gate.evidence_hash_of = lambda value: "evidence"
+    pkg = types.ModuleType("dicode.simulator_frontier")
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier", pkg)
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier._e3_real_llm_clients", clients)
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier.llm_contracts", llm_contracts)
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier.invocation_gate", invocation_gate)
+    monkeypatch.setenv("E3_SESSION_IDX", "1")
+    monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "diag-key")
+    clients.clear_audit_events = lambda: None
+    clients.drain_audit_events = lambda: [
+        {"role": "frontier_evidence_diagnostician", "reused": True, "paid_new": False},
+        {"role": "curriculum_search_planner", "reused": True, "paid_new": False},
+    ]
+    llm_contracts.run_two_llm_production = lambda *a, **k: {"role_order": [
+        "frontier_evidence_diagnostician", "curriculum_search_planner"]}
+    result = smoke.run_two_real_llm_roles(object(), {"feasibility": {"state_id": "s"}})
+    assert len(result["audit_events"]) == 2
+    assert "E3_PRESEEDED_DIAGNOSTIC_KEY" not in os.environ
+
+
+def test_wrapper_session1_nonreused_preserves_key(monkeypatch):
+    smoke_path = Path(__file__).resolve().parents[2] / "scripts" / "run_e3_real_smoke.py"
+    spec = importlib.util.spec_from_file_location("e3_smoke_wrapper_test_bad", smoke_path)
+    smoke = importlib.util.module_from_spec(spec); spec.loader.exec_module(smoke)
+    clients = types.ModuleType("_e3_real_llm_clients")
+    llm_contracts = types.ModuleType("llm_contracts")
+    invocation_gate = types.ModuleType("invocation_gate")
+    invocation_gate.InvocationReason = types.SimpleNamespace(REVISION_REQUIRED="REVISION_REQUIRED")
+    invocation_gate.decide_invocation = lambda *a, **k: object()
+    invocation_gate.evidence_hash_of = lambda value: "evidence"
+    pkg = types.ModuleType("dicode.simulator_frontier")
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier", pkg)
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier._e3_real_llm_clients", clients)
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier.llm_contracts", llm_contracts)
+    monkeypatch.setitem(sys.modules, "dicode.simulator_frontier.invocation_gate", invocation_gate)
+    monkeypatch.setenv("E3_SESSION_IDX", "1")
+    monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "diag-key")
+    clients.clear_audit_events = lambda: None
+    clients.drain_audit_events = lambda: [
+        {"role": "frontier_evidence_diagnostician", "reused": False, "paid_new": True},
+        {"role": "curriculum_search_planner", "reused": True, "paid_new": False},
+    ]
+    llm_contracts.run_two_llm_production = lambda *a, **k: {"role_order": [
+        "frontier_evidence_diagnostician", "curriculum_search_planner"]}
+    with pytest.raises(RuntimeError, match="PRESEEDED_DIAGNOSTIC_NOT_REUSED"):
+        smoke.run_two_real_llm_roles(object(), {"feasibility": {"state_id": "s"}})
+    assert os.environ.get("E3_PRESEEDED_DIAGNOSTIC_KEY") == "diag-key"
 
 
 def test_two_role_client_journal_reuse(tmp_path, monkeypatch):
