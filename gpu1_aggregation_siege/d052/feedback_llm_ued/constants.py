@@ -225,7 +225,12 @@ BACKEND_KIND_REPLAY = "replay"
 BACKEND_KIND_REAL = "real"
 BACKEND_KINDS = frozenset({BACKEND_KIND_MOCK, BACKEND_KIND_REPLAY,
                            BACKEND_KIND_REAL})
-ROLE_PROMPT_VERSION = "feedback_llm_ued.roles.v1"
+#: v2 — the Critic and InterventionTutor prompts now state the sanctioned
+#: escalation criteria explicitly (REQUEST_CONTROL only for an honesty
+#: violation or HIGH risk from thin evidence; cold-start families get
+#: exploration MUTATE, never REQUEST_CONTROL), so a REAL LLM board applies
+#: the documented policy instead of inventing its own cold-start escalation.
+ROLE_PROMPT_VERSION = "feedback_llm_ued.roles.v2"
 RECONCILE_RULE_VERSION = "feedback_llm_ued.reconcile.v1"
 
 # ---------------------------------------------------------------------------
@@ -436,9 +441,11 @@ GLOBAL_CANONICAL_ANCHOR_IDS = (
 # ---------------------------------------------------------------------------
 STRONG_STUDENT_CANDIDATE_ID = "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
 RESET128_STUDENT_CANDIDATE_ID = "RESET128_RMT16_ORIGINAL_VTRACE_98304"
+SLOWGRU_STUDENT_CANDIDATE_ID = "SLOWGRU_PERSISTENT_CANONICAL_98304"
 ALLOWED_STUDENT_CANDIDATE_IDS = frozenset({
     STRONG_STUDENT_CANDIDATE_ID,
     RESET128_STUDENT_CANDIDATE_ID,
+    SLOWGRU_STUDENT_CANDIDATE_ID,
 })
 
 #: the legal profile -> (memory_mode, carry_mode) mapping
@@ -451,6 +458,8 @@ STUDENT_PROFILE_MEMORY_MAP = {
         STUDENT_MEMORY_MODE_PERSISTENT, STUDENT_CARRY_MODE_PERSISTENT),
     RESET128_STUDENT_CANDIDATE_ID: (
         STUDENT_MEMORY_MODE_RESET128, STUDENT_CARRY_MODE_RESET128),
+    SLOWGRU_STUDENT_CANDIDATE_ID: (
+        STUDENT_MEMORY_MODE_PERSISTENT, STUDENT_CARRY_MODE_PERSISTENT),
 }
 
 #: read-only-mount vs training-readiness status codes (P0-16, section 6)

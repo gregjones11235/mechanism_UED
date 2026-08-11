@@ -150,10 +150,11 @@ def resolve_student_binding(
             f"E2_STUDENT_PROFILE_MISMATCH: contract candidate_id="
             f"{candidate_id!r} != director-selected "
             f"{director_selected_candidate_id!r}")
-    if str(getattr(contract, "architecture_family", "")) != "RMT16":
+    arch = str(getattr(contract, "architecture_family", ""))
+    if arch not in ("RMT16", "SLOWGRU"):
         raise StudentBindingBlocked(
             f"E2_STUDENT_PROFILE_MISMATCH: architecture_family must be "
-            "RMT16, got "
+            "RMT16 or SLOWGRU, got "
             f"{getattr(contract, 'architecture_family', None)!r}")
     param_hash = _require_sha256(
         getattr(contract, "parameter_tree_hash", ""),
@@ -187,7 +188,7 @@ def resolve_student_binding(
         "E2_STUDENT_ADAPTER_IDENTITY_MISMATCH", "adapter_identity_hash")
     return StudentBindingIdentity(
         candidate_id=candidate_id,
-        architecture_family="RMT16",
+        architecture_family=arch,
         memory_family=str(getattr(contract, "memory_family", "UNKNOWN")),
         carry_mode=carry_mode,
         parameter_tree_hash=param_hash,

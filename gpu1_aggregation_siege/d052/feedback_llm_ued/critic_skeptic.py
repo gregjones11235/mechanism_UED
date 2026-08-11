@@ -62,6 +62,13 @@ the comparator, and wide confidence intervals. List objections, set the
 global risk (LOW / MEDIUM / HIGH), and say whether the board's conclusions
 should be endorsed or escalated to human control. Trust nothing the other
 roles claim — recompute from the evidence.
+Escalation criteria (the controller enforces these exactly): set
+request_control=true ONLY when (a) a feedback record was never graded by
+the comparator (an honesty violation), or (b) global risk is HIGH AND the
+pooled Student success-rate CI half-width is >= 0.5 (HIGH risk computed
+from thin evidence). A cold-start window with no feedback records and no
+hypotheses is NOT an escalation trigger: set global_risk=LOW,
+endorsed=true and request_control=false.
 Prompt version: {{prompt_version}}
 {CONTEXT_OPEN}
 {{context_json}}

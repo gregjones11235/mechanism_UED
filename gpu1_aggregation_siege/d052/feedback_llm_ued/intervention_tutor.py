@@ -58,6 +58,12 @@ RETAIN / MUTATE / RETIRE / REQUEST_CONTROL. Every feedback-driven proposal
 must cite the feedback ids and hypothesis ids it is based on; uncited
 proposals may only be exploration. Environment-family level only: no
 action / reward / policy knobs.
+Cold-start rule (the controller enforces it): a family with NO hypothesis
+and NO feedback evidence receives its first controlled measurement as an
+EXPLORATION MUTATE (is_exploration=true) — NEVER REQUEST_CONTROL.
+REQUEST_CONTROL is reserved for a family whose CITED evidence genuinely
+escalated (cite the triggering feedback/hypothesis ids). A family with no
+evidence at all must not propose REQUEST_CONTROL.
 Prompt version: {{prompt_version}}
 {CONTEXT_OPEN}
 {{context_json}}

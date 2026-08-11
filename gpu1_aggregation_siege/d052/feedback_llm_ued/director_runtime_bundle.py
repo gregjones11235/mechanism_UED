@@ -119,10 +119,10 @@ class StudentInitContractData(CanonicalModel):
                 raise ValueError(
                     "STUDENT_CONTRACT_HASH_NOT_SHA256: "
                     f"{field_name}={value!r}")
-        if self.architecture_family != "RMT16":
+        if self.architecture_family not in ("RMT16", "SLOWGRU"):
             raise ValueError(
                 f"E2_STUDENT_PROFILE_MISMATCH: architecture_family must be "
-                f"RMT16, got {self.architecture_family!r}")
+                f"RMT16 or SLOWGRU, got {self.architecture_family!r}")
         expected_mem, expected_carry = C.STUDENT_PROFILE_MEMORY_MAP.get(
             self.candidate_id, (None, None))
         if self.memory_mode != expected_mem or \
@@ -249,7 +249,7 @@ REQUIRED_DIRECTOR_OBJECTS = (
     "student_init_contract", "student_identity", "student_adapter",
     "reference_identity", "reference_adapter", "candidate_probe_runner",
     "shared_anchor_manifest", "canonical_dicode_one_update_runtime",
-    "canonical_dicode_runstate_checkpoint", "authorized_six_role_llm_runtime",
+    "canonical_dicode_run_state_checkpoint", "authorized_six_role_llm_runtime",
     "transport_closure", "auxiliary_compute_ledger",
 )
 
@@ -729,7 +729,7 @@ def resolve_director_runtime_objects(
         anchor_manifest=resolved["shared_anchor_manifest"],
         training_runtime=resolved["canonical_dicode_one_update_runtime"],
         runstate_checkpoint=resolved[
-            "canonical_dicode_runstate_checkpoint"],
+            "canonical_dicode_run_state_checkpoint"],
         llm_runtime=resolved["authorized_six_role_llm_runtime"],
         transport_closure=resolved["transport_closure"],
         compute_ledger=resolved["auxiliary_compute_ledger"],
@@ -748,20 +748,22 @@ def mount_persistent_student(*, resolved: ResolvedDirectorRuntime,
     fail-closed ladder."""
     contract = resolved.student_init_contract
     adapter = resolved.student_adapter
-    if selected_candidate_id != C.STRONG_STUDENT_CANDIDATE_ID:
+    if selected_candidate_id not in C.ALLOWED_STUDENT_CANDIDATE_IDS:
         raise StudentBindingBlocked(
             f"E2_STUDENT_CLI_BUNDLE_MISMATCH: the object-level check runs "
             f"the Persistent Student only; selected="
             f"{selected_candidate_id!r}")
-    if getattr(contract, "candidate_id", None) != \
-            C.STRONG_STUDENT_CANDIDATE_ID:
+    contract_candidate = getattr(contract, "candidate_id", None)
+    if contract_candidate != selected_candidate_id:
         raise StudentBindingBlocked(
             "E2_STUDENT_PROFILE_MISMATCH: the resolved StudentInitContract "
-            f"candidate_id={getattr(contract, 'candidate_id', None)!r} is "
-            f"not {C.STRONG_STUDENT_CANDIDATE_ID!r}")
-    if getattr(contract, "architecture_family", "") != "RMT16":
+            f"candidate_id={contract_candidate!r} is "
+            f"not {selected_candidate_id!r}")
+    arch = getattr(contract, "architecture_family", "")
+    if arch not in ("RMT16", "SLOWGRU"):
         raise StudentBindingBlocked(
-            "E2_STUDENT_PROFILE_MISMATCH: architecture_family must be RMT16")
+            "E2_STUDENT_PROFILE_MISMATCH: architecture_family must be "
+            "RMT16 or SLOWGRU")
     if getattr(contract, "memory_mode", "") != \
             C.STUDENT_MEMORY_MODE_PERSISTENT:
         raise StudentBindingBlocked(
