@@ -35,7 +35,7 @@
     "runner_formal_longrun": {
       "kind": "runner",
       "path": "../scripts/run_e3_formal_longrun.py",
-      "sha256": "b9b4eebaa3547437804cffcbdc1f950f794cbfdff459e1cbcb467e30eb2808a7"
+      "sha256": "0177cf091787d4243ff0b59aedbb790566e5377fa4e420455b0701cf0cda3553"
     },
     "runner_verify": {
       "kind": "runner",
