@@ -121,13 +121,21 @@ def dispatch_evolution_worker(
 
     print("  Selecting tasks and dispatching evolution job...")
 
-    # Select tasks for evolution
+    # Select tasks for evolution (C11: teacher duck hook; teachers
+    # WITHOUT select_context_tasks — the legacy GenManager — keep the
+    # original select_tasks_for_evolution path verbatim). An E1
+    # teacher answers [] while no admissible context tasks exist
+    # (honest this round: no real probes), which dispatches nothing.
     num_to_evolve = (
         config.dicode_manager.num_generation_tasks + config.dicode_manager.additional_num_parents
     )
-    tasks_to_evolve = select_tasks_for_evolution(
-        config, gen_manager.archive, gen_manager.session_idx - 1, num_to_evolve
-    )
+    context_hook = getattr(gen_manager, "select_context_tasks", None)
+    if context_hook is not None:
+        tasks_to_evolve = context_hook(config, num_to_evolve)
+    else:
+        tasks_to_evolve = select_tasks_for_evolution(
+            config, gen_manager.archive, gen_manager.session_idx - 1, num_to_evolve
+        )
 
     if not tasks_to_evolve:
         print("  No eligible tasks to evolve.")

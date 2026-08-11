@@ -1,0 +1,9 @@
+{
+  "git_diff_check_errors": 0,
+  "py_compile_errors": 0,
+  "pytest_errors": 0,
+  "pytest_failed": 0,
+  "pytest_passed": 1306,
+  "pytest_skipped": 1,
+  "skipped_test": "test_distribution_byte_identity.py (jax.numpy import)"
+}

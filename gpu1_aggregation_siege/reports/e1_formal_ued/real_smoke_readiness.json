@@ -1,0 +1,82 @@
+{
+  "blockers": [
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_ANCHOR_MANIFEST",
+      "detail": "shared contract 'AnchorManifest' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_CANDIDATE_PROBE_RESULT",
+      "detail": "shared contract 'CandidateProbeResult' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_FORMAL_ASSET_REGISTRY",
+      "detail": "shared contract 'FormalAssetRegistry' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_FULL_STATE_CHECKPOINT",
+      "detail": "shared contract 'FullStateCheckpoint' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_REFERENCE_ADAPTER",
+      "detail": "shared contract 'ReferenceAdapter' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_REFERENCE_IDENTITY",
+      "detail": "shared contract 'ReferenceIdentity' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_STUDENT_ADAPTER",
+      "detail": "shared contract 'StudentAdapter' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "BLOCKED_WAITING_SHARED_RUNTIME_STUDENT_IDENTITY",
+      "detail": "shared contract 'StudentIdentity' is unbound: shared runtime module 'dicode.shared_runtime' is not importable in this worktree; waiting for the CC4 shared runtime (E1 never constructs a substitute)",
+      "stage": "shared_runtime_resolution"
+    },
+    {
+      "code": "ENVCODER_BACKEND_BLOCKED",
+      "detail": "[ENVCODER_BACKEND_BLOCKED] the real EnvCoder backend is unauthorized this round (craftax runtime absent); it never degrades silently",
+      "stage": "real_envcoder_backend"
+    },
+    {
+      "code": "REFERENCE_CONTRACT_UNFROZEN",
+      "detail": "[REFERENCE_CONTRACT_UNFROZEN] e1_production.reference_contract: reference_contract is not frozen (frozen=False); the evaluation seam stays blocked; E1 never guesses a Reference",
+      "stage": "reference_contract_frozen"
+    },
+    {
+      "code": "BLOCKED_SHARED_ANCHOR_MANIFEST",
+      "detail": "shared anchor manifest status is 'DRAFT_UNFROZEN'; retention and REUSE certification stay BLOCKED until the supervisor freezes it",
+      "stage": "anchor_manifest_frozen"
+    },
+    {
+      "code": "E1_REAL_LLM_NOT_AUTHORIZED",
+      "detail": "E1_REAL_LLM_NOT_AUTHORIZED: no real LLM provider is authorized this round (whitelist is empty; got ''). The six-role board never falls back to replay silently.",
+      "stage": "real_llm_provider_authorized"
+    }
+  ],
+  "bounded_envcoder_repair": true,
+  "branch": "henry/static-llm-ued-v1",
+  "criterionwise_selector": true,
+  "dynamic_12_behaviorally_distinct_verified": false,
+  "dynamic_12_executable_candidates_reachable": true,
+  "dynamic_12_logical_specs_reachable": true,
+  "e1_real_smoke_ready": false,
+  "head_sha": "a98e050da452b53ea34d8eeeb91a474e295f7cb3",
+  "head_sha_note": "head_sha is the SNAPSHOT of `git rev-parse HEAD` at report generation time; the commit enclosing this report advances HEAD past the snapshot \u2014 never hand-edited",
+  "note": "computed by scripts/e1_formal_readiness.py from live code/config/seam state; real_*_executed read from the one-update entrypoint's own status report (absent or status != EXECUTED => false); e1_real_smoke_ready additionally requires BOTH execution flags and zero blockers. Entry: scripts/e1_formal_readiness.py",
+  "real_candidate_probe_executed": false,
+  "real_optimizer_update_executed": false,
+  "real_smoke_attestation_valid": false,
+  "real_smoke_evidence_detail": "no report on disk",
+  "sequential_six_role_context": true,
+  "shared_anchor_manifest_bound": false,
+  "shared_reference_adapter_bound": false,
+  "shared_student_adapter_bound": false
+}

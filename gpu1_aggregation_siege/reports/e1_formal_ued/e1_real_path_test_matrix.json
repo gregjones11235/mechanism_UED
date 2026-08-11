@@ -1,0 +1,25 @@
+{
+  "fixture_discipline": "every fixture is conspicuously marked TEST_ONLY / SYNTHETIC / NOT_REAL_EXECUTION / NOT_SCIENTIFIC_EVIDENCE",
+  "real_execution_status": "REAL_LLM_EXECUTED / REAL_ENVCODER_EXECUTED / REAL_CANDIDATE_PROBE_EXECUTED / REAL_OPTIMIZER_UPDATE_EXECUTED / REAL_FULL_STATE_ROUND_TRIP / E1_REAL_SMOKE_AUTHORIZED / E1_PILOT_AUTHORIZED / SOTA_INTEGRATION_READY \u2014 all false",
+  "real_path_status": "PRODUCTION_PATH_CONTRACT_TESTED",
+  "test_files_added": [
+    "test_e1_runtime_bundle.py",
+    "test_e1_production_driver_dataflow.py",
+    "test_e1_real_board_authorization.py",
+    "test_e1_shared_runtime_object_resolution.py",
+    "test_e1_executable_candidate_binding.py",
+    "test_e1_variant_runtime_binding.py",
+    "test_e1_candidate_probe_result_binding.py",
+    "test_e1_signed_criterion_signals.py",
+    "test_e1_selection_attestation.py",
+    "test_e1_same_teacher_continuity.py",
+    "test_e1_same_student_continuity.py",
+    "test_e1_exactly_one_update_attestation.py",
+    "test_e1_full_state_roundtrip.py",
+    "test_e1_readiness_attestation.py",
+    "test_e1_gate_signal_producers.py",
+    "test_e1_budget_semantics.py",
+    "test_e1_testonly_closed_loop.py"
+  ],
+  "test_files_count": 17
+}

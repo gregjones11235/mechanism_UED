@@ -1,0 +1,31 @@
+{
+  "craftax": {
+    "installed": false
+  },
+  "dicode_shared_runtime": {
+    "detail": "module 'dicode.shared_runtime' does not exist in any branch/worktree",
+    "present": false
+  },
+  "external_blocks": [
+    "dicode.shared_runtime missing",
+    "jax uninstallable",
+    "no LLM credentials"
+  ],
+  "gpu": {
+    "memory_mib": 8151,
+    "name": "NVIDIA GeForce RTX 5070 Laptop GPU",
+    "present": true,
+    "uuid": "GPU-63493c36-721b-a8de-1a35-43c5b623964f"
+  },
+  "host": "LAPTOP-OHKQP6UK",
+  "jax": {
+    "import_error": "DLL load failed while importing _jax (Windows wheel)",
+    "installed": false
+  },
+  "llm_credentials": {
+    "anthropic_api_key": false,
+    "openai_api_key": false
+  },
+  "platform": "win32",
+  "python": "3.12.4"
+}

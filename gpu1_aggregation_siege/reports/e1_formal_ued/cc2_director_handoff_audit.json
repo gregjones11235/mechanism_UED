@@ -1,0 +1,51 @@
+{
+  "audit": "cc2_director_handoff",
+  "branch": "henry/static-llm-ued-v1",
+  "confirmed_issues_fixed": {
+    "12_plus_4_not_converted_to_15_curriculum_plus_1_target": {
+      "commit": "5325e75",
+      "fixed": true
+    },
+    "budget_semantics_built_around_98304": {
+      "commit": "6274ea5",
+      "fixed": true
+    },
+    "lonlongrun_total_env_steps_still_98304": {
+      "commit": "6274ea5",
+      "fixed": true
+    },
+    "missing_full_runstate_checkpoint_resume": {
+      "commit": "0cafadd",
+      "fixed": true
+    },
+    "missing_selection_to_training_batch_plan_to_dicode_update": {
+      "commit": "0cafadd",
+      "fixed": true
+    },
+    "one_window_driver_stopped_at_criterion_selection": {
+      "commit": "0cafadd",
+      "fixed": true
+    },
+    "run_e1_longrun_still_emits_old_98304_fields": {
+      "commit": "6274ea5",
+      "fixed": true
+    },
+    "run_e1_real_one_update_fixed_pipeline_unauthorized": {
+      "commit": "7abde9b",
+      "fixed": true
+    }
+  },
+  "head_after": "6274ea5a07ea2e1bcb3613c94072396998aacc8b",
+  "head_before": "39060175410de092a6a164d2ce3472d0d63dcedf",
+  "note": "code + contract tests are complete for the full one-window chain (Review Window -> EnvCoder -> ExecutableCandidate -> signed probes -> signed signals -> SelectionAttestation -> 12 dynamic -> CanonicalDiCodeTrainingBatchPlan (15+1) -> canonical DiCode one update -> RunStateCheckpoint -> fresh-process restore -> signed smoke attestation). The real Smoke has NOT been authorized or executed: every REAL_* / authorization flag stays false until the director signs the runtime bundle and approves the Smoke.",
+  "real_and_authorization_flags": {
+    "E1_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "REAL_CANDIDATE_PROBE_EXECUTED": false,
+    "REAL_ENVCODER_EXECUTED": false,
+    "REAL_FULL_STATE_ROUND_TRIP": false,
+    "REAL_LLM_EXECUTED": false,
+    "REAL_OPTIMIZER_UPDATE_EXECUTED": false
+  },
+  "stage": "DIRECTOR_SMOKE_HANDOFF_READY"
+}

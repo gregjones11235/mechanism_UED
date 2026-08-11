@@ -1,0 +1,31 @@
+{
+  "checkpoint_written": false,
+  "fields_covered": [
+    "params_hash",
+    "optimizer_state_hash",
+    "optimizer_step",
+    "global_update_step",
+    "global_env_steps",
+    "rng_hash",
+    "session_index",
+    "gen_manager_archive_hash",
+    "e1_ledger_hash",
+    "pending_worker_policy_hash",
+    "config_hash",
+    "runtime_bundle_hash"
+  ],
+  "full_state_round_trip_identity_fields": [
+    "training_rng_hash",
+    "env_rng_hash",
+    "policy_memory_history_hash",
+    "student_identity_hash",
+    "anchor_manifest_hash",
+    "formal_asset_registry_hash",
+    "window_hash",
+    "selection_hash",
+    "verified_batch_hash",
+    "source_commit"
+  ],
+  "kind": "CanonicalDiCodeRunStateCheckpoint",
+  "status": "BLOCKED_EXTERNAL"
+}

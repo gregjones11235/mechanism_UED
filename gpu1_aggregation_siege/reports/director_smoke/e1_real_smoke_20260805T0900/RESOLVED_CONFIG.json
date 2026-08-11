@@ -1,0 +1,4 @@
+{
+  "e1_teacher_config": "conf/teacher/e1_formal.yaml",
+  "frozen_config": "configs/e1_formal_ued.yaml"
+}

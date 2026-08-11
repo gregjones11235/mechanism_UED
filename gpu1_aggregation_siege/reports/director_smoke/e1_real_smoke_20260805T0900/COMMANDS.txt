@@ -1,0 +1,7 @@
+git fetch origin --prune  (BLOCKED: proxy 127.0.0.1:1080 dead; direct -c http.proxy= works)
+python -m py_compile src/dicode/teachers/e1_formal/*.py scripts/run_e1_real_one_update.py  -> 0 errors
+PYTHONPATH=src python -m pytest tests/e1_formal/ -q  -> 1306 passed, 1 skipped, 0 failed, 0 errors
+git diff --check  -> 0 errors
+python scripts/run_e1_real_one_update.py --check-only --director-runtime-bundle <prod_bundle>
+   --student-candidate-id PERSISTENT_RMT16_ORIGINAL_VTRACE_98304
+   -> OBJECT_LEVEL_CHECK_ONLY_BLOCKED (BLOCKED_WAITING_SHARED_RUNTIME_* external blockers)

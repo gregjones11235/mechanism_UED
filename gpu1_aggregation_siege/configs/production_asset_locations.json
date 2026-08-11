@@ -1,0 +1,28 @@
+{
+  "schema": "mechanism_UED.production_asset_locations/v1",
+  "note": "Deployment-bound real asset locations. Every path is verified by sha256 at consumption time (fail closed).",
+  "student": {
+    "persistent_profile": "conf/student_profiles/rmt16_persistent_98304.yaml",
+    "reset128_profile": "conf/student_profiles/rmt16_reset128_98304.yaml",
+    "persistent_checkpoint": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/full_state.pkl",
+    "persistent_train_state": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-PERSISTENT/ckpt/98304/train_state.pkl",
+    "reset128_checkpoint": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl",
+    "reset128_train_state": "/home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/train_state.pkl",
+    "persistent_checkpoint_file_sha256": "2866b5defc356b57345ca47b2f4f44f19f63e618aa62bc8e03c8f751f005c723",
+    "reset128_checkpoint_file_sha256": "de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638",
+    "persistent_params_sha256": "aa6ba44040a0742bd709ebe6299acde6242e4faf748159dd0765ee2428addd0d",
+    "reset128_params_sha256": "78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2",
+    "driver_source": "/home/oseasy/cc4_tier3_eval_20260730/repo/D:/Projects/dicode-codex-director/orchestration/control/_cc2_stage/train_rmt16_p2replay.py",
+    "driver_source_sha256": "453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc",
+    "cc2_frozen_modules": "/home/oseasy/git_work/mechanism_UED_rmt16_probe/gpu2_rmt16_phase4a_snapshot/runtime/frozen_modules",
+    "slowgru_persistent_profile": "conf/student_profiles/slowgru_persistent_98304.yaml",
+    "slowgru_persistent_checkpoint": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/ckpt/98304/full_state.pkl",
+    "slowgru_persistent_checkpoint_file_sha256": "0bc92c9ee28684ba507d6d6d728110000f11d7115126fbaf9137b1f8390a9c47",
+    "slowgru_persistent_params_sha256": "99d734b48acfd3499e5b836c7f632a52b1d17a732c3764a24c1935fd82a77ecc",
+    "slowgru_driver_source": "/home/oseasy/student_pool_v1/cc3/slowgru_runtime",
+    "slowgru_checkpoint_contract": "/home/oseasy/student_pool_v1/cc3/SLOWGRU_PERSISTENT_CANONICAL_98304/checkpoint_contract.json",
+    "slowgru_network_src_sha256": "b265210597d003218e303ef458ff697b5c9c6a14bfccca098ccce8014bf3eb0b",
+    "slowgru_trainer_src_sha256": "7918333c63bdb6c8917bf423dfb8484942fb46edc6a7c8fa7e36c769cada2545"
+  },
+  "checkpoint_contract_sha256": "7dda2bc7517342b189a1f1ba949d620eb4d1c978e252b74f4e2bdeb61363f2e5"
+}

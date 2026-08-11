@@ -1,0 +1,13 @@
+{
+  "bundle_mode": "PRODUCTION",
+  "director_bundle_verifier": "injected (accepting test verifier in check-only exercise)",
+  "formal_asset_registry": "UNBOUND (external missing)",
+  "identity_fields": [
+    "identity_hash",
+    "implementation_hash",
+    "source_commit",
+    "registry_identity"
+  ],
+  "object_declaration_set": "runtime_objects.REQUIRED_RUNTIME_OBJECTS (13 unified)",
+  "resolved_runtime": "NOT_BOUND (objects not resolvable without shared runtime)"
+}

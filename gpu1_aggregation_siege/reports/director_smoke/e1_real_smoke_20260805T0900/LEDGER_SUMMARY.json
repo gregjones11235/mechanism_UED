@@ -1,0 +1,10 @@
+{
+  "billing_idempotent": true,
+  "duplicate_calls": false,
+  "duplicate_curriculum": false,
+  "duplicate_updates": false,
+  "llm_calls": 0,
+  "notes": "No LLM transport authorized; zero real calls made.",
+  "paid_calls": 0,
+  "request_ids": []
+}

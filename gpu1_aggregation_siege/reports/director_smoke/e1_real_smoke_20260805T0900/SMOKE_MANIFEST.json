@@ -1,0 +1,11 @@
+{
+  "canonical_dicode_update": "NOT_EXECUTED (jax absent)",
+  "checkpoint": "NOT_WRITTEN",
+  "envcoder": "NOT_EXECUTED (craftax absent)",
+  "fresh_process_restore": "NOT_RUN",
+  "next_policy_equivalence": "NOT_RUN",
+  "probe": "NOT_EXECUTED",
+  "run_id": "e1_real_smoke_20260805T0900",
+  "six_role_llm": "NOT_EXECUTED (no credentials)",
+  "status": "BLOCKED_EXTERNAL"
+}

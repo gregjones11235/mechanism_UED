@@ -1,0 +1,14 @@
+{
+  "budget": "training_budget_semantics is a director decision; unresolved 98304 => BLOCKED_WAITING_DIRECTOR_BUDGET_DECISION",
+  "continuity": "OneWindowContinuity (same GenManager + bundle) and StudentBinding (same Student checkpoint probe->update)",
+  "criterion_signals": "SignedCriterionSignals minted ONLY via derive_criterion_signals_from_probe_result; 8 criteria fail-closed on missing sources",
+  "probe_intake": "CandidateProbeResult consumed ONLY registry-signed; TEST_ONLY signer rejected on production surfaces",
+  "readiness": "E1RealSmokeAttestation is the trust root; plain JSON status is parse-level evidence only; every bound hash re-verified against live state",
+  "roundtrip": "FullStateRoundTripAttestation requires a fresh subprocess restore, leaf comparison and identical next-policy-step replay",
+  "selection": "SelectionAttestation binds selected ids + candidate/probe/signals pool hashes + selector source + constants + weights + family cap + seed; GenManager certification re-verifies everything before the C13-C15 gates",
+  "shared_resolution": "SharedRuntimeResolution[T] carries object_ref + identity hash; absent objects => bound=False with per-contract BLOCKED_WAITING_SHARED_RUNTIME_<CONTRACT> codes",
+  "signed_bundle": "E1RuntimeBundle carries 9 capability contracts bound as REAL objects; PRODUCTION signer whitelist EMPTY => RUNTIME_BUNDLE_SIGNER_UNAUTHORIZED",
+  "six_role_board": "AuthorizedSixRoleLLMRuntime; fixed role order, 6 logical calls, any role failure => VOID never COMPLETE; provider whitelist EMPTY",
+  "update": "OptimizerUpdateAttestation proves optimizer_step_after == before+1 and update_count == 1",
+  "variant_execution": "Mode A: different variant_params => different candidate hash; VARIANT_PARAMETER_NOT_EXECUTED marker until the real backend executes them"
+}

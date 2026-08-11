@@ -1,0 +1,23 @@
+{
+  "architecture_family": "RMT16",
+  "audit": "cc2_persistent_runtime_object",
+  "branch": "henry/static-llm-ued-v1",
+  "head_after": "914b2cc3f268c7a63e90d94436102158632379d0",
+  "head_before": "12ebca44908ad1e65c38dd962955b4dce29829f7",
+  "memory_mode": "PERSISTENT",
+  "note": "the production entry resolves the REAL StudentInitContract from the director-injected FormalAssetRegistry BEFORE any Student mount; --object-registry JSON injection is deleted; check-only has two levels; main() really calls run_director_one_window_pipeline once gates clear; REAL_* flags derive from their own immutable evidence. Without the director registry + Persistent checkpoint, the object-level check honestly BLOCKs.",
+  "object_level_ok": false,
+  "persistent_candidate": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304",
+  "persistent_only_this_round": true,
+  "profile_id": "rmt16_persistent_98304",
+  "real_and_authorization_flags": {
+    "E1_REAL_SMOKE_AUTHORIZED": false,
+    "FORMAL_EXPERIMENT_AUTHORIZED": false,
+    "REAL_CANDIDATE_PROBE_EXECUTED": false,
+    "REAL_ENVCODER_EXECUTED": false,
+    "REAL_FULL_STATE_ROUND_TRIP": false,
+    "REAL_LLM_EXECUTED": false,
+    "REAL_OPTIMIZER_UPDATE_EXECUTED": false
+  },
+  "stage": "E1_PERSISTENT_OBJECT_CONSUMER_IMPLEMENTED"
+}

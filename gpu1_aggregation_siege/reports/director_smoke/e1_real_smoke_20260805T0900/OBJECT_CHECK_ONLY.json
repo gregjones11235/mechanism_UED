@@ -1,0 +1,20 @@
+{
+  "blockers": [
+    "BLOCKED_WAITING_SHARED_RUNTIME_FORMAL_ASSET_REGISTRY",
+    "BLOCKED_WAITING_SHARED_RUNTIME_STUDENT_ADAPTER",
+    "BLOCKED_WAITING_SHARED_RUNTIME_STUDENT_IDENTITY",
+    "ENVCODER_BACKEND_BLOCKED (craftax runtime absent)",
+    "REFERENCE_CONTRACT_UNFROZEN"
+  ],
+  "checkpoint_writes": 0,
+  "counts_all_zero": true,
+  "executed": false,
+  "llm_calls": 0,
+  "note": "The production PRODUCTION-bundle check-only path was exercised with an injected director bundle verifier: bundle loaded, verifier passed, status = OBJECT_LEVEL_CHECK_ONLY_BLOCKED with only BLOCKED_WAITING_SHARED_RUNTIME_* blockers. The shared runtime is an external component missing from the repository.",
+  "optimizer_updates": 0,
+  "paid_calls": 0,
+  "probe_executions": 0,
+  "production_taskarchive_writes": 0,
+  "status": "OBJECT_LEVEL_CHECK_ONLY_BLOCKED",
+  "target": "PERSISTENT_RMT16_ORIGINAL_VTRACE_98304"
+}

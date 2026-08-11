@@ -1,0 +1,74 @@
+teacher:
+  teacher_type: e1_formal
+  flags:
+    real_envcoder_used: false
+    real_student_reference_eval: false
+    real_training_update_executed: false
+  strong_student:
+    candidate_id: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304
+  reference_contract:
+    frozen: true
+    candidate_id: RESET128_RMT16_ORIGINAL_VTRACE_98304
+    checkpoint_ref: /home/oseasy/cc2_data/cc2_runs_76b294b/runs/RMT16-LONG98304-RESET128/ckpt/98304/full_state.pkl
+    file_sha256: de3a159f58f904c4ed0bce17bcb87e4b39b21b4ffd0cea557ce61b860727b638
+    params_sha256: 78a14cc6e9ccdeb2c9c3d827ff9e21366d7ceb73ca6c9e557fb1a3733fe6b3f2
+    architecture_family: RMT16
+    architecture_version: rmt16-vtrace-cc2
+    architecture_config_hash: e7010df153c4bfddc81150c78a04e15159733d2115690811c364d5dfb229d36f
+    memory_semantics: reset-to-128-window-memory
+    memory_semantics_hash: 22eafa255e62372b149c514ac634a63f98cc1a3eb1afb0b1bf07d4adc04c19c9
+    episode_reset_protocol_id: mechanism_UED.episode_reset.v1
+    episode_reset_protocol_hash: 214ea203330b0655e0f1d5909eaca2be221560c9f163bbfaf985903f4917a55f
+    global_step: 98304
+    total_env_steps: 98304
+    seed: 42
+    source_commit: src-sha256:453bd1ecc8d9671c741c4462214bd7699c74611a52ec157ff30cd68653b4bafc
+    frozen_manifest_hash: 2d96a1827f86e2a50daf495dff631bc01a7b864eef910e70d1ea2de2023fb66c
+    provenance: TRAINING
+  learnability:
+    tau_saturated: null
+    tau_reachable: null
+    tau_unreachable: null
+    delta_min: null
+    min_episodes: null
+    ci_level: null
+  invocation:
+    threshold_version: e1-gate-thresholds-v1
+    thresholds:
+      capability_shift_delta: null
+      stagnation_max_delta: null
+      stagnation_min_sessions: null
+      forgetting_regression_drop: null
+      intervention_exhaustion_max_reuses: null
+      exploration_slot_period: null
+  selection:
+    critic_policy: hard_veto
+    k: 12
+    seed: 20260803
+    family_cap: 3
+  anchors:
+    task_ids:
+    - task_1
+    - task_2
+    - task_3
+    - original_craftax
+    manifest_path: configs/e1_formal_ued_anchor_manifest.DRAFT.json
+  envcoder:
+    max_repairs: 2
+    backend: replay
+    seed_examples:
+    - task_id: task_1
+      description: collect coal near spawn
+    - task_id: task_2
+      description: cross a narrow gap
+    - task_id: task_3
+      description: defeat the orc soldier
+  replay:
+    provider: replay
+    model_id: e1-replay-mock-v1
+    record: disabled
+  candidate_eval:
+    enabled: false
+hydra:
+  run:
+    dir: outputs/e1_formal_ued/${now:%Y-%m-%d}_${now:%H-%M-%S}

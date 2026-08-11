@@ -1,0 +1,15 @@
+{
+  "loop": "six-role fixture board -> 6 templates / 12 variants -> 12 executable candidates -> 12 signed synthetic probe results -> 12 signed criterion signals -> Soft Copeland selects 12 -> GenManager certifies 12+4 (promotion gate reached) -> exactly-one update attestation -> full-state round-trip attestation",
+  "proves": "PRODUCTION_PATH_CONTRACT_TESTED (code-path connectivity only; never scientific evidence)",
+  "real_flags": {
+    "E1_PILOT_AUTHORIZED": false,
+    "E1_REAL_SMOKE_AUTHORIZED": false,
+    "REAL_CANDIDATE_PROBE_EXECUTED": false,
+    "REAL_ENVCODER_EXECUTED": false,
+    "REAL_FULL_STATE_ROUND_TRIP": false,
+    "REAL_LLM_EXECUTED": false,
+    "REAL_OPTIMIZER_UPDATE_EXECUTED": false,
+    "SOTA_INTEGRATION_READY": false
+  },
+  "status": "TEST_ONLY_PIPELINE_COMPLETE"
+}

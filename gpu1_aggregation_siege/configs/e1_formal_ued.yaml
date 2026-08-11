@@ -1,0 +1,52 @@
+# E1 formal UED frozen manifest (supervisor-owned).
+#
+# Cross-checked against conf/teacher/e1_formal.yaml at teacher init:
+#   flags mismatch          -> FLAG_MANIFEST_MISMATCH
+#   copeland/replay/anchors -> GEN_MANAGER_MANIFEST_MISMATCH
+#   invocation threshold_version -> GEN_MANAGER_MANIFEST_MISMATCH
+# The copeland pins duplicate the values hard-pinned in
+# src/dicode/teachers/e1_formal/selector.py (G4); they are verified
+# against the branch canonical bytes and the supervisor-frozen report
+# reports/d052_canonical_artifacts_SHA256SUMS by
+# tests/e1_formal/test_copeland_parity.py (no skip). Pins are never
+# self-updated to bypass a mismatch.
+
+schema_version: e1_formal.frozen_manifest.v1
+
+flags:
+  real_envcoder_used: false
+  real_student_reference_eval: false
+  real_training_update_executed: false
+
+copeland:
+  protocol_version: canonical_v2
+  # sha256 of d052/selectors/copeland.py (committed LF blob bytes)
+  source_sha256: 80a60829537c87bafcc17aef7715cd37f6fdad0027cc16f27832744f11f6d613
+  # sha256 of d052/legacy/canonical_constants.py
+  constants_sha256: 32c7a1c9dd28fc0388d213591061cd7eb5e1a1944fc68ee1ab448c1eec822bf2
+  # sha256 of d052/selectors/base.py
+  base_sha256: c9d0858548176e50a5ce561258ac0863fb8908b9b789c9293116702ad2ede108
+
+replay:
+  provider: replay
+  model_id: e1-replay-mock-v1
+  record: disabled
+
+# P0-3: review-window invocation regime identity. Only the version is
+# frozen here; the threshold VALUES are supervisor-owned and live in
+# conf/teacher/e1_formal.yaml (all null until frozen =>
+# INVOCATION_THRESHOLD_MISSING, gate signals stay honestly computed).
+invocation:
+  threshold_version: e1-gate-thresholds-v1
+
+anchors:
+  task_ids:
+    - task_1
+    - task_2
+    - task_3
+    - original_craftax
+  manifest_path: configs/e1_formal_ued_anchor_manifest.FROZEN.json
+  manifest_status: FROZEN  # supervisor-frozen shared anchor manifest
+
+strong_student:
+  candidate_id: PERSISTENT_RMT16_ORIGINAL_VTRACE_98304

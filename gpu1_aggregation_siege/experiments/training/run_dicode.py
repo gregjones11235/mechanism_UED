@@ -160,17 +160,54 @@ def main(config: DictConfig):
 
         # --- Step 3: Sample tasks for training ---
         print("Sampling tasks for training...")
-        target_batch_size = config.dicode_manager.training_sample_size_n
-        num_new_to_use = len(new_task_ids)
-        num_to_sample_from_archive = max(0, (target_batch_size - 1) - num_new_to_use)
+        # C11 teacher duck hook: an E1 teacher builds its own batch
+        # (12 dynamic + 4 anchors when a real selection is verified,
+        # or a legitimately REUSEd verified window); legacy archive
+        # sampling is bypassed entirely. Teachers without the hook —
+        # the legacy GenManager — take the original sampling path
+        # verbatim.
+        #
+        # C13 fail-closed training gate: while ANY applicable hard gate
+        # blocks (DRAFT anchor manifest, missing real dual probes, no
+        # verified previous-window batch), the teacher batch is NOT
+        # training_permitted and run_session_training must NEVER run —
+        # zero PPO updates, zero global/env-step progress. Refuse
+        # loudly; never fall back to legacy sampling, never train an
+        # anchors-only batch.
+        batch_hook = getattr(gen_manager, "build_training_batch", None)
+        if batch_hook is not None:
+            e1_batch = batch_hook()
+            from dicode.teachers.e1_formal.training_gate import (
+                TrainingGateError,
+                enforce_training_gate,
+            )
+            try:
+                gated_task_ids = enforce_training_gate(e1_batch)
+            except TrainingGateError as gate_error:
+                raise RuntimeError(
+                    "E1 training gate BLOCKED ("
+                    + ", ".join(gate_error.codes or (gate_error.code,))
+                    + "): zero training updates this session; "
+                    "run_session_training refused (fix: freeze the "
+                    "Reference identity + shared anchor manifest and "
+                    "provide real dual probes, or do not enable the "
+                    "e1_formal teacher)."
+                ) from gate_error
+            print(f"  Teacher-built batch: {len(gated_task_ids)} tasks "
+                  f"(provenance={e1_batch.get('provenance')}).")
+            sampled_task_ids = list(gated_task_ids)
+        else:
+            target_batch_size = config.dicode_manager.training_sample_size_n
+            num_new_to_use = len(new_task_ids)
+            num_to_sample_from_archive = max(0, (target_batch_size - 1) - num_new_to_use)
 
-        print(f"  New tasks: {num_new_to_use}. "
-              f"Sampling {num_to_sample_from_archive} from archive.")
+            print(f"  New tasks: {num_new_to_use}. "
+                  f"Sampling {num_to_sample_from_archive} from archive.")
 
-        sampled_from_archive = sample_tasks_for_training(
-            gen_manager, config, num_to_sample_from_archive
-        )
-        sampled_task_ids = new_task_ids + sampled_from_archive
+            sampled_from_archive = sample_tasks_for_training(
+                gen_manager, config, num_to_sample_from_archive
+            )
+            sampled_task_ids = new_task_ids + sampled_from_archive
 
         if not sampled_task_ids:
             print("  No tasks sampled. Skipping to next session.")
@@ -200,6 +237,24 @@ def main(config: DictConfig):
             original_return_prev_session=last_known_original_return,
         )
         global_env_steps = int(global_env_steps)
+
+        # C11 teacher duck hook: feed the training window's own metrics
+        # back to an E1 teacher as NORMAL_TRAINING_FEEDBACK evidence.
+        # Called ONLY when real training metrics exist — an empty
+        # metrics dict carries no admissible facts and is never fed.
+        # The teacher re-verifies provenance and guard-scans the facts
+        # before storing anything. Teachers without the hook — the
+        # legacy GenManager — skip this entirely.
+        feedback_hook = getattr(gen_manager, "observe_session_feedback", None)
+        if feedback_hook is not None and training_metrics:
+            feedback_hook(
+                current_session_idx,
+                {
+                    "provenance": "NORMAL_TRAINING_FEEDBACK",
+                    "num_updates_in_session": int(num_updates_in_session),
+                    "num_tasks_trained": int(len(sampled_task_ids)),
+                },
+            )
 
         if "mean_return" in evaluation_metrics:
             last_known_original_return = evaluation_metrics["mean_return"]
@@ -309,6 +364,15 @@ def _process_worker_results(
     """
     if not worker_results:
         return [], 0
+
+    # C11 teacher duck hook: an E1 teacher consumes its own worker
+    # dicts itself (compiled artifacts are recorded in the teacher's
+    # artifact registry; promotion happens ONLY through E1 selection,
+    # never legacy compare-and-swap activation). Teachers without the
+    # hook — the legacy GenManager — take the original path verbatim.
+    consume_hook = getattr(gen_manager, "consume_worker_results", None)
+    if consume_hook is not None:
+        return consume_hook(worker_results)
 
     compiled_tasks = [res for res in worker_results if res.get("compiled")]
     failed_tasks = [res for res in worker_results if not res.get("compiled")]

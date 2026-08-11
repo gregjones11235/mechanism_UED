@@ -41,6 +41,70 @@ from minicraftax.envs.craftax import CraftaxAugObsTrain
 from minicraftax.tasks.seed_tasks.original import Env as OriginalTask
 
 
+def _resolve_teacher(config: DictConfig):
+    """Resolves the curriculum teacher (C11 guarded seam).
+
+    * NO ``teacher`` group: the original ``gen_manager =
+      GenManager(config)`` line runs VERBATIM — the default path is
+      byte-identical to the baseline.
+    * ``teacher.teacher_type == "e1_formal"``: lazy-imports the E1
+      formal teacher and constructs it from the committed frozen
+      manifest (configs/e1_formal_ued.yaml) and the committed DRAFT
+      anchor manifest. Until the supervisor freeze artifacts arrive
+      the teacher constructs fully degraded: its blocked batch trains
+      NOTHING (zero updates), and REUSE is legitimate only as a fully
+      verified previous window (C13).
+    * ``teacher.teacher_type == "static_llm"``: E1-S is demoted to
+      PRESERVED ARTIFACTS only this round; it is not runnable and
+      must never be silently substituted — fail closed with the
+      demotion pointer. Scheduling E1-S is a supervisor decision.
+    * anything else: fail closed (no silent fallback).
+    """
+    teacher_cfg = OmegaConf.select(config, "teacher", default=None)
+    if teacher_cfg is None:
+        gen_manager = GenManager(config)
+        return gen_manager
+
+    teacher_type = OmegaConf.select(
+        teacher_cfg, "teacher_type", default=None
+    )
+    if teacher_type == "e1_formal":
+        import json
+
+        import yaml
+
+        from dicode.teachers.e1_formal.gen_manager import E1FormalGenManager
+
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
+        )
+        frozen_path = os.path.join(repo_root, "configs", "e1_formal_ued.yaml")
+        with open(frozen_path, "r", encoding="utf-8") as handle:
+            frozen_manifest = yaml.safe_load(handle)
+        teacher_mapping = OmegaConf.to_container(teacher_cfg, resolve=True)
+        anchor_rel = teacher_mapping["anchors"]["manifest_path"]
+        anchor_path = os.path.join(repo_root, anchor_rel)
+        with open(anchor_path, "r", encoding="utf-8") as handle:
+            anchor_manifest_mapping = json.load(handle)
+        return E1FormalGenManager(
+            {"teacher": teacher_mapping},
+            frozen_manifest=frozen_manifest,
+            anchor_manifest_mapping=anchor_manifest_mapping,
+        )
+    if teacher_type == "static_llm":
+        raise NotImplementedError(
+            "teacher.teacher_type='static_llm' (E1-S) is demoted to "
+            "preserved artifacts only this round; it is NOT runnable "
+            "(see reports/e1_formal_ued/e1s_demotion.md). Scheduling "
+            "the E1-S ablation is a supervisor decision — this seam "
+            "fails closed instead of silently substituting anything."
+        )
+    raise NotImplementedError(
+        f"unknown teacher.teacher_type={teacher_type!r}; failing closed "
+        "(no silent fallback to the legacy teacher)"
+    )
+
+
 def setup_experiment(config: DictConfig) -> tuple:
     """Initializes the entire experiment setup.
 
@@ -60,8 +124,10 @@ def setup_experiment(config: DictConfig) -> tuple:
 
     print("--- Initializing Online Curriculum Manager ---")
 
-    # Initialize GenManager and RNG
-    gen_manager = GenManager(config)
+    # Initialize GenManager and RNG (C11: teacher seam; with no
+    # `teacher` group this is the original GenManager(config) line
+    # verbatim — see _resolve_teacher)
+    gen_manager = _resolve_teacher(config)
     rng = jax.random.PRNGKey(config.seed)
 
     # Set up checkpoint manager

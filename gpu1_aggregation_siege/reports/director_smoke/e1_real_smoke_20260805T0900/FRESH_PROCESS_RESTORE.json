@@ -1,0 +1,6 @@
+{
+  "independent_process": false,
+  "ran": false,
+  "same_process": false,
+  "status": "BLOCKED_EXTERNAL (no real checkpoint, no jax)"
+}

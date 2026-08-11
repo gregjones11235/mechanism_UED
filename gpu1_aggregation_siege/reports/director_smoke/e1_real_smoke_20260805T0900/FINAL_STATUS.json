@@ -1,0 +1,15 @@
+{
+  "external_dependencies_verified": {
+    "craftax": "NOT_IMPORTABLE",
+    "dicode_shared_runtime": "MISSING",
+    "formal_asset_registry_concrete": "MISSING (only Protocol defined)",
+    "gpu": "GPU-63493c36-721b-a8de-1a35-43c5b623964f",
+    "jax": "NOT_IMPORTABLE",
+    "llm_transport": "NOT_AUTHORIZED",
+    "real_persistent_student_checkpoint": "NOT_INJECTED"
+  },
+  "final_status": "BLOCKED_EXTERNAL",
+  "reason": "The E1 real smoke cannot execute in this environment: (1) the shared runtime module 'dicode.shared_runtime' (FormalAssetRegistry, Persistent Student Adapter, Reference identity) does not exist in any branch or worktree - the production path honestly blocks on BLOCKED_WAITING_SHARED_RUNTIME_*; (2) jax/craftax cannot be imported (jaxlib Windows wheel DLL load failure) so the canonical DiCode one-update runtime cannot run; (3) no LLM API credentials are present for the six-role runtime. Per directive: BLOCKED_EXTERNAL, evidence preserved, no forged PASS.",
+  "result": "NOT_PASS",
+  "run_id": "e1_real_smoke_20260805T0900"
+}

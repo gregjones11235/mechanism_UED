@@ -121,8 +121,8 @@ def run_session_training(
     )
 
     # Calculate task distribution
-    task_distribution_proportions = _calculate_task_distribution(
-        config, len(sampled_task_classes)
+    task_distribution_proportions = _resolve_session_task_distribution(
+        config, gen_manager, len(sampled_task_classes), all_task_ids
     )
 
     # Run training
@@ -372,6 +372,24 @@ def _calculate_task_distribution(
         proportions = jnp.array([1.0])
 
     return proportions / jnp.sum(proportions)
+
+
+def _resolve_session_task_distribution(config, gen_manager, num_curriculum_tasks, all_task_ids):
+    """Apply an optional E1 layout hook; otherwise preserve legacy distribution."""
+    layout_hook = getattr(gen_manager, "build_training_layout", None)
+    if layout_hook is not None:
+        from dicode.teachers.e1_formal.schemas import E1SchemaError
+        try:
+            override = layout_hook([t for t in all_task_ids
+                                    if t not in set(getattr(gen_manager, "anchor_task_ids", ()))])
+        except E1SchemaError as exc:
+            print(f"  [E1 layout hook] fail-closed ({exc}); legacy distribution applies unchanged.")
+            override = None
+        if override is not None:
+            weights = [override.get(task_id) for task_id in all_task_ids]
+            if all(w is not None for w in weights) and abs(sum(weights) - 1.0) <= 1e-12:
+                return jnp.array(weights)
+    return _calculate_task_distribution(config, num_curriculum_tasks)
 
 
 def _reset_optimizer_state(

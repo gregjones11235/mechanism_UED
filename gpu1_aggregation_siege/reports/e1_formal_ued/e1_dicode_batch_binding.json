@@ -1,0 +1,22 @@
+{
+  "curriculum_task_ids": 15,
+  "dynamic_task_ids": 12,
+  "non_target_anchor_ids": 3,
+  "rules": [
+    "OriginalTask appears EXACTLY ONCE (DiCode appends it internally; never passed into sampled_task_ids)",
+    "original_task_proportion == 0.20 (frozen from conf/dicode_manager/default.yaml)",
+    "the remaining 0.80 is shared by the 15 curriculum ids",
+    "the 4th 'anchor' is the OriginalTask semantic, NOT a regular curriculum id",
+    "the plan binds selection_attestation_hash + anchor_manifest_hash into plan_hash"
+  ],
+  "target_probability": 0.2,
+  "target_task_id": "original_craftax",
+  "timeline": {
+    "98304": "allowed ONLY in checkpoint paths / checkpoint steps / Student candidate identity",
+    "global_env_steps": "DiCode timeline",
+    "global_update_step": "DiCode timeline",
+    "session_idx": "gen_manager.session_idx",
+    "total_timesteps": "frozen DiCode resolved config (conf/training/default.yaml) = 2_005_401_600"
+  },
+  "total_session_tasks": 16
+}
