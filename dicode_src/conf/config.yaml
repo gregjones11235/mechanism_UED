@@ -24,3 +24,19 @@ seed: 42
 ablation: false
 
 checkpoint_dir: "rl_checkpoints/"
+
+# Optional runtime instrumentation and evaluator compilation cache.
+# Both are deliberately disabled by default to preserve historical behavior.
+runtime_profiling:
+  enabled: false
+  output_jsonl: runtime_analysis/events.jsonl
+
+performance:
+  eval_compile_cache: false
+  train_compile_cache: false
+  compiled_cache_max_entries: 8
+  embedding_cache: false
+  validation_cache: false
+  embedding_cache_max_entries: 2048
+  validation_cache_max_entries: 512
+  validation_static_lint: false

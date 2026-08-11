@@ -8,6 +8,7 @@ This module provides functions for:
 # --- Standard Library ---
 import json
 import os
+import time
 
 # --- Third-Party ---
 import numpy as np
@@ -17,6 +18,7 @@ from omegaconf import DictConfig
 # --- Local Modules ---
 from dicode.dreaming.gen_manager import GenManager
 from dicode.utils.logz.graph_visualization import create_graph_visualization_html
+from dicode.runtime_analysis import tracker
 
 
 def log_session_summary(
@@ -92,7 +94,17 @@ def log_session_summary(
     # Add graph visualization
     _add_graph_visualization(log_data)
 
-    wandb.log(log_data)
+    if tracker.enabled:
+        _start = time.monotonic_ns()
+        try:
+            wandb.log(log_data)
+        except Exception:
+            tracker.record("wandb_log_summary", _start, session=current_session_idx, status="error")
+            raise
+        else:
+            tracker.record("wandb_log_summary", _start, session=current_session_idx)
+    else:
+        wandb.log(log_data)
     print("  Session summary logged to W&B.")
 
 

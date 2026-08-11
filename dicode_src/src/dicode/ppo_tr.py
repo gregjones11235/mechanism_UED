@@ -1,4 +1,7 @@
 import time
+import hashlib
+import threading
+from collections import OrderedDict
 
 import distrax
 import flax.linen as nn
@@ -13,6 +16,55 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 
 from dicode.network import ActorCriticTransformer, Transition
+from dicode.runtime_analysis import tracker
+
+_TRAIN_COMPILE_CACHE = OrderedDict()
+_TRAIN_COMPILE_CACHE_LOCK = threading.RLock()
+
+def clear_train_compile_cache():
+	with _TRAIN_COMPILE_CACHE_LOCK:
+		_TRAIN_COMPILE_CACHE.clear()
+
+def train_compile_cache_key(config, task_signature, num_training_updates, task_embeddings,
+						task_distribution_proportions, train_state, rng, current_original_return=None, global_update_step=0):
+	if not task_signature:
+		return None
+	try:
+		from omegaconf import OmegaConf
+		config_fp = OmegaConf.to_container(config, resolve=True)
+	except Exception:
+		config_fp = repr(config)
+	def sig(x):
+		leaves, treedef = jax.tree_util.tree_flatten(x)
+		abstract = jax.eval_shape(lambda y: y, x)
+		abs_leaves = jax.tree_util.tree_leaves(abstract)
+		return (str(treedef), tuple((tuple(getattr(v, "shape", ())), str(getattr(v, "dtype", type(v))), bool(getattr(v, "weak_type", False))) for v in abs_leaves))
+	def digest(x):
+		arr = np.asarray(x); return (arr.shape, str(arr.dtype), hashlib.sha256(arr.tobytes()).hexdigest())
+	return (tuple(task_signature), repr(config_fp), int(num_training_updates),
+			digest(task_embeddings) if task_embeddings is not None else None,
+			digest(task_distribution_proportions) if task_distribution_proportions is not None else None,
+			sig(train_state), sig(rng), sig(current_original_return), sig(global_update_step))
+
+def _resolve_global_step(captured, dynamic, update_step):
+	return (captured if dynamic is None else dynamic) + update_step
+
+def _get_or_compile_train(key, build_jit_callable, args, enabled, max_entries=8):
+	if not enabled or key is None:
+		return build_jit_callable(), False
+	with _TRAIN_COMPILE_CACHE_LOCK:
+		cached = _TRAIN_COMPILE_CACHE.pop(key, None)
+		if cached is not None:
+			_TRAIN_COMPILE_CACHE[key] = cached
+			return cached, True
+	jit_fn = build_jit_callable()
+	with tracker.span("train_lower_compile"):
+		compiled = jit_fn.lower(*args).compile()
+	with _TRAIN_COMPILE_CACHE_LOCK:
+		_TRAIN_COMPILE_CACHE[key] = compiled
+		while len(_TRAIN_COMPILE_CACHE) > max(1, int(max_entries)):
+			_TRAIN_COMPILE_CACHE.popitem(last=False)
+	return compiled, False
 
 from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv, MultiTaskMiniCraftaxEnvR
 from dicode.wrappers_cl import (
@@ -21,7 +73,6 @@ from dicode.wrappers_cl import (
 )
 
 
-# --- 2. Transformer Network Class ---
 # --- 2. Transformer Network Class ---
 # Imported from dicode.network
 
@@ -198,7 +249,7 @@ def make_train(
 			optax.adam(config.lr, eps=1e-5),
 		)
 
-	def train(rng, train_state=None, current_original_return=0.0):
+	def train(rng, train_state=None, current_original_return=0.0, dynamic_global_update_step=None):
 		"""The core JIT-compiled function."""
 		obs_dim = env.observation_space(env_params).shape[0]
 
@@ -642,7 +693,7 @@ def make_train(
 			# Structure: (t_loss, v_loss, a_loss, ent, g_norm_mean, g_norm_max)
 			metrics_to_log = (*losses_mean, gn_mean, gn_max)
 
-			current_step = initial_global_update_step + update_step
+			current_step = _resolve_global_step(initial_global_update_step, dynamic_global_update_step, update_step)
 			jax.debug.callback(_log_callback, metrics_to_log, current_step)
 			
 
@@ -1072,16 +1123,46 @@ def run_training_session(
 	task_distribution_proportions=None,
 	global_update_step=0,
 	current_original_return=0.0,
+	task_signature=None,
 ):
 	config_t = config.training
-	train_fn = make_train(
-		config_t,
-		task_classes,
-		num_training_updates,
-		task_embeddings,
-		task_distribution_proportions,
-		global_update_step,
-	)
+	profiling = bool((config.get("runtime_profiling", {}) if hasattr(config, "get") else {}).get("enabled", False))
+	perf = config.get("performance", {}) if hasattr(config, "get") else {}
+	cache_on = bool(perf.get("train_compile_cache", False))
+	if profiling and not cache_on:
+		with tracker.span("train_build"):
+			train_fn = make_train(config_t, task_classes, num_training_updates, task_embeddings,
+							 task_distribution_proportions, global_update_step)
+		train_jit = jax.jit(train_fn)
+		with tracker.span("train_lower_compile"):
+			compiled = train_jit.lower(rng, train_state, current_original_return).compile()
+		with tracker.span("train_execute"):
+			results = compiled(rng, train_state, current_original_return)
+			for leaf in jax.tree_util.tree_leaves(results):
+				if hasattr(leaf, "block_until_ready"):
+					leaf.block_until_ready()
+		print("JIT compiling and running training session (Transformer)...")
+		return results
+	key = train_compile_cache_key(config_t, task_signature, num_training_updates, task_embeddings,
+						 task_distribution_proportions, train_state, rng, current_original_return, global_update_step) if cache_on else None
+	if cache_on and key is not None:
+		def _builder():
+			with tracker.span("train_build"):
+				return jax.jit(make_train(config_t, task_classes, num_training_updates, task_embeddings,
+							 task_distribution_proportions, global_update_step))
+		compiled, cache_hit = _get_or_compile_train(key, _builder,
+			(rng, train_state, current_original_return, jnp.asarray(global_update_step)), True,
+			perf.get("compiled_cache_max_entries", 8))
+		if tracker.enabled:
+			tracker.record("train_cache_lookup", cache_hit=cache_hit, task_signature=hashlib.sha256(repr(key).encode()).hexdigest())
+		with tracker.span("train_execute", cache_hit=cache_hit, task_signature=hashlib.sha256(repr(key).encode()).hexdigest()):
+			results = compiled(rng, train_state, current_original_return, jnp.asarray(global_update_step))
+			if tracker.enabled:
+				for leaf in jax.tree_util.tree_leaves(results):
+					if hasattr(leaf, "block_until_ready"): leaf.block_until_ready()
+		return results
+	train_fn = make_train(config_t, task_classes, num_training_updates, task_embeddings,
+						 task_distribution_proportions, global_update_step)
 	train_jit = jax.jit(train_fn)
 	print("JIT compiling and running training session (Transformer)...")
 	start_time = time.time()

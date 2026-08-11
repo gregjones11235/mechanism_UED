@@ -11,6 +11,8 @@ This module implements the core curriculum learning loop for DiCode, including:
 
 # --- Standard Library ---
 import copy
+import ast
+import hashlib
 import importlib.util
 import json
 import os
@@ -19,6 +21,9 @@ import sys
 import tempfile
 import threading
 import traceback
+import subprocess
+import time
+from collections import OrderedDict
 from textwrap import dedent
 
 # --- Third-Party ---
@@ -30,6 +35,7 @@ from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
 
 # --- Local Modules ---
 from dicode.dreaming.llm import LLM
+from dicode.runtime_analysis import tracker
 from dicode.dreaming.prompts.dicode.constants import context as CONSTANTS
 from dicode.dreaming.prompts.dicode.minicraftax_api import context as API_DOCS
 
@@ -117,6 +123,8 @@ if _os.environ.get("DICODE_TUTORIAL_REVEAL", "") == "1":
 # ----------------------------------------------------------------------------
 from dicode.dreaming.utils import distances_from_embeddings, smart_absolute_path
 from minicraftax.envs.base import MiniCraftaxTrain
+
+VALIDATOR_CACHE_VERSION = "v1"
 
 # Instruction for the embedding model to generate task embeddings.
 EMBEDDING_INSTRUCTION = (
@@ -1843,7 +1851,7 @@ class EnvGenerator:
 	task description, including a reflection loop to fix compilation errors.
 	"""
 
-	def __init__(self, env_generator_llm: LLM, archive: TaskArchive, config):
+	def __init__(self, env_generator_llm: LLM, archive: TaskArchive, config, performance=None):
 		"""Initializes the EnvGenerator.
 
 		Args:
@@ -1855,6 +1863,17 @@ class EnvGenerator:
 		self.llm = env_generator_llm
 		self.archive = archive
 		self.config = config
+		self.performance = performance or {}
+		self._validation_cache = OrderedDict()
+		self._validation_cache_lock = threading.RLock()
+		self._validation_inflight = {}
+		self._validation_source_sha = os.getenv("DICODE_SOURCE_SHA")
+		if not self._validation_source_sha:
+			try:
+				self._validation_source_sha = subprocess.check_output(
+					["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True).strip()
+			except Exception:
+				self._validation_source_sha = "unknown"
 		self.gen_env_prompt = importlib.import_module(self.config.prompts.env_generation)
 		self.craftax_mechanics = importlib.import_module(self.config.prompts.craftax_code).context
 
@@ -2104,7 +2123,7 @@ class EnvGenerator:
 		codes = self.archive.get_task_codes(example_paths)
 		return "\n".join([f"<example>\n{code}\n</example>\n" for code in codes.values()])
 
-	def check_compilation(self, code: str) -> tuple[bool, str]:
+	def _check_compilation_uncached(self, code: str) -> tuple[bool, str]:
 		"""Validates code by loading and running a full environment step on CPU.
 
 		This ensures generated code is syntactically correct and produces valid
@@ -2171,6 +2190,109 @@ class EnvGenerator:
 			if module_name and module_name in sys.modules:
 				del sys.modules[module_name]
 
+	def _validation_key(self, code):
+		normalized = code.replace("\r\n", "\n").replace("\r", "\n")
+		return (hashlib.sha256(normalized.encode()).hexdigest(), VALIDATOR_CACHE_VERSION, getattr(jax, "__version__", "unknown"), getattr(self, "_validation_source_sha", "unknown"))
+
+	def _static_lint(self, code):
+		try:
+			tree = ast.parse(code)
+			from craftax.craftax.constants import BlockType, Achievement
+			enum_members = {"BlockType": set(BlockType.__members__), "Achievement": set(Achievement.__members__)}
+			aliases = {}
+			inventory_aliases = set()
+			try:
+				from craftax.craftax.craftax_state import Inventory
+				try:
+					from dataclasses import fields
+					inventory_fields = {field.name for field in fields(Inventory)}
+				except Exception:
+					inventory_fields = set(getattr(Inventory, "__annotations__", {}))
+			except Exception:
+				inventory_fields = set()
+			for node in ast.walk(tree):
+				if isinstance(node, ast.ImportFrom) and node.module:
+					for name in node.names:
+						if node.module.endswith("constants") and name.name in enum_members:
+							aliases[name.asname or name.name] = name.name
+						if node.module.endswith("craftax_state") and name.name == "Inventory":
+							inventory_aliases.add(name.asname or name.name)
+				if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in aliases:
+					if node.attr not in enum_members[aliases[node.value.id]]:
+						return False, f"Compilation error: invalid {aliases[node.value.id]} member {node.attr}"
+				if inventory_fields and isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in inventory_aliases:
+					for keyword in node.keywords:
+						if keyword.arg and keyword.arg not in inventory_fields:
+							return False, f"Compilation error: invalid Inventory kwarg {keyword.arg}"
+			return True, ""
+		except SyntaxError as exc:
+			return False, f"Compilation error: {exc}"
+
+	def check_compilation(self, code: str) -> tuple[bool, str]:
+		started_ns = time.monotonic_ns()
+		key_signature = self._validation_key(code)[0]
+		def _validation_event(phase="candidate_validation", cache_hit=False, status="ok", start=started_ns):
+			if tracker.enabled:
+				tracker.record(phase, start_monotonic_ns=start, end_monotonic_ns=time.monotonic_ns(),
+				              task_signature=key_signature, cache_hit=cache_hit, status=status)
+		if self.performance.get("validation_static_lint", False):
+			lint_started = time.monotonic_ns()
+			try:
+				ok, msg = self._static_lint(code)
+			except Exception:
+				_validation_event(phase="candidate_validation_static_lint", start=lint_started, status="error")
+				raise
+			if not ok:
+				_validation_event(phase="candidate_validation_static_lint", start=lint_started, status="error")
+				return ok, msg
+			_validation_event(phase="candidate_validation_static_lint", start=lint_started)
+		if not self.performance.get("validation_cache", False):
+			uncached_started = time.monotonic_ns()
+			try:
+				value = self._check_compilation_uncached(code)
+			except Exception:
+				_validation_event(start=uncached_started, status="error")
+				raise
+			_validation_event(start=uncached_started, status="ok" if value[0] else "error")
+			return value
+		key = self._validation_key(code)
+		with self._validation_cache_lock:
+			if not hasattr(self, "_validation_inflight"):
+				self._validation_inflight = {}
+			if key in self._validation_cache:
+				value = self._validation_cache.pop(key)
+				self._validation_cache[key] = value
+				_validation_event(cache_hit=True, status="ok" if value[0] else "error")
+				return value
+			waiter = self._validation_inflight.get(key)
+			if waiter is None:
+				waiter = threading.Event()
+				self._validation_inflight[key] = waiter
+				owner = True
+			else:
+				owner = False
+		if not owner:
+			wait_started = time.monotonic_ns()
+			waiter.wait()
+			_validation_event(phase="candidate_validation_wait", start=wait_started)
+			return self.check_compilation(code)
+		try:
+			try:
+				value = self._check_compilation_uncached(code)
+			except Exception:
+				_validation_event(cache_hit=False, status="error")
+				raise
+			with self._validation_cache_lock:
+				self._validation_cache[key] = value
+				while len(self._validation_cache) > max(1, int(self.performance.get("validation_cache_max_entries", 512))):
+					self._validation_cache.popitem(last=False)
+		finally:
+			with self._validation_cache_lock:
+				self._validation_inflight.pop(key, None)
+				waiter.set()
+		_validation_event(cache_hit=False, status="ok" if value[0] else "error")
+		return value
+
 	def _extract_file(self, content: str) -> str | None:
 		"""Extracts Python code from an LLM response wrapped in <code> tags.
 
@@ -2220,6 +2342,7 @@ class GenManager:
 		"""
 		self.config_ = config
 		self.config = config.gen_manager
+		performance = config.get("performance", {}) if hasattr(config, "get") else {}
 
 		task_designer = LLM(
 			provider=self.config.task_generator.provider,
@@ -2230,6 +2353,7 @@ class GenManager:
 			temperature=self.config.task_generator.temperature,
 			top_p=self.config.task_generator.top_p,
 			think=self.config.task_generator.think,
+			performance=performance,
 		)
 		env_coder = LLM(
 			provider=self.config.env_generator.provider,
@@ -2240,6 +2364,7 @@ class GenManager:
 			temperature=self.config.env_generator.temperature,
 			top_p=self.config.env_generator.top_p,
 			think=self.config.env_generator.think,
+			performance=performance,
 		)
 
 		embedding_model = LLM(
@@ -2248,6 +2373,7 @@ class GenManager:
 			model=self.config.embedding_model.model,
 			llm_type=self.config.embedding_model.llm_type,
 			embedding_size=self.config.embedding_model.embedding_size,
+			performance=performance,
 		)
 		# Optional N heterogeneous Proposer LLMs for the auction method (config.gen_manager.proposers).
 		# Absent -> proposer_llms stays None -> TaskGenerator falls back to the single-FM baseline.
@@ -2264,6 +2390,7 @@ class GenManager:
 					temperature=pc.temperature,
 					top_p=pc.top_p,
 					think=pc.think,
+					performance=performance,
 				)
 				for pc in proposers_cfg
 			]
@@ -2282,6 +2409,7 @@ class GenManager:
 				temperature=modeler_cfg.temperature,
 				top_p=modeler_cfg.top_p,
 				think=modeler_cfg.get("think", False),
+				performance=performance,
 			)
 			print(f"[modeler] Built MODELER LLM ({modeler_cfg.model}).")
 
@@ -2295,7 +2423,7 @@ class GenManager:
 			proposer_llms=proposer_llms,
 			modeler_llm=modeler_llm,
 		)
-		self.env_generator = EnvGenerator(env_coder, self.archive, self.config)
+		self.env_generator = EnvGenerator(env_coder, self.archive, self.config, performance=performance)
 
 		self.session_idx = self.archive.get_max_session_idx() + 1
 

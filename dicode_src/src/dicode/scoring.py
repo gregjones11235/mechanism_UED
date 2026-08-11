@@ -4,6 +4,7 @@ import jax
 import numpy as np
 from craftax.craftax.constants import Achievement
 from omegaconf import DictConfig
+from dicode.runtime_analysis import tracker
 
 # --- Helper function to get achievement names (Unchanged) ---
 
@@ -24,6 +25,30 @@ def calculate_scores_from_snapshot(
 	config: DictConfig,
 	force_include_achievements_indices: list[int] = None,
 ) -> dict:
+	"""Profile device transfer and CPU scoring while preserving results."""
+	if tracker.enabled:
+		with tracker.span("scoring_transfer"):
+			scoring_window_data_np = jax.device_get(scoring_window_data)
+		with tracker.span("scoring_cpu"):
+			return _calculate_scores_from_snapshot_impl(
+				scoring_window_data_np, num_tasks, task_achievement_mask,
+				task_completed_mask, config, force_include_achievements_indices,
+			)
+	scoring_window_data_np = jax.device_get(scoring_window_data)
+	return _calculate_scores_from_snapshot_impl(
+		scoring_window_data_np, num_tasks, task_achievement_mask,
+		task_completed_mask, config, force_include_achievements_indices,
+	)
+
+
+def _calculate_scores_from_snapshot_impl(
+	scoring_window_data: dict,
+	num_tasks: int,
+	task_achievement_mask: np.ndarray,
+	task_completed_mask: np.ndarray,
+	config: DictConfig,
+	force_include_achievements_indices: list[int] = None,
+) -> dict:
 	"""The main "Smart Calculator" function.
 
 	Orchestrates the calculation of all metrics:
@@ -31,9 +56,8 @@ def calculate_scores_from_snapshot(
 	2. Calculates the specific `priority_score` for all tasks based on config.
 	3. Merges them into a final metrics dictionary.
 	"""
-	# 1. Convert all JAX arrays in the Pytree to NumPy arrays *once*.
-	# This is the most efficient way to move data from device to host.
-	scoring_window_data_np = jax.device_get(scoring_window_data)
+	# Input has already been transferred by the public wrapper.
+	scoring_window_data_np = scoring_window_data
 
 	# Pull from scoring_window_data_np
 	traj_batch = scoring_window_data_np.get("traj_batch")

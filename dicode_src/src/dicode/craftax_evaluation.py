@@ -2,6 +2,9 @@ import distrax
 import jax
 import jax.numpy as jnp
 import numpy as np
+from collections import OrderedDict
+import hashlib
+import threading
 from flax import linen as nn
 from flax import struct
 from flax.linen.initializers import constant, orthogonal
@@ -9,6 +12,81 @@ from dicode.network import ActorCriticTransformer, Transition
 from dicode.wrappers import BatchEnvWrapper
 from minicraftax.envs.craftax import CraftaxAugObsTrain
 from dicode.necropsy import necro_init, necro_step
+from dicode.runtime_analysis import tracker
+
+
+_COMPILED_EVALUATOR_CACHE = OrderedDict()
+_COMPILED_EVALUATOR_CACHE_LOCK = threading.RLock()
+
+
+def clear_compiled_evaluator_cache():
+	"""Clear the run-scoped evaluator cache (used by tests and new runs)."""
+	with _COMPILED_EVALUATOR_CACHE_LOCK:
+		_COMPILED_EVALUATOR_CACHE.clear()
+
+
+def _get_cached_evaluator(key):
+	with _COMPILED_EVALUATOR_CACHE_LOCK:
+		if key not in _COMPILED_EVALUATOR_CACHE:
+			return None
+		value = _COMPILED_EVALUATOR_CACHE.pop(key)
+		_COMPILED_EVALUATOR_CACHE[key] = value
+		return value
+
+
+def _put_cached_evaluator(key, value, max_entries=8):
+	with _COMPILED_EVALUATOR_CACHE_LOCK:
+		_COMPILED_EVALUATOR_CACHE[key] = value
+		while len(_COMPILED_EVALUATOR_CACHE) > max(1, int(max_entries)):
+			_COMPILED_EVALUATOR_CACHE.popitem(last=False)
+
+
+def _pytree_signature(value):
+	try:
+		leaves, treedef = jax.tree_util.tree_flatten(value)
+		return (str(treedef), tuple((tuple(getattr(x, "shape", ())), str(getattr(x, "dtype", type(x)))) for x in leaves))
+	except Exception:
+		return (type(value).__name__, repr(value))
+
+
+def _get_or_compile_evaluator(key, jit_fn, args, enabled, max_entries=8):
+	if enabled:
+		cached = _get_cached_evaluator(key)
+		if cached is not None:
+			return cached, True
+	if enabled:
+		with tracker.span("eval_compile", cache_hit=False, task_signature=str(key)):
+			compiled = jit_fn.lower(*args).compile()
+	else:
+		compiled = jit_fn
+	if enabled:
+		_put_cached_evaluator(key, compiled, max_entries)
+	return compiled, False
+
+
+def _cache_enabled(config):
+	performance = config.get("performance", {}) if hasattr(config, "get") else {}
+	return bool(performance.get("eval_compile_cache", False))
+
+
+def _cache_key(config, eval_embedding, detail, input_shape, train_state=None, rng=None):
+	training = config.training
+	evaluation = config.evaluation
+	static = tuple((name, str(getattr(training, name, None))) for name in (
+		"activation", "hidden_layers", "embed_size", "num_heads", "qkv_features",
+		"num_layers", "gating", "gating_bias", "condition_on_task", "conditioning_type",
+		"window_mem",
+	)) + tuple((name, str(getattr(evaluation, name, None))) for name in ("num_envs", "num_steps"))
+	if hasattr(config, "eval"):
+		static += (("max_timesteps", str(config.eval.get("max_timesteps", 8192))),)
+	h = hashlib.sha256()
+	if eval_embedding is not None:
+		arr = np.asarray(eval_embedding)
+		h.update(str(arr.shape).encode())
+		h.update(str(arr.dtype).encode())
+		h.update(arr.tobytes())
+	return (static, tuple(input_shape or ()), getattr(training, "conditioning_type", None),
+			bool(detail), h.hexdigest(), _pytree_signature(train_state), _pytree_signature(rng))
 # --- 2. Transformer Network Class ---
 # Imported from dicode.network
 
@@ -322,8 +400,20 @@ def main(config, rng, train_state=None, eval_embedding=None, detail=False):
 
 
 	rng, _rng = jax.random.split(rng)
-	evaluate_jit = jax.jit(make_evaluate(config, env, env_params, detail=detail))
-	metrics = evaluate_jit(train_state, _rng)
+	evaluate_fn = make_evaluate(config, env, env_params, detail=detail)
+	use_cache = _cache_enabled(config)
+	key = _cache_key(config, eval_embedding, detail,
+					(getattr(eval_embedding, "shape", None) or (config.evaluation.num_envs,)), train_state, _rng)
+	evaluate_jit = jax.jit(evaluate_fn)
+	max_entries = int((config.get("performance", {}) if hasattr(config, "get") else {}).get("compiled_cache_max_entries", 8))
+	evaluate_compiled, cache_hit = _get_or_compile_evaluator(
+		key, evaluate_jit, (train_state, _rng), use_cache, max_entries)
+	with tracker.span("eval_execute", cache_hit=cache_hit, task_signature=str(key)):
+		metrics = evaluate_compiled(train_state, _rng)
+		if tracker.enabled:
+			for leaf in jax.tree_util.tree_leaves(metrics):
+				if hasattr(leaf, "block_until_ready"):
+					leaf.block_until_ready()
 	return metrics
 
 

@@ -27,6 +27,8 @@ from dicode.evolution_efficient import (
 )
 from dicode.logging_utils import log_session_summary
 from dicode.runtime_analysis import tracker
+from dicode.ppo_tr import clear_train_compile_cache
+from dicode.craftax_evaluation import clear_compiled_evaluator_cache
 from dicode.selection import sample_tasks_for_training
 from dicode.setup import run_initial_seed_training, setup_experiment
 from dicode.training import run_session_training
@@ -39,6 +41,9 @@ MAX_JAX_CACHE_CLEAR_RETRIES = 10
 @hydra.main(version_base="1.2", config_path="../../conf/", config_name="config")
 def main(config: DictConfig):
     """Main entry point for the DiCode training loop."""
+    tracker.configure(config, reset=True)
+    clear_compiled_evaluator_cache()
+    clear_train_compile_cache()
 
     # =========================================================================
     # Phase 1: Experiment Setup
@@ -113,6 +118,8 @@ def main(config: DictConfig):
     # =========================================================================
     while global_env_steps < config.training.total_timesteps:
         current_session_idx = gen_manager.session_idx
+        tracker.set_session(current_session_idx)
+        session_start_ns = time.monotonic_ns()
         print(f"\n{'=' * 60}")
         print(f"--- Starting Session {current_session_idx} ---")
         print(f"{'=' * 60}")
@@ -131,12 +138,14 @@ def main(config: DictConfig):
 
             if evolve_future is not None:
                 wait_start = time.time()
+                wait_start_ns = time.monotonic_ns()
                 worker_timeout = config.dicode_manager.get("worker_sync_timeout_s", 600)
                 try:
                     worker_results = evolve_future.result(timeout=worker_timeout)
                     wait_end = time.time()
 
                     current_worker_wait_time = wait_end - wait_start
+                    tracker.record("evolution_sync_wait", wait_start_ns, session=current_session_idx)
                     current_worker_total_time = wait_end - worker_start_time
                     evolve_future = None
 
@@ -149,6 +158,8 @@ def main(config: DictConfig):
                 except concurrent.futures.TimeoutError:
                     wait_end = time.time()
                     current_worker_wait_time = wait_end - wait_start
+                    tracker.record("evolution_sync_wait", wait_start_ns, session=current_session_idx,
+                                   status="timeout")
                     current_worker_total_time = wait_end - worker_start_time
                     print(
                         f"  [Sync] WARNING: evolution worker did not finish within "
@@ -248,9 +259,9 @@ def main(config: DictConfig):
         print(f"  New tasks: {num_new_to_use}. "
               f"Sampling {num_to_sample_from_archive} from archive.")
 
-        sampled_from_archive = sample_tasks_for_training(
-            gen_manager, config, num_to_sample_from_archive
-        )
+        task_sample_start = time.monotonic_ns()
+        sampled_from_archive = sample_tasks_for_training(gen_manager, config, num_to_sample_from_archive)
+        tracker.record("task_sampling", task_sample_start, session=current_session_idx)
         # [B] Preflight Gate (v2): score new tasks with the CURRENT policy and keep
         #     only learnable ones. Reuses the codebase's own machinery end-to-end:
         #     load_tasks_from_env_codes (env from archived code) -> evaluate_new_tasks
@@ -367,14 +378,11 @@ def main(config: DictConfig):
         # Fix: run the real held-out evaluation (same function priming uses) each
         # session -> posts clean evaluation/* internally; keep the training-slot
         # numbers under evaluation_shaped/* (per-session leak-model verification).
+        heldout_start = time.monotonic_ns()
         rng, _clean_eval_metrics = run_session_evaluation(
-            config,
-            rng,
-            rl_train_state,
-            gen_manager,
-            current_session_idx,
-            global_env_steps,
+            config, rng, rl_train_state, gen_manager, current_session_idx, global_env_steps,
         )
+        tracker.record("heldout_eval", heldout_start, session=current_session_idx)
         if "mean_return" in _clean_eval_metrics:
             last_known_original_return = _clean_eval_metrics["mean_return"]
 
@@ -386,9 +394,17 @@ def main(config: DictConfig):
             }
             for key, value in evaluation_metrics.items():
                 eval_log_data[f"evaluation_shaped/{key}"] = value
-            wandb.log(eval_log_data)
+            _wandb_start = time.monotonic_ns()
+            try:
+                wandb.log(eval_log_data)
+            except Exception:
+                tracker.record("wandb_log_eval", _wandb_start, session=current_session_idx, status="error")
+                raise
+            else:
+                tracker.record("wandb_log_eval", _wandb_start, session=current_session_idx)
 
         # --- Step 5: Post-Training Activation (Compare-and-Swap) ---
+        activation_start = time.monotonic_ns()
         real_activated_count = 0
         if new_task_ids:
             print(f"  Attempting to activate {len(new_task_ids)} new tasks...")
@@ -404,6 +420,7 @@ def main(config: DictConfig):
 
                 if attempt_to_activate_task(gen_manager, new_task_id, new_score, config):
                     real_activated_count += 1
+        tracker.record("task_activation", activation_start, session=current_session_idx)
 
         cumulative_compiled += compiled_count
         cumulative_activated += real_activated_count
@@ -430,30 +447,57 @@ def main(config: DictConfig):
                 raise
 
         print("Checkpointing agent state and saving task graph...")
-        rl_ckpt_manager.save(global_update_step, rl_train_state)
-        gen_manager.archive.save_graph()
+        _ckpt_start = time.monotonic_ns()
+        try:
+            rl_ckpt_manager.save(global_update_step, rl_train_state)
+            if tracker.enabled and hasattr(rl_ckpt_manager, "wait_until_finished"):
+                rl_ckpt_manager.wait_until_finished()
+        except Exception:
+            tracker.record("checkpoint_save", _ckpt_start, session=current_session_idx, status="error")
+            raise
+        else:
+            tracker.record("checkpoint_save", _ckpt_start, session=current_session_idx)
+
+        _graph_start = time.monotonic_ns()
+        try:
+            gen_manager.archive.save_graph()
+        except Exception:
+            tracker.record("task_graph_save", _graph_start, session=current_session_idx, status="error")
+            raise
+        else:
+            tracker.record("task_graph_save", _graph_start, session=current_session_idx)
 
         # --- Step 7: Logging ---
-        log_session_summary(
-            config,
-            current_session_idx,
-            global_env_steps,
-            global_update_step,
-            gen_manager,
-            sampled_task_ids,
-            num_updates_in_session,
-            training_metrics,
-            categorized_tasks,
-            generation_table,
-            rl_ckpt_path,
-            current_worker_wait_time,
-            current_worker_total_time,
-            cumulative_compiled=cumulative_compiled,
-            cumulative_activated=cumulative_activated,
-        )
+        _summary_start = time.monotonic_ns()
+        try:
+            log_session_summary(
+                config,
+                current_session_idx,
+                global_env_steps,
+                global_update_step,
+                gen_manager,
+                sampled_task_ids,
+                num_updates_in_session,
+                training_metrics,
+                categorized_tasks,
+                generation_table,
+                rl_ckpt_path,
+                current_worker_wait_time,
+                current_worker_total_time,
+                cumulative_compiled=cumulative_compiled,
+                cumulative_activated=cumulative_activated,
+            )
+        except Exception:
+            tracker.record("session_summary", _summary_start, session=current_session_idx, status="error")
+            raise
+        else:
+            tracker.record("session_summary", _summary_start, session=current_session_idx)
 
+        tracker.record("session_wall", session_start_ns, session=current_session_idx)
         tracker.save_data()
         tracker.plot_results()
+        if tracker.enabled:
+            tracker.derive_reports()
 
         gen_manager.session_idx += 1
 
@@ -462,7 +506,14 @@ def main(config: DictConfig):
     # =========================================================================
     if config.use_wandb:
         print("\n--- Run complete. Closing W&B run. ---")
-        wandb.finish()
+        _finish_start = time.monotonic_ns()
+        try:
+            wandb.finish()
+        except Exception:
+            tracker.record("wandb_finish", _finish_start, status="error")
+            raise
+        else:
+            tracker.record("wandb_finish", _finish_start)
 
 
 def _process_worker_results(

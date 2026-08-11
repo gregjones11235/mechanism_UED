@@ -1,5 +1,6 @@
 # --- Third-Party ---
 import hydra
+import time
 import jax
 import jax.numpy as jnp
 import wandb
@@ -22,6 +23,7 @@ from minicraftax.envs.craftax import CraftaxAugObsTrain
 # from multitask_evaluation import make_multitask_evaluate
 from dicode.dreaming.gen_manager import GenManager, TaskArchive
 from dicode.dreaming.llm import LLM
+from dicode.runtime_analysis import tracker
 
 
 def run_session_evaluation(
@@ -82,7 +84,17 @@ def run_session_evaluation(
 		eval_log_data = {"session": current_session_idx, "global_env_steps": global_env_steps}
 		for key, value in evaluation_metrics.items():
 			eval_log_data[f"evaluation/{key}"] = value
-		wandb.log(eval_log_data)
+		if tracker.enabled:
+			_start = time.monotonic_ns()
+			try:
+				wandb.log(eval_log_data)
+			except Exception:
+				tracker.record("wandb_log_heldout", _start, session=current_session_idx, status="error")
+				raise
+			else:
+				tracker.record("wandb_log_heldout", _start, session=current_session_idx)
+		else:
+			wandb.log(eval_log_data)
 
 	return rng, evaluation_metrics
 
