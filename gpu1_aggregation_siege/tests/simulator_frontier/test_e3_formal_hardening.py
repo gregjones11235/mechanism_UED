@@ -47,7 +47,7 @@ def test_budget_positive_and_negative():
 def test_journal_tamper_and_ceiling(tmp_path):
     J = _journal_cls(); j = J(str(tmp_path / "j.json"), max_success_keys=1)
     ident = dict(source_commit="a", candidate="b", session=1, evidence_hash="c",
-                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+                 role="frontier_evidence_diagnostician", provider="p", requested_model="m", client_implementation_hash="i")
     key = j.composite_key(**ident)
     j.record_success(key=key, identity=ident, returned_model="m",
                      usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
@@ -65,7 +65,7 @@ def test_journal_concurrent_unique_and_usage_rejection(tmp_path):
     J = _journal_cls(); path = tmp_path / "concurrent.json"
     def one(i):
         j = J(str(path)); ident = dict(source_commit="a", candidate="b", session=i,
-            evidence_hash=str(i), role="r", provider="p", requested_model="m",
+            evidence_hash=str(i), role="frontier_evidence_diagnostician", provider="p", requested_model="m",
             client_implementation_hash="i")
         key = j.composite_key(**ident)
         return j.record_success(key=key, identity=ident, returned_model="m",
@@ -76,14 +76,133 @@ def test_journal_concurrent_unique_and_usage_rejection(tmp_path):
     j = J(str(path)); assert len(j._load()["entries"]) == 16
     capped = J(str(tmp_path / "cap.json"), max_success_keys=2)
     for i in range(2): one_ident = dict(source_commit="c", candidate="d", session=i,
-        evidence_hash=str(i), role="r", provider="p", requested_model="m", client_implementation_hash="i"); capped.record_success(key=capped.composite_key(**one_ident), identity=one_ident, returned_model="m", usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}, validated_output={"i":i}, response_content="{}")
+        evidence_hash=str(i), role="frontier_evidence_diagnostician", provider="p", requested_model="m", client_implementation_hash="i"); capped.record_success(key=capped.composite_key(**one_ident), identity=one_ident, returned_model="m", usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}, validated_output={"i":i}, response_content="{}")
     third = dict(source_commit="c", candidate="d", session=3, evidence_hash="3",
-                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+                 role="frontier_evidence_diagnostician", provider="p", requested_model="m", client_implementation_hash="i")
     with pytest.raises(ValueError):
         capped.record_success(key=capped.composite_key(**third), identity=third,
             returned_model="m", usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},
             validated_output={"i":3}, response_content="{}")
     assert len(capped._load()["entries"]) == 2
+
+
+def test_journal_role_caps_and_preseed_rekey(tmp_path):
+    J = _journal_cls()
+    source_path = tmp_path / "source.json"
+    source = J(str(source_path))
+    old = dict(source_commit="old", candidate="b", session=1,
+               evidence_hash="prompt-hash", role="frontier_evidence_diagnostician",
+               provider="p", requested_model="m", client_implementation_hash="old-client")
+    old_key = source.composite_key(**old)
+    source.record_success(key=old_key, identity=old, returned_model="m",
+        usage={"prompt_tokens": 1, "completion_tokens": 1024, "total_tokens": 1025},
+        validated_output={"ok": True}, response_content="diag")
+    payload = json.loads(source_path.read_text())
+    payload["preseed_provenance"] = {
+        "source_run": "old-run", "source_key": old_key,
+        "source_journal_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "source_commit": "old", "source_client_implementation_hash": "old-client",
+    }
+    source_path.write_text(json.dumps(payload))
+    target = J(str(tmp_path / "target.json"))
+    new = dict(source_commit="new", candidate="b", session=1,
+               evidence_hash="prompt-hash", role="frontier_evidence_diagnostician",
+               provider="p", requested_model="m", client_implementation_hash="new-client")
+    entry = target.install_preseed(source_entry=payload["entries"][old_key],
+        identity=new, provenance=payload["preseed_provenance"])
+    assert target.lookup(entry["key"], identity=new)["validated_output"] == {"ok": True}
+    planner = dict(new, role="curriculum_search_planner", evidence_hash="plan")
+    pkey = target.composite_key(**planner)
+    target2 = J(str(tmp_path / "planner.json"))
+    target2.record_success(key=pkey, identity=planner, returned_model="m",
+        usage={"prompt_tokens": 1, "completion_tokens": 4096, "total_tokens": 4097},
+        validated_output={"plan": True}, response_content="plan")
+    with pytest.raises(ValueError):
+        target2.record_success(key=target2.composite_key(**dict(planner, role="unknown")),
+            identity=dict(planner, role="unknown"), returned_model="m",
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            validated_output={}, response_content="x")
+    with pytest.raises(ValueError):
+        target2.record_success(key=pkey, identity=planner, returned_model="m",
+            usage={"prompt_tokens": 1, "completion_tokens": 4097, "total_tokens": 4098},
+            validated_output={}, response_content="x")
+
+
+def test_runner_preseed_install_rekeys_and_tamper_blocks(tmp_path, monkeypatch):
+    import run_e3_formal_longrun as runner
+    J = _journal_cls(); source_path = tmp_path / "preseed.json"
+    source = J(str(source_path))
+    ident = dict(source_commit="old", candidate="SLOWGRU_PERSISTENT_CANONICAL_98304",
+                 session=1, evidence_hash="prompt", role="frontier_evidence_diagnostician",
+                 provider="dashscope", requested_model="qwen-plus", client_implementation_hash="old-client")
+    key = source.composite_key(**ident)
+    source.record_success(key=key, identity=ident, returned_model="qwen-plus",
+        usage={"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+        validated_output={"state_id":"s"}, response_content="diag")
+    payload = json.loads(source_path.read_text())
+    payload["preseed_provenance"] = {"source_run":"old-run", "source_key":key,
+        "source_journal_sha256":hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "source_commit":"old", "source_client_implementation_hash":"old-client"}
+    source_path.write_text(json.dumps(payload))
+    auth = SimpleNamespace(preseed_journal_sha256=hashlib.sha256(source_path.read_bytes()).hexdigest())
+    run_dir = tmp_path / "run"; run_dir.mkdir()
+    monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
+    info = runner._install_preseed_journal(preseed_path=str(source_path), run_dir=str(run_dir), auth=auth,
+        source_commit="new", candidate_id="SLOWGRU_PERSISTENT_CANONICAL_98304", client_hash="new-client")
+    assert info["source_key"] == key and info["installed_key"] != key
+    assert len(J(str(run_dir / "LLM_PAID_CALL_JOURNAL.json"))._load()["entries"]) == 1
+    auth.preseed_journal_sha256 = "0" * 64
+    with pytest.raises(ValueError):
+        runner._install_preseed_journal(preseed_path=str(source_path), run_dir=str(tmp_path / "other"), auth=auth,
+            source_commit="new", candidate_id="SLOWGRU_PERSISTENT_CANONICAL_98304", client_hash="new-client")
+
+
+def test_preseed_reuse_diag_only_planner_transport(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
+    import run_e3_formal_longrun as runner
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    from dicode.simulator_frontier.llm_contracts import compute_diagnostician_hash
+    J = _journal_cls()
+    evidence = {"feasibility":{"state_id":"s"}, "archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}
+    prompt_hash = clients._canonical_sha256({"evidence":{"feasibility":{"state_id":"s"},"data_source":""}})
+    diag = {"state_id":"s","bucket_id":"b","frontier_class":"LEARNABLE_FRONTIER",
+            "confidence":0.8,"dominant_failure":"x","memory_mismatch_suspected":False,
+            "search_budget_sufficient":True,"evidence_ids":["e"],"recommended_evidence_action":"x"}
+    diag["diagnosis_hash"] = compute_diagnostician_hash(diag, evidence_hash=clients._evidence_hash_of(evidence))
+    source_path = tmp_path / "preseed.json"; source = J(str(source_path))
+    old = dict(source_commit="old", candidate="SLOWGRU_PERSISTENT_CANONICAL_98304", session=1,
+               evidence_hash=prompt_hash, role="frontier_evidence_diagnostician", provider="dashscope",
+               requested_model="m", client_implementation_hash="old-client")
+    old_key = source.composite_key(**old)
+    source.record_success(key=old_key, identity=old, returned_model="m",
+        usage={"prompt_tokens":2,"completion_tokens":5,"total_tokens":7},
+        validated_output=diag, response_content="diag")
+    payload=json.loads(source_path.read_text()); payload["preseed_provenance"]={
+        "source_run":"/old/run","source_key":old_key,
+        "source_journal_sha256":hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "source_commit":"old","source_client_implementation_hash":"old-client"}
+    source_path.write_text(json.dumps(payload))
+    target_dir=tmp_path / "target"; target_dir.mkdir()
+    auth=SimpleNamespace(preseed_journal_sha256=hashlib.sha256(source_path.read_bytes()).hexdigest())
+    runner._install_preseed_journal(preseed_path=str(source_path), run_dir=str(target_dir), auth=auth,
+        source_commit="new", candidate_id="SLOWGRU_PERSISTENT_CANONICAL_98304", client_hash="new-client")
+    monkeypatch.setenv("QWEN_MODEL","m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH",str(target_dir / "LLM_PAID_CALL_JOURNAL.json"))
+    monkeypatch.setenv("E3_SOURCE_COMMIT","new"); monkeypatch.setenv("E3_CANDIDATE_ID","SLOWGRU_PERSISTENT_CANONICAL_98304"); monkeypatch.setenv("E3_SESSION_IDX","1")
+    monkeypatch.setenv("E3_CLIENT_FACTORY_IMPLEMENTATION_HASH", "new-client")
+    calls=[]
+    def fake(system,user,**kwargs):
+        calls.append((system,kwargs))
+        body={"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"s":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION}
+        return {"content":json.dumps(body),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients,"_call_qwen",fake); clients.clear_audit_events()
+    d=clients._DiagnosticianClient("s","b").complete(evidence)
+    clients._PlannerClient("s",4,16).complete({**evidence,"diagnostician_summary":d})
+    events=clients.drain_audit_events()
+    assert len(calls)==1 and calls[0][1]["max_tokens"]==4096
+    assert [e["role"] for e in events] == ["frontier_evidence_diagnostician","curriculum_search_planner"]
+    assert events[0]["reused"] and events[0]["paid_new"] is False
+    assert events[1]["paid_new"] and events[1]["reused"] is False
 
 
 @pytest.mark.parametrize("usage", [
@@ -96,7 +215,7 @@ def test_journal_concurrent_unique_and_usage_rejection(tmp_path):
 def test_invalid_usage_rejected(tmp_path, usage):
     J = _journal_cls(); j = J(str(tmp_path / "u.json"))
     ident = dict(source_commit="a", candidate="b", session=1, evidence_hash="u",
-                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+                 role="frontier_evidence_diagnostician", provider="p", requested_model="m", client_implementation_hash="i")
     with pytest.raises(ValueError):
         j.record_success(key=j.composite_key(**ident), identity=ident,
                          returned_model="m", usage=usage, validated_output={}, response_content="")
@@ -109,7 +228,7 @@ def test_invalid_usage_rejected(tmp_path, usage):
 def test_existing_entry_tamper_hard_fails(tmp_path, field):
     J = _journal_cls(); path = tmp_path / "tamper.json"; j = J(str(path))
     ident = dict(source_commit="a", candidate="b", session=1, evidence_hash="t",
-                 role="r", provider="p", requested_model="m", client_implementation_hash="i")
+                 role="frontier_evidence_diagnostician", provider="p", requested_model="m", client_implementation_hash="i")
     key = j.composite_key(**ident)
     j.record_success(key=key, identity=ident, returned_model="m",
         usage={"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},
@@ -178,6 +297,7 @@ def test_resume_helper_counter_formula():
 
 def test_two_role_client_journal_reuse(tmp_path, monkeypatch):
     pytest.importorskip("jax")
+    monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
     from dicode.simulator_frontier import _e3_real_llm_clients as clients
     monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "roles.json"))
     monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
@@ -202,8 +322,32 @@ def test_two_role_client_journal_reuse(tmp_path, monkeypatch):
         "frontier_evidence_diagnostician", "curriculum_search_planner"}
 
 
+def test_role_specific_transport_caps_and_preseed_miss_blocks(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "caps.json"))
+    monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
+    calls = []
+    def fake(system, user, **kwargs):
+        calls.append((system, kwargs))
+        body = ({"frontier_class":"LEARNABLE_FRONTIER","confidence":.8,"dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,"recommended_evidence_action":"x"}
+                if "Diagnostician" in system else {"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"s":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION})
+        return {"content":json.dumps(body),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients, "_call_qwen", fake)
+    evidence={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}
+    d=clients._DiagnosticianClient("s","b").complete(evidence)
+    clients._PlannerClient("s",4,16).complete({**evidence,"diagnostician_summary":d})
+    assert [kwargs["max_tokens"] for _, kwargs in calls] == [1024, 4096]
+    monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "missing-preseed.json"))
+    monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "missing-key")
+    with pytest.raises(RuntimeError, match="PRESEED_DIAGNOSTIC_EVIDENCE_MISMATCH"):
+        clients._DiagnosticianClient("s","b").complete(evidence)
+
+
 def test_diagnosis_change_rekeys_planner(tmp_path, monkeypatch):
     pytest.importorskip("jax")
+    monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
     from dicode.simulator_frontier import _e3_real_llm_clients as clients
     monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "d.json")); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
     calls=[]
@@ -222,6 +366,7 @@ def test_diagnosis_change_rekeys_planner(tmp_path, monkeypatch):
 
 def test_role2_failure_resume_reuses_role1(tmp_path, monkeypatch):
     pytest.importorskip("jax")
+    monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
     from dicode.simulator_frontier import _e3_real_llm_clients as clients
     monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "r.json")); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
     calls=[]; fail=[True]

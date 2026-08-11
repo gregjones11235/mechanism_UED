@@ -13,6 +13,10 @@ from typing import Any, Mapping
 
 SCHEMA = "simulator_frontier.e3-durable-llm-journal/v1"
 MAX_SUCCESS_KEYS = 302
+ROLE_COMPLETION_CAPS = {
+    "frontier_evidence_diagnostician": 1024,
+    "curriculum_search_planner": 4096,
+}
 _THREAD_LOCKS: dict[str, threading.Lock] = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 
@@ -62,7 +66,13 @@ class DurablePaidCallJournal:
         for key, entry in entries.items():
             if not self._valid_entry(key, entry):
                 raise ValueError(f"durable LLM journal entry tampered: {key}")
-        return {"schema": SCHEMA, "entries": entries}
+        result = {"schema": SCHEMA, "entries": entries}
+        provenance = payload.get("preseed_provenance")
+        if provenance is not None:
+            if not isinstance(provenance, Mapping):
+                raise ValueError("durable LLM preseed provenance invalid")
+            result["preseed_provenance"] = dict(provenance)
+        return result
 
     def _valid_entry(self, key: str, entry: Any) -> bool:
         if not isinstance(entry, Mapping) or entry.get("status") != "SUCCESS":
@@ -82,7 +92,10 @@ class DurablePaidCallJournal:
             return False
         if usage["total_tokens"] != usage["prompt_tokens"] + usage["completion_tokens"]:
             return False
-        if (usage["total_tokens"] <= 0 or usage["completion_tokens"] > 1024
+        cap = ROLE_COMPLETION_CAPS.get(str(entry.get("role")))
+        if cap is None:
+            return False
+        if (usage["total_tokens"] <= 0 or usage["completion_tokens"] > cap
                 or usage["total_tokens"] > 20000
                 or usage["total_tokens"] != usage["prompt_tokens"] + usage["completion_tokens"]):
             return False
@@ -120,7 +133,10 @@ class DurablePaidCallJournal:
                 or any(k not in usage for k in ("prompt_tokens", "completion_tokens", "total_tokens"))):
             raise ValueError("LLM usage is missing")
         clean_usage = {k: int(usage[k]) for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
-        if (clean_usage["total_tokens"] <= 0 or clean_usage["completion_tokens"] > 1024
+        cap = ROLE_COMPLETION_CAPS.get(str(identity.get("role")))
+        if cap is None:
+            raise ValueError("unknown E3 LLM role")
+        if (clean_usage["total_tokens"] <= 0 or clean_usage["completion_tokens"] > cap
                 or clean_usage["total_tokens"] > 20000
                 or clean_usage["total_tokens"] != clean_usage["prompt_tokens"] + clean_usage["completion_tokens"]):
             raise ValueError("LLM usage is missing or exceeds the signed token contract")
@@ -159,6 +175,68 @@ class DurablePaidCallJournal:
                 os.replace(tmp_name, self.path)
             finally:
                 if os.path.exists(tmp_name): os.unlink(tmp_name)
+            return dict(entry)
+
+    def install_preseed(self, *, source_entry: Mapping[str, Any],
+                        identity: Mapping[str, Any],
+                        provenance: Mapping[str, Any]) -> dict[str, Any]:
+        """Atomically install one validated diagnostician success.
+
+        The source response is copied without changing content/output hashes;
+        only the composite identity is re-keyed for the current signed run.
+        """
+        source_entry = dict(source_entry)
+        identity = dict(identity)
+        if source_entry.get("role") != "frontier_evidence_diagnostician":
+            raise ValueError("preseed must contain diagnostician success")
+        old_key = str(source_entry.get("key", ""))
+        if not old_key or not self._valid_entry(old_key, source_entry):
+            raise ValueError("preseed diagnostician entry invalid")
+        required = ("source_commit", "candidate", "session", "evidence_hash",
+                    "role", "provider", "requested_model",
+                    "client_implementation_hash")
+        if any(k not in identity for k in required):
+            raise ValueError("preseed identity incomplete")
+        key = self.composite_key(**identity)
+        if identity["role"] != "frontier_evidence_diagnostician":
+            raise ValueError("preseed role mismatch")
+        if identity["session"] != 1:
+            raise ValueError("preseed session must be 1")
+        if not isinstance(provenance, Mapping) or not provenance:
+            raise ValueError("preseed migration provenance missing")
+        with self._file_lock():
+            payload = self._load()
+            if payload.get("entries"):
+                raise ValueError("preseed target journal is not empty")
+            entry = dict(source_entry)
+            entry.update({
+                "key": key,
+                "source_commit": identity["source_commit"],
+                "candidate": identity["candidate"],
+                "session": identity["session"],
+                "evidence_hash": identity["evidence_hash"],
+                "role": identity["role"],
+                "provider": identity["provider"],
+                "requested_model": identity["requested_model"],
+                "client_implementation_hash": identity["client_implementation_hash"],
+                "key_identity": identity,
+                "returned_model": identity["requested_model"],
+            })
+            if not self._valid_entry(key, entry):
+                raise ValueError("rekeyed preseed entry invalid")
+            payload = {"schema": SCHEMA, "entries": {key: entry},
+                       "preseed_provenance": dict(provenance)}
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_name = tempfile.mkstemp(prefix=self.path.name + ".", dir=str(self.path.parent))
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, ensure_ascii=False, sort_keys=True,
+                              indent=2, default=str)
+                    fh.flush(); os.fsync(fh.fileno())
+                os.replace(tmp_name, self.path)
+            finally:
+                if os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
             return dict(entry)
 
     @contextmanager

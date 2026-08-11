@@ -309,7 +309,7 @@ def run_real_actual_n(student_mount: dict, *, n: int = 4, horizon: int = 16) -> 
 # ---------------------------------------------------------------------------
 # 2. two REAL LLM roles
 # ---------------------------------------------------------------------------
-def build_two_llm_runtime(*, max_output_tokens_per_call: int = 1024,
+def build_two_llm_runtime(*, max_output_tokens_per_call: int = 4096,
                           max_total_tokens_per_call: int = 20000,
                           retry_cap: int = 0,
                           provider: str = "dashscope") -> Any:

@@ -20,7 +20,7 @@
     "runner_authorization": {
       "kind": "runner",
       "path": "../scripts/e3_authorization.py",
-      "sha256": "3b317ea09187f1ed2ab86f6f9d353ac794629ff912c8b4f2b5aa5036523e6c58"
+      "sha256": "5d9eb4f46246767ed399f61d137eaa0f0cca9ca8e638fbcac2b09a37c3f5cd21"
     },
     "runner_capsule_actualn": {
       "kind": "runner",
@@ -35,7 +35,7 @@
     "runner_formal_longrun": {
       "kind": "runner",
       "path": "../scripts/run_e3_formal_longrun.py",
-      "sha256": "05e0546bfc0cd1734134e00128db19e3b52b75dba4f343bf59bca28f9ccc4fcb"
+      "sha256": "b9b4eeaba3547437804cffcbdc1f950f794cbfdff459e1cbcb467e30eb2808a7"
     },
     "runner_verify": {
       "kind": "runner",
@@ -45,7 +45,7 @@
     "task_asset_manifest": {
       "kind": "task_asset_manifest",
       "path": "task_asset_manifest.json",
-      "sha256": "5318cc9abffef5047694a4db7ac13cf2cc0d371f90f9259114c19601a0c2e0f1"
+      "sha256": "eff6445b5501aa46450db56e70794167e9c6d1db54edc65dfb84cd977b0e948b"
     },
     "executable_anchor_manifest": {
       "kind": "executable_anchor_manifest",

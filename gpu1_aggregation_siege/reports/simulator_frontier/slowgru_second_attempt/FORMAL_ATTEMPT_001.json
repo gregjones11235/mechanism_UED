@@ -1,0 +1,30 @@
+{
+  "schema": "e3_formal_attempt_failure/v1",
+  "attempt": "FORMAL_ATTEMPT_001",
+  "status": "FAILED_LLM_PLANNER_TRUNCATED",
+  "candidate": "SLOWGRU_PERSISTENT_CANONICAL_98304",
+  "source_commit": "ae4c9ab3effd68cfa728282c9a43f4f4a4a363b0",
+  "output_path": "/media/数据磁盘2/e3_slowgru_persistent_formal_20260811T011800Z",
+  "wrapper_log_path": "/media/数据磁盘2/e3_slowgru_wrapperlogs_20260811T011800Z",
+  "child_pid": 3936125,
+  "gpu_uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f",
+  "cuda_visible_devices": "1",
+  "session": 1,
+  "diagnostician": {
+    "paid_successes": 1,
+    "journal_entries": 1,
+    "usage": {"prompt_tokens": 364, "completion_tokens": 60, "total_tokens": 424}
+  },
+  "planner": {
+    "status": "REAL_LLM_OUTPUT_UNPARSEABLE",
+    "cause": "response exceeded prior 1024-token completion cap",
+    "paid_successes": 0
+  },
+  "training_updates": 0,
+  "training_env_steps": 0,
+  "checkpoints_written": 0,
+  "api_retry_count": 0,
+  "response_content_recorded": false,
+  "secrets_recorded": false,
+  "note": "Failure evidence preserves the paid diagnostician success for signed preseed migration; no content or API secret is included."
+}

@@ -56,6 +56,7 @@ import socket
 import shutil
 from contextlib import contextmanager
 from collections.abc import Mapping
+from typing import Any
 from pathlib import Path
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -354,10 +355,69 @@ def append_resume_event(run_dir: str, event: dict) -> None:
         fh.write(raw); fh.flush(); os.fsync(fh.fileno())
 
 
+def _install_preseed_journal(*, preseed_path: str, run_dir: str, auth: Any,
+                             source_commit: str, candidate_id: str,
+                             client_hash: str) -> dict[str, Any]:
+    """Validate and re-key exactly one prior diagnostician success."""
+    if not auth.preseed_journal_sha256:
+        raise ValueError("preseed journal is not signed")
+    if _sha256_file(preseed_path) != auth.preseed_journal_sha256:
+        raise ValueError("preseed journal SHA mismatch")
+    import importlib.util
+    journal_path = os.path.join(SRC_DIR, "dicode", "simulator_frontier",
+                                "e3_durable_llm_journal.py")
+    spec = importlib.util.spec_from_file_location("_e3_preseed_journal", journal_path)
+    if spec is None or spec.loader is None:
+        raise ValueError("preseed journal module unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    DurablePaidCallJournal = module.DurablePaidCallJournal
+    source_journal = DurablePaidCallJournal(preseed_path)
+    payload = source_journal._load()
+    entries = payload.get("entries", {})
+    if len(entries) != 1:
+        raise ValueError("preseed journal must contain exactly one success")
+    source_key, source_entry = next(iter(entries.items()))
+    if source_entry.get("role") != "frontier_evidence_diagnostician":
+        raise ValueError("preseed journal may only contain diagnostician")
+    if int(source_entry.get("session", 0)) != 1:
+        raise ValueError("preseed diagnostician must be session 1")
+    provenance = payload.get("preseed_provenance")
+    if not isinstance(provenance, Mapping):
+        raise ValueError("preseed migration provenance missing")
+    for field in ("source_run", "source_key", "source_journal_sha256",
+                  "source_commit", "source_client_implementation_hash"):
+        if not provenance.get(field):
+            raise ValueError(f"preseed provenance missing {field}")
+    old_identity = dict(source_entry.get("key_identity", {}))
+    identity = {
+        "source_commit": source_commit, "candidate": candidate_id,
+        "session": 1, "evidence_hash": old_identity.get("evidence_hash", ""),
+        "role": "frontier_evidence_diagnostician",
+        "provider": str(old_identity.get("provider", "dashscope")),
+        "requested_model": str(old_identity.get("requested_model", "")),
+        "client_implementation_hash": client_hash,
+    }
+    if not identity["evidence_hash"] or not identity["requested_model"]:
+        raise ValueError("preseed diagnostician identity incomplete")
+    target_path = os.path.join(run_dir, "LLM_PAID_CALL_JOURNAL.json")
+    target = DurablePaidCallJournal(target_path)
+    provenance = dict(provenance)
+    provenance.update({"installed_source_key": source_key,
+                       "installed_source_journal_sha256": auth.preseed_journal_sha256})
+    entry = target.install_preseed(source_entry=source_entry,
+                                   identity=identity, provenance=provenance)
+    new_key = entry["key"]
+    os.environ["E3_PRESEEDED_DIAGNOSTIC_KEY"] = new_key
+    return {"sha256": auth.preseed_journal_sha256, "source_key": source_key,
+            "installed_key": new_key, "provenance": provenance}
+
+
 def _metadata_payload(*, source_commit, runner_sha256, auth, candidate_id, sessions,
                       budget, mounted_file_sha, mounted_params_sha, gpu, pid, started_utc,
                       client_combo_hash, checkpoint_sha256, task_asset_manifest_sha256,
-                      disk_free_bytes=0, disk_required_bytes=0):
+                      disk_free_bytes=0, disk_required_bytes=0,
+                      preseed_info=None):
     return {"schema":"simulator_frontier.e3_formal_longrun/v2", "source_commit":source_commit,
             "runner_sha256":runner_sha256, "authorization_id":auth.authorization_id,
             "authorization_manifest_hash":auth.manifest_hash, "candidate_id":candidate_id,
@@ -369,10 +429,12 @@ def _metadata_payload(*, source_commit, runner_sha256, auth, candidate_id, sessi
             "mounted_file_sha256":mounted_file_sha, "mounted_params_sha256":mounted_params_sha,
             "gpu":gpu, "pid":pid, "started_utc":started_utc,
             "updates_per_session":UPDATES_PER_SESSION, "num_envs":NUM_ENVS, "num_steps":NUM_STEPS,
-            "max_logical_calls":302, "max_output_tokens_per_call":1024,
+            "max_logical_calls":302, "max_output_tokens_per_call":4096,
             "max_total_tokens_per_call":20000, "retry_cap":0,
             "disk_free_bytes": disk_free_bytes,
-            "disk_required_bytes": disk_required_bytes}
+            "disk_required_bytes": disk_required_bytes,
+            "preseed_journal_sha256": getattr(auth, "preseed_journal_sha256", None) or "",
+            "preseed_provenance": (preseed_info or {}).get("provenance", {})}
 
 
 def _metadata_expected_static(meta: dict) -> dict:
@@ -671,7 +733,7 @@ def run_one_session(*, candidate_id: str, session_idx: int, run_dir: str,
 
     # ---- 3. two REAL LLM roles (once per session) ----------------------------
     two_llm = prod.build_two_llm_runtime(
-        max_output_tokens_per_call=1024,
+        max_output_tokens_per_call=4096,
         max_total_tokens_per_call=20000,
         retry_cap=0,
         provider="dashscope")
@@ -928,6 +990,7 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
     sessions = 2  # default = integration (2 sessions x 100); full-budget passes 151
     run_dir = None
     auth_manifest = None
+    preseed_journal = None
     resume = False
     for arg in argv:
         if arg.startswith("--student="):
@@ -938,6 +1001,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
             run_dir = arg.split("=", 1)[1]
         elif arg.startswith("--auth-manifest="):
             auth_manifest = arg.split("=", 1)[1]
+        elif arg.startswith("--preseed-journal="):
+            preseed_journal = arg.split("=", 1)[1]
         elif arg == "--resume":
             resume = True
         else:
@@ -1005,6 +1070,7 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
                 static_assets.get("executable_anchor_manifest_sha256", ""))
         anchor_path = static_assets.get("executable_anchor_manifest_path", "")
         anchor_sha = static_assets.get("executable_anchor_manifest_sha256", "")
+        client_hash = ""
         if budget_scope == "formal":
             if not anchor_path or not anchor_sha or _sha256_file(anchor_path) != anchor_sha:
                 raise ValueError("formal executable anchor manifest asset missing or drifted")
@@ -1030,6 +1096,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
                 client_factory_hash=client_hash)
         elif auth.scope != "verification":
             raise ValueError("formal authorization cannot be used for verification scope")
+        if bool(preseed_journal) != bool(getattr(auth, "preseed_journal_sha256", "")):
+            raise ValueError("preseed journal argument/signature mismatch")
     except (ValueError, OSError, KeyError) as exc:
         print(f"[e3-longrun-ctrl] AUTHORIZATION_BLOCKED: {exc}", flush=True)
         return BLOCKED
@@ -1085,12 +1153,22 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
             return BLOCKED
     # P0-8: atomic unique directory claim (rejects duplicate run ids).
     run_id = f"e3-{candidate_id[:12]}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
+    preseed_info = None
     try:
         if not resume:
             auth_mod.claim_output_dir(run_dir, run_id)
     except ValueError as exc:
         print(f"[e3-longrun-ctrl] DIR_CLAIM_BLOCKED: {exc}", flush=True)
         return BLOCKED
+    if preseed_journal:
+        try:
+            preseed_info = _install_preseed_journal(
+                preseed_path=preseed_journal, run_dir=run_dir, auth=auth,
+                source_commit=source_commit, candidate_id=candidate_id,
+                client_hash=client_hash)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"[e3-longrun-ctrl] PRESEED_BLOCKED: {exc}", flush=True)
+            return BLOCKED
     # Authorization and the atomic output claim have passed.  Production/JAX
     # imports and model mounting are now permitted, followed by a second
     # identity check against the already-authorized checkpoint file.
@@ -1120,7 +1198,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
         client_combo_hash=getattr(auth, "client_factory_implementation_hash", "") or "",
         checkpoint_sha256=static_assets["checkpoint_sha256"],
         task_asset_manifest_sha256=static_assets["task_asset_manifest_sha256"],
-        disk_free_bytes=disk_free_bytes, disk_required_bytes=disk_required_bytes)
+        disk_free_bytes=disk_free_bytes, disk_required_bytes=disk_required_bytes,
+        preseed_info=preseed_info)
     if resume:
         if resume_meta.get("mounted_file_sha256") != mounted_file_sha or resume_meta.get("mounted_params_sha256") != mounted_params_sha:
             return BLOCKED

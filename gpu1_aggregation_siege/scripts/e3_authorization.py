@@ -277,6 +277,7 @@ class E3Authorization:
     signature: str
     manifest_hash: str
     executable_anchor_manifest_sha256: str | None = None
+    preseed_journal_sha256: str | None = None
     budget_candidate: str | None = None
     budget_sessions: int | None = None
     budget_updates_per_session: int | None = None
@@ -313,7 +314,8 @@ class E3Authorization:
                  "max_total_tokens_per_call", "retry_cap",
                  "client_factory_implementation_hash", "candidate", "sessions",
                  "updates_per_session", "env_steps_per_update", "resolved_env_steps",
-                 "executable_anchor_manifest_sha256", "expected_physical_gpu_uuid")
+                 "executable_anchor_manifest_sha256", "expected_physical_gpu_uuid",
+                 "preseed_journal_sha256")
         out = {name: getattr(self, name) for name in names}
         if any(value is None for value in out.values()):
             raise ValueError("formal authorization budget/LLM binding is incomplete")
@@ -459,6 +461,7 @@ def load_authorization(auth_manifest_path: str, *,
         env_steps_per_update=payload.get("env_steps_per_update"),
         resolved_env_steps=payload.get("resolved_env_steps"),
         executable_anchor_manifest_sha256=payload.get("executable_anchor_manifest_sha256"),
+        preseed_journal_sha256=payload.get("preseed_journal_sha256"),
         expected_physical_gpu_uuid=payload.get("expected_physical_gpu_uuid"),
     )
 
@@ -560,7 +563,7 @@ def verify_formal_authorization_budget(auth: E3Authorization, *, candidate: str,
         "provider": provider,
         "requested_model": requested_model,
         "max_logical_calls": 302,
-        "max_output_tokens_per_call": 1024,
+        "max_output_tokens_per_call": 4096,
         "max_total_tokens_per_call": 20000,
         "retry_cap": 0,
         "client_factory_implementation_hash": client_factory_hash,
@@ -569,6 +572,7 @@ def verify_formal_authorization_budget(auth: E3Authorization, *, candidate: str,
         "updates_per_session": budget.updates_per_session,
         "env_steps_per_update": budget.env_steps_per_update,
         "resolved_env_steps": budget.resolved_env_steps,
+        "preseed_journal_sha256": auth.preseed_journal_sha256,
     }
     for key, value in expected.items():
         if binding.get(key) != value:

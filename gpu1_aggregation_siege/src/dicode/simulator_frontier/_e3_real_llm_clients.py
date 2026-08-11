@@ -263,6 +263,9 @@ class _DiagnosticianClient:
                              usage=cached["usage"], response_content_hash=cached["response_content_hash"],
                              validated_output_hash=cached["validated_output_hash"])
                 return dict(cached["validated_output"])
+            expected_preseed_key = os.environ.get("E3_PRESEEDED_DIAGNOSTIC_KEY", "")
+            if expected_preseed_key:
+                raise RuntimeError("PRESEED_DIAGNOSTIC_EVIDENCE_MISMATCH")
         system = (
             "You are the Frontier Evidence Diagnostician in a curriculum "
             "learning system.  You read ONLY aggregate feasibility evidence "
@@ -380,7 +383,7 @@ class _PlannerClient:
             },
             "diagnostician_summary": dict(summary),
         }, sort_keys=True, default=str)
-        text = _call_qwen(system, user, max_tokens=1024)
+        text = _call_qwen(system, user, max_tokens=4096)
         if str(text.get("returned_model", "")) != str(text.get("requested_model", "")):
             raise RuntimeError("REAL_LLM_RETURNED_MODEL_MISMATCH")
         raw = _extract_json(str(text["content"])) if isinstance(text, Mapping) else _extract_json(str(text))
