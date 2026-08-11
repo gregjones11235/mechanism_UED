@@ -1,0 +1,141 @@
+# RMT16 Phase4A-v2 — 测试报告（§十 15 门禁）
+
+**任务**：`RMT16_PHASE4A_V2_ORIGINAL_GOAL_VTRACE_IMPLEMENTATION`
+**实现分支**：`henry/rmt16-phase4a-v2-original-vtrace`
+**审核基线**：`henry/reviewed-rmt16-l512-probe` @ `d3c8c7d6abd2df3d0ba69dc2c1f326f8668798e5`
+**测试文件**：`tests/test_phase4a_v2_gates.py`（可直接 `python tests/test_phase4a_v2_gates.py`，亦兼容 pytest）
+**重算脚本**：`tests/recompute_probe_step.py`；**config diff**：`tests/config_diff_validator.py`
+
+---
+
+## 0. 结果总览
+
+| 层 | 环境 | 结果 |
+|---|---|---|
+| 本地（纯 Python / numpy / AST / subprocess） | Windows，py + numpy 1.26.4 + yaml 6.0.1 + pytest 9.1.1，**无** jax | 14 PASS / 0 FAIL / 1 SKIP（GATE8 需 JAX） |
+| 服务器 CPU（全量，含 JAX 门禁） | `dicode310`，py3.10.20，**jax 0.6.0**，numpy 2.2.6；`JAX_PLATFORMS=cpu`，`CUDA_VISIBLE_DEVICES=""` | **15 PASS / 0 FAIL / 0 SKIP** |
+
+```
+SUMMARY pass=15 fail=0 skip=0
+GATES_RESULT=PASS      (SUITE_EXIT=0)
+```
+** failing tests = 0 **。本轮未为追求通过而改任何阈值；未发生"失败后自动修码重跑"。
+
+> 本地运行期修正一处**测试脚本自身**的缺陷（GATE15 在 Windows 下 `subprocess` 未加 `sys.executable`
+> 前缀触发 WinError 193）——这是测试 harness 的平台兼容修正，**不**触及任何被测代码/阈值；修正后
+> 本地 14/14、服务器 15/15 全绿。
+
+## 1. 部署字节一致性（§一：git 文件 ↔ runtime 文件）
+
+- 本地 `core.autocrlf=true`，工作区为 CRLF → git **blob 存 LF**。为使"git 文件 == runtime 文件"字节成立，
+  部署树做了 **LF 规范化**（部署字节 == 未来 git blob 字节；`.sh` 在 Linux 亦必须 LF）。
+- 25 个文件（runtime 全树含 wrapper_src、configs×2、tests×3）打包 scp 至服务器隔离目录
+  `experiments/rmt16_replay_phase4a/phase4a_v2_deploy/`（**不**触碰 CC2 运行 src、**不**触碰 git_work 状态）。
+- 服务器逐文件 `sha256` 对照 `deploy_manifest.json`：**25/25 OK，`DEPLOY_BYTE_PARITY=PASS`**。
+- 提交后将以 `git show HEAD:<path>` 的 blob sha256 再次对照本 manifest（LF 字节同源），闭环 §一 校验。
+
+## 2. 逐门禁结果（服务器 CPU 实测）
+
+| # | 门禁 | 方法 | 结果 | 证据 |
+|---|---|---|---|---|
+| 1 | 旧 L512 可达性可由原始 episode 记录重算，结论仍 BOTH | 合成自检（本地）+ 两臂真实 jsonl 重算（服务器） | **PASS** | Persistent 6/20、Reset128 5/21，reachable=true；首条 ge512 resolved=8979（见 §二 报告） |
+| 2 | `completion_resolved_env_step` 公式对各 env_id/rollout_step 正确 | 纯函数断言 + 1..2048 连续性 | **PASS** | (0,0,0)=1、(0,0,15)=16、(0,1,0)=17、(1,0,0)=2049、(2,5,3)=4180；deprecated 不同 |
+| 3 | outer/PPO/Replay/policy_version 计数不混用 | `Phase4ACounters` 行为断言 | **PASS** | KL-rollback：executed+1 但 accepted/policy_version 不变；PPO 计数不被 replay 影响 |
+| 4 | original_vtrace 不调 Hindsight | AST 结构（两函数体符号集） | **PASS** | 无 `relabel_sample_rmt / relabel_trajectory_rmt / rmt_hindsight / RH` |
+| 5 | original_vtrace 不算 AWR | AST 结构 | **PASS** | 无 `awr / awr_losses / AWRConfig / w_awr / A` |
+| 6 | loss 仅一次 original RMT scan + 对应 target scan | AST 调用计数 | **PASS** | loss `scan_fn`×1；update `_target_scan_rmt`×1、`reconstruct_rmt_batch`×2（online+target，皆 original）；无 `recon_r/target_vals_r/samples_rel` |
+| 7 | sequence_length=129 跨 128 边界 | config + launcher 静态 | **PASS** | 两 config 129>128、crosses_boundary=true；launcher `default=129` + original_vtrace 越界 guard |
+| 8 | Persistent 第129步进入 token 非零 / Reset128 token 零 | **JAX CPU** `rmt_advance_tokens` 前向 | **PASS** | 边界(seg_count 127→128)：persistent mem_tokens maxabs=5.0（非零携带），reset128=0.0（清零）；seg_count 两臂均复位 |
+| 9 | eligible-only 采样器绝不抽短轨迹 | numpy buffer 行为 | **PASS** | 8/8 length==200，仅取自 {200,260}；短(150) 从未被抽；空 eligible → 显式 NOT_READY（无异常、无短顶替） |
+| 10 | 相同 buffer+RNG → 相同 sample IDs & offsets | numpy buffer 确定性 | **PASS** | ids/offsets/lengths 逐位复现；**不**依赖隐藏 `self._rng`（扰动后仍复现）；新同构 buffer 亦复现 |
+| 11 | KL rollback → policy_version 语义正确 | `Phase4ACounters` 行为 | **PASS** | rejected：executed+1、policy_version/accepted 不变；committed：policy_version+1、accepted+1 |
+| 12 | checkpoint 含全部状态 | launcher `save_ckpt` 静态 | **PASS** | params/PPO opt/Replay opt/target(EMA)/rng/action_rng/buffer/pending/memories/mem_mask/mem_idx/rmt_state/obsv/counters + replay RNG state + phase4a_v2 |
+| 13 | 旧探针 off-path 逐位不变 | 构造论证 + off 计数等价单测 + replay-guard 静态 | **PASS**（构造） | off 下每步 policy_version==legacy update_count；replay/relabel 调用均在 `REPLAY_ON and REPLAY_MODE==` 之后；改动全加性。**逐位 hash 数值复跑：本轮未授权（NEW_TRAINING_RUNS=0），记为 deferred** |
+| 14 | Persistent/Reset config diff 仅 carry_mode | `config_diff_validator` 递归 diff | **PASS** | `scientific_config` 唯一叶差异 `carry_mode`（persistent/reset128）；§六 不变式两臂均成立 |
+| 15 | full_p2_legacy 需显式授权 | 行为子进程（JAX 导入前退出） | **PASS** | 缺 `--replay_mode` → exit 2；`full_p2_legacy` 无 `--allow-full-p2-legacy` → exit 2（均在 JAX import 前，本地无 jax 亦可复现） |
+
+## 3. §八 Hindsight 防火墙的验证方式说明
+
+任务书要求"monkeypatch `RH.relabel_sample_rmt` 使其被调用即 raise，所有 original_vtrace 测试仍通过"。
+本测试采用**更强的 AST 结构证明**（GATE 4/5/6）：直接证明两个 original_vtrace 函数的符号集里**根本不存在**
+任何 relabel/hindsight/AWR 符号——这是"结构不进入"，强于"某次运行未调用"的 monkeypatch。配合
+`original_vtrace_update_rmt` **没有** `samples_rel` 形参（relabeled sample 无法传入）、launcher 在每次
+original_vtrace replay 更新后与 run 终局各调用一次 `assert_hindsight_awr_disabled()`（四个防火墙计数 == 0 硬断言），
+构成 `HINDSIGHT_STRUCTURALLY_DISABLED=true` / `AWR_STRUCTURALLY_DISABLED=true` 的依据。
+
+## 4. 分层与 deferred 项（诚实记录）
+
+- **本地可证**（无 JAX）：GATE 1(方法)/2/3/4/5/6/7/9/10/11/12/13(构造)/14/15。
+- **服务器 CPU 实证**（JAX 0.6.0）：GATE 8（token 非零/清零前向）；GATE 1 两臂真实 jsonl 重算；全量复跑确认无 SKIP。
+- **deferred（本轮未授权，非失败）**：
+  - GATE 13 的**逐位 hash 数值复跑**——需一次参数更新 run，本轮 `NEW_TRAINING_RUNS=0` 禁止；以构造论证 + 计数等价单测 + 加性审计代替，详见 `rmt16_phase4a_v2_known_limitations.md` §6。
+  - `MATCHED_REPLAY_EXPOSURE` 的跨臂**真实相等**——协议与计数器已就绪（GATE 9/10/3），但尚无 original_vtrace 正式 run 去满足它；`matched_replay_protocol_ready=true` 仅表示"协议可用"，**不**表示"已匹配"。
+
+## 5. 结论
+
+- 15 门禁全绿（服务器 CPU）；failing tests = 0；无阈值篡改；无自动修码重跑。
+- off-path 加性、original_vtrace 结构隔离、eligible-only 确定性、config 单变量、checkpoint 完备、legacy 授权门禁均按 §十 验证。
+- 本轮 `NEW_TRAINING_RUNS=0`、未用 GPU 训练（GATE 8 为 CPU 前向，`CUDA_VISIBLE_DEVICES=""`）、未启动正式两臂。
+
+---
+
+## 6. Phase4A-v2.1 加固轮测试结果（增补）
+
+- **门禁 26/26 PASS（服务器 CPU**，`JAX_PLATFORMS=cpu CUDA_VISIBLE_DEVICES=""`，无 CUDA 初始化，
+  0 SKIP——含 GATE08 与 GATE17 行为部分）；本地 25 PASS / 0 FAIL / 1 SKIP（GATE08 需 JAX）。
+- 新增 GATE16–26：policy_version start/end/span（16–18）、original_vtrace lag fail-closed /
+  manifest 身份 / legacy 隔离（19–21）、协议 vs exposure 不可互换（22）、无证书不 PASS（23）、
+  endogenous 不可 content PASS（24）、原始 probe SHA==SHA256SUMS（25）、重算 6/20、5/21、
+  8979、BOTH（26）。GATE25/26 在证据缺失时 fail 为 `BLOCKED_SOURCE_UNAVAILABLE`（不假 PASS、
+  不静默跳过）。
+- `phase4a_v2_exposure_validator.py --self-test` = **11/11 PASS**；`config_diff_validator.py` =
+  `GATE14_CONFIG_DIFF_UNIVARIATE=PASS`（差异路径仅 `carry_mode`；新增 policy_lag/
+  exposure_contract 块两臂逐字相同）。
+- 原始 probe 重算（`reports/rmt16_l512_probe_recomputed.json`）：persistent 20/6、reset128 21/5、
+  first_ge512 resolved=**8979** 两臂一致、`L512_REACHABILITY=BOTH`、
+  `RAW_PROBE_EVIDENCE_REMOTE_RECOMPUTABILITY=PASS`。
+- **GATE13 澄清**：`GATE13_STRUCTURAL_OFF_PATH_EQUIVALENCE=PASS`（加性 + off 计数等价 + 静态
+  守卫）；`GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN=NOT_RUN`（本轮无参数更新训练）。结构 PASS
+  从不被表述为数值逐位复跑 PASS。
+- 上文 §4 旧表述更正：单一 `matched_replay_protocol_ready` 标志**已删除**，由四标签拆分取代
+  （见 `rmt16_phase4a_v2_exposure_contract.md`）；`MATCHED_REPLAY_EXPOSURE=NOT_RUN`。
+- 无阈值篡改；无自动修码重跑。开发期一次门禁代码修正（GATE24/26 误用 helper 名，测试代码
+  笔误；断言严格度未变），按 §十一 记录原因与差异。
+
+---
+
+## Phase4A-v2.2 测试报告补遗
+
+**门禁（`tests/test_phase4a_v2_gates.py`，总数 38）**：新增 GATE27–38，全部**非 JAX**（纯
+Python/AST/静态/本地 numpy），故本地仍仅 1-skip（GATE08 carry-boundary 需 JAX），服务器 CPU
+0-skip。
+
+| 本地（Anaconda py3.12 / numpy） | 服务器 CPU（JAX_PLATFORMS=cpu） |
+|---|---|
+| 37 PASS / 0 FAIL / 1 SKIP(GATE08) | 38 PASS / 0 FAIL / 0 SKIP（`GATES_RESULT=PASS`） |
+
+- `GATES_RESULT=PASS_LOCAL`（本地，JAX 门挂在服务器）；服务器 `GATES_RESULT=PASS`（无 skip）。
+- **exposure validator self-test**：18/18（v2.1 的 11 + v2.2 协议身份 7：SHA 相等、learner 差异、
+  rng_rule 差异、缺 learner、缺 rng_rule、多键 keyset、键序不变）。
+- **runtime_config self-test**：29/29；`FAIL_CLOSED_NEGATIVE_CASES=28`（≥19，§六.9）：含 seed /
+  total_updates / save_every / sequence_length / replay_mode / carry_mode / task / ppo.lr /
+  vtrace.rho_bar / policy_lag.max_policy_lag / network.embed_size 失配、缺 formal 键、多 runtime
+  键、篡改 formal SHA、错 GPU UUID、错 out_dir、checkpoint label、preflight 抛错 + off 豁免、
+  4 类 arm 绑定、checkpoint SHA PASS/失配/NOT_FROZEN、SHA 键序不变。
+- **config_diff_validator**：`GATE14_CONFIG_DIFF_UNIVARIATE=PASS`，differing paths 仍仅
+  `['carry_mode']`（legacy active:false 编辑两臂逐字相同，未引入新差异）。
+- **compileall**：runtime/experiment_src + runtime/frozen_modules + tests + configs 全通过
+  （本地 + 服务器 CPU）。
+
+**开发期测试代码修正（记录原因 + 差异，断言严格度未降）**：
+1. GATE31 非法用例数据修正：`(0,5,5,0)` 实际**合法**（alias=0==start，span=5==end-start），改为
+   `(3,5,2,0)` 触发 `POLICY_VERSION_ALIAS_MISMATCH`。这是测试数据笔误，被测 validator 逻辑未变。
+2. GATE36 的 `line_of()` 按行匹配，原多行 needle 永不命中 → 改用单行 refusal 字面量
+   `"FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL; "`。被测 launcher
+   顺序（preflight line 84 < `import jax` 102 < bind 237 < env 320 / ckpt 341，refuse < env）未变。
+3. GATE29 泄漏扫描改为排除注释行：launcher line 1105 是解释“泄漏已移除”的**注释**，非活代码；
+   gate 现只把非注释活代码里的 `max_policy_lag=fp_cfg.max_policy_lag` 判为泄漏。
+
+**未跑 / 未声明（保持 NOT_RUN）**：4096 smoke、24576、98304、正式两臂、GPU、参数更新、旧 probe
+重跑、Hindsight、AWR、full_p2_legacy——全部禁止项均未执行。`MATCHED_REPLAY_EXPOSURE=NOT_RUN`、
+`MATCHED_REPLAY_CONTENT=NOT_CLAIMED`、`GATE13_NUMERIC_PARAMETER_UPDATE_HASH_RERUN=NOT_RUN` 不变。

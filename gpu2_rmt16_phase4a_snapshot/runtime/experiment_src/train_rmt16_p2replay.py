@@ -23,14 +23,69 @@ are NOT tuned here. GPU2=persistent, GPU3=reset128 (directive §二).
 import os, sys, json, time, hashlib, pickle, argparse
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--carry_mode", required=True, choices=["persistent", "reset128"])
-ap.add_argument("--replay", required=True, choices=["on", "off"])
+ap.add_argument("--carry_mode", required=True,
+                choices=["persistent", "reset128", "base_gtrxl"])
+# ---- Phase4A-v2 (CC2 directive §四): EXPLICIT replay mode (replaces ambiguous --replay on/off) ----
+# required=True with NO default -> a missing --replay_mode is a hard argparse failure (exit 2).
+# No old parameter is auto-inferred: the mode is taken verbatim, nothing else implies it.
+ap.add_argument("--replay_mode", required=True,
+                choices=["off", "original_vtrace", "full_p2_legacy"],
+                help="off=online PPO only (no replay learner/hindsight/AWR); "
+                     "original_vtrace=online PPO + Original-goal Replay V-trace (Hindsight calls==0, "
+                     "AWR calls==0, no relabeled sample, no second relabeled RMT scan); "
+                     "full_p2_legacy=V-trace+AWR audit/legacy path, DEFAULT-FORBIDDEN for formal "
+                     "science, requires --allow-full-p2-legacy.")
+ap.add_argument("--allow-full-p2-legacy", action="store_true",
+                help="EXPLICIT authorization required to run --replay_mode full_p2_legacy (GATE 15).")
+# ---- Phase4A-v2 (CC2 directive §六): EXPLICIT formal sequence length ----
+ap.add_argument("--sequence_length", type=int, default=129,
+                help="Replay loss-window length. Phase4A-v2 formal clean Carry experiment is "
+                     "PRE-REGISTERED at 129 (crosses one 128-step RMT segment boundary). 512 is "
+                     "retained only as ENGINEERING_LONG_WINDOW_MODE.")
 ap.add_argument("--ckpt17500", required=True)
 ap.add_argument("--out", required=True)
 ap.add_argument("--gpu_uuid", required=True)
+# ---- Phase4A-v2.2 (CC2 §六): pre-registered formal config binding (fail closed) ----
+# REQUIRED for replay_mode=original_vtrace (enforced BEFORE `import jax` below; missing ->
+# FORMAL_CONFIG_REQUIRED_FOR_ORIGINAL_VTRACE). replay_mode=off / probe may omit it (legacy dev
+# compat). There is NO bypass parameter that relaxes the binding once a config is supplied.
+ap.add_argument("--formal_config", default=None,
+                help="path to the pre-registered YAML (configs/rmt16_phase4a_v2_<arm>.yaml); "
+                     "required for replay_mode=original_vtrace. The driver binds it to the REAL "
+                     "runtime scientific config / runtime assignment / base checkpoint identity "
+                     "and refuses to proceed (FORMAL_CONFIG_RUNTIME_MISMATCH) on any difference.")
+# ---- Phase4A-v2.3 (CC2 §三/§四): canonical path identity + strict run-root placement ----
+# --snapshot_root pins the canonical pre-registered formal-config PATH (§三.2): realpath(args.
+# formal_config) must equal realpath(snapshot_root/configs/rmt16_phase4a_v2_<arm>.yaml); byte
+# copies, symlink escapes and `..` traversals are rejected. --run_root pins the STRICT out_dir
+# identity (§四.3): realpath(args.out) must EQUAL realpath(run_root/<formal out_dir>) — relative
+# path only, no `..`, no suffix match. Both are required for replay_mode=original_vtrace and are
+# enforced BEFORE `import jax` (fail closed, no bypass).
+ap.add_argument("--snapshot_root", default=None,
+                help="root of the frozen experiment snapshot; pins the canonical formal-config "
+                     "PATH identity (§三.2). Required for replay_mode=original_vtrace.")
+ap.add_argument("--run_root", default=None,
+                help="root under which the formal runtime_assignment.out_dir (a RELATIVE path) "
+                     "must resolve; realpath(run_root/out_dir) must equal realpath(--out) exactly "
+                     "(§四.3; no suffix match). Required for replay_mode=original_vtrace.")
 ap.add_argument("--total_updates", type=int, default=12)     # 12 * 2048 = 24576
 ap.add_argument("--seed", type=int, default=42)
 ap.add_argument("--save_every", type=int, default=2)         # updates between saves (2 => every 4096)
+# ---- Phase4A-direct-98304 (§一.2 / §二 / §三 / §六): run CLASS (NON-scientific management) ----
+# formal_vtrace (DEFAULT) = the pre-registered formal Carry experiment; the ONLY class whose
+# exit gate requires the replay horizon and the ONLY class authorized for a scientific claim.
+# engineering_smoke = 4096-step (total_updates=2) correctness smoke; replay horizon NOT required
+# for exit PASS (replay_update_count==0 / REPLAY_HORIZON_NOT_REACHED does NOT block the 98k run).
+# long_run_98304 = 98304-step (total_updates=48) single-seed long horizon; no performance
+# early-stop (§六). The run CLASS is bound to the config's top-level run_management block PRE-JAX
+# (RTC.validate_run_class_binding) and recorded in the certificate; the frozen scientific protocol
+# itself is unchanged across all three classes.
+ap.add_argument("--run_class", default="formal_vtrace",
+                choices=["formal_vtrace", "engineering_smoke", "long_run_98304"],
+                help="run management class (NOT a scientific variable): formal_vtrace (formal "
+                     "Carry experiment; replay horizon required for exit PASS; claim-authorized) "
+                     "| engineering_smoke (4096-step correctness smoke; horizon NOT required) | "
+                     "long_run_98304 (98304-step single-seed long run; no performance early-stop).")
 # Phase4A probe (CC2 directive 2/3 + addendum): reachability probe + A/B no-perturbation gate.
 ap.add_argument("--probe", action="store_true",
                 help="L512 reachability probe: record-only, fixed full horizon, replay learner+hindsight OFF")
@@ -39,6 +94,149 @@ ap.add_argument("--early_stop_len", type=int, default=0,
 ap.add_argument("--equiv_dump", action="store_true",
                 help="emit per-update deterministic equivalence hashes for the A/B no-perturbation gate")
 args = ap.parse_args()
+
+# ---- Phase4A-v2 (CC2 directive §四): replay-mode validation (no auto-inference) ----
+REPLAY_MODE = args.replay_mode
+if REPLAY_MODE == "full_p2_legacy" and not args.allow_full_p2_legacy:
+    # GATE 15: full_p2_legacy is default-forbidden for formal science.
+    ap.error("--replay_mode full_p2_legacy requires explicit --allow-full-p2-legacy "
+             "(default-forbidden for formal science).")
+
+# ---- Phase4A-v2.2/2.3 (§六.2/§六.3 + §三/§四/§五.2/§六.1/§七): PRE-JAX identity + FULL binding ----
+# Everything here is PURE Python (yaml/json/hashlib/os/inspect; NO jax/numpy) and runs BEFORE
+# `import jax`, BEFORE CUDA env vars, BEFORE env build / ckpt load / training, in this order:
+#   1. preflight  : original_vtrace REQUIRES --formal_config                (v2.2 §六.2)
+#   2. arm binding: schema/arm/carry_mode/replay_mode                       (v2.2 §六.3)
+#   3. FORMAL IDENTITY: canonical PATH + CONTENT (frozen file SHA / scientific SHA) (§三)
+#   4. runtime_assignment: completeness + 4-way arm + exact gpu + STRICT out_dir      (§四)
+#   5. FULL scientific binding: the pre-JAX runtime scientific config built from the frozen
+#      pure-Python spec (phase4a_v2_frozen_spec) must equal the YAML scientific_config (§五.2)
+#   6. provisional PENDING_CHECKPOINT_IDENTITY certificate written ATOMICALLY + sidecar (§六/§七)
+# Only when the precheck certificate is PENDING_CHECKPOINT_IDENTITY does the driver continue to
+# `import jax`. The REAL imported objects are re-bound + diffed against the frozen spec AFTER
+# import (§五.3: IMPORTED_RUNTIME_CONSTANTS_MISMATCH on drift) — still before env build. The
+# base checkpoint params SHA is verified after load and FINALIZES the certificate (§六.2/§六.3).
+import phase4a_v2_runtime_config as RTC      # noqa: E402  (pure: yaml/json/hashlib/os)
+import phase4a_v2_frozen_spec as FSPEC       # noqa: E402  (pure: stdlib only)
+import phase4a_v2_formal_identity as FID     # noqa: E402  (pure: stdlib + yaml via RTC)
+FORMAL_CONFIG_RECORD = None
+FORMAL_CONFIG_IDENTITY = None
+RUNTIME_ASSIGNMENT_RECORD = None
+RUNTIME_CONFIG_CERTIFICATE = None
+RUNTIME_CONFIG_CERTIFICATE_PATH = None
+RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH = None
+RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256 = None
+# Phase4A-v2.4 (§五): the PAYLOAD SHA of the last written certificate artifact. Adopted from
+# write_certificate_atomic's return at EVERY write site and pinned in manifest / summary /
+# launch-status (non-null length-64 hex once a certificate has been written).
+RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256 = None
+EXECUTED_PROTOCOL_IDENTITY = None
+# Phase4A-direct-98304 (§一.2): the run_class management identity bound PRE-JAX from the config's
+# run_management block. None for formal_vtrace (no run_management block -> certificate stays
+# byte-identical to V2.4); a bound record for engineering_smoke / long_run_98304.
+RUN_CLASS_IDENTITY = None
+# Phase4A-v2.4 (§八): the DECLARED protocol definition + the EFFECTIVE protocol definition
+# (declared + executed learner/sampler source identity + executed RNG identity) and its stable
+# SHA256. Bound BEFORE the certificate reaches PASS (§六 ordering); None on non-formal runs.
+DECLARED_PROTOCOL_DEFINITION = None
+EFFECTIVE_PROTOCOL_DEFINITION = None
+EFFECTIVE_PROTOCOL_SHA256 = None
+try:
+    RTC.preflight_require_formal_config(REPLAY_MODE, args.formal_config)
+    if args.formal_config:
+        FORMAL_CONFIG_RECORD = RTC.load_formal_config(args.formal_config)
+        RTC.validate_arm_binding(FORMAL_CONFIG_RECORD, args.carry_mode, replay_mode=REPLAY_MODE)
+        # §三 canonical formal-config PATH + CONTENT identity (frozen pre-registration).
+        # Phase4A-direct-98304 (§一.3): formal_vtrace uses the FROZEN formal identity (file SHA +
+        # scientific SHA pinned to the two canonical YAMLs). engineering_smoke / long_run_98304 use
+        # the NON-frozen engineering identity: SAME path anti-copy protection, but the content is
+        # bound by SELF-CONSISTENCY + the runtime deep_diff (their engineering budget legitimately
+        # differs from the frozen formal SHAs). The frozen spec still binds every non-budget
+        # scientific constant in all three classes.
+        if args.run_class == "formal_vtrace":
+            FORMAL_CONFIG_IDENTITY = FID.verify_formal_config_identity(
+                args.snapshot_root, args.carry_mode, FORMAL_CONFIG_RECORD)
+        else:
+            FORMAL_CONFIG_IDENTITY = FID.verify_engineering_config_identity(
+                args.snapshot_root, args.carry_mode, FORMAL_CONFIG_RECORD, args.run_class)
+        # §四 fail-closed runtime_assignment (completeness + 4-way arm + exact gpu + strict
+        # realpath out_dir anchored at --run_root; the v2.2 suffix match is gone).
+        RUNTIME_ASSIGNMENT_RECORD = RTC.validate_runtime_assignment(
+            FORMAL_CONFIG_RECORD["config"],
+            cli_carry=args.carry_mode, cli_gpu=args.gpu_uuid, cli_out=args.out,
+            run_root=args.run_root)
+        # Phase4A-direct-98304 (§一.2): bind the run CLASS to the config's run_management block
+        # PRE-JAX. formal_vtrace -> None (no block; certificate stays byte-identical to V2.4);
+        # engineering_smoke / long_run_98304 -> a fail-closed bound record (run_class must match
+        # the block; interruption_policy must be RESTART_FROM_STEP0; §七). This is a MANAGEMENT
+        # binding only — it never touches scientific_config, so the deep_diff scientific gate and
+        # the frozen spec are unaffected.
+        RUN_CLASS_IDENTITY = (
+            None if args.run_class == "formal_vtrace"
+            else RTC.validate_run_class_binding(FORMAL_CONFIG_RECORD["config"], args.run_class))
+        # §五.2 FULL scientific binding PRE-JAX (Phase4A-v2.4 §三.1: ACTUAL CLI BINDING): start
+        # from the frozen pure-Python spec (single source of truth; no jax needed), then
+        # OVERRIDE the seven CLI-facing keys with the ACTUAL command-line values, so the
+        # precheck certificate binds what THIS process was really launched with — not the
+        # frozen defaults. Any wrong CLI value (--seed / --total_updates / --save_every /
+        # --sequence_length / --allow-full-p2-legacy; a wrong --replay_mode / --carry_mode is
+        # caught by validate_arm_binding above) makes the runtime scientific config differ
+        # from the formal YAML scientific_config => FORMAL_CONFIG_RUNTIME_MISMATCH HERE, BEFORE
+        # `import jax` / CUDA env / env build / ckpt load (§三.2/§三.3).
+        _prejax_kwargs = FSPEC.build_kwargs(args.carry_mode)
+        _prejax_kwargs.update(
+            carry_mode=args.carry_mode,
+            replay_mode=REPLAY_MODE,
+            allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
+            sequence_length=int(args.sequence_length),
+            seed=int(args.seed),
+            total_updates=int(args.total_updates),
+            save_every=int(args.save_every))
+        _PREJAX_SCIENTIFIC = RTC.build_runtime_scientific_config(**_prejax_kwargs)
+        RUNTIME_CONFIG_CERTIFICATE = RTC.build_precheck_certificate(
+            FORMAL_CONFIG_RECORD, _PREJAX_SCIENTIFIC,
+            formal_identity_record=FORMAL_CONFIG_IDENTITY,
+            assignment_record=RUNTIME_ASSIGNMENT_RECORD,
+            run_class_identity=RUN_CLASS_IDENTITY,
+            checkpoint_identity=RTC.build_checkpoint_identity(args.ckpt17500),
+            frozen_spec_sha256=FSPEC.FROZEN_SPEC_SHA256,
+            cli_args={k: v for k, v in vars(args).items()},
+            runtime_constants=dict(FROZEN_SPEC_SHA256=FSPEC.FROZEN_SPEC_SHA256),
+            snapshot_root=args.snapshot_root, run_root=args.run_root)
+        if RUNTIME_CONFIG_CERTIFICATE["certificate_status"] != RTC.CERTIFICATE_STATUS_PENDING:
+            raise ValueError(
+                "FORMAL_CONFIG_RUNTIME_MISMATCH: prejax precheck certificate_status="
+                + RUNTIME_CONFIG_CERTIFICATE["certificate_status"]
+                + " (required: PENDING_CHECKPOINT_IDENTITY); no `import jax` / env build / ckpt "
+                "load will proceed. errors: "
+                + " | ".join(RUNTIME_CONFIG_CERTIFICATE["validation_errors"]))
+        # §六.1/§六.4/§七 provisional PENDING certificate: ATOMIC write + payload SHA + detached
+        # file-SHA sidecar. This file is OVERWRITTEN by the finalized certificate after the base
+        # checkpoint SHA is verified (§六.2/§六.3); a failure can never leave a stale PASS here
+        # because the status is PENDING and certificate_finalized is false.
+        # Phase4A-v2.4 (§五): write_certificate_atomic returns the EXACT serialized artifact;
+        # the caller adopts it immediately (RUNTIME_CONFIG_CERTIFICATE = written_certificate),
+        # so the in-memory object can never drift from the disk file.
+        (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+         RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256,
+         RUNTIME_CONFIG_CERTIFICATE) = (
+            RTC.write_certificate_atomic(
+                RUNTIME_CONFIG_CERTIFICATE,
+                os.path.join(args.out, "runtime_config_certificate.json")))
+        # Phase4A-v2.4 (§五.2): immediately re-verify the just-written artifact (payload SHA +
+        # file SHA + STRICT sidecar basename/format) after the write.
+        RTC.verify_certificate_artifact(
+            RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+            expected_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+            expected_payload_sha256=RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256)
+        print(f"[formal-config] prejax precheck certificate_status="
+              f"{RUNTIME_CONFIG_CERTIFICATE['certificate_status']} "
+              f"frozen_spec_sha={FSPEC.FROZEN_SPEC_SHA256[:16]} "
+              f"certificate_payload_sha={RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256[:16]} "
+              f"certificate_file_sha={RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256[:16]} "
+              f"path={RUNTIME_CONFIG_CERTIFICATE_PATH}", flush=True)
+except ValueError as e:
+    raise SystemExit(str(e))
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_uuid
 os.environ["XLA_FLAGS"] = "--xla_gpu_deterministic_ops=true"
@@ -64,15 +262,56 @@ import rmt_collect as RC
 import rmt_ppo as PPO
 import rmt_replay_learner as RL
 import rmt_hindsight as RH
-from rmt_replay_buffer import RMTReplayBuffer
+# Phase4A-v2.2 (§六.4): ANCHOR_INTERVAL / MIN_SEQUENCE_LENGTH are the REAL replay-protocol
+# constants the formal YAML must match (not CLI args).
+from rmt_replay_buffer import RMTReplayBuffer, ANCHOR_INTERVAL, MIN_SEQUENCE_LENGTH
 from full_p2_learner import FullP2Config, build_optimizer
-from rmt_memory_anchor import make_apply_eval_rmt
+from rmt_memory_anchor import make_apply_eval_rmt, entering_read_tokens
+# Phase4A-v2 (CC2 directive §三/§八): split counters + Hindsight/AWR firewall.
+from phase4a_v2_counters import Phase4ACounters
+# Phase4A-v2.1 (CC2 §三/§四/§五): policy-lag gate identity, replay label split, fail-closed gates.
+import phase4a_v2_contract as CONTRACT
 
-REPLAY_ON = (args.replay == "on")
+REPLAY_ON = (REPLAY_MODE != "off")                       # any active replay channel
+REPLAY_USES_HINDSIGHT = (REPLAY_MODE == "full_p2_legacy")  # ONLY the legacy path touches Hindsight/AWR
 PROBE = bool(args.probe)
 if PROBE:
-    assert args.replay == "off", "probe requires --replay off (replay learner + hindsight must be OFF)"
-ARM = f"RMT16-{args.carry_mode.capitalize()}{'-P2Replay' if REPLAY_ON else '-PPO'}"
+    assert REPLAY_MODE == "off", "probe requires --replay_mode off (replay learner + hindsight must be OFF)"
+# Phase4A-v2 (§六): pre-registered formal sequence length + segment-boundary provenance.
+SEQUENCE_LENGTH = int(args.sequence_length)
+SEGMENT_LEN = 128                                          # RMT16 segment boundary (ANCHOR_INTERVAL)
+ENGINEERING_LONG_WINDOW_MODE = 512                         # legacy engineering window (NOT the formal one)
+if REPLAY_MODE == "original_vtrace" and SEQUENCE_LENGTH <= SEGMENT_LEN:
+    # The formal clean Carry experiment must CROSS one 128-step boundary (step 129 reads the
+    # cross-segment token). Guard against an accidental non-crossing pre-registration.
+    raise SystemExit(f"FATAL: replay_mode=original_vtrace requires sequence_length > {SEGMENT_LEN} "
+                     f"(got {SEQUENCE_LENGTH}); the formal Carry experiment crosses one boundary.")
+ARM_REPLAY_TAG = {"off": "-PPO", "original_vtrace": "-OrigVtrace",
+                  "full_p2_legacy": "-P2ReplayLegacy"}[REPLAY_MODE]
+# CC2 §二 BASE_GTRXL_ORIGINAL_VTRACE_98304: the third arm. SAME network module (ActorCriticTransformer
+# RMT16) + SAME ckpt17500, but the RMT16 persistent-token READ path is SKIPPED (entering tokens forced
+# to None) so the policy reduces to the pure GTrXL backbone; RMT params get no gradient (frozen at
+# init). PPO / Replay / task / seed / budget are UNCHANGED from the frozen protocol — the ONLY
+# scientific_config difference vs persistent/reset128 is carry_mode=base_gtrxl.
+EXECUTED_READ_SKIPPED = (args.carry_mode == "base_gtrxl")   # positive evidence the skip path ran
+if args.carry_mode == "base_gtrxl":
+    ARM = f"BASEGTRXL{ARM_REPLAY_TAG}"          # e.g. BASEGTRXL-OrigVtrace (aligns w/ candidate_id)
+    NETWORK_FAMILY = "base_gtrxl"               # handover §七: pure GTrXL backbone (no RMT memory read)
+    MEMORY_MODE = "none"                        # handover §七: persistent-token read path disabled
+else:
+    ARM = f"RMT16-{args.carry_mode.capitalize()}{ARM_REPLAY_TAG}"
+    NETWORK_FAMILY = "rmt16"
+    MEMORY_MODE = args.carry_mode               # persistent / reset128
+
+# Phase4A-v2.1 (§三.2) FAIL-CLOSED runtime alignment: the policy-lag gate identity is derived
+# SOLELY from REPLAY_MODE, so original_vtrace/off can NEVER carry an active hard lag gate at
+# runtime (only full_p2_legacy does). If this invariant is ever broken, refuse to run rather
+# than silently imply a lag gate that the code does not implement.
+_pl_manifest = CONTRACT.policy_lag_runtime_manifest(REPLAY_MODE)
+if REPLAY_MODE in ("off", "original_vtrace") and _pl_manifest["policy_lag_gate_active"]:
+    raise SystemExit("ORIGINAL_VTRACE_POLICY_LAG_CONFIG_CONFLICT: runtime policy-lag gate active "
+                     f"under replay_mode={REPLAY_MODE} (must be inactive; V-trace importance "
+                     "sampling is the only off-policy correction).")
 
 # ----------------------- config (bakeoff frozen + P2 frozen) -----------------------
 class Cfg:
@@ -97,6 +336,208 @@ rmt_cfg = rmtm.RMT16Config(num_tokens=cfg.rmt_num_tokens, segment_len=cfg.num_st
 K_BATCH = 4
 L_SEQ = 512
 STEPS_PER_UPDATE = cfg.num_envs * cfg.num_steps     # 2048
+
+# ----------------------- Phase4A-v2.3 (§五.3/§八): imported constants + executed-protocol binding -----------------------
+# Runs AFTER `import jax` and the REAL constant materialization (Cfg / FullP2Config / K_BATCH /
+# ANCHOR_INTERVAL / MIN_SEQUENCE_LENGTH / RL.W_ORIGINAL_VTRACE) and BEFORE env build / network
+# init / checkpoint load / training. The pre-JAX precheck certificate already bound the formal
+# YAML to the FROZEN pure-Python spec (§五.2). Here the runtime scientific config is rebuilt from
+# the REAL imported objects and diffed against the EXPECTED imported config (the frozen spec with
+# the seven CLI-facing keys — incl. the actual executed budget total_updates/save_every — overridden
+# by the ACTUAL command-line values; Phase4A-direct-98304 hotfix §一): any drift =>
+# IMPORTED_RUNTIME_CONSTANTS_MISMATCH (the finalized FAIL certificate is written and the driver
+# exits). By transitivity: formal YAML == frozen spec (+ actual CLI budget) == REAL executing
+# constants. The frozen spec still binds EVERY non-budget scientific constant in all run classes.
+# Then the replay protocol's EXECUTED source identity is bound via inspect on the real imported
+# learner + sampler (§八; NOT string declarations) and reconciled with the declared labels.
+if FORMAL_CONFIG_RECORD is not None:
+    _imported_scientific = RTC.build_runtime_scientific_config(
+        carry_mode=args.carry_mode,
+        replay_mode=REPLAY_MODE,
+        allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
+        sequence_length=SEQUENCE_LENGTH,
+        segment_len=SEGMENT_LEN,
+        hindsight=bool(REPLAY_USES_HINDSIGHT),
+        awr=bool(REPLAY_USES_HINDSIGHT),
+        w_original_vtrace=float(RL.W_ORIGINAL_VTRACE),
+        base_checkpoint="ckpt17500",
+        seed=int(args.seed),
+        total_updates=int(args.total_updates),
+        save_every=int(args.save_every),
+        num_envs=int(cfg.num_envs),
+        num_steps=int(cfg.num_steps),
+        task="DEFEAT_KOBOLD",
+        optimistic_reset_ratio=int(cfg.optimistic_reset_ratio),
+        condition_on_task=bool(cfg.condition_on_task),
+        replay_batch_size=int(K_BATCH),
+        replay_buffer_capacity=64,               # == RMTReplayBuffer(capacity=64) below
+        anchor_interval=int(ANCHOR_INTERVAL),    # frozen P2 constant (128)
+        min_sequence_length=int(MIN_SEQUENCE_LENGTH),   # frozen P2 constant (129)
+        eligible_only_sampling=True,             # sample_eligible is the only sampling path
+        ppo_lr=float(cfg.lr), ppo_max_grad_norm=float(cfg.max_grad_norm),
+        ppo_gamma=float(cfg.gamma), ppo_gae_lambda=float(cfg.gae_lambda),
+        ppo_clip_eps=float(cfg.clip_eps), ppo_vf_coef=float(cfg.vf_coef),
+        ppo_ent_coef=float(cfg.ent_coef), ppo_update_epochs=int(cfg.update_epochs),
+        ppo_num_minibatches=int(cfg.num_minibatches),
+        ppo_value_target_clip_min=float(cfg.value_target_clip_min),
+        ppo_value_target_clip_max=float(cfg.value_target_clip_max),
+        vtrace_rho_bar=float(fp_cfg.rho_bar), vtrace_c_bar=float(fp_cfg.c_bar),
+        vtrace_vt_clip_min=float(fp_cfg.vt_clip_min),
+        vtrace_vt_clip_max=float(fp_cfg.vt_clip_max),
+        kl_replay_max=float(fp_cfg.kl_replay_max), kl_run_max=float(fp_cfg.kl_run_max),
+        actor_step_scales=list(fp_cfg.actor_step_scales),
+        policy_lag_gate_active=bool(_pl_manifest["policy_lag_gate_active"]),
+        policy_lag_gate_mode=_pl_manifest["policy_lag_gate_mode"],
+        policy_lag_max_policy_lag=_pl_manifest["max_policy_lag"],
+        legacy_full_p2_active=False, legacy_full_p2_max_policy_lag=16,
+        ema_tau=float(fp_cfg.ema_tau), ent_floor=float(fp_cfg.ent_floor),
+        grad_clip=float(fp_cfg.grad_clip), adam_eps=float(fp_cfg.adam_eps),
+        net_activation=cfg.activation, net_embed_size=int(cfg.embed_size),
+        net_num_heads=int(cfg.num_heads), net_qkv_features=int(cfg.qkv_features),
+        net_num_layers=int(cfg.num_layers), net_gating=bool(cfg.gating),
+        net_gating_bias=float(cfg.gating_bias), net_window_mem=int(cfg.window_mem),
+        net_rmt_num_tokens=int(cfg.rmt_num_tokens))
+    # Phase4A-direct-98304 hotfix (§一): the EXPECTED imported scientific config is built from the
+    # frozen spec (the single source of truth for every NON-CLI scientific constant) with the SEVEN
+    # CLI-facing keys overridden by the ACTUAL command-line values — the SAME construction as the
+    # pre-JAX block above (§五.2). Comparing THIS against the config rebuilt from the REAL imported
+    # objects means: formal_vtrace still binds 12/2; engineering_smoke correctly accepts 2/2;
+    # long_run_98304 correctly accepts 48/4; and any OTHER (non-budget) constant drift between the
+    # frozen spec and the real imported objects STILL fails closed below. NO diff field is filtered
+    # or ignored — the full deep_diff is evaluated exactly as before; only the EXPECTED side now
+    # carries the actual executed budget instead of the frozen formal budget.
+    _expected_imported_kwargs = FSPEC.build_kwargs(args.carry_mode)
+    _expected_imported_kwargs.update(
+        carry_mode=args.carry_mode,
+        replay_mode=REPLAY_MODE,
+        allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
+        sequence_length=int(args.sequence_length),
+        seed=int(args.seed),
+        total_updates=int(args.total_updates),
+        save_every=int(args.save_every))
+    _EXPECTED_IMPORTED_SCIENTIFIC = RTC.build_runtime_scientific_config(
+        **_expected_imported_kwargs)
+    _IMPORTED_CONSTANTS_DRIFT = RTC.deep_diff(
+        RTC.canonical_scientific_config(_EXPECTED_IMPORTED_SCIENTIFIC),
+        RTC.canonical_scientific_config(_imported_scientific))
+    # Phase4A-direct-98304 hotfix (§四 regression): CPU self-test hook. When the env var is set the
+    # driver exits HERE — immediately after the post-JAX binding is computed and BEFORE env build /
+    # ckpt load / training — so the binding can be regression-tested under JAX_PLATFORMS=cpu with
+    # NO training. The launchers never set this var, so production runs are completely unaffected.
+    if os.environ.get("RMT16_POSTJAX_BINDING_SELFTEST") == "1":
+        if _IMPORTED_CONSTANTS_DRIFT:
+            _selftest_drift = " | ".join(
+                f"{d['path']}: expected={d['formal']!r} imported={d['runtime']!r} ({d['kind']})"
+                for d in _IMPORTED_CONSTANTS_DRIFT)
+            print("POSTJAX_BINDING_SELFTEST=FAIL run_class=" + str(args.run_class)
+                  + " drift: " + _selftest_drift, flush=True)
+            raise SystemExit(3)
+        print("POSTJAX_BINDING_SELFTEST=PASS imported_constants_match=True run_class="
+              + str(args.run_class) + " total_updates=" + str(int(args.total_updates))
+              + " save_every=" + str(int(args.save_every)), flush=True)
+        raise SystemExit(0)
+    if _IMPORTED_CONSTANTS_DRIFT:
+        _drift_msg = " | ".join(
+            f"{d['path']}: frozen={d['formal']!r} imported={d['runtime']!r} ({d['kind']})"
+            for d in _IMPORTED_CONSTANTS_DRIFT)
+        # §六: a constants-drift failure FINALIZES the certificate FAIL and overwrites the
+        # provisional PENDING file before exit (no stale PENDING/PASS survives).
+        RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(
+            RUNTIME_CONFIG_CERTIFICATE,
+            checkpoint_error="IMPORTED_RUNTIME_CONSTANTS_MISMATCH: " + _drift_msg)
+        (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+         RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256,
+         RUNTIME_CONFIG_CERTIFICATE) = (
+            RTC.write_certificate_atomic(
+                RUNTIME_CONFIG_CERTIFICATE, RUNTIME_CONFIG_CERTIFICATE_PATH))
+        RTC.verify_certificate_artifact(
+            RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+            expected_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+            expected_payload_sha256=RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256)
+        raise SystemExit(
+            "IMPORTED_RUNTIME_CONSTANTS_MISMATCH: the REAL imported runtime constants drifted "
+            "from the frozen pre-JAX spec (FROZEN_SPEC_SHA256=" + FSPEC.FROZEN_SPEC_SHA256
+            + "); no env build / ckpt load / training will proceed. drift: " + _drift_msg)
+    RUNTIME_CONFIG_CERTIFICATE["runtime_constants_imported"] = dict(
+        SEQUENCE_LENGTH=SEQUENCE_LENGTH, SEGMENT_LEN=SEGMENT_LEN,
+        ENGINEERING_LONG_WINDOW_MODE=ENGINEERING_LONG_WINDOW_MODE,
+        K_BATCH=K_BATCH, STEPS_PER_UPDATE=STEPS_PER_UPDATE, ARM=ARM,
+        ANCHOR_INTERVAL=int(ANCHOR_INTERVAL),
+        MIN_SEQUENCE_LENGTH=int(MIN_SEQUENCE_LENGTH))
+    RUNTIME_CONFIG_CERTIFICATE["imported_constants_binding"] = dict(
+        imported_constants_match=True,
+        imported_vs_frozen_drift=[],
+        frozen_spec_sha256=FSPEC.FROZEN_SPEC_SHA256,
+        imported_scientific_config_sha256=RTC.scientific_config_sha256(_imported_scientific))
+# Phase4A-v2.4 (§六 ordering, step 5): the DEDICATED deterministically-seeded replay-sampling
+# RNG is constructed HERE — after the imported-constants binding and the learner/sampler
+# SOURCE binding below, BEFORE checkpoint load + certificate finalize — and the SAME instance
+# is reused by training (search: replay_sample_rng). No random state is consumed before the
+# certificate PASS: only its type/identity is verified (verify_rng_instance_identity draws no
+# random numbers).
+replay_sample_rng = np.random.RandomState(args.seed + 7)
+if FORMAL_CONFIG_RECORD is not None:
+    # §六/§七/§八: the ACTUALLY EXECUTED replay protocol — learner SOURCE identity, sampler
+    # SOURCE identity, RNG instance identity, and the resulting EFFECTIVE protocol definition
+    # + SHA — must be FULLY bound BEFORE checkpoint load / certificate finalize. ANY failure
+    # of this binding FINALIZES the certificate FAIL, rewrites the provisional file ATOMICALLY
+    # (and re-verifies it) and exits nonzero: the certificate can never reach PASS with an
+    # unbound / partially-bound executed protocol (no declared-strings-only fallback).
+    _EXECUTED_PROTOCOL_ERROR = None
+    try:
+        EXECUTED_PROTOCOL_IDENTITY = CONTRACT.executed_function_source_identity(
+            RL.original_vtrace_update_rmt, RMTReplayBuffer.sample_eligible)
+        _DECLARED_PROTOCOL_DEFINITION = CONTRACT.replay_protocol_labels(
+            REPLAY_MODE, SEQUENCE_LENGTH, K_BATCH)["protocol_definition"]
+        EXECUTED_PROTOCOL_IDENTITY["declaration_match"] = (
+            CONTRACT.verify_executed_protocol_matches_declared(
+                EXECUTED_PROTOCOL_IDENTITY, _DECLARED_PROTOCOL_DEFINITION))
+        EXECUTED_PROTOCOL_IDENTITY["declared_protocol_definition"] = _DECLARED_PROTOCOL_DEFINITION
+        EXECUTED_PROTOCOL_IDENTITY["rng_instance"] = CONTRACT.verify_rng_instance_identity(
+            replay_sample_rng)
+        DECLARED_PROTOCOL_DEFINITION = _DECLARED_PROTOCOL_DEFINITION
+        EFFECTIVE_PROTOCOL_DEFINITION, EFFECTIVE_PROTOCOL_SHA256 = (
+            CONTRACT.build_effective_protocol_definition(
+                _DECLARED_PROTOCOL_DEFINITION, EXECUTED_PROTOCOL_IDENTITY,
+                EXECUTED_PROTOCOL_IDENTITY["rng_instance"]))
+        RUNTIME_CONFIG_CERTIFICATE["executed_protocol_identity"] = dict(
+            learner=EXECUTED_PROTOCOL_IDENTITY["learner"],
+            sampler=EXECUTED_PROTOCOL_IDENTITY["sampler"],
+            rng_instance=EXECUTED_PROTOCOL_IDENTITY["rng_instance"],
+            declaration_match=EXECUTED_PROTOCOL_IDENTITY["declaration_match"])
+        RUNTIME_CONFIG_CERTIFICATE["declared_protocol_definition"] = DECLARED_PROTOCOL_DEFINITION
+        RUNTIME_CONFIG_CERTIFICATE["effective_protocol_definition"] = (
+            EFFECTIVE_PROTOCOL_DEFINITION)
+        RUNTIME_CONFIG_CERTIFICATE["effective_protocol_sha256"] = EFFECTIVE_PROTOCOL_SHA256
+    except Exception as exc:
+        _EXECUTED_PROTOCOL_ERROR = f"{type(exc).__name__}: {exc}"
+    if _EXECUTED_PROTOCOL_ERROR is not None:
+        RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(
+            RUNTIME_CONFIG_CERTIFICATE,
+            checkpoint_error="EXECUTED_PROTOCOL_BINDING_FAILURE: " + _EXECUTED_PROTOCOL_ERROR)
+        (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+         RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256,
+         RUNTIME_CONFIG_CERTIFICATE) = (
+            RTC.write_certificate_atomic(
+                RUNTIME_CONFIG_CERTIFICATE, RUNTIME_CONFIG_CERTIFICATE_PATH))
+        RTC.verify_certificate_artifact(
+            RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+            expected_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+            expected_payload_sha256=RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256)
+        raise SystemExit(
+            "EXECUTED_PROTOCOL_BINDING_FAILURE: the executed replay protocol (learner source "
+            "identity / sampler source identity / RNG instance identity / effective protocol "
+            "definition) could not be FULLY bound BEFORE the checkpoint finalize; the "
+            "certificate is finalized FAIL and no checkpoint load / training will proceed. "
+            "cause: " + _EXECUTED_PROTOCOL_ERROR)
+    print(f"[formal-config] imported constants binding=PASS (drift=0 vs frozen spec) "
+          f"executed_learner={EXECUTED_PROTOCOL_IDENTITY['learner']['qualname']} "
+          f"executed_sampler={EXECUTED_PROTOCOL_IDENTITY['sampler']['qualname']} "
+          f"learner_src_sha="
+          f"{EXECUTED_PROTOCOL_IDENTITY['learner']['function_source_sha256'][:16]} "
+          f"rng_class={EXECUTED_PROTOCOL_IDENTITY['rng_instance']['class_name']} "
+          f"effective_protocol_sha={EFFECTIVE_PROTOCOL_SHA256[:16]}",
+          flush=True)
 
 # ----------------------- Stage4 DEFEAT_KOBOLD task (identical to bakeoff) -----------------------
 S4_TASK_CODE = '''
@@ -150,10 +591,122 @@ def _merge(base, full):
         return out
     return base
 
+# ----------------------- Phase4A-v2.4 (§四 + §六): base checkpoint load + staged fail-closed identity -----------------------
+# Runs AFTER `import jax`, the imported-constants binding, the learner/sampler SOURCE binding,
+# the replay-RNG construction + identity binding and the EFFECTIVE protocol build — and BEFORE
+# env build / network init / optimizer / training (§六 ordering). The ENTIRE checkpoint flow is
+# under ONE staged try: CheckpointManager init -> restore -> structure (raw["params"]) ->
+# params extraction (base_params["params"]) -> params hash -> SHA compare. ANY failure at ANY
+# stage is captured with its stage label (RTC.CHECKPOINT_FAILURE_STAGES) and FINALIZES the
+# certificate FAIL: the finalized FAIL certificate is rewritten ATOMICALLY (payload SHA + file
+# SHA + strict sidecar), re-verified, and the driver exits nonzero — no stale PENDING/PASS can
+# survive a checkpoint failure, and a PASS certificate is only written when EVERY stage (incl.
+# the SHA compare) succeeded.
+base_params = None
+base_inner = None
+base_sha = None
+_CHECKPOINT_ERROR = None
+_CHECKPOINT_FAILURE_STAGE = "NONE"
+try:
+    _CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_MANAGER_INIT"
+    t0 = time.time()
+    ckpt_mgr = ocp.CheckpointManager(os.path.dirname(args.ckpt17500))
+    _CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_RESTORE"
+    raw = ckpt_mgr.restore(int(os.path.basename(args.ckpt17500)))
+    _CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_STRUCTURE"
+    base_params = raw["params"]                 # {"params": {...}} wrapped (repo convention)
+    _CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_PARAMS_EXTRACTION"
+    base_inner = base_params["params"]          # INNER (apply convention used by make_apply_eval_rmt)
+    _CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_PARAMS_HASH"
+    base_sha = _params_sha(base_inner)
+except Exception as exc:
+    _CHECKPOINT_ERROR = f"{type(exc).__name__}: {exc}"
+if base_sha is not None:
+    print(f"[load] ckpt17500 leaves={len(jax.tree_util.tree_leaves(base_inner))} "
+          f"sha={base_sha[:16]} ({time.time()-t0:.1f}s)", flush=True)
+else:
+    print(f"[load] ckpt17500 FAILED checkpoint_failure_stage={_CHECKPOINT_FAILURE_STAGE} "
+          f"error={_CHECKPOINT_ERROR}", flush=True)
+
+# Phase4A-v2.4 (§四): staged SHA compare + UNIFIED finalize. The loaded base params SHA is
+# compared against the FROZEN expectation from reviewed evidence (both arms' frozen raw-probe
+# summaries record this base_sha256), then the certificate is finalized: PENDING + checkpoint
+# PASS/NOT_FROZEN -> PASS (stage NONE); ANY staged failure -> FAIL with its
+# checkpoint_failure_stage recorded in the certificate (§四.1). The FINALIZED certificate is
+# rewritten ATOMICALLY and this is the LAST write to the file — checkpoint manifests and the
+# summary pin this exact file SHA (§七.3).
+if RUNTIME_CONFIG_CERTIFICATE is not None:
+    if _CHECKPOINT_ERROR is None:
+        _CHECKPOINT_FAILURE_STAGE = "CHECKPOINT_SHA_COMPARE"
+        try:
+            RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"] = RTC.verify_checkpoint_params_sha(
+                RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"], base_sha)
+            _CHECKPOINT_FAILURE_STAGE = "NONE"
+        except Exception as exc:
+            _CHECKPOINT_ERROR = f"{type(exc).__name__}: {exc}"
+    RUNTIME_CONFIG_CERTIFICATE = RTC.finalize_certificate(
+        RUNTIME_CONFIG_CERTIFICATE,
+        RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"],
+        checkpoint_error=_CHECKPOINT_ERROR,
+        checkpoint_failure_stage=_CHECKPOINT_FAILURE_STAGE)
+    (RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+     RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256, RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256,
+     RUNTIME_CONFIG_CERTIFICATE) = (
+        RTC.write_certificate_atomic(
+            RUNTIME_CONFIG_CERTIFICATE, RUNTIME_CONFIG_CERTIFICATE_PATH))
+    # Phase4A-v2.4 (§五.2): re-verify the FINAL artifact (payload SHA + file SHA + strict
+    # sidecar basename/format) immediately after the write.
+    RTC.verify_certificate_artifact(
+        RUNTIME_CONFIG_CERTIFICATE_PATH, RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+        expected_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+        expected_payload_sha256=RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256)
+    if RUNTIME_CONFIG_CERTIFICATE["certificate_status"] == RTC.CERTIFICATE_STATUS_PASS:
+        # Phase4A-v2.4 (§五.2): on a final PASS certificate, re-read the artifact from disk and
+        # require it to EQUAL the adopted in-memory RUNTIME_CONFIG_CERTIFICATE, with a non-null
+        # certificate_payload_sha256 — the payload SHA in the manifest/summary is the disk truth.
+        with open(RUNTIME_CONFIG_CERTIFICATE_PATH, "r") as _cert_f:
+            _disk_certificate = json.load(_cert_f)
+        if _disk_certificate != RUNTIME_CONFIG_CERTIFICATE:
+            raise SystemExit(
+                "CERTIFICATE_DISK_OBJECT_MISMATCH: the re-read disk certificate does not equal "
+                "the adopted in-memory RUNTIME_CONFIG_CERTIFICATE after the final PASS write.")
+        if not RUNTIME_CONFIG_CERTIFICATE.get("certificate_payload_sha256"):
+            raise SystemExit(
+                "CERTIFICATE_PAYLOAD_SHA_MISSING: the final PASS certificate carries no "
+                "non-null certificate_payload_sha256.")
+    _bc_match = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"]["base_checkpoint_match"]
+    _bc_expected = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"][
+        "base_checkpoint_expected_sha256"]
+    print(f"[formal-config] FINAL certificate_status="
+          f"{RUNTIME_CONFIG_CERTIFICATE['certificate_status']} "
+          f"finalized={RUNTIME_CONFIG_CERTIFICATE['certificate_finalized']} "
+          f"checkpoint_failure_stage="
+          f"{RUNTIME_CONFIG_CERTIFICATE.get('checkpoint_failure_stage')} "
+          f"base_checkpoint_match={_bc_match} expected={_bc_expected[:16]} "
+          f"loaded={base_sha[:16] if base_sha else None} "
+          f"certificate_payload_sha={RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256[:16]} "
+          f"certificate_file_sha="
+          f"{RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256[:16]}", flush=True)
+    if RUNTIME_CONFIG_CERTIFICATE["certificate_status"] != RTC.CERTIFICATE_STATUS_PASS:
+        raise SystemExit(
+            "FORMAL_CONFIG_RUNTIME_MISMATCH: runtime_config_certificate_status=FAIL "
+            "(checkpoint_failure_stage="
+            + str(RUNTIME_CONFIG_CERTIFICATE.get("checkpoint_failure_stage"))
+            + "); no training step will proceed (the finalized FAIL certificate overwrote the "
+            "provisional file). errors: "
+            + " | ".join(RUNTIME_CONFIG_CERTIFICATE["validation_errors"]))
+elif _CHECKPOINT_ERROR is not None:
+    # No formal certificate (replay_mode=off/probe legacy dev compat): a checkpoint load
+    # failure is still a hard stop (pre-v2.4 this raised uncaught from the same operations).
+    raise SystemExit(
+        f"CHECKPOINT_LOAD_FAILURE: checkpoint_failure_stage={_CHECKPOINT_FAILURE_STAGE} "
+        f"error={_CHECKPOINT_ERROR}")
+
 # ----------------------- env + network + compat init -----------------------
 print("=" * 78, flush=True)
 print(f"{ARM}  driver  (Phase4A)", flush=True)
-print(f"  carry_mode={args.carry_mode} replay={args.replay} gpu={args.gpu_uuid}", flush=True)
+print(f"  carry_mode={args.carry_mode} replay_mode={REPLAY_MODE} "
+      f"sequence_length={SEQUENCE_LENGTH} gpu={args.gpu_uuid}", flush=True)
 print(f"  devices={[str(d) for d in jax.devices()]}", flush=True)
 print("=" * 78, flush=True)
 
@@ -168,6 +721,9 @@ env_params = env.default_params
 assert env_params is not None, 'env_params (Craftax EnvParams) must resolve before collect/env.step'
 ACTION_DIM = int(env.action_space(env_params).n)
 OBS_DIM = int(env.observation_space(env_params).shape[0])
+# CC2 §七 handover: the FULL canonical Craftax observation shape + action dim (recorded in the
+# summary so CC4 can load the checkpoint read-only against the exact obs/action contract).
+OBS_SHAPE = tuple(int(x) for x in env.observation_space(env_params).shape)
 fp_cfg.action_dim = ACTION_DIM; fp_cfg.obs_dim = OBS_DIM
 
 network = ActorCriticTransformerRMT16(
@@ -176,16 +732,11 @@ network = ActorCriticTransformerRMT16(
     num_layers=cfg.num_layers, gating=cfg.gating, gating_bias=cfg.gating_bias,
     rmt_num_tokens=cfg.rmt_num_tokens)
 
-# compat init from ckpt17500 (base params loaded; RMT params fresh, rmt_gate=0 -> bit-exact)
-t0 = time.time()
-ckpt_mgr = ocp.CheckpointManager(os.path.dirname(args.ckpt17500))
-raw = ckpt_mgr.restore(int(os.path.basename(args.ckpt17500)))
-base_params = raw["params"]                 # {"params": {...}} wrapped (repo convention)
-base_inner = base_params["params"]          # INNER (apply convention used by make_apply_eval_rmt)
-base_sha = _params_sha(base_inner)
-print(f"[load] ckpt17500 leaves={len(jax.tree_util.tree_leaves(base_inner))} "
-      f"sha={base_sha[:16]} ({time.time()-t0:.1f}s)", flush=True)
-
+# compat init from ckpt17500 (base params loaded; RMT params fresh, rmt_gate=0 -> bit-exact).
+# Phase4A-v2.4 (§四/§六): the base checkpoint LOAD + staged fail-closed identity + certificate
+# FINALIZATION moved ABOVE the env build (search: "base checkpoint load + staged fail-closed
+# identity") so the executed protocol is bound and the certificate is finalized BEFORE any env
+# reset / optimizer / training work. base_inner / base_sha are in scope here.
 rng_init = jax.random.PRNGKey(args.seed); rng_init, _rng = jax.random.split(rng_init)
 full_params = network.init(
     _rng, jnp.zeros((2, cfg.window_mem, cfg.num_layers, cfg.embed_size)),
@@ -247,7 +798,31 @@ replay_update_success_count = 0
 replay_first_success_update = None
 replay_last_sampled_seq_len = None
 replay_last_sampled_traj_len = None
+replay_sequences_consumed = 0          # Phase4A-v2 (§七): MATCHED_REPLAY_EXPOSURE numerator
 ever_eligible_512 = False
+# ---- Phase4A-v2 (CC2 directive §三): authoritative SPLIT counters (replace overloaded update_count) ----
+counters = Phase4ACounters()
+# Phase4A-v2.4 (§六): replay_sample_rng (the DEDICATED deterministically-seeded RNG for
+# eligible-only replay sampling: given the same buffer state + this RNG state, sample_eligible
+# produces bit-identical sample_ids/start_offsets/sequence_lengths; seeded args.seed + 7 so it
+# is reproducible and independent of the JAX rollout/action RNG streams) was constructed ABOVE
+# — after the imported-constants + learner/sampler source binding, BEFORE the checkpoint load +
+# certificate finalize — and its identity was bound into EXECUTED_PROTOCOL_IDENTITY there. The
+# SAME instance is reused below; no random state was consumed before the certificate PASS.
+# ---- Phase4A-v2.1 (CC2 §五): per-arm MATCHED_REPLAY_EXPOSURE certificate accumulation ----
+# These per-outer-update lists are the raw exposure record the two-arm validator compares at
+# level 2 (EXPOSURE_COUNT_MATCH). sample_ids_by_outer_update / start_offsets_by_outer_update are
+# per-arm INTERNAL provenance ONLY — endogenous buffers have no shared trajectory identity, so
+# those two are NEVER compared across arms (compare_exposure excludes them).
+replay_attempt_mask = []                 # bool per outer update: True if a replay update was ATTEMPTED
+replay_attempt_outer_updates = []        # outer update indices where a replay update was attempted
+replay_not_ready_outer_updates = []      # outer update indices where buffer was NOT eligible -> skip
+replay_update_outer_updates = []         # outer update indices where a replay update actually RAN
+replay_batch_sizes = []                  # per executed replay update: batch size (== K_BATCH)
+replay_sequence_lengths = []             # per executed replay update: list of sampled seq lengths
+eligible_count_by_outer_update = []      # eligible trajectory count at each attempt
+sample_ids_by_outer_update = []          # INTERNAL: sampled trajectory ids (not compared cross-arm)
+start_offsets_by_outer_update = []       # INTERNAL: sampled start offsets (not compared cross-arm)
 persistent_carry_nonzero_all = True     # persistent: carried RMT tokens nonzero every rollout
 reset128_boundary_clear_all = True      # reset128: carried RMT tokens strictly zero every rollout
 gtrxl_window_finite_all = True
@@ -319,6 +894,66 @@ probe_completed_episodes = []     # cumulative per-episode termination records
 probe_first_ge512 = None          # first length>=512 episode (RECORD only; never a stop)
 
 # ----------------------- checkpoint -----------------------
+def _phase4a_v2_manifest_fields():
+    """Phase4A-v2 (CC2 directive §六): provenance fields recorded in every checkpoint manifest.
+
+    sequence_length, segment_len=128, crosses_boundary (= sequence_length > 128), replay_mode,
+    and the structural hindsight/awr flags. For replay_mode in {off, original_vtrace} hindsight
+    and awr are STRUCTURALLY False (the path never references them); only full_p2_legacy sets
+    them True."""
+    fields = dict(
+        sequence_length=SEQUENCE_LENGTH,
+        segment_len=SEGMENT_LEN,
+        crosses_boundary=bool(SEQUENCE_LENGTH > SEGMENT_LEN),
+        replay_mode=REPLAY_MODE,
+        hindsight=bool(REPLAY_USES_HINDSIGHT),
+        awr=bool(REPLAY_USES_HINDSIGHT),
+        w_original_vtrace=float(RL.W_ORIGINAL_VTRACE),
+        allow_full_p2_legacy=bool(args.allow_full_p2_legacy),
+        # Phase4A-direct-98304 (§一.2): the run management class recorded in every checkpoint
+        # manifest (NON-scientific provenance; formal_vtrace / engineering_smoke / long_run_98304).
+        run_class=args.run_class)
+    # Phase4A-v2.1 (§三.2): policy-lag GATE identity. For original_vtrace this records
+    # policy_lag_gate_active=false / max_policy_lag=null / off_policy_correction=vtrace; the
+    # V-trace importance correction stays active, only an ADDITIONAL hard lag gate is absent.
+    fields.update(CONTRACT.policy_lag_runtime_manifest(REPLAY_MODE))
+    # Phase4A-v2.2 (§三.1/§三.2): the manifest's ACTIVE replay block carries an explicit
+    # active_replay_config (replay_mode + policy_lag_gate_active=false + max_policy_lag=null +
+    # vtrace_importance_sampling for original_vtrace). The numeric legacy lag 16 is quarantined
+    # in legacy_full_p2_only with active=false — it never appears in any active manifest block.
+    fields["active_replay_config"] = CONTRACT.active_replay_config_manifest(REPLAY_MODE)
+    fields["legacy_full_p2_only"] = CONTRACT.legacy_full_p2_manifest(
+        active=False, max_policy_lag=16)
+    # Phase4A-v2.1 (§四): the four-way replay label split — SAME_REPLAY_PROTOCOL=READY does NOT
+    # imply MATCHED_REPLAY_EXPOSURE (NOT_RUN) nor MATCHED_REPLAY_CONTENT (NOT_CLAIMED).
+    fields["replay_labels"] = CONTRACT.replay_protocol_labels(
+        REPLAY_MODE, SEQUENCE_LENGTH, K_BATCH)
+    # Phase4A-v2.2 (§六.8): every checkpoint manifest (step0 full_state + train_state and all
+    # later checkpoints) references the runtime_config_certificate SHAs + status + path, so the
+    # binding evidence is anchored inside the artifacts themselves.
+    if RUNTIME_CONFIG_CERTIFICATE is not None:
+        # Phase4A-v2.3 (§七.3): the manifest pins the finalized certificate's OWN artifact
+        # identity — payload SHA, FINAL file SHA, sidecar path — so checkpoint readers can
+        # re-verify the certificate file byte-for-byte (verify_certificate_artifact).
+        fields["runtime_config_certificate"] = RTC.certificate_shas_record(
+            RUNTIME_CONFIG_CERTIFICATE,
+            certificate_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+            certificate_sidecar_path=RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)
+        fields["runtime_config_certificate_path"] = RUNTIME_CONFIG_CERTIFICATE_PATH
+        fields["runtime_config_certificate_sidecar_path"] = (
+            RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)
+        fields["runtime_config_certificate_file_sha256"] = (
+            RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256)
+        # Phase4A-v2.4 (§五.3): the certificate PAYLOAD SHA (the SHA the sidecar's file SHA is
+        # derived from) and the loaded base checkpoint params SHA are first-class manifest
+        # fields — non-null length-64 hex, equal to the on-disk certificate artifact / the
+        # loaded base params.
+        fields["runtime_config_certificate_payload_sha256"] = (
+            RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256)
+        fields["base_checkpoint_params_sha256"] = base_sha
+    return fields
+
+
 def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag):
     d = os.path.join(CKPT_DIR, str(step)); os.makedirs(d, exist_ok=True)
     p_sha = _params_sha(params)
@@ -326,9 +961,10 @@ def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag)
     with open(os.path.join(d, "full_state.pkl"), "wb") as f:
         pickle.dump({"params": _to_np(params),
                      "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
-                                  "carry_mode": args.carry_mode, "replay": args.replay,
+                                  "carry_mode": args.carry_mode, "replay_mode": REPLAY_MODE,
                                   "gpu_uuid": args.gpu_uuid, "seed": args.seed,
                                   "config": {k: v for k, v in vars(cfg).items()},
+                                  "phase4a_v2": _phase4a_v2_manifest_fields(),
                                   "tag": tag}}, f, protocol=4)
     # train_state.pkl for exact resume (opt/EMA/replay/rng/counters)
     with open(os.path.join(d, "train_state.pkl"), "wb") as f:
@@ -341,12 +977,18 @@ def save_ckpt(step, params, ppo_opt_state, replay_opt_state, target_params, tag)
                      "memories": np.asarray(memories), "mem_mask": np.asarray(mem_mask),
                      "mem_idx": np.asarray(mem_idx),
                      "rmt_state": _to_np(rmt_state), "obsv": np.asarray(obsv),
+                     # GATE 12: checkpoint carries params/PPO opt/Replay opt/EMA/RNG/action RNG/
+                     # buffer/pending episodes/GTrXL state/RMT state AND all split counters.
                      "counters": {"accepted_policy_updates": accepted_policy_updates,
                                   "kl_rejected_updates": kl_rejected_updates,
                                   "hindsight_eligible": hindsight_eligible,
-                                  "hindsight_attempts": hindsight_attempts},
+                                  "hindsight_attempts": hindsight_attempts,
+                                  "replay_sequences_consumed": replay_sequences_consumed,
+                                  "replay_sample_rng_state": replay_sample_rng.get_state(),
+                                  "phase4a_v2": counters.snapshot()},
                      "manifest": {"params_sha256": p_sha, "step": step, "arm": ARM,
-                                  "carry_mode": args.carry_mode, "replay": args.replay}},
+                                  "carry_mode": args.carry_mode, "replay_mode": REPLAY_MODE,
+                                  "phase4a_v2": _phase4a_v2_manifest_fields()}},
                     f, protocol=4)
     print(f"[ckpt] step={step} params_sha={p_sha[:16]} tag={tag}", flush=True)
     return p_sha
@@ -362,7 +1004,11 @@ for u in range(args.total_updates):
         env, env_state, network, params, obsv, memories, mem_mask, mem_idx, rmt_state,
         rng, action_rng, pending, target_achievement_1d, cfg.num_steps, cfg.window_mem,
         cfg.num_heads, rmt_cfg, args.carry_mode, collected_update_count=update_count,
-        apply_eval_rmt=apply_eval_rmt, env_params=env_params)
+        apply_eval_rmt=apply_eval_rmt, env_params=env_params,
+        # Phase4A-v2 (§二/§三): episode update index = outer loop index; pending-episode
+        # policy_version = ACCEPTED policy version (not the loop index). In replay_mode=off
+        # these coincide with the legacy values -> bit-exact (GATE 13).
+        outer_update_index=u, policy_version=counters.policy_version)
     env_state = carry["env_state"]; obsv = carry["obsv"]
     memories = carry["memories"]; mem_mask = carry["mem_mask"]
     mem_idx = carry["mem_idx"]; rmt_state = carry["rmt_state"]; rng = carry["rng"]
@@ -384,7 +1030,13 @@ for u in range(args.total_updates):
             if probe_first_ge512 is None and int(_ep["length"]) >= PROBE_GE_LEN:
                 probe_first_ge512 = dict(
                     first_ge512_update=int(_ep["update_index"]),
+                    # Phase4A-v2 (§二): PRECISE resolved env step (authoritative).
+                    first_ge512_resolved_env_step=int(_ep["completion_resolved_env_step"]),
+                    # DEPRECATED (§二): kept only for historical recomparison.
                     first_ge512_global_step=int(_ep["completion_global_step"]),
+                    first_ge512_global_step_deprecated=True,
+                    first_ge512_env_id=int(_ep["env_id"]),
+                    first_ge512_rollout_step=int(_ep["rollout_step"]),
                     first_ge512_episode_id=int(_ep["episode_id"]),
                     first_ge512_length=int(_ep["length"]))
         _lens = [int(_e["length"]) for _e in probe_completed_episodes]
@@ -413,8 +1065,10 @@ for u in range(args.total_updates):
               f"first_ge512={probe_first_ge512}", flush=True)
 
     # 2. last_value + GAE + PPO main update
+    # Use the SAME entering_read_tokens helper as collection + rmt_step_forward so the GAE
+    # bootstrap value is computed on the identical (base_gtrxl: read-skipped) forward path.
     _lg, last_value, _mo, _ht = apply_eval_rmt(
-        params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+        params, memories, obsv, mem_mask, entering_read_tokens(rmt_state, args.carry_mode))
     advantages, targets = PPO.compute_gae(
         rollout["rewards"], rollout["values"], rollout["dones"], np.asarray(last_value),
         cfg.gamma, cfg.gae_lambda, cfg.value_target_clip_min, cfg.value_target_clip_max)
@@ -423,6 +1077,11 @@ for u in range(args.total_updates):
         ppo_cfg, rmt_cfg, args.carry_mode, rng)
     update_count += 1
     online_ppo_update_count += 1
+    # Phase4A-v2 (§三): one outer rollout+PPO iteration completed; PPO always commits its
+    # policy step -> policy_version advances. (off-path: policy_version stays == legacy
+    # update_count, bit-exact.)
+    counters.on_outer_update(cfg.num_envs, cfg.num_steps)
+    counters.on_ppo_accepted()
     assert ppo_metrics["ppo_finite"], "HARD STOP NaN/Inf in PPO update"
     # ---- A/B training-no-perturbation gate artifacts (CC2 addendum; only with --equiv_dump) ----
     # Deterministic hashes of the rollout + post-update params/optimizer/RMT state. A (probe OFF)
@@ -447,71 +1106,171 @@ for u in range(args.total_updates):
         with open(equiv_path, "a") as f:
             f.write(json.dumps(equiv, default=str) + "\n")
 
-    # 3. replay update (P2-Full-A frozen channel)
+    # 3. replay update (Phase4A-v2: mode-dispatched; CC2 directive §四/§五/§七/§八)
     rep = {}
     # ---- Replay eligibility instrumentation (every update, every arm; read-only query) ----
     _rstats = _replay_stats(replay._buffer)
     _pending_traj_count = sum(1 for _ps in pending.slots if len(_ps["obs"]) > 0)
     if _rstats["replay_eligible_count_512"] > 0:
         ever_eligible_512 = True
-    if REPLAY_ON and replay.can_sample():
-        so, sr = [], []
-        # PRECISE DRIVER-ONLY GUARD (CC2 directive): skip Replay ONLY when no trajectory
-        # can satisfy the requested L_SEQ. Explicit eligibility query (preferred path):
-        if _rstats["replay_eligible_count_512"] == 0:
+    did_replay_update = False
+    # ---- Phase4A-v2.1 (§五): per-outer-update exposure scratch (recorded after dispatch) ----
+    _replay_attempted_this_update = False
+    _replay_not_ready_this_update = False
+    _eligible_count_this_update = int(_rstats.get("replay_eligible_count_512", 0))
+    _replay_batch_size_this_update = 0
+    _replay_seq_lengths_this_update = []
+    _sample_ids_this_update = []
+    _start_offsets_this_update = []
+    if REPLAY_ON and REPLAY_MODE == "original_vtrace":
+        # ============ ORIGINAL-GOAL V-TRACE ONLY (no relabel, no AWR; firewall §八) ============
+        # Eligible-ONLY deterministic sampling (§七): pre-filters length>=SEQUENCE_LENGTH, fixed
+        # batch size, explicit NOT_READY (no random-short-then-retry, no silent redraw).
+        _batch = replay.sample_eligible(SEQUENCE_LENGTH, replay_sample_rng, K_BATCH)
+        _replay_attempted_this_update = True          # §五: sampling was attempted this update
+        _eligible_count_this_update = int(_batch.eligible_count)
+        if _batch.status == "NOT_READY":
+            _replay_not_ready_this_update = True      # §五: attempted but buffer not eligible
             replay_not_ready_skip_count += 1
-            print(f"REPLAY_NOT_READY requested_sequence_length={L_SEQ} "
+            print(f"REPLAY_NOT_READY requested_sequence_length={SEQUENCE_LENGTH} "
                   f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
-                  f"eligible_count_512={_rstats['replay_eligible_count_512']}", flush=True)
+                  f"eligible_count={_batch.eligible_count}", flush=True)
         else:
-            _too_short_prefix = f"sequence_length {L_SEQ} > trajectory length"
-            for _ in range(K_BATCH):
-                hindsight_attempts += 1
-                try:
-                    s = replay.sample(sequence_length=L_SEQ)
-                except ValueError as _e:
-                    # TEMPORARY COMPAT GUARD (driver-only): sample() selects uniformly among
-                    # trajectories >= MIN_SEQUENCE_LENGTH; a random pick can be < L_SEQ and raise.
-                    # ONLY the precise "requested {L_SEQ} > picked trajectory length" case is a
-                    # benign redraw -> retry. ANY other ValueError is re-raised UNCHANGED.
-                    if str(_e).startswith(_too_short_prefix):
-                        continue
-                    raise
-                replay_sample_success_count += 1
-                replay_last_sampled_seq_len = int(getattr(s, "length", L_SEQ))
-                _src = replay._get_by_id(getattr(s, "source_trajectory_id", None))
-                replay_last_sampled_traj_len = int(_src.length) if _src is not None else None
-                try:
-                    rel = RH.relabel_sample_rmt(s, embedding_size=EMB)   # min achieved goal (Gate 5/6)
-                except ValueError:
-                    continue                            # not relabelable -> skip
-                hindsight_eligible += 1
-                so.append(s); sr.append(rel)
-        if len(so) >= 2:
-            params, target_params, replay_opt_state, m = RL.full_p2_update_rmt(
+            so = _batch.samples
+            # §五 exposure scratch: the drawn sample identity / geometry for this update.
+            _replay_batch_size_this_update = int(len(so))
+            _replay_seq_lengths_this_update = [int(x) for x in _batch.sequence_lengths]
+            _sample_ids_this_update = [int(x) for x in _batch.sample_ids]
+            _start_offsets_this_update = [int(x) for x in _batch.start_offsets]
+            counters.on_replay_attempt(len(so))
+            replay_sample_success_count += len(so)
+            replay_last_sampled_seq_len = SEQUENCE_LENGTH
+            _src0 = replay._get_by_id(_batch.sample_ids[0]) if _batch.sample_ids else None
+            replay_last_sampled_traj_len = int(_src0.length) if _src0 is not None else None
+            params, target_params, replay_opt_state, m = RL.original_vtrace_update_rmt(
                 network, params, target_params, replay_opt_state, replay_opt,
-                apply_eval_rmt, scan_fn, so, sr, fp_cfg, rmt_cfg, args.carry_mode, update_count)
+                apply_eval_rmt, scan_fn, so, fp_cfg, rmt_cfg, args.carry_mode)
             update_count += 1
-            assert bool(m["finite"]), "HARD STOP NaN/Inf in replay loss"
+            counters.on_replay_update_executed()
+            did_replay_update = True
+            assert bool(m["finite"]), "HARD STOP NaN/Inf in original_vtrace replay loss"
             if bool(m.get("policy_committed")):
                 assert float(m["policy_kl"]) <= fp_cfg.kl_replay_max + 1e-12, \
                     f"HARD STOP accepted policy_kl={float(m['policy_kl']):.5f} > {fp_cfg.kl_replay_max}"
                 accepted_policy_updates += 1
+                counters.on_replay_policy_committed()
             if bool(m.get("kl_rejected_update")):
                 assert not bool(m.get("policy_committed")), "HARD STOP KL-rejected committed policy"
                 kl_rejected_updates += 1
+                counters.on_replay_kl_rejected()   # policy_version does NOT advance on rollback
             assert float(m["entropy"]) >= fp_cfg.ent_floor, \
                 f"HARD STOP entropy collapse {float(m['entropy']):.4f} < {fp_cfg.ent_floor}"
             rep = {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
                    for k, v in m.items() if not isinstance(v, (list, dict))}
             rep["batch"] = len(so)
+            rep["replay_sample_ids"] = list(_batch.sample_ids)
+            rep["replay_start_offsets"] = list(_batch.start_offsets)
+            rep["replay_sequence_lengths"] = list(_batch.sequence_lengths)
             replay_update_success_count += 1
+            replay_sequences_consumed += len(so)
             if replay_first_success_update is None:
                 replay_first_success_update = update_count
-    elif REPLAY_ON:
-        # EMA still tracks params on PPO-only updates
-        target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
-    if (not REPLAY_ON):
+            # ---- Hindsight/AWR firewall (§八): original_vtrace MUST keep all four == 0 ----
+            counters.assert_hindsight_awr_disabled()
+    elif REPLAY_ON and REPLAY_MODE == "full_p2_legacy":
+        # ============ LEGACY V-trace+AWR (audit only; GATE 15 requires explicit flag) ============
+        # Preserves the original K_BATCH relabel path for audit/legacy comparison. This is the
+        # ONLY path that touches Hindsight/AWR; it is default-forbidden for formal science.
+        if replay.can_sample():
+            _replay_attempted_this_update = True      # §五: sampling was attempted this update
+            so, sr = [], []
+            if _rstats["replay_eligible_count_512"] == 0:
+                _replay_not_ready_this_update = True  # §五: attempted but buffer not eligible
+                replay_not_ready_skip_count += 1
+                print(f"REPLAY_NOT_READY requested_sequence_length={L_SEQ} "
+                      f"max_trajectory_length={_rstats['replay_max_trajectory_length']} "
+                      f"eligible_count_512={_rstats['replay_eligible_count_512']}", flush=True)
+            else:
+                _too_short_prefix = f"sequence_length {L_SEQ} > trajectory length"
+                for _ in range(K_BATCH):
+                    hindsight_attempts += 1
+                    counters.on_hindsight_attempt(1)
+                    try:
+                        s = replay.sample(sequence_length=L_SEQ)
+                    except ValueError as _e:
+                        # Legacy benign redraw: a random pick can be < L_SEQ and raise. ONLY the
+                        # precise "requested {L_SEQ} > picked trajectory length" case retries; any
+                        # other ValueError is re-raised UNCHANGED. (original_vtrace never reaches
+                        # this — sample_eligible pre-filters and never draws a short trajectory.)
+                        if str(_e).startswith(_too_short_prefix):
+                            continue
+                        raise
+                    replay_sample_success_count += 1
+                    replay_last_sampled_seq_len = int(getattr(s, "length", L_SEQ))
+                    _src = replay._get_by_id(getattr(s, "source_trajectory_id", None))
+                    replay_last_sampled_traj_len = int(_src.length) if _src is not None else None
+                    try:
+                        rel = RH.relabel_sample_rmt(s, embedding_size=EMB)   # min achieved goal
+                    except ValueError:
+                        continue                            # not relabelable -> skip
+                    hindsight_eligible += 1
+                    counters.on_hindsight_eligible(1)
+                    counters.on_relabeled_sample(1)
+                    so.append(s); sr.append(rel)
+            if len(so) >= 2:
+                params, target_params, replay_opt_state, m = RL.full_p2_update_rmt(
+                    network, params, target_params, replay_opt_state, replay_opt,
+                    apply_eval_rmt, scan_fn, so, sr, fp_cfg, rmt_cfg, args.carry_mode, update_count)
+                update_count += 1
+                counters.on_replay_attempt(len(so))
+                counters.on_replay_update_executed()
+                counters.on_awr_update(1)
+                did_replay_update = True
+                assert bool(m["finite"]), "HARD STOP NaN/Inf in replay loss"
+                if bool(m.get("policy_committed")):
+                    assert float(m["policy_kl"]) <= fp_cfg.kl_replay_max + 1e-12, \
+                        f"HARD STOP accepted policy_kl={float(m['policy_kl']):.5f} > {fp_cfg.kl_replay_max}"
+                    accepted_policy_updates += 1
+                    counters.on_replay_policy_committed()
+                if bool(m.get("kl_rejected_update")):
+                    assert not bool(m.get("policy_committed")), "HARD STOP KL-rejected committed policy"
+                    kl_rejected_updates += 1
+                    counters.on_replay_kl_rejected()
+                assert float(m["entropy"]) >= fp_cfg.ent_floor, \
+                    f"HARD STOP entropy collapse {float(m['entropy']):.4f} < {fp_cfg.ent_floor}"
+                rep = {k: (float(v) if isinstance(v, (int, float, np.floating)) else v)
+                       for k, v in m.items() if not isinstance(v, (list, dict))}
+                rep["batch"] = len(so)
+                replay_update_success_count += 1
+                replay_sequences_consumed += len(so)
+                if replay_first_success_update is None:
+                    replay_first_success_update = update_count
+                # §五 exposure scratch (legacy path): fixed L_SEQ windows from the relabel path.
+                _replay_batch_size_this_update = int(len(so))
+                _replay_seq_lengths_this_update = [int(getattr(s, "length", L_SEQ)) for s in so]
+                _sample_ids_this_update = [int(getattr(s, "source_trajectory_id", -1)) for s in so]
+                _start_offsets_this_update = [int(getattr(s, "start_offset", 0)) for s in so]
+    # ---- Phase4A-v2.1 (§五): record this outer update's exposure certificate row ----
+    # One row per outer update, in outer-update order. replay_attempt_mask[k] is True iff outer
+    # update k attempted a replay sample. sample_ids_by_outer_update / start_offsets_by_outer_update
+    # are per-arm INTERNAL provenance (endogenous buffers => never compared cross-arm).
+    replay_attempt_mask.append(bool(_replay_attempted_this_update))
+    if _replay_attempted_this_update:
+        replay_attempt_outer_updates.append(int(u))
+    if _replay_not_ready_this_update:
+        replay_not_ready_outer_updates.append(int(u))
+    if did_replay_update:
+        replay_update_outer_updates.append(int(u))
+    eligible_count_by_outer_update.append(int(_eligible_count_this_update))
+    if did_replay_update:
+        replay_batch_sizes.append(int(_replay_batch_size_this_update))
+        replay_sequence_lengths.append(list(_replay_seq_lengths_this_update))
+        sample_ids_by_outer_update.append(list(_sample_ids_this_update))
+        start_offsets_by_outer_update.append(list(_start_offsets_this_update))
+    # ---- EMA target tracking on PPO-only outer iterations (no replay update this iteration) ----
+    # Identical to legacy off-path (GATE 13): replay_mode=off EMAs every iteration; a replay
+    # update performs its own EMA internally, so we skip the PPO-only EMA on those iterations.
+    if not did_replay_update:
         target_params = RL.FPL.ema_update(params, target_params, fp_cfg.ema_tau)
 
     # ---- RMT read-path monitor probe (post-update params + carried state) ----
@@ -616,7 +1375,7 @@ if PROBE:
     probe_summary = dict(
         arm=ARM, carry_mode=args.carry_mode, probe="REACHABILITY_ONLY",
         not_for_formal_science=True,
-        replay=args.replay,
+        replay_mode=REPLAY_MODE,
         replay_note="replay learner + hindsight OFF; buffer collection of complete done episodes ON",
         total_updates=args.total_updates,
         total_env_steps=args.total_updates * STEPS_PER_UPDATE,
@@ -642,39 +1401,81 @@ RMT_READ_PATH_ACTIVE = bool(read_ever_nonzero and mem_on_off_ever_nonzero)  # ca
 READ_BRANCH_CONNECTED = bool(read_conn_ever_nonzero)                         # synthetic-token connectivity
 _carried_final_maxabs = float(np.max(np.abs(np.asarray(rmt_state["mem_tokens"]))))
 REPLAY_HORIZON_REACHED = bool(replay_update_success_count > 0)
+# Phase4A-direct-98304 (§四 / §六): the replay horizon is a PASS requirement ONLY for the formal
+# run class. engineering_smoke (4096 steps) and long_run_98304 do NOT require a replay update to
+# exit PASS — at 4096 steps the 512-anchor horizon is structurally unreachable, so
+# replay_update_count==0 / REPLAY_HORIZON_NOT_REACHED must NOT block the run (and must NOT block
+# the conditional 98k launch; §五). The CORRECTNESS gates (carry/boundary + read branch + finite
+# gtrxl window) stay REQUIRED for every class. When correctness holds but the horizon is not
+# reached under a non-formal class, the arm exits PASS with ARM_STATUS=PASS_REPLAY_HORIZON_NOT_REACHED.
+REPLAY_HORIZON_REQUIRED_FOR_PASS = bool(args.run_class == "formal_vtrace")
 if args.carry_mode == "persistent":
     # Persistent: write->carry->read connected; cross-boundary carry NON-ZERO; read affects output >=1.
     CARRY_NONZERO = bool(persistent_carry_nonzero_all and _carried_final_maxabs > 0.0)
     READ_AFFECTS_OUTPUT = bool(RMT_READ_PATH_ACTIVE or READ_BRANCH_CONNECTED)
     PERSISTENT_READ_DEFECT = bool(CARRY_NONZERO and (not READ_AFFECTS_OUTPUT))
-    ARM_GATES_PASS = bool(REPLAY_HORIZON_REACHED and CARRY_NONZERO and RMT_READ_PATH_ACTIVE
-                          and READ_BRANCH_CONNECTED and gtrxl_window_finite_all)
+    _PERSISTENT_CORRECTNESS_OK = bool(CARRY_NONZERO and RMT_READ_PATH_ACTIVE
+                                      and READ_BRANCH_CONNECTED and gtrxl_window_finite_all)
+    ARM_GATES_PASS = bool(_PERSISTENT_CORRECTNESS_OK
+                          and (REPLAY_HORIZON_REACHED or not REPLAY_HORIZON_REQUIRED_FOR_PASS))
     if PERSISTENT_READ_DEFECT:
         ARM_STATUS = "RMT_READ_PATH_ENGINEERING_DEFECT"
-    elif not REPLAY_HORIZON_REACHED:
+    elif not REPLAY_HORIZON_REACHED and REPLAY_HORIZON_REQUIRED_FOR_PASS:
         ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
-    elif ARM_GATES_PASS:
+    elif ARM_GATES_PASS and REPLAY_HORIZON_REACHED:
         ARM_STATUS = "PASS"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
     else:
         ARM_STATUS = "FAIL"
-else:  # reset128 -- cross-boundary long-term carry read NOT required; read branch MUST be connected.
+elif args.carry_mode == "reset128":  # cross-boundary long-term carry read NOT required; read branch MUST be connected.
     # (a) expected control: carried tokens zero (reset works) AND read branch connected (forced-open
     #     gate + injected non-zero tokens produce detectable logit/KL/top-action change / read grad).
     # (b) defect: read branch NEVER connected -> RMT_RESET128_READ_PATH_ENGINEERING_DEFECT.
     BOUNDARY_CLEAR = bool(reset128_boundary_clear_all and _carried_final_maxabs == 0.0)
     RESET128_READ_DEFECT = bool(not READ_BRANCH_CONNECTED)
-    ARM_GATES_PASS = bool(REPLAY_HORIZON_REACHED and BOUNDARY_CLEAR and READ_BRANCH_CONNECTED
-                          and gtrxl_window_finite_all)
+    _RESET128_CORRECTNESS_OK = bool(BOUNDARY_CLEAR and READ_BRANCH_CONNECTED
+                                    and gtrxl_window_finite_all)
+    ARM_GATES_PASS = bool(_RESET128_CORRECTNESS_OK
+                          and (REPLAY_HORIZON_REACHED or not REPLAY_HORIZON_REQUIRED_FOR_PASS))
     if RESET128_READ_DEFECT:
         ARM_STATUS = "RMT_RESET128_READ_PATH_ENGINEERING_DEFECT"
     elif not BOUNDARY_CLEAR:
         ARM_STATUS = "RESET128_BOUNDARY_CLEAR_FAILED"
-    elif not REPLAY_HORIZON_REACHED:
+    elif not REPLAY_HORIZON_REACHED and REPLAY_HORIZON_REQUIRED_FOR_PASS:
         ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
-    elif ARM_GATES_PASS:
+    elif ARM_GATES_PASS and REPLAY_HORIZON_REACHED:
         ARM_STATUS = "PASS"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
     else:
         ARM_STATUS = "FAIL"
+elif args.carry_mode == "base_gtrxl":
+    # CC2 §二 BASE_GTRXL: the RMT16 persistent-token READ path is DISABLED BY DESIGN (entering tokens
+    # forced to None -> the policy is the pure GTrXL backbone; RMT params get no gradient, frozen at
+    # init). The persistent/reset128 read-ACTIVITY / read-CONNECTIVITY requirements therefore DO NOT
+    # apply — those probes only report LATENT wiring here and are explicitly NOT gates for this arm.
+    # Correctness = the GTrXL short-memory window stays finite AND the read-skip actually executed
+    # (positive evidence) AND (replay horizon reached OR not required for this run class). NaN/Inf is
+    # already a hard stop during training (ppo_finite / replay-finite asserts), so it is not re-checked
+    # here. replay_update_count is NOT a gate for engineering_smoke / long_run_98304 (§四).
+    _BASE_CORRECTNESS_OK = bool(gtrxl_window_finite_all and EXECUTED_READ_SKIPPED)
+    ARM_GATES_PASS = bool(_BASE_CORRECTNESS_OK
+                          and (REPLAY_HORIZON_REACHED or not REPLAY_HORIZON_REQUIRED_FOR_PASS))
+    if not EXECUTED_READ_SKIPPED:
+        ARM_STATUS = "BASE_GTRXL_READ_SKIP_NOT_EXECUTED"
+    elif not gtrxl_window_finite_all:
+        ARM_STATUS = "BASE_GTRXL_WINDOW_NOT_FINITE"
+    elif not REPLAY_HORIZON_REACHED and REPLAY_HORIZON_REQUIRED_FOR_PASS:
+        ARM_STATUS = "REPLAY_HORIZON_NOT_REACHED"
+    elif ARM_GATES_PASS and REPLAY_HORIZON_REACHED:
+        ARM_STATUS = "PASS"
+    elif ARM_GATES_PASS:
+        ARM_STATUS = "PASS_REPLAY_HORIZON_NOT_REACHED"
+    else:
+        ARM_STATUS = "FAIL"
+else:
+    raise SystemExit(f"FATAL: unhandled carry_mode={args.carry_mode!r} in per-arm final gate")
 print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
       f"replay_upd={replay_update_success_count} read_active={RMT_READ_PATH_ACTIVE} "
       f"read_conn={READ_BRANCH_CONNECTED} carry_final_maxabs={_carried_final_maxabs:.3e} "
@@ -682,7 +1483,35 @@ print(f"[gates] arm={ARM} carry_mode={args.carry_mode} STATUS={ARM_STATUS} "
       f"reset128_boundary_clear_all={reset128_boundary_clear_all} "
       f"ever_eligible_512={ever_eligible_512}", flush=True)
 # ----------------------- summary -----------------------
-summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
+# Phase4A-v2 (§八): FINAL Hindsight/AWR firewall. For replay_mode in {off, original_vtrace} the
+# four firewall counters MUST be 0 for the entire run (structural non-entry). Any breach here is
+# a HARD STOP. full_p2_legacy is the only mode permitted to make them nonzero.
+if REPLAY_MODE in ("off", "original_vtrace"):
+    counters.assert_hindsight_awr_disabled()
+# Phase4A-v2.1 (§五): MATCHED_REPLAY_EXPOSURE readiness. A formal two-arm Carry causal
+# conclusion requires the Persistent and Reset128 arms to have consumed IDENTICAL replay
+# exposure across the full EXPOSURE_MATCH_FIELDS set (replay_attempt_mask,
+# replay_update_outer_updates, replay_update_count, replay_sequences_consumed,
+# replay_batch_sizes, replay_sequence_lengths). Each arm records its own exposure_certificate
+# below; the cross-arm equality is adjudicated host-side by
+# tests/phase4a_v2_exposure_validator.py from the two summaries. This arm reports its
+# certificate + the four-way label split (phase4a_v2.replay_labels); it does NOT self-declare
+# MATCHED_REPLAY_EXPOSURE=PASS (no two-arm run this round -> NOT_RUN).
+summary = dict(arm=ARM, carry_mode=args.carry_mode, replay_mode=REPLAY_MODE,
+               # CC2 §二/§七 BASE_GTRXL handover labels: the network family + memory mode + the
+               # positive evidence that the read path was skipped (base_gtrxl) / the canonical
+               # Craftax obs shape + action dim (for CC4 read-only checkpoint loading). For the
+               # frozen persistent/reset128 arms these are network_family=rmt16, memory_mode=<arm>,
+               # executed_read_skipped=False — i.e. purely additive, no behaviour change.
+               network_family=NETWORK_FAMILY, memory_mode=MEMORY_MODE,
+               executed_read_skipped=EXECUTED_READ_SKIPPED,
+               observation_shape=list(OBS_SHAPE), action_dim=ACTION_DIM,
+               # Phase4A-direct-98304 (§一.2): the run management class + its bound identity
+               # (NON-scientific; None on formal_vtrace). Recorded so the smoke PASS evaluation
+               # (§四) and the conditional 98k launch (§五) can key off the run class directly.
+               run_class=args.run_class,
+               run_class_identity=RUN_CLASS_IDENTITY,
+               replay_horizon_required_for_pass=REPLAY_HORIZON_REQUIRED_FOR_PASS,
                total_updates=args.total_updates, global_step=args.total_updates * STEPS_PER_UPDATE,
                final_params_sha256=_params_sha(params), base_sha256=base_sha,
                accepted_policy_updates=accepted_policy_updates,
@@ -690,10 +1519,83 @@ summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
                hindsight_eligible=hindsight_eligible, hindsight_attempts=hindsight_attempts,
                replay_buffer_hash=replay.hash_digest() if REPLAY_ON else None,
                config={k: v for k, v in vars(cfg).items()},
+               phase4a_v2=_phase4a_v2_manifest_fields(),
+               phase4a_v2_counters=counters.snapshot(),
+               replay_update_count=counters.replay_update_count,
+               accepted_replay_policy_update_count=counters.accepted_replay_policy_update_count,
+               replay_attempt_count=counters.replay_attempt_count,
+               replay_sequences_consumed=replay_sequences_consumed,
+               policy_version=counters.policy_version,
+               outer_update_index=counters.outer_update_index,
+               global_env_steps=counters.global_env_steps,
+               # Phase4A-v2.1 (§四): the single conflated MATCHED_REPLAY_PROTOCOL_READY flag is
+               # REMOVED. The four distinct labels live in phase4a_v2.replay_labels
+               # (SAME_REPLAY_PROTOCOL=READY / MATCHED_REPLAY_EXPOSURE=NOT_RUN /
+               #  MATCHED_REPLAY_CONTENT=NOT_CLAIMED / ENDOGENOUS_REPLAY_SCREENING=READY_AFTER_SMOKE).
+               # Phase4A-v2.1 (§五): the per-arm MATCHED_REPLAY_EXPOSURE certificate — the raw
+               # exposure record the two-arm validator (tests/phase4a_v2_exposure_validator.py)
+               # compares. One row per outer update, in order. sample_ids_*/start_offsets_* are
+               # per-arm INTERNAL provenance ONLY (endogenous buffers: NOT compared cross-arm).
+               exposure_certificate=dict(
+                   outer_update_count=int(counters.outer_update_index),
+                   replay_attempt_mask=[bool(x) for x in replay_attempt_mask],
+                   replay_attempt_outer_updates=list(replay_attempt_outer_updates),
+                   replay_not_ready_outer_updates=list(replay_not_ready_outer_updates),
+                   replay_update_outer_updates=list(replay_update_outer_updates),
+                   replay_update_count=int(counters.replay_update_count),
+                   accepted_replay_policy_update_count=int(
+                       counters.accepted_replay_policy_update_count),
+                   kl_rejected_replay_update_count=int(counters.kl_rejected_replay_update_count),
+                   replay_sequences_consumed=int(replay_sequences_consumed),
+                   replay_batch_sizes=list(replay_batch_sizes),
+                   replay_sequence_lengths=[list(x) for x in replay_sequence_lengths],
+                   eligible_count_by_outer_update=list(eligible_count_by_outer_update),
+                   sample_ids_by_outer_update=[list(x) for x in sample_ids_by_outer_update],
+                   start_offsets_by_outer_update=[list(x) for x in start_offsets_by_outer_update]),
+               # Phase4A-v2.2 (§三.1): p2_frozen keeps the frozen V-trace/AWR correction
+               # constants but MUST NOT carry a numeric policy lag for original_vtrace: the old
+               # max_policy_lag=fp_cfg.max_policy_lag (=legacy 16) leaked alongside
+               # max_policy_lag=null elsewhere. Now max_policy_lag=null +
+               # policy_lag_gate_active=false here; the documentary legacy 16 lives ONLY in the
+               # inactive legacy_full_p2_only block below.
                p2_frozen=dict(rho_bar=fp_cfg.rho_bar, c_bar=fp_cfg.c_bar, beta=fp_cfg.beta,
                               w_max=fp_cfg.w_max, w_vtrace=fp_cfg.w_vtrace, w_awr=fp_cfg.w_awr,
                               kl_replay_max=fp_cfg.kl_replay_max, ema_tau=fp_cfg.ema_tau,
-                              max_policy_lag=fp_cfg.max_policy_lag),
+                              policy_lag_gate_active=False,
+                              max_policy_lag=None),
+               # Phase4A-v2.2 (§三.1): explicit ACTIVE replay config + inactive legacy scope.
+               active_replay_config=CONTRACT.active_replay_config_manifest(REPLAY_MODE),
+               legacy_full_p2_only=CONTRACT.legacy_full_p2_manifest(active=False,
+                                                                    max_policy_lag=16),
+               # Phase4A-v2.2 (§六.8): the formal-config binding record (SHAs + status + path +
+               # frozen base-checkpoint expectation). None when no --formal_config was supplied
+               # (replay_mode=off / probe legacy dev compat).
+               # Phase4A-v2.3 (§七.3 + §八): the summary pins the FINALIZED certificate's file
+               # SHA / sidecar / payload SHA and the executed-protocol SOURCE identity (learner
+               # + sampler source SHA via inspect, RNG instance class) — not string labels.
+               runtime_config_certificate=(
+                   RTC.certificate_shas_record(
+                       RUNTIME_CONFIG_CERTIFICATE,
+                       certificate_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+                       certificate_sidecar_path=RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH)
+                   if RUNTIME_CONFIG_CERTIFICATE is not None else None),
+               runtime_config_certificate_path=RUNTIME_CONFIG_CERTIFICATE_PATH,
+               runtime_config_certificate_sidecar_path=RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH,
+               runtime_config_certificate_file_sha256=RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256,
+               executed_protocol_identity=EXECUTED_PROTOCOL_IDENTITY,
+               # Phase4A-v2.4 (§八): BOTH arms' summaries carry the DECLARED protocol
+               # definition + the EFFECTIVE protocol definition (declared + executed learner /
+               # sampler source identity + executed RNG identity) + its stable SHA256, so the
+               # cross-arm validator compares the EFFECTIVE protocol, not declared strings
+               # alone. None on non-formal runs (replay_mode=off / probe legacy dev compat).
+               declared_protocol_definition=DECLARED_PROTOCOL_DEFINITION,
+               effective_protocol_definition=EFFECTIVE_PROTOCOL_DEFINITION,
+               effective_protocol_sha256=EFFECTIVE_PROTOCOL_SHA256,
+               # Phase4A-v2.4 (§五.3): non-null length-64 SHA pins in the summary (payload SHA
+               # of the on-disk certificate artifact + loaded base checkpoint params SHA).
+               runtime_config_certificate_payload_sha256=(
+                   RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256),
+               base_checkpoint_params_sha256=base_sha,
                status="COMPLETE",
                arm_status=ARM_STATUS,
                arm_gates_pass=bool(ARM_GATES_PASS),
@@ -714,6 +1616,16 @@ summary = dict(arm=ARM, carry_mode=args.carry_mode, replay=args.replay,
                read_branch_connected=READ_BRANCH_CONNECTED,
                read_conn_ever_nonzero=read_conn_ever_nonzero,
                timestamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+# Phase4A-v2.2 (§三.3): fail-closed active-policy-lag leak scan over the WHOLE summary before it
+# is written to disk. For replay_mode=original_vtrace any numeric max_policy_lag in an active
+# block (phase4a_v2 / active_replay_config / p2_frozen / scientific_config.policy_lag / run
+# manifest / top level) aborts the run with ORIGINAL_VTRACE_ACTIVE_POLICY_LAG_LEAK; the legacy
+# 16 is legal ONLY under legacy_full_p2_only with active=false.
+try:
+    summary["phase4a_v2_active_policy_lag_leak_scan"] = (
+        CONTRACT.assert_no_active_policy_lag_leak(summary))
+except ValueError as e:
+    raise SystemExit(str(e))
 with open(os.path.join(LOG_DIR, f"{ARM}_train_summary.json"), "w") as f:
     json.dump(summary, f, indent=2, default=str)
 print("\n" + "=" * 78, flush=True)
@@ -722,5 +1634,29 @@ print(f"  accepted_policy_updates={accepted_policy_updates} kl_rejected={kl_reje
       f"hindsight={hindsight_eligible}/{hindsight_attempts}", flush=True)
 print("=" * 78, flush=True)
 print(f"PHASE4A_ARM_FINAL_STATUS={ARM_STATUS}", flush=True)
+# Phase4A-v2.2/2.3 (§六.8 + §七): launch-status line for the formal-config binding — now also
+# carries the FINALIZED flag and the certificate's own FINAL file SHA + sidecar (§七.3), so the
+# launch log alone lets a reviewer re-fetch + re-verify the exact certificate artifact.
+if RUNTIME_CONFIG_CERTIFICATE is not None:
+    _cert_status = RUNTIME_CONFIG_CERTIFICATE["certificate_status"]
+    _cert_finalized = RUNTIME_CONFIG_CERTIFICATE["certificate_finalized"]
+    _cert_sci_sha = RUNTIME_CONFIG_CERTIFICATE["scientific_config_sha256"]
+    _cert_rt_sha = RUNTIME_CONFIG_CERTIFICATE["runtime_scientific_config_sha256"]
+    _cert_bc_status = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"][
+        "base_checkpoint_expected_sha256_status"]
+    _cert_bc_match = RUNTIME_CONFIG_CERTIFICATE["checkpoint_identity"]["base_checkpoint_match"]
+    print(f"RUNTIME_CONFIG_CERTIFICATE_STATUS={_cert_status} "
+          f"certificate_finalized={_cert_finalized} "
+          f"scientific_config_sha256={_cert_sci_sha} "
+          f"runtime_scientific_config_sha256={_cert_rt_sha} "
+          f"base_checkpoint_expected_sha256_status={_cert_bc_status} "
+          f"base_checkpoint_match={_cert_bc_match} "
+          f"certificate_payload_sha256={RUNTIME_CONFIG_CERTIFICATE_PAYLOAD_SHA256} "
+          f"certificate_file_sha256={RUNTIME_CONFIG_CERTIFICATE_FILE_SHA256} "
+          f"base_checkpoint_params_sha256={base_sha} "
+          f"certificate_sidecar_path={RUNTIME_CONFIG_CERTIFICATE_SIDECAR_PATH}", flush=True)
+else:
+    print("RUNTIME_CONFIG_CERTIFICATE_STATUS=NOT_REQUIRED_NO_FORMAL_CONFIG "
+          "(replay_mode=off/probe legacy dev compat)", flush=True)
 if not ARM_GATES_PASS:
     sys.exit(1)

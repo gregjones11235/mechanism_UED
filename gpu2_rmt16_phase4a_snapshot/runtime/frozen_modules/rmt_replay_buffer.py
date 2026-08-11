@@ -25,6 +25,46 @@ from replay_buffer import (
 )
 
 
+# ===========================================================================
+# Phase4A-v2.2 (CC2 §五) — policy-version RANGE invariants (ADDITIVE ONLY)
+# ===========================================================================
+# Pure validation of the (start, end, span, alias) block. These functions NEVER modify sampling
+# behavior or any numeric content; they only raise on invariant violations. The LEGACY DEFAULT
+# 0/0/0/0 is legal (start=0, end=0, span=0, alias=0 satisfies every invariant).
+#   POLICY_VERSION_RANGE_INVALID   : start < 0, OR end < start
+#   POLICY_VERSION_SPAN_MISMATCH   : span != end - start (a negative span always fails here)
+#   POLICY_VERSION_ALIAS_MISMATCH  : policy_version_at_collection != policy_version_start
+def validate_policy_version_range_fields(start, end, span, alias):
+    """Validate the four policy-version range fields. Raises ValueError with one of the codes
+    above on violation; returns the coerced int record on success. Pure — no side effects."""
+    start = int(start); end = int(end); span = int(span); alias = int(alias)
+    if start < 0 or end < start:
+        raise ValueError(
+            f"POLICY_VERSION_RANGE_INVALID: start={start} end={end} span={span} alias={alias}; "
+            "require start >= 0 and end >= start.")
+    if span != end - start:
+        raise ValueError(
+            f"POLICY_VERSION_SPAN_MISMATCH: span={span} != end - start = {end - start} "
+            f"(start={start}, end={end}).")
+    if alias != start:
+        raise ValueError(
+            f"POLICY_VERSION_ALIAS_MISMATCH: policy_version_at_collection={alias} != "
+            f"policy_version_start={start}; the deprecated alias MUST equal start.")
+    return dict(policy_version_start=start, policy_version_end=end,
+                policy_version_span=span, policy_version_at_collection=alias)
+
+
+def validate_sample_policy_version_range(sample):
+    """Phase4A-v2.2 (§五): validate a sampled window's policy-version range (propagated verbatim
+    from the source trajectory by sample()). READ-ONLY: this must never change the sample's
+    numeric content — it inspects the four fields and raises on violation, nothing else."""
+    return validate_policy_version_range_fields(
+        getattr(sample, "policy_version_start", 0),
+        getattr(sample, "policy_version_end", 0),
+        getattr(sample, "policy_version_span", 0),
+        getattr(sample, "policy_version_at_collection", 0))
+
+
 @dataclass
 class RMTTrajectory(Trajectory):
     """A complete episode with sparse GTrXL memory anchors AND RMT16 token anchors.
@@ -44,6 +84,34 @@ class RMTTrajectory(Trajectory):
     rmt_anchor_segbuf: np.ndarray = field(default_factory=lambda: np.array([]))
     rmt_anchor_segcount: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.int64))
 
+    # ---- Phase4A-v2 / v2.1 (CC2 §二/§三): split provenance (additive, default 0) ----
+    # outer_update_index : OUTER rollout+PPO loop index at episode completion
+    #                      (== inherited collected_update_count for legacy compat).
+    #
+    # Phase4A-v2.1 (§二) EPISODE policy-version RANGE. An episode (trajectory) can span
+    # MULTIPLE outer rollouts, therefore MULTIPLE policy versions. These three fields record
+    # that RANGE — they are NOT per-transition provenance:
+    #   policy_version_start : policy version in force when the episode BEGAN
+    #                          (pending.policy_version[e] at completion, captured BEFORE the
+    #                          completing reset_slot overwrites it).
+    #   policy_version_end   : policy version of the rollout that COMPLETED the episode
+    #                          (the current accepted policy_version at completion).
+    #   policy_version_span  : policy_version_end - policy_version_start (>= 0).
+    # Labels: PER_TRANSITION_POLICY_VERSION=NOT_RECORDED, EPISODE_POLICY_VERSION_RANGE=RECORDED.
+    # original_vtrace does V-trace off-policy correction with each transition's STORED behavior
+    # log_prob, so a per-step policy-version array is neither recorded nor required this round.
+    #
+    # policy_version_at_collection : DEPRECATED alias of policy_version_start.
+    #   POLICY_VERSION_AT_COLLECTION = DEPRECATED_ALIAS_OF_POLICY_VERSION_START.
+    #   Kept ONLY for schema/back-compat; it MUST equal policy_version_start and is NO LONGER
+    #   the authoritative "single version of the whole trajectory" (that notion was wrong for
+    #   multi-rollout episodes).
+    outer_update_index: int = 0
+    policy_version_start: int = 0
+    policy_version_end: int = 0
+    policy_version_span: int = 0
+    policy_version_at_collection: int = 0
+
     def validate_anchors(self):
         """P2 conservation PLUS RMT anchor count/steps == GTrXL anchor count/steps."""
         super().validate_anchors()
@@ -62,7 +130,19 @@ class RMTTrajectory(Trajectory):
             raise ValueError("RMT seg_buf anchor count mismatch.")
         if int(np.asarray(self.rmt_anchor_segcount).shape[0]) != n_exp:
             raise ValueError("RMT seg_count anchor count mismatch.")
+        # Phase4A-v2.2 (§五): the policy-version range invariants are enforced here, so every
+        # buffer insert (base insert validates anchors) rejects an inconsistent range.
+        self.validate_policy_version_range()
         return True
+
+    def validate_policy_version_range(self):
+        """Phase4A-v2.2 (§五): validate the episode policy-version RANGE block
+        (start/end/span + deprecated alias==start). PURE validation — never modifies any field.
+        The legacy default 0/0/0/0 is legal. Raises POLICY_VERSION_RANGE_INVALID /
+        POLICY_VERSION_SPAN_MISMATCH / POLICY_VERSION_ALIAS_MISMATCH on violation."""
+        return validate_policy_version_range_fields(
+            self.policy_version_start, self.policy_version_end,
+            self.policy_version_span, self.policy_version_at_collection)
 
     def rmt_anchor_segcount_steps(self):
         """RMT anchors share anchor_steps with the GTrXL anchors (1:1 aligned)."""
@@ -86,6 +166,43 @@ class RMTReplaySample(ReplaySample):
     pre_anchor_rmt_tokens: np.ndarray = field(default_factory=lambda: np.array([]))   # [num_tokens, D]
     pre_anchor_rmt_segbuf: np.ndarray = field(default_factory=lambda: np.array([]))   # [segment_len, D]
     pre_anchor_rmt_segcount: int = 0
+    # Phase4A-v2.1 (CC2 §二): source-episode policy-version RANGE, propagated verbatim from the
+    # source trajectory by sample(). Additive, default 0. policy_version_at_collection is the
+    # DEPRECATED alias of policy_version_start (MUST equal start). A sampled WINDOW inherits the
+    # episode's version range; its individual transitions are NOT each stamped with a version
+    # (PER_TRANSITION_POLICY_VERSION=NOT_RECORDED) — V-trace uses the stored behavior log_probs.
+    policy_version_start: int = 0
+    policy_version_end: int = 0
+    policy_version_span: int = 0
+    policy_version_at_collection: int = 0
+
+
+@dataclass
+class EligibleSampleBatch:
+    """Result of RMTReplayBuffer.sample_eligible (Phase4A-v2, CC2 directive §七).
+
+    status:
+      "OK"        -> exactly `batch_size` samples were drawn, all from trajectories with
+                     length >= sequence_length.
+      "NOT_READY" -> the eligible set (length >= sequence_length) is EMPTY; zero samples
+                     returned. This is an EXPLICIT, non-exceptional signal: the caller must
+                     NOT redraw, NOT silently substitute shorter trajectories, and NOT treat
+                     it as a successful replay update. It simply means no replay update
+                     happens this outer iteration.
+
+    Provenance arrays (parallel, length == len(samples)):
+      sample_ids       : source trajectory_id of each drawn sample
+      start_offsets    : start_step of each drawn contiguous window
+      sequence_lengths : sequence_length of each drawn window (== requested sequence_length)
+    eligible_count : number of buffer trajectories with length >= sequence_length at call time.
+    """
+    status: str
+    samples: list = field(default_factory=list)
+    sample_ids: list = field(default_factory=list)
+    start_offsets: list = field(default_factory=list)
+    sequence_lengths: list = field(default_factory=list)
+    eligible_count: int = 0
+    batch_size: int = 0
 
 
 class RMTReplayBuffer(ReplayBuffer):
@@ -156,7 +273,7 @@ class RMTReplayBuffer(ReplayBuffer):
         self.counters.replay_samples_drawn += 1
         self.counters.total_sequence_length += sequence_length
 
-        return RMTReplaySample(
+        sample = RMTReplaySample(
             observations=traj.observations[start_step:end_step].copy(),
             actions=traj.actions[start_step:end_step].copy(),
             rewards=traj.rewards[start_step:end_step].copy(),
@@ -175,10 +292,74 @@ class RMTReplayBuffer(ReplayBuffer):
             next_value=next_value,
             episode_done=slice_done,
             collected_update_count=int(getattr(traj, "collected_update_count", 0)),
+            # Phase4A-v2.1 (§二): propagate the source-episode policy-version RANGE verbatim.
+            # policy_version_at_collection is the DEPRECATED alias and MUST equal start.
+            policy_version_start=int(getattr(traj, "policy_version_start", 0)),
+            policy_version_end=int(getattr(traj, "policy_version_end", 0)),
+            policy_version_span=int(getattr(traj, "policy_version_span", 0)),
+            policy_version_at_collection=int(getattr(traj, "policy_version_start", 0)),
             pre_anchor_rmt_tokens=rmt_tok,
             pre_anchor_rmt_segbuf=rmt_segbuf,
             pre_anchor_rmt_segcount=int(rmt_segcount),
         )
+        # Phase4A-v2.2 (§五): the constructed sample's policy-version range must satisfy the
+        # invariants (read-only check; sample numeric content is NOT touched).
+        validate_sample_policy_version_range(sample)
+        return sample
 
     def sample_batch(self, n: int, **kw) -> list:
         return [self.sample(**kw) for _ in range(n)]
+
+    def sample_eligible(self, sequence_length, rng, batch_size) -> EligibleSampleBatch:
+        """Eligible-ONLY, fixed-size, deterministic replay sampling (CC2 directive §七).
+
+        Replaces the legacy K_BATCH try/except loop in the launcher, which drew from ANY
+        trajectory length>=129 and then RAISED+`continue`d when a chosen trajectory was
+        shorter than the requested sequence_length — so different arms silently got
+        different replay success counts depending on which short trajectories they happened
+        to hit. Here:
+
+          * the eligible set is PRE-filtered to trajectories with length >= sequence_length;
+          * a draw NEVER selects a too-short trajectory and NEVER retries on a short one;
+          * if the eligible set is EMPTY -> explicit status="NOT_READY", zero samples, no
+            exception, no silent redraw, no shorter-substitute;
+          * when OK, EXACTLY batch_size samples are returned every time;
+          * all randomness comes from the supplied `rng` (a np.random.RandomState); given the
+            SAME buffer state and the SAME rng state the produced sample_ids / start_offsets /
+            sequence_lengths are BIT-identical (no hidden self._rng consumption, because every
+            self.sample() call below is given explicit trajectory_id + start_step).
+
+        sequence_length must be >= MIN_SEQUENCE_LENGTH (129). batch_size must be >= 1.
+        """
+        sequence_length = int(sequence_length)
+        batch_size = int(batch_size)
+        if sequence_length < MIN_SEQUENCE_LENGTH:
+            raise ValueError(
+                f"sample_eligible: sequence_length {sequence_length} < {MIN_SEQUENCE_LENGTH} REJECTED.")
+        if batch_size < 1:
+            raise ValueError(f"sample_eligible: batch_size {batch_size} < 1 REJECTED.")
+
+        eligible = [(i, t) for i, t in enumerate(self._buffer) if t.length >= sequence_length]
+        eligible_count = len(eligible)
+        if eligible_count == 0:
+            # EXPLICIT not-ready: caller must skip the replay update (no redraw / no retry).
+            return EligibleSampleBatch(status="NOT_READY", samples=[], sample_ids=[],
+                                       start_offsets=[], sequence_lengths=[],
+                                       eligible_count=0, batch_size=batch_size)
+
+        samples, sample_ids, start_offsets, sequence_lengths = [], [], [], []
+        for _ in range(batch_size):
+            _, traj = eligible[rng.randint(eligible_count)]
+            max_start = traj.length - sequence_length
+            start_step = int(rng.randint(0, max_start + 1)) if max_start > 0 else 0
+            s = self.sample(trajectory_id=traj.trajectory_id, start_step=start_step,
+                            sequence_length=sequence_length)
+            samples.append(s)
+            sample_ids.append(int(traj.trajectory_id))
+            start_offsets.append(int(start_step))
+            sequence_lengths.append(int(sequence_length))
+
+        return EligibleSampleBatch(status="OK", samples=samples, sample_ids=sample_ids,
+                                   start_offsets=start_offsets,
+                                   sequence_lengths=sequence_lengths,
+                                   eligible_count=eligible_count, batch_size=batch_size)

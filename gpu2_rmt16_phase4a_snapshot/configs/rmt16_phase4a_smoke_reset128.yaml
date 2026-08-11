@@ -1,0 +1,131 @@
+# ============================================================================
+# RMT16 Phase4A — ENGINEERING SMOKE — RESET128 arm (run_class=engineering_smoke)
+# ============================================================================
+# Phase4A-direct-98304 (§一.3 / §二). ENGINEERING correctness smoke, NOT the formal Carry
+# experiment. Shares the EXACT frozen scientific protocol with the formal YAMLs EXCEPT the
+# engineering budget (total_updates=2 -> 4096 env steps). Identical to
+# rmt16_phase4a_smoke_persistent.yaml EXCEPT carry_mode (+ arm label / GPU / out_dir).
+# NON-SCIENTIFIC: scientific_claim_authorized=false. Not frozen; verified by
+# FID.verify_engineering_config_identity.
+# ============================================================================
+
+schema: rmt16_phase4a_v2
+arm: reset128
+
+scientific_config:
+  # ---- the ONLY allowed scientific difference between the two arms ----
+  carry_mode: reset128
+
+  # ---- everything below is IDENTICAL to the frozen formal protocol (except the budget) ----
+  replay_mode: original_vtrace
+  allow_full_p2_legacy: false
+  sequence_length: 129
+  segment_len: 128
+  crosses_boundary: true
+  hindsight: false
+  awr: false
+  w_original_vtrace: 1.0
+
+  # step0 / base (SAME frozen base checkpoint as the formal experiment)
+  base_checkpoint: ckpt17500
+  seed: 42
+
+  # ENGINEERING smoke budget (§二): 2 * 2048 = 4096 resolved env steps.
+  total_updates: 2
+  save_every: 2                   # checkpoint every 2 outer updates (step0 + step4096)
+
+  # env / task
+  num_envs: 16
+  num_steps: 128
+  task: DEFEAT_KOBOLD
+  optimistic_reset_ratio: 16
+  condition_on_task: true
+
+  # replay protocol
+  replay_batch_size: 4
+  replay_buffer_capacity: 64
+  anchor_interval: 128
+  min_sequence_length: 129
+  eligible_only_sampling: true
+
+  # on-policy PPO (FROZEN)
+  ppo:
+    lr: 2.0e-5
+    max_grad_norm: 1.0
+    gamma: 0.999
+    gae_lambda: 0.8
+    clip_eps: 0.2
+    vf_coef: 0.5
+    ent_coef: 0.002
+    update_epochs: 1
+    num_minibatches: 2
+    value_target_clip_min: -50.0
+    value_target_clip_max: 300.0
+
+  # V-trace (FROZEN)
+  vtrace:
+    rho_bar: 1.0
+    c_bar: 1.0
+    vt_clip_min: -50.0
+    vt_clip_max: 300.0
+
+  kl_replay_max: 0.05
+  kl_run_max: 0.1
+  actor_step_scales: [1.0, 0.5, 0.25, 0.125]
+  policy_lag:
+    active: false
+    mode: not_applicable_original_vtrace
+    max_policy_lag: null
+    correction:
+      method: vtrace_importance_sampling
+      rho_bar: 1.0
+      c_bar: 1.0
+  exposure_contract:
+    same_replay_protocol: READY
+    matched_replay_exposure: NOT_RUN
+    matched_replay_content: NOT_CLAIMED
+    endogenous_replay_screening: READY_AFTER_SMOKE
+    buffer_kind: endogenous
+  legacy_full_p2_only:
+    active: false
+    max_policy_lag: 16
+  ema_tau: 0.995
+  ent_floor: 0.05
+  grad_clip: 1.0
+  adam_eps: 1.0e-5
+
+  # network (RMT16, FROZEN architecture)
+  network:
+    activation: relu
+    embed_size: 256
+    num_heads: 8
+    qkv_features: 256
+    num_layers: 2
+    gating: true
+    gating_bias: 2.0
+    window_mem: 128
+    rmt_num_tokens: 16
+
+  # evaluator
+  evaluator: frozen_rmt16_evaluator
+
+# ----------------------------------------------------------------------------
+# runtime_assignment — HARDWARE / LOG PLACEMENT ONLY.
+runtime_assignment:
+  gpu_uuid: GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd   # GPU3 (reset128)
+  out_dir: runs/RMT16-SMOKE-RESET128-4096
+
+# ----------------------------------------------------------------------------
+# run_management — NON-scientific RUN MANAGEMENT LAYER (Phase4A-direct-98304 §一.2/§二/§七).
+run_management:
+  run_class: engineering_smoke
+  total_env_steps: 4096
+  total_updates: 2
+  save_every: 2
+  interruption_policy: RESTART_FROM_STEP0
+  scientific_claim_authorized: false
+  screening_class: NOT_APPLICABLE_ENGINEERING_SMOKE
+  can_select_strong_student: false
+  can_select_provisional_strong_student: false
+  replay_horizon_required_for_pass: false
+  notes: "4096-step engineering correctness smoke; gates the conditional 98k launch; NOT a scientific run."

@@ -1,0 +1,134 @@
+# ============================================================================
+# RMT16 Phase4A-v2 — FORMAL clean Carry experiment — PERSISTENT arm
+# ============================================================================
+# Pre-registered scientific config (CC2 directive §六/§九/§十一).
+#
+# UNIVARIATE CONTRACT (§九): the `scientific_config` block of this file is
+# BIT-IDENTICAL to rmt16_phase4a_v2_reset128.yaml EXCEPT for `carry_mode`, which is
+# the SINGLE allowed experimental variable. This is enforced automatically by
+# tests/config_diff_validator.py (GATE 14): any other difference fails the gate.
+#
+# Top-level `arm` and the `runtime_assignment` block are NON-scientific (a label and
+# hardware/log placement) and are explicitly EXCLUDED from the GATE-14 diff. GPU device
+# identity and output path are physical run placement, not experimental variables
+# (CC2 §二 GPU map: GPU2=persistent, GPU3=reset128; GPU0/GPU1 strictly forbidden).
+# ============================================================================
+
+schema: rmt16_phase4a_v2
+arm: persistent
+
+scientific_config:
+  # ---- the ONLY allowed difference between the two arms (CC2 §九) ----
+  carry_mode: persistent
+
+  # ---- everything below is IDENTICAL across arms ----
+  # replay mode (§四): original-goal V-trace ONLY; Hindsight/AWR structurally disabled (§八).
+  replay_mode: original_vtrace
+  allow_full_p2_legacy: false
+  # formal sequence length (§六): 129 crosses exactly one 128-step RMT segment boundary.
+  sequence_length: 129
+  segment_len: 128
+  crosses_boundary: true
+  hindsight: false
+  awr: false
+  w_original_vtrace: 1.0          # FROZEN (§五); deliberately NOT the combined loss's 0.5.
+
+  # step0 / base
+  base_checkpoint: ckpt17500
+  seed: 42
+
+  # training budget
+  total_updates: 12               # 12 * 2048 = 24576 resolved env steps
+  save_every: 2                   # checkpoint every 2 outer updates (every 4096 steps)
+
+  # env / task
+  num_envs: 16
+  num_steps: 128                  # rollout length == RMT segment length
+  task: DEFEAT_KOBOLD
+  optimistic_reset_ratio: 16
+  condition_on_task: true
+
+  # replay protocol (§七)
+  replay_batch_size: 4            # K_BATCH (fixed every replay update)
+  replay_buffer_capacity: 64
+  anchor_interval: 128
+  min_sequence_length: 129
+  eligible_only_sampling: true    # sample_eligible; never draws a too-short trajectory
+
+  # on-policy PPO (FROZEN)
+  ppo:
+    lr: 2.0e-5
+    max_grad_norm: 1.0
+    gamma: 0.999
+    gae_lambda: 0.8
+    clip_eps: 0.2
+    vf_coef: 0.5
+    ent_coef: 0.002
+    update_epochs: 1
+    num_minibatches: 2
+    value_target_clip_min: -50.0
+    value_target_clip_max: 300.0
+
+  # V-trace (FROZEN)
+  vtrace:
+    rho_bar: 1.0
+    c_bar: 1.0
+    vt_clip_min: -50.0
+    vt_clip_max: 300.0
+
+  # transactional KL gate / EMA / grad clip (FROZEN)
+  kl_replay_max: 0.05
+  kl_run_max: 0.1
+  actor_step_scales: [1.0, 0.5, 0.25, 0.125]
+  # ---- Phase4A-v2.1 (§三): policy-lag GATE identity. For original_vtrace there is NO active
+  # hard lag gate; V-trace importance sampling (rho_bar/c_bar) is the only off-policy correction.
+  # A stray top-level max_policy_lag under original_vtrace is a fail-closed config conflict. ----
+  policy_lag:
+    active: false
+    mode: not_applicable_original_vtrace
+    max_policy_lag: null
+    correction:
+      method: vtrace_importance_sampling
+      rho_bar: 1.0
+      c_bar: 1.0
+  # ---- Phase4A-v2.1 (§四/§五): replay protocol/exposure/content contract (label split) ----
+  exposure_contract:
+    same_replay_protocol: READY
+    matched_replay_exposure: NOT_RUN
+    matched_replay_content: NOT_CLAIMED
+    endogenous_replay_screening: READY_AFTER_SMOKE
+    buffer_kind: endogenous
+  # ---- Phase4A-v2.1 (§三): legacy lag gate, scoped ONLY to full_p2_legacy (default-forbidden,
+  # requires --allow-full-p2-legacy). NOT part of the active original_vtrace config. ----
+  legacy_full_p2_only:
+    # Phase4A-v2.2 (§三.1): the ONLY place the numeric legacy lag may appear for
+    # original_vtrace — an explicitly INACTIVE scope. active: false is REQUIRED; a legacy
+    # block with a numeric max_policy_lag but no explicit active: false fails the
+    # ORIGINAL_VTRACE_ACTIVE_POLICY_LAG_LEAK scan closed.
+    active: false
+    max_policy_lag: 16
+  ema_tau: 0.995
+  ent_floor: 0.05
+  grad_clip: 1.0
+  adam_eps: 1.0e-5
+
+  # network (RMT16, FROZEN architecture)
+  network:
+    activation: relu
+    embed_size: 256
+    num_heads: 8
+    qkv_features: 256
+    num_layers: 2
+    gating: true
+    gating_bias: 2.0
+    window_mem: 128
+    rmt_num_tokens: 16
+
+  # evaluator
+  evaluator: frozen_rmt16_evaluator
+
+# ----------------------------------------------------------------------------
+# runtime_assignment — HARDWARE / LOG PLACEMENT ONLY (excluded from GATE-14 diff).
+runtime_assignment:
+  gpu_uuid: GPU-8df11537-ab79-722d-606f-411966196c4c   # GPU2 (persistent)
+  out_dir: runs/RMT16-PERSISTENT-ORIGVTRACE-129

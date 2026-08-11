@@ -42,11 +42,13 @@ def make_apply_eval_rmt(network):
         return pi.logits, value, mem_out, h_t
 
     def apply_eval_rmt(params, memories, obs, mask, mem_tokens):
+        # base_gtrxl passes mem_tokens=None -> the network read path is skipped (pure GTrXL
+        # backbone). None must propagate untouched (NOT concatenated) so the skip is preserved.
         if memories.shape[0] == 1:
             memories2 = jnp.concatenate([memories, memories], 0)
             obs2 = jnp.concatenate([obs, obs], 0)
             mask2 = jnp.concatenate([mask, mask], 0)
-            tok2 = jnp.concatenate([mem_tokens, mem_tokens], 0)
+            tok2 = None if mem_tokens is None else jnp.concatenate([mem_tokens, mem_tokens], 0)
             lg, vl, mo, ht = _raw(params, memories2, obs2, mask2, tok2)
             return lg[:1], vl[:1], mo[:1], ht[:1]
         return _raw(params, memories, obs, mask, mem_tokens)
@@ -64,15 +66,37 @@ def make_update_fn(network, params):
 
 # ----------------------------- shared per-step transition -----------------------------
 
+def entering_read_tokens(rmt_st, carry_mode):
+    """The tokens the actor READS with on this step's forward.
+
+    persistent / reset128 -> rmt_st["mem_tokens"] (read path executed).
+    base_gtrxl            -> None  (read path SKIPPED; policy reduces to the pure GTrXL
+                              backbone, RMT params get no gradient and stay frozen at init).
+
+    This is the SINGLE source of truth for the base_gtrxl read-skip: collection (rmt_collect),
+    PPO re-forward, replay reconstruction and the loss/ground-truth scan ALL go through
+    rmt_step_forward, which calls this helper, so collection old_logp == re-forward new_logp
+    by construction (valid PPO ratio).
+    """
+    if carry_mode == "base_gtrxl":
+        return None
+    return rmt_st["mem_tokens"]
+
+
 def rmt_advance_tokens(rmt_st, h_t, done, update_fn, rmt_cfg, carry_mode):
     """Advance RMT state by one env step. SHARED by collect + reconstruction + loss scan.
 
     1. true-done envs fully reset (tokens/seg_buf/seg_count -> 0).
     2. store h_t into seg_buf; seg_count += 1.
     3. at segment boundary (seg_count >= segment_len):
-         persistent -> mem_tokens <- updated (residual attn), carried across;
-         reset128   -> mem_tokens <- 0 (cleared at boundary).
-       seg_buf/seg_count reset to 0 in BOTH modes.
+         persistent          -> mem_tokens <- updated (residual attn), carried across;
+         reset128 / base_gtrxl -> mem_tokens <- 0 (cleared at boundary).
+       seg_buf/seg_count reset to 0 in ALL modes.
+
+    base_gtrxl shares reset128's zeroing here: its tokens are never READ (entering_read_tokens
+    returns None) so the zeroing is semantically inert, but it keeps the carried state bounded
+    and bit-identical to the read-skipped forward. The RMT update path still runs (cheap) but
+    its output is discarded, so RMT params receive no gradient and stay frozen at init.
     """
     st = rmtm.rmt16_reset_envs(rmt_st, done, rmt_cfg)
     st = rmtm.rmt16_store_h(st, h_t, rmt_cfg)
@@ -80,7 +104,7 @@ def rmt_advance_tokens(rmt_st, h_t, done, update_fn, rmt_cfg, carry_mode):
     updated = rmtm.rmt16_update_tokens(st, update_fn, rmt_cfg)     # resets seg_buf/count
     if carry_mode == "persistent":
         new_tokens = updated["mem_tokens"]
-    elif carry_mode == "reset128":
+    elif carry_mode in ("reset128", "base_gtrxl"):
         new_tokens = jnp.zeros_like(updated["mem_tokens"])
     else:
         raise ValueError(f"unknown carry_mode={carry_mode}")
@@ -103,7 +127,7 @@ def rmt_step_forward(apply_eval_rmt, params, memories, mem_mask, mem_idx,
     Returns (post_memories, new_mask, new_idx, new_rmt_st, logits, value, mem_pre,
              entering_tokens) where mem_pre / entering_tokens are the PRE-action state
              used for this step's forward (what the loss reads)."""
-    entering_tokens = rmt_st["mem_tokens"]
+    entering_tokens = entering_read_tokens(rmt_st, carry_mode)
     mem_pre = memories
     # ---- GTrXL mask/idx advance (done resets idx to window_mem, clears mask) ----
     mem_idx = jnp.where(done, window_mem, jnp.clip(mem_idx - 1, 0, window_mem)).astype(jnp.int32)

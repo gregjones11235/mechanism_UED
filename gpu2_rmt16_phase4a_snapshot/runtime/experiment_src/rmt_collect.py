@@ -24,7 +24,10 @@ from pending_episodes import PendingEpisodeBuffers
 from replay_buffer import ANCHOR_INTERVAL
 from rmt_replay_buffer import RMTTrajectory
 import rmt16_memory as rmtm
-from rmt_memory_anchor import make_apply_eval_rmt, make_update_fn, rmt_advance_tokens
+from rmt_memory_anchor import (make_apply_eval_rmt, make_update_fn, rmt_advance_tokens,
+                              entering_read_tokens)
+# Phase4A-v2 (CC2 directive §二): PRECISE resolved-env-step provenance (pure, no JAX).
+from phase4a_v2_counters import completion_resolved_env_step
 
 
 def _fresh_rmt_slot() -> dict:
@@ -86,12 +89,28 @@ def collect_rollout_rmt(
     collected_update_count: int = 0,
     apply_eval_rmt=None,
     env_params=None,  # Craftax EnvParams (NOT network params); driver must pass explicitly
+    # ---- Phase4A-v2 (CC2 directive §三): split the overloaded update count ----
+    # outer_update_index : the OUTER rollout+PPO loop index (authoritative episode update
+    #                      index). Replaces the overloaded `collected_update_count` for
+    #                      episode stamping / logging.
+    # policy_version     : the ACCEPTED policy version (increments only on committed,
+    #                      policy-changing updates). Used to stamp pending-episode
+    #                      policy_version (NOT the outer loop index).
+    # Both default to None -> fall back to `collected_update_count` for strict backward
+    # compatibility with replay_mode=off, where every meaning still coincides (bit-exact).
+    outer_update_index=None,
+    policy_version=None,
 ):
     """Run rollout_steps vectorized env steps; emit completed RMTTrajectories (w/ anchors).
 
     Returns (trajectories, carry, stats). carry holds env/GTrXL/RMT/rng state for the next
     rollout (memory/mask/idx AND rmt_state persist across rollouts for Persistent)."""
     assert env_params is not None, 'collect_rollout_rmt: env_params (Craftax EnvParams) must be passed explicitly'
+    # ---- Phase4A-v2 (CC2 directive §二/§三): resolve the split counters ----
+    if outer_update_index is None:
+        outer_update_index = int(collected_update_count)   # deprecated-compat fallback
+    if policy_version is None:
+        policy_version = int(outer_update_index)           # off-path == old behaviour (bit-exact)
     num_envs = int(np.asarray(obsv).shape[0])
     if apply_eval_rmt is None:
         apply_eval_rmt = make_apply_eval_rmt(network)
@@ -123,10 +142,12 @@ def collect_rollout_rmt(
                 pending.add_anchor(e, k, mem_in[e].copy(), mask_in[e].copy(), int(idx_in[e]))
                 pending.add_rmt_anchor(e, tok_in[e].copy(), segbuf_in[e].copy(), int(segcount_in[e]))
 
-        # ---- forward (read ENTERING tokens) ----
+        # ---- forward (read ENTERING tokens; base_gtrxl -> None -> read path skipped) ----
+        # Must use the SAME entering_read_tokens helper as rmt_memory_anchor.rmt_step_forward so
+        # collection old_logp == PPO re-forward new_logp by construction (valid PPO ratio).
         rng, a_rng = jax.random.split(rng)
         logits, value, mem_out, h_t = apply_eval_rmt(
-            params, memories, obsv, mem_mask, rmt_state["mem_tokens"])
+            params, memories, obsv, mem_mask, entering_read_tokens(rmt_state, carry_mode))
         value_np = np.asarray(value); mem_out_np = np.asarray(mem_out)
         probs = np.asarray(jax.nn.softmax(jnp.asarray(logits), axis=-1))
         actions_np = RU.sample_actions(action_rng, probs)
@@ -196,6 +217,21 @@ def collect_rollout_rmt(
             if done_np[e]:
                 L = len(buf["obs"])
                 if L > 0 and buf["init_mem"] is not None:
+                    # ---- Phase4A-v2.1 (CC2 §二): episode policy-version RANGE provenance ----
+                    # pending.policy_version[e] is the version in force when this episode BEGAN
+                    # (set by the reset_slot that opened the slot). It must be read HERE, before
+                    # the completing reset_slot below overwrites it with the new episode's start.
+                    # `policy_version` (the current accepted version) is the END version. A long
+                    # episode that crosses outer rollouts therefore has span = end - start >= 0;
+                    # it is NOT correct to stamp the whole trajectory with the end version alone.
+                    episode_start_version = int(pending.policy_version[e])
+                    episode_end_version = int(policy_version)
+                    episode_version_span = episode_end_version - episode_start_version
+                    assert episode_end_version >= episode_start_version, (
+                        f"policy_version_end {episode_end_version} < start "
+                        f"{episode_start_version} (env {e})")
+                    assert episode_version_span >= 0, (
+                        f"policy_version_span {episode_version_span} < 0 (env {e})")
                     traj = RMTTrajectory(
                         observations=np.stack(buf["obs"]),
                         actions=np.array(buf["act"], np.int32),
@@ -211,7 +247,17 @@ def collect_rollout_rmt(
                         anchor_steps=np.array(buf["anchor_step"], np.int64),
                         anchor_masks=np.stack(buf["anchor_mask"]),
                         anchor_idxs=np.array(buf["anchor_idx"], np.int64),
-                        collected_update_count=int(collected_update_count),
+                        # Phase4A-v2 (§三): collected_update_count kept as the OUTER loop index
+                        # for strict legacy schema compat.
+                        collected_update_count=int(outer_update_index),
+                        outer_update_index=int(outer_update_index),
+                        # Phase4A-v2.1 (§二): episode policy-version RANGE (start/end/span).
+                        # policy_version_at_collection is the DEPRECATED alias of START (it is
+                        # NO LONGER the end/current version — that was the bug fixed here).
+                        policy_version_start=episode_start_version,
+                        policy_version_end=episode_end_version,
+                        policy_version_span=episode_version_span,
+                        policy_version_at_collection=episode_start_version,
                         rmt_initial_tokens=buf["init_rmt_tokens"],
                         rmt_initial_segbuf=buf["init_rmt_segbuf"],
                         rmt_initial_segcount=int(buf["init_rmt_segcount"]),
@@ -240,11 +286,33 @@ def collect_rollout_rmt(
                     _done_reason = _cands[0] if len(_cands) == 1 else "unknown"
                     _ach_reached = [k.split("/", 1)[1] for k in _ach_keys
                                     if float(np.asarray(info[k])[e]) > 0.0]
-                    episode_records.append(dict(
+                    episode_record = dict(
                         episode_id=int(pending.episode_id[e]), env_id=int(e), length=int(L),
-                        update_index=int(collected_update_count), rollout_step=int(_rollout_step_i),
-                        completion_global_step=int(collected_update_count) * (num_envs * rollout_steps)
+                        update_index=int(outer_update_index), rollout_step=int(_rollout_step_i),
+                        # Phase4A-v2 (§二): PRECISE resolved env step at completion (authoritative).
+                        completion_resolved_env_step=completion_resolved_env_step(
+                            outer_update_index, num_envs, rollout_steps, _rollout_step_i, e),
+                        outer_update_index=int(outer_update_index),
+                        # Phase4A-v2.2 (§四): the episode record carries the policy-version
+                        # RANGE (start/end/span), values IDENTICAL to the RMTTrajectory built
+                        # just above. Recompute provenance (update_index/rollout_step/env_id/
+                        # length/episode_id) is unchanged, so frozen recompute stays 20/6,
+                        # 21/5, 8979, BOTH.
+                        policy_version_start=episode_start_version,
+                        policy_version_end=episode_end_version,
+                        policy_version_span=episode_version_span,
+                        # §四 compat: the old UNSCOPED policy_version field is no longer an
+                        # authoritative field; it is an explicit DEPRECATED alias of
+                        # policy_version_end (the completion version).
+                        policy_version=int(policy_version),
+                        policy_version_deprecated=True,
+                        policy_version_alias_of="policy_version_end",
+                        # DEPRECATED (§二): NOT a precise resolved step (drops *num_envs on the
+                        # rollout_step term, the per-env env_id offset and the +1). Kept ONLY for
+                        # historical recomparison against pre-v2 records.
+                        completion_global_step=int(outer_update_index) * (num_envs * rollout_steps)
                             + int(_rollout_step_i),
+                        completion_global_step_deprecated=True,
                         terminated=bool(done_np[e] and not _done_steps_e), truncated=_done_steps_e,
                         done_reason=_done_reason, done_reason_ambiguous=bool(len(_cands) > 1),
                         done_reason_candidates=_cands,
@@ -256,8 +324,43 @@ def collect_rollout_rmt(
                         term_is_dead=_is_dead_e, term_done_steps=_done_steps_e,
                         term_is_success=_is_success_e, term_timestep=int(_info_timestep[e]),
                         episode_return=float(np.sum(buf["rew"])),
-                        carry_mode=carry_mode, has_term_signals=bool(_has_term)))
-                pending.reset_slot(e, policy_version=int(collected_update_count))
+                        carry_mode=carry_mode, has_term_signals=bool(_has_term))
+                    # Phase4A-v2.2 (§四): PRE-WRITE invariants — the record's range must be
+                    # self-consistent AND exactly equal to the just-built trajectory's range
+                    # (and the trajectory's deprecated alias must equal START). Any violation
+                    # aborts collection loudly rather than writing an inconsistent record.
+                    assert episode_record["policy_version_start"] >= 0, (
+                        f"episode record policy_version_start < 0 (env {e})")
+                    assert episode_record["policy_version_end"] >= (
+                        episode_record["policy_version_start"]), (
+                        f"episode record policy_version_end < start (env {e})")
+                    assert episode_record["policy_version_span"] == (
+                        episode_record["policy_version_end"]
+                        - episode_record["policy_version_start"]), (
+                        f"episode record policy_version_span != end - start (env {e})")
+                    assert traj.policy_version_start == episode_record["policy_version_start"], (
+                        f"traj/record policy_version_start mismatch (env {e})")
+                    assert traj.policy_version_end == episode_record["policy_version_end"], (
+                        f"traj/record policy_version_end mismatch (env {e})")
+                    assert traj.policy_version_span == episode_record["policy_version_span"], (
+                        f"traj/record policy_version_span mismatch (env {e})")
+                    assert traj.policy_version_at_collection == (
+                        episode_record["policy_version_start"]), (
+                        f"traj.policy_version_at_collection != record start (env {e})")
+                    assert episode_record["policy_version"] == (
+                        episode_record["policy_version_end"]), (
+                        f"deprecated policy_version alias != policy_version_end (env {e})")
+                    episode_records.append(episode_record)
+                # Phase4A-v2.1 (§二.3): open the NEXT episode with start version == the CURRENT
+                # rollout's accepted policy_version. This is correct because:
+                #   * after this auto-reset the new episode's FIRST steps (the rest of THIS
+                #     rollout) are still generated by the current rollout's policy;
+                #   * the PPO update happens only AFTER the whole rollout completes, so no newer
+                #     accepted version exists yet at this point;
+                #   * therefore the new episode's policy_version_start is the current rollout
+                #     policy version. (In replay_mode=off this equals the outer loop index, so
+                #     the off path stays bit-exact.)
+                pending.reset_slot(e, policy_version=int(policy_version))
 
         # ---- advance GTrXL memory (terminal reset AFTER recording; isolation) ----
         post_memories = jnp.roll(memories, -1, axis=1).at[:, -1].set(mem_out_np)

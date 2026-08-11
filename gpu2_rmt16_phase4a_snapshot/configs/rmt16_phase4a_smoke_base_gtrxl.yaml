@@ -1,0 +1,152 @@
+# ============================================================================
+# RMT16 Phase4A — ENGINEERING SMOKE — BASE_GTRXL arm (run_class=engineering_smoke)
+# ============================================================================
+# CC2 §二 BASE_GTRXL_ORIGINAL_VTRACE_98304 (third arm of the frozen protocol). This is an
+# ENGINEERING correctness smoke, NOT a pre-registered formal Carry experiment. It shares the
+# EXACT frozen scientific protocol with the persistent/reset128 engineering configs EXCEPT for
+# (a) carry_mode=base_gtrxl and (b) the engineering training budget (total_updates=2 -> 4096
+# resolved env steps). carry_mode is the ONLY scientific_config key that differs from the
+# persistent arm -> a distinct scientific_config_sha256 -> an independent frozen identity.
+#
+# base_gtrxl semantics: the SAME ActorCriticTransformerRMT16 module + SAME ckpt17500, but the
+# RMT16 persistent-token READ path is SKIPPED (entering tokens forced to None) so the policy
+# reduces to the pure GTrXL backbone; RMT params receive no gradient and stay frozen at init.
+# PPO / Replay learner / sampler / seed / task / budget cadence / certificate / Hindsight-AWR
+# firewall are UNCHANGED from the frozen protocol — only the network's memory-read path differs,
+# and that difference is recorded here as carry_mode=base_gtrxl (network_family=base_gtrxl,
+# memory_mode=none in the run summary / CC4 handover).
+#
+# NON-SCIENTIFIC: scientific_claim_authorized=false. Not frozen against the formal YAMLs; its
+# file SHA / scientific SHA are frozen to THEIR OWN values and verified by
+# FID.verify_engineering_config_identity (path anti-copy + frozen content identity).
+# ============================================================================
+
+schema: rmt16_phase4a_v2
+arm: base_gtrxl
+
+scientific_config:
+  # ---- the ONLY allowed scientific difference vs the persistent/reset128 arms ----
+  carry_mode: base_gtrxl
+
+  # ---- everything below is IDENTICAL to the frozen formal protocol (except the budget) ----
+  replay_mode: original_vtrace
+  allow_full_p2_legacy: false
+  sequence_length: 129
+  segment_len: 128
+  crosses_boundary: true
+  hindsight: false
+  awr: false
+  w_original_vtrace: 1.0
+
+  # step0 / base (SAME frozen base checkpoint as the formal experiment)
+  base_checkpoint: ckpt17500
+  seed: 42
+
+  # ENGINEERING smoke budget (§二): 2 * 2048 = 4096 resolved env steps.
+  total_updates: 2
+  save_every: 2                   # checkpoint every 2 outer updates (step0 + step4096)
+
+  # env / task
+  num_envs: 16
+  num_steps: 128
+  task: DEFEAT_KOBOLD
+  optimistic_reset_ratio: 16
+  condition_on_task: true
+
+  # replay protocol
+  replay_batch_size: 4
+  replay_buffer_capacity: 64
+  anchor_interval: 128
+  min_sequence_length: 129
+  eligible_only_sampling: true
+
+  # on-policy PPO (FROZEN)
+  ppo:
+    lr: 2.0e-5
+    max_grad_norm: 1.0
+    gamma: 0.999
+    gae_lambda: 0.8
+    clip_eps: 0.2
+    vf_coef: 0.5
+    ent_coef: 0.002
+    update_epochs: 1
+    num_minibatches: 2
+    value_target_clip_min: -50.0
+    value_target_clip_max: 300.0
+
+  # V-trace (FROZEN)
+  vtrace:
+    rho_bar: 1.0
+    c_bar: 1.0
+    vt_clip_min: -50.0
+    vt_clip_max: 300.0
+
+  kl_replay_max: 0.05
+  kl_run_max: 0.1
+  actor_step_scales: [1.0, 0.5, 0.25, 0.125]
+  policy_lag:
+    active: false
+    mode: not_applicable_original_vtrace
+    max_policy_lag: null
+    correction:
+      method: vtrace_importance_sampling
+      rho_bar: 1.0
+      c_bar: 1.0
+  exposure_contract:
+    same_replay_protocol: READY
+    matched_replay_exposure: NOT_RUN
+    matched_replay_content: NOT_CLAIMED
+    endogenous_replay_screening: READY_AFTER_SMOKE
+    buffer_kind: endogenous
+  legacy_full_p2_only:
+    active: false
+    max_policy_lag: 16
+  ema_tau: 0.995
+  ent_floor: 0.05
+  grad_clip: 1.0
+  adam_eps: 1.0e-5
+
+  # network (RMT16 module, FROZEN architecture; base_gtrxl reads NO persistent tokens)
+  network:
+    activation: relu
+    embed_size: 256
+    num_heads: 8
+    qkv_features: 256
+    num_layers: 2
+    gating: true
+    gating_bias: 2.0
+    window_mem: 128
+    rmt_num_tokens: 16
+
+  # evaluator
+  evaluator: frozen_rmt16_evaluator
+
+# ----------------------------------------------------------------------------
+# runtime_assignment — HARDWARE / LOG PLACEMENT ONLY.
+runtime_assignment:
+  gpu_uuid: GPU-8df11537-ab79-722d-606f-411966196c4c   # GPU2 (base_gtrxl single arm)
+  out_dir: runs/BASEGTRXL-SMOKE-4096
+
+# ----------------------------------------------------------------------------
+# run_management — NON-scientific RUN MANAGEMENT LAYER (CC2 §二/§四/§五/§七).
+# Bound PRE-JAX by RTC.validate_run_class_binding. Outside scientific_config, so the GATE-14
+# univariate diff and the scientific deep_diff never see it.
+run_management:
+  run_class: engineering_smoke
+  total_env_steps: 4096
+  total_updates: 2
+  save_every: 2
+  # §七: Exact Resume is NOT verified this round; any interruption restarts from step0 and MUST
+  # NOT resume from an intermediate checkpoint as if it were the same formal trajectory.
+  interruption_policy: RESTART_FROM_STEP0
+  scientific_claim_authorized: false
+  screening_class: NOT_APPLICABLE_ENGINEERING_SMOKE
+  can_select_strong_student: false
+  can_select_provisional_strong_student: false
+  # §四: at 4096 steps the 512-anchor replay horizon is structurally unreachable, so
+  # replay_update_count==0 / REPLAY_HORIZON_NOT_REACHED does NOT block the exit gate (the arm
+  # exits PASS_REPLAY_HORIZON_NOT_REACHED once the correctness gates hold) and does NOT block
+  # the conditional 98k launch. The smoke is gated ONLY on engineering correctness (§四), never
+  # on reward / success rate / Tier3 / short-horizon performance / replay_update_count.
+  replay_horizon_required_for_pass: false
+  notes: "4096-step engineering correctness smoke for the base_gtrxl (pure GTrXL backbone) arm; gates the conditional 98k launch; NOT a scientific run."

@@ -1,0 +1,118 @@
+# ============================================================================
+# W512 × P2-Replay — CANONICAL 4096 ENGINEERING SMOKE (run_class=engineering_smoke)
+# Candidate: W512_RESET128_P2REPLAY_CANONICAL_98304  (CC2 corrected §二)
+# ============================================================================
+# ENGINEERING CORRECTNESS ONLY: this smoke validates the W512 runtime end-to-end (base ckpt load +
+# SHA d4e85af5 certificate, W512 init+merge with base bit-exact, collect -> PPO -> replay
+# sample_eligible -> original_vtrace_update, checkpoints, finite params, reset128 clear, W512 read
+# path active, Hindsight/AWR firewall == 0). It is NOT gated on reward / success-rate / short-Tier3
+# / replay_update_count. PASS here authorizes the 98304 retrain from step0.
+#
+# Scientific constants are IDENTICAL to the frozen Base/RMT16 formal protocol EXCEPT network
+# capacity (W512 raw-history read: long_size=384 + delay_size=128 replacing rmt_num_tokens=16).
+# Bound fail-closed by w512_formal_identity.CANONICAL_SCIENTIFIC_CONSTANTS.
+# ============================================================================
+
+schema: w512_phase4a_canonical
+arm: W512-Reset128-OrigVtrace
+
+scientific_config:
+  # ---- the fixed W512 canonical scientific contract (match Base/RMT16 EXCEPT capacity) ----
+  network_family: W512
+  carry_mode: reset128
+  replay_mode: original_vtrace
+  allow_full_p2_legacy: false
+  sequence_length: 129
+  segment_len: 128
+  crosses_boundary: true
+  hindsight: false
+  awr: false
+  w_original_vtrace: 1.0
+
+  # step0 / base (SAME frozen base checkpoint as Base/RMT16)
+  base_checkpoint: ckpt17500
+  seed: 42
+
+  # SMOKE budget: 2 * 2048 = 4096 resolved env steps.
+  total_updates: 2
+  save_every: 2
+
+  # env / task
+  num_envs: 16
+  num_steps: 128
+  task: DEFEAT_KOBOLD
+  optimistic_reset_ratio: 16
+  condition_on_task: true
+
+  # replay protocol (FROZEN P2)
+  replay_batch_size: 4
+  replay_buffer_capacity: 64
+  anchor_interval: 128
+  min_sequence_length: 129
+  eligible_only_sampling: true
+
+  # on-policy PPO (FROZEN)
+  ppo:
+    lr: 2.0e-5
+    max_grad_norm: 1.0
+    gamma: 0.999
+    gae_lambda: 0.8
+    clip_eps: 0.2
+    vf_coef: 0.5
+    ent_coef: 0.002
+    update_epochs: 1
+    num_minibatches: 2
+    value_target_clip_min: -50.0
+    value_target_clip_max: 300.0
+
+  # V-trace (FROZEN)
+  vtrace:
+    rho_bar: 1.0
+    c_bar: 1.0
+    vt_clip_min: -50.0
+    vt_clip_max: 300.0
+
+  kl_replay_max: 0.05
+  kl_run_max: 0.1
+  actor_step_scales: [1.0, 0.5, 0.25, 0.125]
+  ema_tau: 0.995
+  ent_floor: 0.05
+  grad_clip: 1.0
+  adam_eps: 1.0e-5
+
+  # network (W512: SAME trunk as RMT16, EXCEPT the raw-history capacity block)
+  network:
+    network_family: W512
+    activation: relu
+    embed_size: 256
+    num_heads: 8
+    qkv_features: 256
+    num_layers: 2
+    gating: true
+    gating_bias: 2.0
+    window_mem: 128
+    w512_long_size: 384
+    w512_delay_size: 128
+    w512_encoder_size: 256
+
+  evaluator: frozen_w512_evaluator
+
+# ----------------------------------------------------------------------------
+# runtime_assignment — HARDWARE / LOG PLACEMENT ONLY (GPU2 ONLY; GPU0/1 forbidden).
+runtime_assignment:
+  gpu_uuid: GPU-8df11537-ab79-722d-606f-411966196c4c   # GPU2
+  out_dir: runs/W512-SMOKE-4096
+
+# ----------------------------------------------------------------------------
+# run_management — NON-scientific RUN MANAGEMENT LAYER.
+run_management:
+  run_class: engineering_smoke
+  total_env_steps: 4096
+  total_updates: 2
+  save_every: 2
+  interruption_policy: RESTART_FROM_STEP0
+  scientific_claim_authorized: false
+  screening_class: ENGINEERING_CORRECTNESS_SMOKE
+  replay_horizon_required_for_pass: false
+  no_performance_early_stop: true
+  notes: "4096-step engineering correctness smoke; NOT gated on reward/success/Tier3/replay_update_count; PASS authorizes the 98304 retrain from step0."
