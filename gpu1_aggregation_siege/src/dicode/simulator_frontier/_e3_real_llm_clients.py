@@ -369,7 +369,8 @@ class _PlannerClient:
             'monsters_killed_to_clear_level, and growing_plants_age must use '
             'JSON integer scalars/endpoints), '
             '"start_distribution" (object with exactly D00..D11 slots; each '
-            'slot is non-empty, finite positive weights and contains current state), '
+            'slot is non-empty, finite positive weights and contains the exact '
+            'required_current_state_id supplied below; every D00..D11 key is mandatory), '
             '"seed_distribution" (object, non-empty, e.g. {"seed_base": [0, 1]}), '
             '"stochasticity_distribution" (object, non-empty, e.g. '
             '{"epsilon": [0.0, 0.1], "temperature": [1.0, 1.0]}), '
@@ -377,6 +378,15 @@ class _PlannerClient:
             '"retention_constraints" (list of strings), '
             '"reason" (short string); reply with no other keys.')
         user = json.dumps({
+            "required_current_state_id": self._state_id,
+            "start_distribution_template": {
+                "D00": {self._state_id: 1.0}, "D01": {self._state_id: 1.0},
+                "D02": {self._state_id: 1.0}, "D03": {self._state_id: 1.0},
+                "D04": {self._state_id: 1.0}, "D05": {self._state_id: 1.0},
+                "D06": {self._state_id: 1.0}, "D07": {self._state_id: 1.0},
+                "D08": {self._state_id: 1.0}, "D09": {self._state_id: 1.0},
+                "D10": {self._state_id: 1.0}, "D11": {self._state_id: 1.0},
+            },
             "evidence": {
                 "feasibility": dict(evidence.get("feasibility", {})),
                 "data_source": str(evidence.get("data_source", "")),

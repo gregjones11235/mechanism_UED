@@ -330,7 +330,7 @@ def test_role_specific_transport_caps_and_preseed_miss_blocks(tmp_path, monkeypa
     monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1")
     calls = []
     def fake(system, user, **kwargs):
-        calls.append((system, kwargs))
+        calls.append((system, user, kwargs))
         body = ({"frontier_class":"LEARNABLE_FRONTIER","confidence":.8,"dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,"recommended_evidence_action":"x"}
                 if "Diagnostician" in system else {"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"s":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION})
         return {"content":json.dumps(body),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
@@ -338,7 +338,12 @@ def test_role_specific_transport_caps_and_preseed_miss_blocks(tmp_path, monkeypa
     evidence={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}
     d=clients._DiagnosticianClient("s","b").complete(evidence)
     clients._PlannerClient("s",4,16).complete({**evidence,"diagnostician_summary":d})
-    assert [kwargs["max_tokens"] for _, kwargs in calls] == [1024, 4096]
+    assert [kwargs["max_tokens"] for _, _, kwargs in calls] == [1024, 4096]
+    planner_system, planner_user, _ = calls[1]
+    assert "required_current_state_id" in planner_user
+    assert all(slot in planner_user for slot in ("D00", "D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10", "D11"))
+    assert '"s"' in planner_user
+    assert "exact required_current_state_id" in planner_system
     monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "missing-preseed.json"))
     monkeypatch.setenv("E3_PRESEEDED_DIAGNOSTIC_KEY", "missing-key")
     with pytest.raises(RuntimeError, match="PRESEED_DIAGNOSTIC_EVIDENCE_MISMATCH"):
