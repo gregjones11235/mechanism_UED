@@ -270,6 +270,32 @@ def _jax_tree_finite(value: Any) -> bool:
         return False
 
 
+def _training_metrics_finite(value: Any) -> bool:
+    """Validate task metrics, permitting only scalar real ``lp=NaN`` sentinel."""
+    if not isinstance(value, Mapping):
+        return False
+    try:
+        import numpy as np
+        for task_metrics in value.values():
+            if not isinstance(task_metrics, Mapping):
+                return False
+            for field, item in task_metrics.items():
+                if field != "lp":
+                    if not _numeric_leaves_finite(item):
+                        return False
+                    continue
+                if isinstance(item, bool) or item is None or isinstance(item, str):
+                    return False
+                arr = np.asarray(item)
+                if arr.ndim != 0 or arr.dtype.kind not in "iuf":
+                    return False
+                if bool(np.isinf(arr)):
+                    return False
+        return True
+    except (ImportError, TypeError, ValueError, RuntimeError):
+        return False
+
+
 def _assert_finite_training_artifacts(*, train_state: Any,
                                       receipt: Mapping[str, Any]) -> None:
     """Fail before checkpoint/report creation when any numeric artifact drifts."""
@@ -279,7 +305,11 @@ def _assert_finite_training_artifacts(*, train_state: Any,
         raise RuntimeError("FINITE_GATE_PARAMS_NAN_OR_INF")
     if opt_state is None or not _jax_tree_finite(opt_state):
         raise RuntimeError("FINITE_GATE_OPT_STATE_NAN_OR_INF")
-    for key in ("training_metrics", "evaluation_metrics", "architecture_memory"):
+    if "training_metrics" in receipt:
+        metrics = receipt.get("training_metrics")
+        if not isinstance(metrics, Mapping) or not _training_metrics_finite(metrics):
+            raise RuntimeError("FINITE_GATE_TRAINING_METRICS_NAN_OR_INF")
+    for key in ("evaluation_metrics", "architecture_memory"):
         if key in receipt and not _jax_tree_finite(receipt.get(key)):
             raise RuntimeError(f"FINITE_GATE_{key.upper()}_NAN_OR_INF")
 

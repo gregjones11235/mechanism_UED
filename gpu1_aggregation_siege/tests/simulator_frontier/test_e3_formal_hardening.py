@@ -348,6 +348,21 @@ def test_resume_helper_counter_formula():
     assert 100 * r.ENV_STEPS_PER_UPDATE == 13_107_200
 
 
+@pytest.mark.parametrize("metrics,ok", [
+    ({"task": {"lp": float("nan"), "sr": 0.5}}, True),
+    ({"task": {"lp": -1.0, "sr": 0.5}}, True),
+    ({"task": {"lp": float("inf")}}, False),
+    ({"task": {"sr": float("nan")}}, False),
+    ({"task": {"nested": {"mean_return": float("inf")}}}, False),
+    ({"task": 3.0}, False),
+    ({"task": {"lp": [float("nan")]}}, False),
+    ({"task": {"lp": complex(1, 2)}}, False),
+])
+def test_training_metrics_lp_nan_sentinel(metrics, ok):
+    import run_e3_formal_longrun as r
+    assert r._training_metrics_finite(metrics) is ok
+
+
 def test_two_role_client_journal_reuse(tmp_path, monkeypatch):
     pytest.importorskip("jax")
     monkeypatch.delenv("E3_PRESEEDED_DIAGNOSTIC_KEY", raising=False)
@@ -505,14 +520,14 @@ def test_finite_gate_rejects_params_opt_and_metrics(tmp_path):
     good = SimpleNamespace(params=jax.numpy.ones((2,)),
                            opt_state=jax.numpy.ones((2,)))
     runner._assert_finite_training_artifacts(
-        train_state=good, receipt={"training_metrics": {"loss": 1.0},
+        train_state=good, receipt={"training_metrics": {"task": {"loss": 1.0}},
                                    "evaluation_metrics": {"return": 0.0}})
     for state, receipt, message in (
         (SimpleNamespace(params=jax.numpy.array([jax.numpy.nan]),
                          opt_state=jax.numpy.ones((1,))), {}, "PARAMS"),
         (SimpleNamespace(params=jax.numpy.ones((1,)),
                          opt_state=jax.numpy.array([jax.numpy.inf])), {}, "OPT_STATE"),
-        (good, {"training_metrics": {"loss": jax.numpy.nan}}, "TRAINING_METRICS"),
+        (good, {"training_metrics": {"task": {"loss": jax.numpy.nan}}}, "TRAINING_METRICS"),
     ):
         with pytest.raises(RuntimeError, match=message):
             runner._assert_finite_training_artifacts(train_state=state, receipt=receipt)
