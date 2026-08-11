@@ -171,3 +171,90 @@ def test_runtime_source_evidence_requires_all_bindings(tmp_path, monkeypatch):
         with pytest.raises(RuntimeError): h._runtime_source_evidence(bad, loaded, "P0_PROFILE")
     wrong = {**loaded}; wrong["source_config"] = {"source": {**entries, "perf48/src/dicode/scoring.py": {"path": str(files["calculate_scores_from_snapshot"]), "sha256": "bad"}}}
     with pytest.raises(RuntimeError): h._runtime_source_evidence(rt, wrong, "P0_PROFILE")
+
+
+def _bench(tmp_path=None):
+    b = load("perf48_pair_benchmark")
+    return b
+
+
+def test_append_xla_flag_empty_env():
+    b = _bench()
+    assert b.append_xla_flag(None) == b.DETERMINISTIC_FLAG
+    assert b.append_xla_flag("") == b.DETERMINISTIC_FLAG
+    assert b.append_xla_flag("   ") == b.DETERMINISTIC_FLAG
+
+
+def test_append_xla_flag_preserves_existing_flags():
+    b = _bench()
+    out = b.append_xla_flag("--xla_gpu_autotune_level=0")
+    assert out == "--xla_gpu_autotune_level=0 " + b.DETERMINISTIC_FLAG
+    assert out.count(b.DETERMINISTIC_FLAG) == 1
+    # existing flags preserved in order
+    out2 = b.append_xla_flag("--a=1 --b=2")
+    assert out2 == "--a=1 --b=2 " + b.DETERMINISTIC_FLAG
+
+
+def test_append_xla_flag_already_present_no_duplicate():
+    b = _bench()
+    assert b.append_xla_flag(b.DETERMINISTIC_FLAG) == b.DETERMINISTIC_FLAG
+    assert b.append_xla_flag(b.DETERMINISTIC_FLAG).count(b.DETERMINISTIC_FLAG) == 1
+    out = b.append_xla_flag("--foo=1 " + b.DETERMINISTIC_FLAG)
+    assert out == "--foo=1 " + b.DETERMINISTIC_FLAG
+    assert out.count(b.DETERMINISTIC_FLAG) == 1
+
+
+def test_append_xla_flag_idempotent_across_calls():
+    b = _bench()
+    first = b.append_xla_flag("--foo=1")
+    second = b.append_xla_flag(first)
+    third = b.append_xla_flag(second)
+    assert first == second == third
+    assert third.count(b.DETERMINISTIC_FLAG) == 1
+
+
+def test_append_xla_flag_child_inherits_full_value(tmp_path):
+    import os
+    import subprocess
+    import sys
+    b = _bench()
+    env = dict(os.environ)
+    env["XLA_FLAGS"] = b.append_xla_flag("--existing_flag=1")
+    child = tmp_path / "child.py"
+    child.write_text("import os; print(os.environ.get('XLA_FLAGS', 'MISSING'))")
+    out = subprocess.run([sys.executable, str(child)], env=env, capture_output=True, text=True)
+    assert out.returncode == 0
+    val = out.stdout.strip()
+    assert "--existing_flag=1" in val and b.DETERMINISTIC_FLAG in val
+
+
+def test_arm_env_applies_deterministic_flag_when_enabled(tmp_path):
+    import types
+    b = _bench()
+    args = types.SimpleNamespace(gpu_uuid="GPU-1", deterministic_xla=True)
+    src = tmp_path / "src"; src.mkdir(parents=True); (src / "src").mkdir(parents=True, exist_ok=True)
+    out = tmp_path / "out"
+    env = b._arm_env(args, "E0", str(src), out)
+    assert env["XLA_FLAGS"].count(b.DETERMINISTIC_FLAG) == 1
+    assert b.DETERMINISTIC_FLAG in env["XLA_FLAGS"]
+    assert env["CUDA_VISIBLE_DEVICES"] == "GPU-1"
+    assert env["WANDB_MODE"] == "offline"
+    keymap = {"tmp": "TMP", "cache": "XDG_CACHE_HOME", "wandb": "WANDB_DIR"}
+    for sub in ("tmp", "cache", "wandb"):
+        assert (out / sub).is_dir()
+        assert env.get(keymap[sub]) == str(out / sub)
+    assert env.get("PYTHONPATH") == str(src / "src")
+
+
+def test_arm_env_no_deterministic_flag_when_disabled(tmp_path):
+    import types
+    import os
+    b = _bench()
+    args = types.SimpleNamespace(gpu_uuid="GPU-1", deterministic_xla=False)
+    src = tmp_path / "src"; src.mkdir(parents=True); (src / "src").mkdir(parents=True, exist_ok=True)
+    out = tmp_path / "out"
+    env = b._arm_env(args, "P0_OFF", str(src), out)
+    if "XLA_FLAGS" in os.environ:
+        assert b.DETERMINISTIC_FLAG not in env["XLA_FLAGS"]
+    else:
+        assert "XLA_FLAGS" not in env or env["XLA_FLAGS"].strip() == ""

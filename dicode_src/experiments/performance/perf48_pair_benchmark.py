@@ -22,6 +22,24 @@ FATAL_RE = re.compile(
 )
 CSV_HEADER = "timestamp,gpu_index,gpu_uuid,memory_used_mib,memory_free_mib,utilization_gpu_pct,app_pid,app_classification"
 
+# Deterministic XLA flag appended to the isolated harness env (never production defaults).
+DETERMINISTIC_FLAG = "--xla_gpu_deterministic_ops=true"
+
+
+def append_xla_flag(existing, flag=DETERMINISTIC_FLAG):
+    """Append a deterministic XLA flag once, preserving any existing XLA_FLAGS.
+
+    - empty/unset env -> just the flag
+    - env with other flags -> existing flags preserved, flag appended once
+    - flag already present -> unchanged, never duplicated
+    """
+    if existing is None or not existing.strip():
+        return flag
+    parts = [p for p in existing.split() if p.strip()]
+    if flag in parts:
+        return existing
+    return existing.rstrip() + " " + flag
+
 
 def gpu_snapshot(index: int, uuid: str | None = None) -> str:
     return subprocess.run(
@@ -344,6 +362,17 @@ def _failure(out: Path, message: str, proc: subprocess.Popen[Any] | None = None,
     atomic_json(out / "failure.json", {"error": message, **extra})
 
 
+def _arm_env(args: Any, arm: str, source: str, out: Path) -> dict[str, str]:
+    """Build the isolated harness env: per-arm caches, exact GPU UUID, optional deterministic XLA flag."""
+    env = dict(os.environ); env.pop("JAX_PLATFORMS", None)
+    env.update(CUDA_VISIBLE_DEVICES=args.gpu_uuid, WANDB_MODE="offline", PYTHONPATH=str(Path(source) / "src"))
+    if getattr(args, "deterministic_xla", False):
+        env["XLA_FLAGS"] = append_xla_flag(env.get("XLA_FLAGS"))
+    for key, subdir in (("TMPDIR", "tmp"), ("TMP", "tmp"), ("TEMP", "tmp"), ("XDG_CACHE_HOME", "cache"), ("WANDB_DIR", "wandb")):
+        path = out / subdir; path.mkdir(parents=True, exist_ok=True); env[key] = str(path)
+    return env
+
+
 def run_arm(args: Any, stage: str, repeat: int, arm: str, out: str | Path) -> dict[str, Any]:
     out = Path(out); out.mkdir(parents=True, exist_ok=True); result = out / "RESULT.json"
     manifest_sha = args.manifest_sha256
@@ -351,10 +380,7 @@ def run_arm(args: Any, stage: str, repeat: int, arm: str, out: str | Path) -> di
         return validate_result(json.loads(result.read_text()), manifest_sha256=manifest_sha, stage=stage, repeat=repeat, arm=arm, gpu_uuid=args.gpu_uuid, source_commit=args.source_commit)
     source = args.source_e0 if arm == "E0" else args.source_perf48
     config = args.config_e0 if arm == "E0" else (args.config_perf48_off if arm == "P0_OFF" else args.config_perf48_profile)
-    env = dict(os.environ); env.pop("JAX_PLATFORMS", None)
-    env.update(CUDA_VISIBLE_DEVICES=args.gpu_uuid, WANDB_MODE="offline", PYTHONPATH=str(Path(source) / "src"))
-    for key, subdir in (("TMPDIR", "tmp"), ("TMP", "tmp"), ("TEMP", "tmp"), ("XDG_CACHE_HOME", "cache"), ("WANDB_DIR", "wandb")):
-        path = out / subdir; path.mkdir(parents=True, exist_ok=True); env[key] = str(path)
+    env = _arm_env(args, arm, source, out)
     cmd = [args.python, args.harness, "--manifest", args.manifest, "--config", config, "--out", str(out), "--required-gpu-uuid", args.gpu_uuid,
            "--source-commit", args.source_commit, "--stage", stage, "--repeat", str(repeat), "--arm", arm, "--mode", "run"]
     assert_gpu_free(args.gpu_index, args.gpu_uuid)
@@ -392,6 +418,8 @@ def main() -> None:
     p = argparse.ArgumentParser()
     for name in ("root", "manifest", "harness", "python", "gpu_index", "gpu_uuid", "source_e0", "source_perf48", "config_e0", "config_perf48_off", "config_perf48_profile", "source_commit"):
         p.add_argument("--" + name.replace("_", "-"), required=True)
+    p.add_argument("--deterministic-xla", action="store_true",
+                   help="append --xla_gpu_deterministic_ops=true to every harness env (gate-only, not production defaults)")
     args = p.parse_args(); args.gpu_index = int(args.gpu_index)
     root = Path(args.root); root.mkdir(parents=True, exist_ok=True)
     import importlib.util

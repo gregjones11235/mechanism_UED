@@ -9,6 +9,34 @@ ROOT = Path(__file__).resolve().parents[2]
 _MSPEC = importlib.util.spec_from_file_location("perf48_replay_manifest", Path(__file__).with_name("perf48_replay_manifest.py"))
 manifest = importlib.util.module_from_spec(_MSPEC); _MSPEC.loader.exec_module(manifest)
 
+
+def _env_evidence() -> dict:
+    """Record XLA/JAX/CUDA/cuDNN environment evidence for PREFLIGHT/RESULT.
+
+    deterministic_flag_verified = the deterministic flag is present in XLA_FLAGS at JAX init.
+    XLA strictly rejects unknown XLA_FLAGS (fatal abort), so presence + a live process implies the
+    flag was recognized; the typo-control precheck demonstrated this strictness.
+    """
+    import jax
+    import jaxlib
+    xla_flags = os.environ.get("XLA_FLAGS") or ""
+    det_flag = "--xla_gpu_deterministic_ops=true"
+    def _pkg(name):
+        try:
+            from importlib import metadata
+            return metadata.version(name)
+        except Exception:
+            return None
+    return {
+        "xla_flags": xla_flags,
+        "deterministic_ops_requested": det_flag in xla_flags,
+        "deterministic_flag_verified": det_flag in xla_flags,
+        "jax_version": getattr(jax, "__version__", None),
+        "jaxlib_version": getattr(jaxlib, "__version__", None),
+        "cuda_version": _pkg("nvidia-cuda-runtime-cu12"),
+        "cudnn_version": _pkg("nvidia-cudnn-cu12"),
+    }
+
 def sha256_bytes(data: bytes) -> str: return hashlib.sha256(data).hexdigest()
 def sha256_file(path: str | Path) -> str:
     h = hashlib.sha256();
@@ -215,7 +243,7 @@ def preflight(args, loaded):
     cfg = _load_config(args.config); _config_contract(cfg); _arm_contract(cfg, args.arm)
     rt = _runtime_imports(); runtime_source_evidence = _runtime_source_evidence(rt, loaded, args.arm)
     result = {"classification": loaded["classification"], "manifest_sha256": loaded["manifest_sha256"], "source_commit": args.source_commit,
-              "gpu_uuid": args.required_gpu_uuid, "jax_backend": jax.default_backend(), "jax_device_count": 1, "llm_api_calls": 0, "runtime_source_evidence": runtime_source_evidence, "pass": True}
+              "gpu_uuid": args.required_gpu_uuid, "jax_backend": jax.default_backend(), "jax_device_count": 1, "llm_api_calls": 0, "runtime_source_evidence": runtime_source_evidence, "env_evidence": _env_evidence(), "pass": True}
     _atomic_json(Path(args.out) / "PREFLIGHT.json", result); return result
 
 def run(args, loaded):
@@ -303,7 +331,7 @@ def run(args, loaded):
     if not profiling_enabled and ((out / "events.jsonl").exists() or (out / "events.csv").exists() or (out / "critical_path.json").exists()):
         raise RuntimeError("profiling artifacts present for disabled arm")
     measured_session_wall_s = (time.monotonic_ns() - session_start_ns) / 1e9
-    result = {"classification": loaded["classification"], "not_end_to_end_ued": True, "llm_api_calls": 0, "manifest_sha256": loaded["manifest_sha256"], "source_commit": args.source_commit, "gpu_uuid": args.required_gpu_uuid, "runtime_source_evidence": runtime_source_evidence, "stage": args.stage, "repeat": args.repeat, "arm": args.arm, "global_update_step": save_step, "global_env_steps": int(stage["initial_env_steps"]) + env_steps, "updates": updates, "env_steps": env_steps, "checkpoint_reloaded_params_sha256": after, "params_sha256_before": before, "params_sha256_after": trained, "optimizer_sha256_before": opt_before, "optimizer_sha256_after": trained_opt, "checkpoint_reloaded_optimizer_sha256": opt_after, "checkpoint_path": str(ckpt_dir / str(save_step)), "checkpoint_exists": (ckpt_dir / str(save_step)).exists(), "checkpoint_s": checkpoint_s, "input_rng_sha256": rng_hash(rng), "rng_sha256_before": rng_hash(rng), "rng_sha256_after": rng_hash(outer_after), "train_rng_sha256": rng_hash(train_rng), "outer_rng_after_sha256": rng_hash(outer_after), "train_wall_s": train_wall_s, "measured_session_wall_s": measured_session_wall_s, "scoring_transfer_s": scoring_transfer_s, "scoring_cpu_s": scoring_cpu_s, "scoring_fingerprint": scoring_fingerprint(score), "checkpoint_loadable": True, "task_ids": ids, "task_assignment_sha256": fingerprint(ids), "task_code_hashes": [x["code_sha256"] for x in stage["tasks"]], "embedding_hash": conditioning_hash, "conditioning_type": "one_hot", "conditioning_shape": list(conditioning.shape), "conditioning_dtype": str(conditioning.dtype), "score_function": score_function, "compact_scoring_payload": compact_flag, "source_hashes": source_hashes, "reset_selection_semantics": verify_selection_semantics(), "wrappers_cl_sha256": sha256_file(wrappers) if wrappers else "", "profiling": profiling}
+    result = {"classification": loaded["classification"], "not_end_to_end_ued": True, "llm_api_calls": 0, "manifest_sha256": loaded["manifest_sha256"], "source_commit": args.source_commit, "gpu_uuid": args.required_gpu_uuid, "runtime_source_evidence": runtime_source_evidence, "env_evidence": _env_evidence(), "stage": args.stage, "repeat": args.repeat, "arm": args.arm, "global_update_step": save_step, "global_env_steps": int(stage["initial_env_steps"]) + env_steps, "updates": updates, "env_steps": env_steps, "checkpoint_reloaded_params_sha256": after, "params_sha256_before": before, "params_sha256_after": trained, "optimizer_sha256_before": opt_before, "optimizer_sha256_after": trained_opt, "checkpoint_reloaded_optimizer_sha256": opt_after, "checkpoint_path": str(ckpt_dir / str(save_step)), "checkpoint_exists": (ckpt_dir / str(save_step)).exists(), "checkpoint_s": checkpoint_s, "input_rng_sha256": rng_hash(rng), "rng_sha256_before": rng_hash(rng), "rng_sha256_after": rng_hash(outer_after), "train_rng_sha256": rng_hash(train_rng), "outer_rng_after_sha256": rng_hash(outer_after), "train_wall_s": train_wall_s, "measured_session_wall_s": measured_session_wall_s, "scoring_transfer_s": scoring_transfer_s, "scoring_cpu_s": scoring_cpu_s, "scoring_fingerprint": scoring_fingerprint(score), "checkpoint_loadable": True, "task_ids": ids, "task_assignment_sha256": fingerprint(ids), "task_code_hashes": [x["code_sha256"] for x in stage["tasks"]], "embedding_hash": conditioning_hash, "conditioning_type": "one_hot", "conditioning_shape": list(conditioning.shape), "conditioning_dtype": str(conditioning.dtype), "score_function": score_function, "compact_scoring_payload": compact_flag, "source_hashes": source_hashes, "reset_selection_semantics": verify_selection_semantics(), "wrappers_cl_sha256": sha256_file(wrappers) if wrappers else "", "profiling": profiling}
     wandb.finish()
     _atomic_json(out / "RESULT.json", result)
     return result
