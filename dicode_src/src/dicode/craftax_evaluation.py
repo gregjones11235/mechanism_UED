@@ -42,14 +42,29 @@ def _put_cached_evaluator(key, value, max_entries=8):
 
 
 def _pytree_signature(value):
+	# Mirrors ppo_tr.train_compile_cache_key's sig() (ppo_tr.py:41): use
+	# jax.eval_shape so each abstract leaf carries shape + dtype + weak_type.
+	# weak_type matters for python-scalar leaves (e.g. a python float vs a
+	# weak-typed jnp scalar compile to different signatures). Non-jax values
+	# (e.g. a string in tests) fall back to a stable (type, repr) tag.
 	try:
 		leaves, treedef = jax.tree_util.tree_flatten(value)
-		return (str(treedef), tuple((tuple(getattr(x, "shape", ())), str(getattr(x, "dtype", type(x)))) for x in leaves))
+		abstract = jax.eval_shape(lambda y: y, value)
+		abs_leaves = jax.tree_util.tree_leaves(abstract)
+		return (str(treedef), tuple(
+			(tuple(getattr(v, "shape", ())), str(getattr(v, "dtype", type(v))),
+			 bool(getattr(v, "weak_type", False))) for v in abs_leaves))
 	except Exception:
 		return (type(value).__name__, repr(value))
 
 
 def _get_or_compile_evaluator(key, jit_fn, args, enabled, max_entries=8):
+	# NOTE (C1): the cached object is the CompiledFunction returned by
+	# jit_fn.lower(*args).compile(), which is a self-contained executable. It
+	# does NOT reference JAX's internal compilation caches, so a later
+	# jax.clear_caches() (which only drops jit/lowering memoization) leaves the
+	# already-compiled object fully callable. The clear_caches-survival property
+	# is asserted by a real-JAX CPU test (test_eval_compiled_survives_jax_clear_caches).
 	if enabled:
 		cached = _get_cached_evaluator(key)
 		if cached is not None:
@@ -87,6 +102,21 @@ def _cache_key(config, eval_embedding, detail, input_shape, train_state=None, rn
 		h.update(arr.tobytes())
 	return (static, tuple(input_shape or ()), getattr(training, "conditioning_type", None),
 			bool(detail), h.hexdigest(), _pytree_signature(train_state), _pytree_signature(rng))
+
+
+def _eval_cache_key(use_cache, config, eval_embedding, detail, input_shape, train_state=None, rng=None):
+	"""Return the compiled-evaluator cache key, or None when caching is disabled.
+
+	When use_cache is False this skips ALL of _cache_key's expensive work
+	(notably the ~1MB embedding sha256), so the disabled path performs zero extra
+	hashing and is byte-identical to the historical path. Mirrors
+	ppo_tr.run_training_session's `key = ... if cache_on else None`.
+	"""
+	if not use_cache:
+		return None
+	return _cache_key(config, eval_embedding, detail, input_shape, train_state, rng)
+
+
 # --- 2. Transformer Network Class ---
 # Imported from dicode.network
 
@@ -402,8 +432,11 @@ def main(config, rng, train_state=None, eval_embedding=None, detail=False):
 	rng, _rng = jax.random.split(rng)
 	evaluate_fn = make_evaluate(config, env, env_params, detail=detail)
 	use_cache = _cache_enabled(config)
-	key = _cache_key(config, eval_embedding, detail,
-					(getattr(eval_embedding, "shape", None) or (config.evaluation.num_envs,)), train_state, _rng)
+	# [C] skip the expensive cache-key hash entirely when caching is off
+	# (byte-identical historical path; see _eval_cache_key).
+	key = _eval_cache_key(
+		use_cache, config, eval_embedding, detail,
+		(getattr(eval_embedding, "shape", None) or (config.evaluation.num_envs,)), train_state, _rng)
 	evaluate_jit = jax.jit(evaluate_fn)
 	max_entries = int((config.get("performance", {}) if hasattr(config, "get") else {}).get("compiled_cache_max_entries", 8))
 	evaluate_compiled, cache_hit = _get_or_compile_evaluator(
