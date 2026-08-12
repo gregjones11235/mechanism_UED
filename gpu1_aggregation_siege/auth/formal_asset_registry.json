@@ -20,7 +20,7 @@
     "runner_authorization": {
       "kind": "runner",
       "path": "../scripts/e3_authorization.py",
-      "sha256": "5d9eb4f46246767ed399f61d137eaa0f0cca9ca8e638fbcac2b09a37c3f5cd21"
+      "sha256": "2130a1f1a8b339a212aaa8a85e634a83938660d9bce5e0ef1976b54840d149aa"
     },
     "runner_capsule_actualn": {
       "kind": "runner",
@@ -35,7 +35,7 @@
     "runner_formal_longrun": {
       "kind": "runner",
       "path": "../scripts/run_e3_formal_longrun.py",
-      "sha256": "66e2a892e7776c028c2d7bc6135d3f5588c9836613343cb58ffd1776708e6f95"
+      "sha256": "e6683944815ff1171b060d2308f95755e92b78becad332d3dc42b29acbfeaa96"
     },
     "runner_verify": {
       "kind": "runner",

@@ -278,6 +278,7 @@ class E3Authorization:
     manifest_hash: str
     executable_anchor_manifest_sha256: str | None = None
     preseed_journal_sha256: str | None = None
+    continuation_manifest_sha256: str | None = None
     budget_candidate: str | None = None
     budget_sessions: int | None = None
     budget_updates_per_session: int | None = None
@@ -462,6 +463,7 @@ def load_authorization(auth_manifest_path: str, *,
         resolved_env_steps=payload.get("resolved_env_steps"),
         executable_anchor_manifest_sha256=payload.get("executable_anchor_manifest_sha256"),
         preseed_journal_sha256=payload.get("preseed_journal_sha256"),
+        continuation_manifest_sha256=payload.get("continuation_manifest_sha256"),
         expected_physical_gpu_uuid=payload.get("expected_physical_gpu_uuid"),
     )
 

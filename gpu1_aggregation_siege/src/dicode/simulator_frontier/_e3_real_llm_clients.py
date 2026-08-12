@@ -339,10 +339,16 @@ class _PlannerClient:
         evidence = dict(planner_input)
         evidence.pop("diagnostician_summary", None)
         evidence_hash = _evidence_hash_of(evidence)
+        from .llm_contracts import validate_diagnostician_output, validate_planner_output
         journal, key, identity = _journal_for("curriculum_search_planner", full_prompt_hash)
         if journal is not None:
             cached = journal.lookup(key, identity=identity)
             if cached is not None:
+                diagnosis = validate_diagnostician_output(
+                    planner_input.get("diagnostician_summary"), evidence_hash=evidence_hash,
+                    expected_state_id=self._state_id)
+                validate_planner_output(cached["validated_output"],
+                                        evidence_hash=evidence_hash, diagnosis=diagnosis)
                 _audit_event(role=identity["role"], key=key, paid_new=False, reused=True,
                              requested_model=cached["requested_model"], returned_model=cached["returned_model"],
                              usage=cached["usage"], response_content_hash=cached["response_content_hash"],
@@ -359,7 +365,9 @@ class _PlannerClient:
             "frontier evidence and the diagnostician summary, propose a "
             "frontier training plan.  Reply with a single JSON object with "
             "EXACTLY these keys: "
-            '"bucket_modifications" (object), '
+            '"bucket_modifications" (object that MUST be exactly {}; every nested level '
+            'forbids action/actions/route/routes/logit/logits/hidden_state/hidden_states/'
+            'teacher_action/expert_action), '
             '"taskparam_ranges" (object with EXACTLY the 12 TaskParams keys '
             'passive_spawn_multiplier, melee_spawn_multiplier, ranged_spawn_multiplier, '
             'mob_health_multiplier, mob_damage_multiplier, melee_trigger_distance, '
@@ -416,8 +424,8 @@ class _PlannerClient:
         if not isinstance(seed, Mapping) or not isinstance(stochastic, Mapping):
             raise ValueError("seed/stochasticity distributions must be mappings")
         bucket_mods = raw.get("bucket_modifications")
-        if not isinstance(bucket_mods, Mapping):
-            raise ValueError("bucket_modifications must be mapping")
+        if not isinstance(bucket_mods, Mapping) or dict(bucket_mods):
+            raise ValueError("bucket_modifications must be exactly {}")
         retention_raw = raw.get("retention_constraints")
         if not isinstance(retention_raw, (list, tuple)) or not retention_raw or any(not isinstance(c, str) or not c.strip() for c in retention_raw):
             raise ValueError("retention_constraints must be non-empty strings")
@@ -439,11 +447,11 @@ class _PlannerClient:
             "reason": _strict_str(raw["reason"], "reason"),
         }
         from .llm_contracts import compute_planner_hash
-        output["plan_hash"] = compute_planner_hash(output, evidence_hash=evidence_hash)
-        # Fill in the based_on_diagnosis_hash AFTER hash computation (it is
-        # part of the output but the hash must bind it).
+        # Bind diagnosis before final hash/validation; invalid outputs never
+        # become durable SUCCESS entries.
         output["based_on_diagnosis_hash"] = diagnosis.diagnosis_hash
         output["plan_hash"] = compute_planner_hash(output, evidence_hash=evidence_hash)
+        validate_planner_output(output, evidence_hash=evidence_hash, diagnosis=diagnosis)
         journal, key, identity = _journal_for("curriculum_search_planner", full_prompt_hash)
         if journal is not None:
             usage = text.get("usage", {}) if isinstance(text, Mapping) else {}

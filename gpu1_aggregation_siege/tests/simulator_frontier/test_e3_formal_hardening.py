@@ -307,10 +307,20 @@ def test_dual_preseed_client_path_reuses_both_without_transport(tmp_path, monkey
             "dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,
             "evidence_ids":["e"],"recommended_evidence_action":"x"}
     dh = clients._canonical_sha256({"evidence":{"feasibility":{"state_id":"s"},"data_source":""}})
+    full_eh = clients._evidence_hash_of(evidence)
+    from dicode.simulator_frontier.llm_contracts import compute_diagnostician_hash, compute_planner_hash
+    diag["diagnosis_hash"] = compute_diagnostician_hash(diag, evidence_hash=full_eh)
     planner_input = {**evidence, "diagnostician_summary": diag}
     ph = clients._canonical_sha256(planner_input)
+    valid_planner = {"plan_id":"plan-old", "based_on_diagnosis_hash":diag["diagnosis_hash"],
+        "bucket_modifications":{}, "start_distribution":VALID_START_DISTRIBUTION,
+        "taskparam_ranges":VALID_TASKPARAM_RANGES, "seed_distribution":{"s":[0,1]},
+        "stochasticity_distribution":{"x":[0,1]}, "search_source":"STUDENT_DETERMINISTIC",
+        "actual_n":4, "horizon":16, "memory_mode":"SAVED_POLICY_MEMORY",
+        "anchor_ratio":0.2, "retention_constraints":["x"], "reason":"x"}
+    valid_planner["plan_hash"] = compute_planner_hash(valid_planner, evidence_hash=full_eh)
     identities=[]; entries=[]
-    for role, eh, out in (("frontier_evidence_diagnostician", dh, diag), ("curriculum_search_planner", ph, {"plan_hash":"p"})):
+    for role, eh, out in (("frontier_evidence_diagnostician", dh, diag), ("curriculum_search_planner", ph, valid_planner)):
         old = dict(source_commit="old", candidate="b", session=1, evidence_hash=eh, role=role,
                    provider="dashscope", requested_model="m", client_implementation_hash="old")
         key = journal.composite_key(**old)
@@ -653,6 +663,64 @@ def test_role2_failure_resume_reuses_role1(tmp_path, monkeypatch):
     assert events[1]["paid_new"] and not events[1]["reused"]
 
 
+def _planner_fake_body(system):
+    if "Diagnostician" in system:
+        return {"frontier_class":"LEARNABLE_FRONTIER","confidence":.8,"dominant_failure":"x","memory_mismatch_suspected":False,"search_budget_sufficient":True,"recommended_evidence_action":"x"}
+    return {"bucket_modifications":{},"taskparam_ranges":VALID_TASKPARAM_RANGES,"seed_distribution":{"s":[0,1]},"stochasticity_distribution":{"x":[0,1]},"anchor_ratio":.2,"retention_constraints":["x"],"reason":"x","start_distribution":VALID_START_DISTRIBUTION}
+
+
+def test_diagnostician_cached_second_call_reuses(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1"); monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(tmp_path / "d.json"))
+    calls=[]; monkeypatch.setattr(clients, "_call_qwen", lambda s,u,**k: (calls.append(s) or {"content":json.dumps(_planner_fake_body(s)),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}))
+    ev={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}; dc=clients._DiagnosticianClient("s","b"); clients.clear_audit_events(); d1=dc.complete(ev); d2=dc.complete(ev); events=clients.drain_audit_events()
+    assert d1==d2 and len(calls)==1 and events[-1]["reused"]
+
+
+def test_valid_planner_new_is_validated_and_saved(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "1"); path=tmp_path/"v.json"; monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(path))
+    monkeypatch.setattr(clients, "_call_qwen", lambda s,u,**k: {"content":json.dumps(_planner_fake_body(s)),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}})
+    ev={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}; d=clients._DiagnosticianClient("s","b").complete(ev); clients._PlannerClient("s",4,16).complete({**ev,"diagnostician_summary":d}); assert len(_journal_cls()(str(path))._load()["entries"])==2
+
+
+def test_nested_action_new_planner_not_saved(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "2"); path=tmp_path/"n.json"; monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(path))
+    def fake(s,u,**k):
+        b=_planner_fake_body(s)
+        if "Diagnostician" not in s:
+            b["seed_distribution"]={"action": 1}
+        return {"content":json.dumps(b),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients,"_call_qwen",fake); ev={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}; d=clients._DiagnosticianClient("s","b").complete(ev)
+    with pytest.raises(Exception): clients._PlannerClient("s",4,16).complete({**ev,"diagnostician_summary":d})
+    assert len(_journal_cls()(str(path))._load()["entries"])==1
+
+
+def test_toxic_cached_planner_rejected_without_reuse(tmp_path, monkeypatch):
+    pytest.importorskip("jax")
+    from dicode.simulator_frontier import _e3_real_llm_clients as clients
+    monkeypatch.setenv("QWEN_MODEL", "m"); monkeypatch.setenv("E3_SOURCE_COMMIT", "a"); monkeypatch.setenv("E3_CANDIDATE_ID", "b"); monkeypatch.setenv("E3_SESSION_IDX", "3"); path=tmp_path/"t.json"; monkeypatch.setenv("E3_LLM_JOURNAL_PATH", str(path))
+    calls=[]
+    def fake(s,u,**k):
+        calls.append((s,u)); return {"content":json.dumps(_planner_fake_body(s)),"requested_model":"m","returned_model":"m","usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+    monkeypatch.setattr(clients,"_call_qwen",fake)
+    ev={"feasibility":{"state_id":"s"},"archive_summary":{"bucket_id":"b","evidence_ids":["e"]}}; d=clients._DiagnosticianClient("s","b").complete(ev); pc=clients._PlannerClient("s",4,16); pc.complete({**ev,"diagnostician_summary":d})
+    payload=json.loads(path.read_text());
+    for e in payload["entries"].values():
+        if e.get("role")=="curriculum_search_planner":
+            e["validated_output"]["bucket_modifications"]={"D00":{"action":"forbidden"}}
+    import hashlib
+    toxic = next(e for e in payload["entries"].values() if e.get("role")=="curriculum_search_planner")
+    toxic["validated_output_hash"] = hashlib.sha256(json.dumps(toxic["validated_output"], sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode()).hexdigest()
+    path.write_text(json.dumps(payload)); before=len(calls); clients.clear_audit_events()
+    with pytest.raises(Exception, match="FORBIDDEN_ACTION_GUIDANCE_FIELD"):
+        pc.complete({**ev,"diagnostician_summary":d})
+    assert not any(e.get("role")=="curriculum_search_planner" and e.get("reused") for e in clients.drain_audit_events())
+    assert len(calls) == before
 def test_formal_disk_gate_new_child_and_escape(tmp_path, monkeypatch):
     import run_e3_formal_longrun as runner
     root = tmp_path / "data-root"

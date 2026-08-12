@@ -534,8 +534,8 @@ def _validate_formal_journal(results: list[Mapping[str, Any]], journal: Mapping[
             ident = entry.get("key_identity", {})
             if (ident.get("session") != report.get("session_idx")
                     or ident.get("role") != event.get("role")
-                    or ident.get("candidate") != report.get("candidate_id")
-                    or ident.get("source_commit") != report.get("source_commit")):
+                    or (not report.get("legacy_prefix") and ident.get("candidate") != report.get("candidate_id"))
+                    or (not report.get("legacy_prefix") and ident.get("source_commit") != report.get("source_commit"))):
                 return False
             for field in ("requested_model", "returned_model", "usage",
                           "response_content_hash", "validated_output_hash"):
@@ -1123,6 +1123,102 @@ def _wandb_offline_init(run_id: str) -> None:
         _log(f"wandb offline init warning: {exc!r}")
 
 
+def _install_continuation(*, legacy_root: str, manifest_path: str, run_dir: str,
+                          source_commit: str, candidate_id: str, auth: Any,
+                          client_hash: str) -> dict[str, Any]:
+    """Install an immutable s1..s29 prefix plus s30 diagnosis into a new run."""
+    try:
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"continuation manifest unreadable: {exc}") from exc
+    if manifest.get("schema") != "simulator_frontier.e3-continuation/v1":
+        raise ValueError("continuation manifest schema mismatch")
+    if os.path.realpath(str(manifest.get("legacy_root"))) != os.path.realpath(legacy_root):
+        raise ValueError("continuation legacy root mismatch")
+    if manifest.get("prefix_sessions") != 29 or manifest.get("prefix_final_global_update") != 2900 or manifest.get("prefix_final_global_env_steps") != 380108800:
+        raise ValueError("continuation prefix counters mismatch")
+    old_root_path = Path(legacy_root)
+    old_meta = json.loads((old_root_path / "RUN_METADATA.json").read_text(encoding="utf-8"))
+    if (manifest.get("legacy_source_commit") != old_meta.get("source_commit")
+            or manifest.get("legacy_auth_hash") != old_meta.get("authorization_manifest_hash")):
+        raise ValueError("continuation legacy identity mismatch")
+    if set(manifest.get("prefix_evidence_sha256", {})) != {f"{i:03d}" for i in range(1, 30)}:
+        raise ValueError("continuation evidence inventory incomplete")
+    for field, rel in (("legacy_run_metadata_sha256", "RUN_METADATA.json"), ("legacy_journal_sha256", "LLM_PAID_CALL_JOURNAL.json")):
+        if manifest.get(field) and _sha256_file(str(old_root_path / rel)) != manifest[field]:
+            raise ValueError(f"continuation {field} mismatch")
+    s029_state = old_root_path / "runstate" / "e3_canonical_runstate_s029.state.pkl"
+    s029_meta = old_root_path / "runstate" / "e3_canonical_runstate_s029.meta.json"
+    if manifest.get("prefix_state_sha256") and _sha256_file(str(s029_state)) != manifest["prefix_state_sha256"]:
+        raise ValueError("continuation s029 state hash mismatch")
+    if manifest.get("prefix_meta_sha256") and _sha256_file(str(s029_meta)) != manifest["prefix_meta_sha256"]:
+        raise ValueError("continuation s029 meta hash mismatch")
+    old_journal_path = Path(legacy_root) / "LLM_PAID_CALL_JOURNAL.json"
+    if not old_journal_path.exists():
+        raise ValueError("continuation legacy journal missing")
+    from dicode.simulator_frontier.e3_durable_llm_journal import DurablePaidCallJournal
+    old = DurablePaidCallJournal(str(old_journal_path))._load()
+    old_candidate = old_meta.get("candidate_id") or old_meta.get("candidate")
+    refs = []
+    for i in range(1, 30):
+        report_path = Path(legacy_root) / "evidence" / f"session_{i:03d}.json"
+        expected_report_sha = manifest.get("prefix_evidence_sha256", {}).get(f"{i:03d}")
+        if not expected_report_sha or _sha256_file(str(report_path)) != expected_report_sha:
+            raise ValueError(f"continuation evidence hash mismatch session {i}")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        for ref in report.get("durable_role_journal_refs", []):
+            key = str(ref.get("key", "")); entry = old.get("entries", {}).get(key)
+            if (not entry or entry.get("session") != i or entry.get("role") != ref.get("role")
+                    or entry.get("source_commit") != manifest.get("legacy_source_commit")
+                    or (old_candidate and entry.get("candidate") != old_candidate)
+                    or (ref.get("evidence_hash") and entry.get("evidence_hash") != ref.get("evidence_hash"))):
+                raise ValueError("continuation prefix journal/report identity mismatch")
+            refs.append(key)
+    if len(refs) != 58 or len(set(refs)) != 58:
+        raise ValueError("continuation prefix journal refs invalid")
+    entries = old.get("entries", {})
+    prefix = [entries[k] for k in refs if k in entries]
+    if len(prefix) != 58:
+        raise ValueError("continuation prefix journal entry missing")
+    diag_key = str(manifest.get("session30_diag", {}).get("key", ""))
+    if not diag_key or diag_key not in entries:
+        raise ValueError("continuation session30 diagnosis missing")
+    diag = entries[diag_key]
+    if diag.get("role") != "frontier_evidence_diagnostician" or int(diag.get("session", 0)) != 30:
+        raise ValueError("continuation session30 diagnosis invalid")
+    diag_manifest = manifest.get("session30_diag", {})
+    if (diag.get("response_content_hash") != diag_manifest.get("content_hash")
+            or diag.get("validated_output_hash") != diag_manifest.get("validated_output_hash")):
+        raise ValueError("continuation diagnosis hash mismatch")
+    quarantine = manifest.get("quarantine_planner", {})
+    quarantine_key = str(quarantine.get("key", ""))
+    toxic = entries.get(quarantine_key)
+    if (not quarantine_key or not isinstance(toxic, Mapping)
+            or toxic.get("role") != "curriculum_search_planner"
+            or int(toxic.get("session", 0)) != 30
+            or toxic.get("response_content_hash") != quarantine.get("content_hash")
+            or toxic.get("validated_output_hash") != quarantine.get("validated_output_hash")
+            or quarantine.get("error_code") != "FORBIDDEN_ACTION_GUIDANCE_FIELD"):
+        raise ValueError("continuation quarantine planner evidence mismatch")
+    old_id = dict(diag.get("key_identity", {}))
+    new_id = {**old_id, "source_commit": source_commit,
+              "candidate": candidate_id, "client_implementation_hash": client_hash,
+              "provider": getattr(auth, "provider", old_id.get("provider")),
+              "requested_model": getattr(auth, "requested_model", old_id.get("requested_model"))}
+    target = DurablePaidCallJournal(str(Path(run_dir) / "LLM_PAID_CALL_JOURNAL.json"))
+    installed = target.install_continuation_prefix(
+        prefix_entries=prefix, diagnostician_entry=diag,
+        diagnostician_identity=new_id,
+        provenance={"manifest_hash": _sha256_file(manifest_path),
+                    "legacy_journal_sha256": _sha256_file(str(old_journal_path)),
+                    "quarantine_key": str(manifest.get("quarantine_planner", {}).get("key", "")),
+                    "legacy_root": str(legacy_root)})
+    return {"manifest_sha256": _sha256_file(manifest_path), "legacy_root": str(legacy_root),
+            "installed_count": len(installed),
+            "previous_checkpoint": str(Path(legacy_root) / "runstate" / "e3_canonical_runstate_s029"),
+            "start_session": 30}
+
+
 def main(argv=None, *, _lease_held: bool = False) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     candidate_id = None
@@ -1130,6 +1226,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
     run_dir = None
     auth_manifest = None
     preseed_journal = None
+    continue_from_run = None
+    continuation_manifest = None
     resume = False
     for arg in argv:
         if arg.startswith("--student="):
@@ -1142,6 +1240,10 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
             auth_manifest = arg.split("=", 1)[1]
         elif arg.startswith("--preseed-journal="):
             preseed_journal = arg.split("=", 1)[1]
+        elif arg.startswith("--continue-from-run="):
+            continue_from_run = arg.split("=", 1)[1]
+        elif arg.startswith("--continuation-manifest="):
+            continuation_manifest = arg.split("=", 1)[1]
         elif arg == "--resume":
             resume = True
         else:
@@ -1153,6 +1255,12 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
     if not run_dir:
         print("[e3-longrun-ctrl] --out=<RUN_DIR> required", flush=True)
         return FAIL
+    if bool(continue_from_run) != bool(continuation_manifest):
+        print("[e3-longrun-ctrl] CONTINUATION_BLOCKED: both continuation arguments are required", flush=True)
+        return BLOCKED
+    if continue_from_run and preseed_journal:
+        print("[e3-longrun-ctrl] CONTINUATION_BLOCKED: continuation cannot combine with preseed journal", flush=True)
+        return BLOCKED
     import e3_authorization as auth_mod
     # Mechanical budget gate occurs before any authorization, output claim,
     # transport construction, model mount, or GPU/JAX import.
@@ -1237,6 +1345,14 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
             raise ValueError("formal authorization cannot be used for verification scope")
         if bool(preseed_journal) != bool(getattr(auth, "preseed_journal_sha256", "")):
             raise ValueError("preseed journal argument/signature mismatch")
+        continuation_sha = getattr(auth, "continuation_manifest_sha256", None)
+        if continue_from_run:
+            if not continuation_sha or len(str(continuation_sha)) != 64 or _sha256_file(continuation_manifest) != continuation_sha:
+                raise ValueError("continuation manifest signature/hash mismatch")
+            if getattr(auth, "preseed_journal_sha256", None):
+                raise ValueError("continuation authorization cannot bind preseed journal")
+        elif continuation_sha:
+            raise ValueError("non-continuation authorization carries continuation binding")
     except (ValueError, OSError, KeyError) as exc:
         print(f"[e3-longrun-ctrl] AUTHORIZATION_BLOCKED: {exc}", flush=True)
         return BLOCKED
@@ -1299,6 +1415,24 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
     except ValueError as exc:
         print(f"[e3-longrun-ctrl] DIR_CLAIM_BLOCKED: {exc}", flush=True)
         return BLOCKED
+    continuation_info = None
+    if continue_from_run:
+        try:
+            continuation_info = _install_continuation(
+                legacy_root=continue_from_run, manifest_path=continuation_manifest,
+                run_dir=run_dir, source_commit=source_commit,
+                candidate_id=candidate_id, auth=auth, client_hash=client_hash)
+            results = []
+            legacy_evidence = Path(continue_from_run) / "evidence"
+            for idx in range(1, 30):
+                old_report = json.loads((legacy_evidence / f"session_{idx:03d}.json").read_text(encoding="utf-8"))
+                old_report["legacy_prefix"] = True
+                results.append(old_report)
+            start_session = 30
+            prev_runstate = continuation_info["previous_checkpoint"]
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"[e3-longrun-ctrl] CONTINUATION_BLOCKED: {exc}", flush=True)
+            return BLOCKED
     if preseed_journal:
         try:
             preseed_info = _install_preseed_journal(
@@ -1339,6 +1473,8 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
         task_asset_manifest_sha256=static_assets["task_asset_manifest_sha256"],
         disk_free_bytes=disk_free_bytes, disk_required_bytes=disk_required_bytes,
         preseed_info=preseed_info)
+    if continuation_info:
+        metadata_payload["continuation_binding"] = continuation_info
     if resume:
         if resume_meta.get("mounted_file_sha256") != mounted_file_sha or resume_meta.get("mounted_params_sha256") != mounted_params_sha:
             return BLOCKED
@@ -1408,14 +1544,16 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
         results.append(report)
         prev_runstate = report["checkpoint_path"]
 
+    final_global_update = results[-1]["global_update_step"] if results else 0
+    final_global_env_steps = results[-1]["global_env_steps"] if results else 0
     final = {
         "schema": "simulator_frontier.e3_formal_longrun_final/v2",
         "protocol": "E3_DICODE_SESSION_ALIGNED_CONSERVATIVE_16x128",
         "candidate_id": candidate_id,
         "sessions_completed": len(results),
         "updates_per_session": UPDATES_PER_SESSION,
-        "final_global_update": results[-1]["global_update_step"] if results else 0,
-        "final_global_env_steps": results[-1]["global_env_steps"] if results else 0,
+        "final_global_update": final_global_update,
+        "final_global_env_steps": final_global_env_steps,
         "latest_checkpoint": prev_runstate,
         "all_fresh_restore_ok": all(r["fresh_process_restore_equivalent"]
                                     for r in results),
