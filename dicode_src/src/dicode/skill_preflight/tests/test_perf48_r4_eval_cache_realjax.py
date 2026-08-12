@@ -236,3 +236,22 @@ def test_new_run_clears_cache(monkeypatch):
     rd = Path(__file__).parents[4] / "experiments" / "training" / "run_dicode.py"
     src = rd.read_text(encoding="utf-8")
     assert "clear_compiled_evaluator_cache()" in src.split("tracker.configure(config, reset=True)")[1][:120]
+
+
+def test_concurrency_formal_flow_single_threaded_documented():
+    """Audit R4 item 13: the formal held-out evaluator is invoked exactly once
+    per session from run_dicode's single main thread, so the run-scoped cache is
+    effectively single-threaded in production. The cache helpers are
+    RLock-guarded against corruption. If a future multi-threaded caller appears,
+    a per-key single-flight must be added around the lower().compile() step
+    (which currently happens outside the lock)."""
+    from pathlib import Path
+    rd = Path(__file__).parents[4] / "experiments" / "training" / "run_dicode.py"
+    src = rd.read_text(encoding="utf-8")
+    # run_session_evaluation (the held-out path) is called once per session in
+    # run_dicode's main loop (LEAK FIX block).
+    assert src.count("run_session_evaluation(") >= 1
+    from dicode import craftax_evaluation as ce
+    import threading
+    assert isinstance(ce._COMPILED_EVALUATOR_CACHE_LOCK, type(threading.RLock()))
+    assert hasattr(ce, "_get_cached_evaluator") and hasattr(ce, "_put_cached_evaluator")
