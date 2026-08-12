@@ -9,6 +9,7 @@ enters the expected spans.
 import importlib.util
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -267,3 +268,73 @@ def test_preflight_route_enabled_enters_archive_spans(monkeypatch):
     rd._preflight_route({"0": {"sr": 0.5}}, ["t1"], kept, arch,
                         lambda sr, any_partial: D())
     assert kept == ["t1"] and calls == ["archive_update"]
+
+
+def test_load_tasks_off_on_equivalent(monkeypatch):
+    """Audit R1 test 4: disabled and enabled modes must return identical
+    results for the same input (only instrumentation differs)."""
+    pytest.importorskip("jax")
+    from dicode.runtime_analysis import tracker
+    tu = _load_task_utils()
+    calls = []
+
+    class FakeSpan:
+        def __init__(self, name, **k):
+            self.name = name
+
+        def __enter__(self):
+            calls.append(self.name)
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(tracker, "span", FakeSpan)
+    monkeypatch.setattr(tracker, "enabled", False)
+    classes_off, ok_off = tu.load_tasks_from_env_codes(_fake_archive(), ["t1", "t2"])
+    monkeypatch.setattr(tracker, "enabled", True)
+    calls.clear()
+    classes_on, ok_on = tu.load_tasks_from_env_codes(_fake_archive(), ["t1", "t2"])
+    assert ok_off == ok_on == ["t1", "t2"]
+    assert len(classes_off) == len(classes_on) == 2
+    assert calls == ["candidate_code_load"]
+
+
+def test_preflight_route_off_on_equivalent(monkeypatch):
+    """Audit R1 test 4: disabled and enabled modes must apply the same archive
+    mutations for the same scores (instrumentation is the only difference)."""
+    pytest.importorskip("jax")
+    from dicode.runtime_analysis import tracker
+    rd = _load_run_dicode()
+
+    class FakeSpan:
+        def __init__(self, name, **k):
+            self.name = name
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(tracker, "span", FakeSpan)
+
+    def run(tracked):
+        monkeypatch.setattr(tracker, "enabled", tracked)
+        arch = _fake_archive()
+
+        class D:
+            action = "reject"
+            reason = "sr_low"
+
+        kept = []
+        rd._preflight_route({"0": {"sr": 0.1}, "1": {"sr": 0.9}}, ["t1", "t2"], kept, arch,
+                            lambda sr, any_partial: D() if sr < 0.5 else SimpleNamespace(action="accept", reason=""))
+        return arch, kept
+
+    off_arch, off_kept = run(False)
+    on_arch, on_kept = run(True)
+    assert off_kept == on_kept == ["t2"]
+    assert off_arch.status == on_arch.status == [("t1", "preflight_sr_low")]
+    assert off_arch.active == on_arch.active == [("t1", False)]
+    assert len(off_arch.learn) == len(on_arch.learn) == 1
