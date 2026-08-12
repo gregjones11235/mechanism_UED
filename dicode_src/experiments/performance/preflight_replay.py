@@ -61,8 +61,7 @@ PREFLIGHT_PHASES = (
 # --- replay event phases (measurement, not the production tracker) ---------------
 REPLAY_PHASES = (
     "replay_wall", "archive_copy_or_load", "candidate_code_load", "checkpoint_load",
-    "task_load", "evaluator_build", "evaluator_lower", "evaluator_compile",
-    "evaluator_execute", "scoring_device_transfer", "scoring_cpu",
+    "task_load", "evaluator_execute", "scoring",
     "route_decision", "archive_update", "result_write",
 )
 EVENT_FIELDS = (
@@ -587,7 +586,11 @@ def _run_replay(manifest: Mapping[str, Any], rt: Mapping[str, Any], out_dir: Pat
         if swd is None:
             raise ValueError("rollouts produced no scoring_window_data")
 
-        scores = rt["score"](config, swd, len(candidate_ids), task_achievement_mask, task_completed_mask)
+        with recorder.span("scoring"):
+            # device transfer + CPU scoring are fused inside the production
+            # calculate_scores_from_snapshot (cannot be split without touching
+            # scoring.py, which is out of scope); recorded as one honest phase.
+            scores = rt["score"](config, swd, len(candidate_ids), task_achievement_mask, task_completed_mask)
 
         with recorder.span("route_decision"):
             decisions, accepted, rejected = _route_all(rt["route"], scores, candidate_ids)
