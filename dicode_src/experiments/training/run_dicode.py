@@ -27,6 +27,10 @@ from dicode.evolution_efficient import (
 )
 from dicode.logging_utils import log_session_summary
 from dicode.runtime_analysis import tracker
+from dicode.skill_preflight.contract import (
+    PreflightOptimizationContractError,
+    handle_preflight_gate_error,
+)
 from dicode.ppo_tr import clear_train_compile_cache
 from dicode.craftax_evaluation import clear_compiled_evaluator_cache
 from dicode.selection import sample_tasks_for_training
@@ -334,6 +338,16 @@ def main(config: DictConfig):
                     _reuse_tasks = bool((config.get("performance", {})
                                          if hasattr(config, "get") else {})
                                         .get("preflight_reuse_loaded_tasks", False))
+                    # [R2] fail fast before the 40-update rollout: if B3 compact
+                    # payload is enabled, the score function must be one that
+                    # compact supports. Unknown -> PreflightOptimizationContractError
+                    # propagates (fail-closed) through the outer gate catch.
+                    _compact_payload = bool((config.get("performance", {})
+                                             if hasattr(config, "get") else {})
+                                            .get("compact_preflight_payload", False))
+                    if _compact_payload:
+                        from dicode.skill_preflight.scoring_contract import compact_field_decisions
+                        compact_field_decisions(config.dicode_manager.score_function)
                     _pf_raw = evaluate_new_tasks(
                         config, _pf_rng, rl_train_state, _pf_ok_ids,
                         gen_manager.archive, gen_manager.selector.embedding_model,
@@ -365,7 +379,10 @@ def main(config: DictConfig):
                     tracker.record("preflight_wall", _pf_t0_ns, session=current_session_idx)
                 new_task_ids = _kept
             except Exception as e:
-                print(f"  [Preflight] ERROR (kept all, gate inactive!): {e}")
+                # [R2] fail-closed: an enabled preflight optimization (B2/B3)
+                # contract violation must terminate the run, never degrade to
+                # "keep all". Ordinary preflight errors still degrade historically.
+                handle_preflight_gate_error(e)
         _bb = bool(config.get("skill_preflight", {}).get("batch_backfill", False))
         if _bb:
             _shortfall = (target_batch_size - 1) - len(new_task_ids) - len(sampled_from_archive)

@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from dicode.skill_preflight.contract import PreflightOptimizationContractError
+
 
 def resolve_preloaded_tasks(
     config: Any,
@@ -48,16 +50,16 @@ def resolve_preloaded_tasks(
     if not reuse:
         return None, False
     if preloaded_task_classes is None or preloaded_task_ids is None:
-        raise ValueError(
+        raise PreflightOptimizationContractError(
             "performance.preflight_reuse_loaded_tasks is on but preloaded "
             "task classes/ids were not provided (all-or-nothing; no silent "
             "fallback to a second load).")
     if [str(x) for x in preloaded_task_ids] != [str(x) for x in new_task_ids]:
-        raise ValueError(
+        raise PreflightOptimizationContractError(
             "preloaded_task_ids must equal new_task_ids in order and count "
             "(got %r vs %r)." % (list(preloaded_task_ids), list(new_task_ids)))
     if len(preloaded_task_classes) != len(new_task_ids):
-        raise ValueError(
+        raise PreflightOptimizationContractError(
             "preloaded_task_classes count (%d) must equal new_task_ids count (%d)."
             % (len(preloaded_task_classes), len(new_task_ids)))
     return preloaded_task_classes, True

@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from dicode.skill_preflight.contract import PreflightOptimizationContractError
 
 DICODE = Path(__file__).parents[2]
 PPO_TR = DICODE / "ppo_tr.py"
@@ -63,7 +64,7 @@ def test_compact_field_decisions_max_mc():
 
 def test_compact_field_decisions_unknown_raises():
     decisions, _, _ = _contract()
-    with pytest.raises(ValueError):
+    with pytest.raises(PreflightOptimizationContractError):
         decisions("bogus")
 
 

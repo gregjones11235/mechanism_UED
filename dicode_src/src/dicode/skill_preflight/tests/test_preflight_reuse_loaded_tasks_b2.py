@@ -7,6 +7,7 @@ evaluate_new_tasks need jax/craftax and are marked # requires-jax-server.
 from pathlib import Path
 
 import pytest
+from dicode.skill_preflight.contract import PreflightOptimizationContractError
 
 DICODE = Path(__file__).parents[2]
 RUN_DICODE = Path(__file__).parents[4] / "experiments" / "training" / "run_dicode.py"
@@ -43,23 +44,23 @@ def test_reuse_on_reuses_matching_preloaded():
 @pytest.mark.parametrize("ids", [["b", "a"], ["a"], ["a", "b", "c"], ["A", "b"]])
 def test_reuse_on_mismatched_ids_raise(ids):
     resolve = _helper()
-    with pytest.raises(ValueError):
+    with pytest.raises(PreflightOptimizationContractError):
         resolve(_Cfg(True), ["a", "b"], ["cls_a", "cls_b"], ids)
 
 
 def test_reuse_on_count_mismatch_raise():
     resolve = _helper()
-    with pytest.raises(ValueError):
+    with pytest.raises(PreflightOptimizationContractError):
         resolve(_Cfg(True), ["a", "b"], ["cls_a"], ["a", "b"])
 
 
 def test_reuse_on_missing_preloaded_raises():
     resolve = _helper()
-    with pytest.raises(ValueError):
+    with pytest.raises(PreflightOptimizationContractError):
         resolve(_Cfg(True), ["a", "b"], None, None)
-    with pytest.raises(ValueError):
+    with pytest.raises(PreflightOptimizationContractError):
         resolve(_Cfg(True), ["a", "b"], ["cls_a"], None)
-    with pytest.raises(ValueError):
+    with pytest.raises(PreflightOptimizationContractError):
         resolve(_Cfg(True), ["a", "b"], None, ["a", "b"])
 
 

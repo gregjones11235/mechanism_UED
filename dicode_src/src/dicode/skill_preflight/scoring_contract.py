@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from dicode.skill_preflight.contract import PreflightOptimizationContractError
+
 # info keys read unconditionally by _calculate_base_metrics / snapshot impl.
 SCORING_INFO_REQUIRED_KEYS = frozenset({
     "task_id", "returned_episode", "is_success",
@@ -68,4 +70,5 @@ def compact_field_decisions(score_function: str) -> dict[str, Any]:
     if score_function == "max_mc":
         return {"keep_advantages": False, "keep_reward": True,
                 "keep_value": True, "keep_done": False, "trim_info": True}
-    raise ValueError(f"Unknown score_function: {score_function}")
+    raise PreflightOptimizationContractError(
+        f"Unknown score_function for compact_preflight_payload: {score_function}")
