@@ -103,6 +103,11 @@ def _replay_spec(tmp_path):
         p = tmp_path / f"{cid}.py"
         p.write_text(f"class Env:\n    pass\n# task {cid}\n")
         codes[cid] = str(p)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("validation:\n  rollout_updates: 40\n  num_envs: 1024\n  num_steps: 128\n"
+                   "dicode_manager:\n  score_function: learnability\n")
+    src = tmp_path / "source.py"
+    src.write_text("# frozen source\n")
     return {
         "base_dir": str(tmp_path),
         "checkpoint": str(ckpt),
@@ -112,6 +117,12 @@ def _replay_spec(tmp_path):
         "score_function": "learnability",
         "rollout_updates": 40,
         "global_step": 2100,
+        "source_commit": "frozen-commit-abc123",
+        "gpu_uuid": "GPU-replay-test",
+        "config_path": str(cfg),
+        "source_mapping": {"src/dicode/ppo_tr.py": str(src)},
+        "num_envs": 1024,
+        "num_steps": 128,
     }
 
 
