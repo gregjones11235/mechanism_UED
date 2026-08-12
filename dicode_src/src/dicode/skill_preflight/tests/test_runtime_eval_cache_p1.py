@@ -281,7 +281,7 @@ def test_eval_cache_key_static_config_changes_miss():
     assert craftax._cache_key(base, a, True, a.shape, "state", "rng") != base_key
     # max_timesteps (config.eval)
     cfg_ev = _eval_cfg()
-    cfg_ev.eval = SimpleNamespace(max_timesteps=4096)
+    cfg_ev.eval = {"max_timesteps": 4096}  # dict (has .get) mirrors OmegaConf
     assert craftax._cache_key(cfg_ev, a, False, a.shape, "state", "rng") != base_key
     # train-state / rng structure change (different treedef)
     assert craftax._cache_key(base, a, False, a.shape, {"p": 1}, "rng") != craftax._cache_key(base, a, False, a.shape, [1], "rng")

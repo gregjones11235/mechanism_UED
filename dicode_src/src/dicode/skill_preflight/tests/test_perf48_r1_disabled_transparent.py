@@ -206,7 +206,7 @@ def test_preflight_route_disabled_never_enters_span(monkeypatch):
 
     kept = []
     rd._preflight_route({"0": {"sr": 0.3}}, ["t1"], kept, arch,
-                        lambda sr, any_partial: D())
+                        lambda sr, any_partial_progress: D())
     assert kept == [] and arch.status == [("t1", "preflight_sr_low")]
     assert arch.active == [("t1", False)]
     assert calls == []
@@ -232,7 +232,7 @@ def test_preflight_route_disabled_accept_path(monkeypatch):
 
     kept = []
     rd._preflight_route({"0": {"sr": 0.8}}, ["t1"], kept, arch,
-                        lambda sr, any_partial: D())
+                        lambda sr, any_partial_progress: D())
     assert kept == ["t1"]
     assert len(arch.learn) == 1 and arch.learn[0][0] == "t1"
     assert abs(arch.learn[0][1] - 0.8 * 0.2) < 1e-9
@@ -266,7 +266,7 @@ def test_preflight_route_enabled_enters_archive_spans(monkeypatch):
 
     kept = []
     rd._preflight_route({"0": {"sr": 0.5}}, ["t1"], kept, arch,
-                        lambda sr, any_partial: D())
+                        lambda sr, any_partial_progress: D())
     assert kept == ["t1"] and calls == ["archive_update"]
 
 
@@ -329,7 +329,7 @@ def test_preflight_route_off_on_equivalent(monkeypatch):
 
         kept = []
         rd._preflight_route({"0": {"sr": 0.1}, "1": {"sr": 0.9}}, ["t1", "t2"], kept, arch,
-                            lambda sr, any_partial: D() if sr < 0.5 else SimpleNamespace(action="accept", reason=""))
+                            lambda sr, any_partial_progress: D() if sr < 0.5 else SimpleNamespace(action="accept", reason=""))
         return arch, kept
 
     off_arch, off_kept = run(False)

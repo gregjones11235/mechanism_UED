@@ -48,7 +48,8 @@ def _cfg(activation="relu", hidden_layers=256, embed_size=256, num_heads=8,
     evaluation = SimpleNamespace(num_envs=num_envs, num_steps=num_steps)
     cfg = SimpleNamespace(training=training, evaluation=evaluation)
     if with_eval:
-        cfg.eval = SimpleNamespace(max_timesteps=max_timesteps)
+        # dict (has .get) mirrors OmegaConf DictConfig for config.eval
+        cfg.eval = {"max_timesteps": max_timesteps}
     return cfg
 
 
