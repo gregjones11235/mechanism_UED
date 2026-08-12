@@ -2175,8 +2175,22 @@ class EnvGenerator:
 							)
 					return reward
 
-				_validate_on_cpu = jax.jit(_validate_on_cpu_impl, backend="cpu")
-				_ = _validate_on_cpu(key)
+				if tracker.enabled:
+					# [B1] split the fused jit-construct + call into build/compile/
+					# execute so the preflight cost attribution is precise. The
+					# explicit lower()+compile() forces the compile to happen inside
+					# its own span (jax.jit alone defers compilation to first call).
+					with tracker.span("candidate_cpu_validation_build"):
+						_validate_on_cpu = jax.jit(_validate_on_cpu_impl, backend="cpu")
+					with tracker.span("candidate_cpu_validation_compile"):
+						_validate_on_cpu = _validate_on_cpu.lower(key).compile()
+					with tracker.span("candidate_cpu_validation_execute"):
+						_ = _validate_on_cpu(key)
+						_.block_until_ready()
+				else:
+					# Historical path (byte-identical behaviour when profiling off).
+					_validate_on_cpu = jax.jit(_validate_on_cpu_impl, backend="cpu")
+					_ = _validate_on_cpu(key)
 
 			return True, ""
 

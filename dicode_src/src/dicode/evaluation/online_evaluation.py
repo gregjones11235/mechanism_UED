@@ -157,7 +157,11 @@ def evaluate_new_tasks(
 	print(f"  - Evaluating {len(new_task_ids)} newly generated tasks...")
 
 	# 1. Load Task Classes from Archive Code
-	task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
+	# [B1] preflight_task_reload: the second load of the candidate Env classes
+	# (the first happens in run_dicode.py's preflight block). span is a near
+	# no-op when profiling is disabled.
+	with tracker.span("preflight_task_reload"):
+		task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
 	num_new_tasks = len(task_classes)
 	if num_new_tasks == 0:
 		print("  - Warning: Could not load any task classes for evaluation.")

@@ -1176,6 +1176,22 @@ def run_evaluation_rollouts(
 ):
 	if train_state is None:
 		raise ValueError("run_evaluation_rollouts requires a valid train_state.")
+	if tracker.enabled:
+		# [B1] precise preflight profiling: split the fused make+jit+call into
+		# build / lower_compile / execute, mirroring run_training_session. Each
+		# result leaf is block_until_ready() so execute measures true device time.
+		with tracker.span("preflight_eval_build"):
+			eval_fn = make_eval(config, task_classes, num_training_updates, task_embeddings)
+		eval_jit = jax.jit(eval_fn)
+		with tracker.span("preflight_eval_lower_compile"):
+			compiled = eval_jit.lower(rng, train_state).compile()
+		with tracker.span("preflight_eval_execute"):
+			results = compiled(rng, train_state)
+			for leaf in jax.tree_util.tree_leaves(results):
+				if hasattr(leaf, "block_until_ready"):
+					leaf.block_until_ready()
+		print("JIT compiling and running evaluation rollouts (Transformer)...")
+		return results
 	eval_fn = make_eval(config, task_classes, num_training_updates, task_embeddings)
 	eval_jit = jax.jit(eval_fn)
 	print("JIT compiling and running evaluation rollouts (Transformer)...")

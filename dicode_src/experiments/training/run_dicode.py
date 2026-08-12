@@ -281,9 +281,11 @@ def main(config: DictConfig):
                         "run command (preflight needs validation.rollout_updates)")
 
                 _pf_t0 = time.time()
+                _pf_t0_ns = time.monotonic_ns()  # [B1] preflight_wall
                 # Resolve which ids actually load, in order (index-aligns with scores)
-                _pf_classes, _pf_ok_ids = load_tasks_from_env_codes(
-                    gen_manager.archive, new_task_ids)
+                with tracker.span("preflight_task_reload"):
+                    _pf_classes, _pf_ok_ids = load_tasks_from_env_codes(
+                        gen_manager.archive, new_task_ids)
                 # Ids whose code failed to load: keep (same as baseline; they will be
                 # skipped again by the training loader anyway)
                 _kept = [t for t in new_task_ids if t not in _pf_ok_ids]
@@ -306,23 +308,27 @@ def main(config: DictConfig):
                             _pf_raw["task_completed_mask"],
                             config,
                         )
-                        for _pf_i, _tid in enumerate(_pf_ok_ids):
-                            _sr = float(_pf_scores.get(str(_pf_i), {}).get("sr", -1.0))
-                            # sr < 0 => no episode finished => no partial progress
-                            _d = route(max(_sr, 0.0), any_partial_progress=(_sr >= 0.0))
-                            if _d.action == "accept":
-                                _kept.append(_tid)
-                                _clip = min(max(_sr, 0.0), 1.0)
-                                gen_manager.archive.update_node_learnability(
-                                    _tid, _clip * (1.0 - _clip))
-                            else:
-                                gen_manager.archive.update_node_status(
-                                    _tid, f"preflight_{_d.reason}")
-                                gen_manager.archive.set_task_active_status(_tid, False)
-                                print(f"  [Preflight] reject {_tid}: {_d.reason} "
-                                      f"(sr={_sr:.2f})")
+                        with tracker.span("route"):
+                            for _pf_i, _tid in enumerate(_pf_ok_ids):
+                                _sr = float(_pf_scores.get(str(_pf_i), {}).get("sr", -1.0))
+                                # sr < 0 => no episode finished => no partial progress
+                                _d = route(max(_sr, 0.0), any_partial_progress=(_sr >= 0.0))
+                                if _d.action == "accept":
+                                    _kept.append(_tid)
+                                    _clip = min(max(_sr, 0.0), 1.0)
+                                    with tracker.span("archive_update"):
+                                        gen_manager.archive.update_node_learnability(
+                                            _tid, _clip * (1.0 - _clip))
+                                else:
+                                    with tracker.span("archive_update"):
+                                        gen_manager.archive.update_node_status(
+                                            _tid, f"preflight_{_d.reason}")
+                                        gen_manager.archive.set_task_active_status(_tid, False)
+                                    print(f"  [Preflight] reject {_tid}: {_d.reason} "
+                                          f"(sr={_sr:.2f})")
                 print(f"  [Preflight] kept {len(_kept)}/{len(new_task_ids)} new tasks "
                       f"({time.time() - _pf_t0:.1f}s)")
+                tracker.record("preflight_wall", _pf_t0_ns, session=current_session_idx)
                 new_task_ids = _kept
             except Exception as e:
                 print(f"  [Preflight] ERROR (kept all, gate inactive!): {e}")

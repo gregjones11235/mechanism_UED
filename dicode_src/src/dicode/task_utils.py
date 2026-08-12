@@ -7,6 +7,7 @@ from craftax.craftax.constants import Achievement
 
 # --- Local Modules ---
 from dicode.dreaming.gen_manager import TaskArchive
+from dicode.runtime_analysis import tracker
 
 # 2. Pre-calculate vector size for efficiency
 # We find the highest ID in the Enum and add 1 to handle the 0-index.
@@ -55,28 +56,31 @@ def load_tasks_from_env_codes(archive: TaskArchive, tasks: list[str]) -> tuple[l
 	# 1. Get all code strings from the archive in one batch
 	code_strings_dict = archive.get_task_codes(tasks)
 
-	for task, code_string in code_strings_dict.items():
-		if not code_string:
-			print(f"Warning: No code found for task {task}. Skipping.")
-			continue
+	# [B1] precise preflight profiling: time the dynamic Env-class load loop.
+	# tracker.span is a near no-op when profiling is disabled (no I/O).
+	with tracker.span("candidate_code_load"):
+		for task, code_string in code_strings_dict.items():
+			if not code_string:
+				print(f"Warning: No code found for task {task}. Skipping.")
+				continue
 
-		try:
-			# 2. Create a new, temporary "virtual" module in memory
-			# We use a unique name to avoid conflicts.
-			task_module = types.ModuleType(task)
+			try:
+				# 2. Create a new, temporary "virtual" module in memory
+				# We use a unique name to avoid conflicts.
+				task_module = types.ModuleType(task)
 
-			# 3. Execute the code string within the namespace of our new module
-			exec(code_string, task_module.__dict__)
+				# 3. Execute the code string within the namespace of our new module
+				exec(code_string, task_module.__dict__)
 
-			# 4. Extract the 'Env' class that was just defined in the module
-			if hasattr(task_module, "Env"):
-				task_classes.append(task_module.Env)
-				successful_task_ids.append(task)
-			else:
-				print(f"Warning: No 'Env' class found in code for task {task}. Skipping.")
+				# 4. Extract the 'Env' class that was just defined in the module
+				if hasattr(task_module, "Env"):
+					task_classes.append(task_module.Env)
+					successful_task_ids.append(task)
+				else:
+					print(f"Warning: No 'Env' class found in code for task {task}. Skipping.")
 
-		except Exception as e:
-			print(f"Error dynamically loading code for task {task}: {e}")
+			except Exception as e:
+				print(f"Error dynamically loading code for task {task}: {e}")
 
 	return task_classes, successful_task_ids
 
