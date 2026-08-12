@@ -40,3 +40,7 @@ performance:
   embedding_cache_max_entries: 2048
   validation_cache_max_entries: 512
   validation_static_lint: false
+  # [B2] reuse run_dicode's first load_tasks_from_env_codes result in
+  # evaluate_new_tasks (skip the second exec of candidate code). Default off ->
+  # historical path byte-identical.
+  preflight_reuse_loaded_tasks: false

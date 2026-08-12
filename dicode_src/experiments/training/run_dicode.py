@@ -292,9 +292,18 @@ def main(config: DictConfig):
 
                 if _pf_ok_ids:
                     rng, _pf_rng = jax.random.split(rng)
+                    # [B2] performance.preflight_reuse_loaded_tasks (default off):
+                    # pass the first load's classes/ids so evaluate_new_tasks skips
+                    # its second load_tasks_from_env_codes. Off -> both None -> the
+                    # historical second load happens, byte-identical.
+                    _reuse_tasks = bool((config.get("performance", {})
+                                         if hasattr(config, "get") else {})
+                                        .get("preflight_reuse_loaded_tasks", False))
                     _pf_raw = evaluate_new_tasks(
                         config, _pf_rng, rl_train_state, _pf_ok_ids,
                         gen_manager.archive, gen_manager.selector.embedding_model,
+                        preloaded_task_classes=(_pf_classes if _reuse_tasks else None),
+                        preloaded_task_ids=(_pf_ok_ids if _reuse_tasks else None),
                     )
                     _pf_swd = _pf_raw.get("scoring_window_data")
                     if _pf_swd is None:

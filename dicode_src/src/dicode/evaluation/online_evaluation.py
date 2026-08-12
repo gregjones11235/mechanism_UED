@@ -147,21 +147,39 @@ def evaluate_new_tasks(
 	new_task_ids: list[str],
 	archive: TaskArchive,
 	embedding_model: LLM,
+	preloaded_task_classes: list = None,
+	preloaded_task_ids: list[str] = None,
 ) -> dict:
 	"""Evaluates a list of newly generated tasks using the current agent state
 	by running rollouts and collecting raw trajectory data for scoring.
+
+	[B2] ``preloaded_task_classes`` / ``preloaded_task_ids``: when
+	``performance.preflight_reuse_loaded_tasks`` is enabled, run_dicode.py's
+	first ``load_tasks_from_env_codes`` result is reused here instead of a
+	second load (same source, same semantics). The two must be given together
+	(all-or-nothing); id order/count are validated against ``new_task_ids`` and
+	any mismatch raises (no silent fallback). We deliberately do NOT reuse the
+	validation-path Env class (``Task(temp_file)``): it differs in module name /
+	lifecycle / JIT static signature. See skill_preflight.reuse_loaded_tasks.
 	"""
 	if not new_task_ids:
 		return {}
 
 	print(f"  - Evaluating {len(new_task_ids)} newly generated tasks...")
 
-	# 1. Load Task Classes from Archive Code
+	# 1. Load Task Classes from Archive Code (or reuse run_dicode's first load)
 	# [B1] preflight_task_reload: the second load of the candidate Env classes
 	# (the first happens in run_dicode.py's preflight block). span is a near
-	# no-op when profiling is disabled.
-	with tracker.span("preflight_task_reload"):
-		task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
+	# no-op when profiling is disabled. [B2] when the reuse flag is on, the
+	# first load is passed in and no second load happens.
+	from dicode.skill_preflight.reuse_loaded_tasks import resolve_preloaded_tasks
+	preloaded, _use_preload = resolve_preloaded_tasks(
+		config, new_task_ids, preloaded_task_classes, preloaded_task_ids)
+	if _use_preload:
+		task_classes = preloaded
+	else:
+		with tracker.span("preflight_task_reload"):
+			task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
 	num_new_tasks = len(task_classes)
 	if num_new_tasks == 0:
 		print("  - Warning: Could not load any task classes for evaluation.")
