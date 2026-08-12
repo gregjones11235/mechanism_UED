@@ -177,9 +177,11 @@ def evaluate_new_tasks(
 		config, new_task_ids, preloaded_task_classes, preloaded_task_ids)
 	if _use_preload:
 		task_classes = preloaded
-	else:
+	elif tracker.enabled:
 		with tracker.span("preflight_task_reload"):
 			task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
+	else:
+		task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
 	num_new_tasks = len(task_classes)
 	if num_new_tasks == 0:
 		print("  - Warning: Could not load any task classes for evaluation.")

@@ -38,6 +38,35 @@ from dicode.training import run_session_training
 MAX_JAX_CACHE_CLEAR_RETRIES = 10
 
 
+def _preflight_route(scores, ok_ids, kept, archive, route_fn):
+    """Preflight accept/reject loop + archive mutation (B1 profiled).
+
+    Profiling spans are entered only when ``tracker.enabled``; the disabled path
+    performs the exact historical route/archive mutations with zero instrumentation.
+    """
+    for _pf_i, _tid in enumerate(ok_ids):
+        _sr = float(scores.get(str(_pf_i), {}).get("sr", -1.0))
+        # sr < 0 => no episode finished => no partial progress
+        _d = route_fn(max(_sr, 0.0), any_partial_progress=(_sr >= 0.0))
+        if _d.action == "accept":
+            kept.append(_tid)
+            _clip = min(max(_sr, 0.0), 1.0)
+            if tracker.enabled:
+                with tracker.span("archive_update"):
+                    archive.update_node_learnability(_tid, _clip * (1.0 - _clip))
+            else:
+                archive.update_node_learnability(_tid, _clip * (1.0 - _clip))
+        else:
+            if tracker.enabled:
+                with tracker.span("archive_update"):
+                    archive.update_node_status(_tid, f"preflight_{_d.reason}")
+                    archive.set_task_active_status(_tid, False)
+            else:
+                archive.update_node_status(_tid, f"preflight_{_d.reason}")
+                archive.set_task_active_status(_tid, False)
+            print(f"  [Preflight] reject {_tid}: {_d.reason} (sr={_sr:.2f})")
+
+
 @hydra.main(version_base="1.2", config_path="../../conf/", config_name="config")
 def main(config: DictConfig):
     """Main entry point for the DiCode training loop."""
@@ -281,9 +310,15 @@ def main(config: DictConfig):
                         "run command (preflight needs validation.rollout_updates)")
 
                 _pf_t0 = time.time()
-                _pf_t0_ns = time.monotonic_ns()  # [B1] preflight_wall
+                # [B1] preflight_wall start time: only captured when profiling is
+                # enabled (zero instrumentation otherwise).
+                _pf_t0_ns = time.monotonic_ns() if tracker.enabled else None
                 # Resolve which ids actually load, in order (index-aligns with scores)
-                with tracker.span("preflight_task_reload"):
+                if tracker.enabled:
+                    with tracker.span("preflight_task_reload"):
+                        _pf_classes, _pf_ok_ids = load_tasks_from_env_codes(
+                            gen_manager.archive, new_task_ids)
+                else:
                     _pf_classes, _pf_ok_ids = load_tasks_from_env_codes(
                         gen_manager.archive, new_task_ids)
                 # Ids whose code failed to load: keep (same as baseline; they will be
@@ -317,27 +352,17 @@ def main(config: DictConfig):
                             _pf_raw["task_completed_mask"],
                             config,
                         )
-                        with tracker.span("route"):
-                            for _pf_i, _tid in enumerate(_pf_ok_ids):
-                                _sr = float(_pf_scores.get(str(_pf_i), {}).get("sr", -1.0))
-                                # sr < 0 => no episode finished => no partial progress
-                                _d = route(max(_sr, 0.0), any_partial_progress=(_sr >= 0.0))
-                                if _d.action == "accept":
-                                    _kept.append(_tid)
-                                    _clip = min(max(_sr, 0.0), 1.0)
-                                    with tracker.span("archive_update"):
-                                        gen_manager.archive.update_node_learnability(
-                                            _tid, _clip * (1.0 - _clip))
-                                else:
-                                    with tracker.span("archive_update"):
-                                        gen_manager.archive.update_node_status(
-                                            _tid, f"preflight_{_d.reason}")
-                                        gen_manager.archive.set_task_active_status(_tid, False)
-                                    print(f"  [Preflight] reject {_tid}: {_d.reason} "
-                                          f"(sr={_sr:.2f})")
+                        if tracker.enabled:
+                            with tracker.span("route"):
+                                _preflight_route(_pf_scores, _pf_ok_ids, _kept,
+                                                 gen_manager.archive, route)
+                        else:
+                            _preflight_route(_pf_scores, _pf_ok_ids, _kept,
+                                             gen_manager.archive, route)
                 print(f"  [Preflight] kept {len(_kept)}/{len(new_task_ids)} new tasks "
                       f"({time.time() - _pf_t0:.1f}s)")
-                tracker.record("preflight_wall", _pf_t0_ns, session=current_session_idx)
+                if tracker.enabled:
+                    tracker.record("preflight_wall", _pf_t0_ns, session=current_session_idx)
                 new_task_ids = _kept
             except Exception as e:
                 print(f"  [Preflight] ERROR (kept all, gate inactive!): {e}")

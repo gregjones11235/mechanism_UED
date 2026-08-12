@@ -56,31 +56,39 @@ def load_tasks_from_env_codes(archive: TaskArchive, tasks: list[str]) -> tuple[l
 	# 1. Get all code strings from the archive in one batch
 	code_strings_dict = archive.get_task_codes(tasks)
 
-	# [B1] precise preflight profiling: time the dynamic Env-class load loop.
-	# tracker.span is a near no-op when profiling is disabled (no I/O).
-	with tracker.span("candidate_code_load"):
-		for task, code_string in code_strings_dict.items():
-			if not code_string:
-				print(f"Warning: No code found for task {task}. Skipping.")
-				continue
+	if tracker.enabled:
+		# [B1] precise preflight profiling: time the dynamic Env-class load loop.
+		# Only entered when profiling is enabled; the disabled path is the exact
+		# historical loop with zero instrumentation.
+		with tracker.span("candidate_code_load"):
+			return _load_tasks_from_env_codes_impl(code_strings_dict, task_classes, successful_task_ids)
+	return _load_tasks_from_env_codes_impl(code_strings_dict, task_classes, successful_task_ids)
 
-			try:
-				# 2. Create a new, temporary "virtual" module in memory
-				# We use a unique name to avoid conflicts.
-				task_module = types.ModuleType(task)
 
-				# 3. Execute the code string within the namespace of our new module
-				exec(code_string, task_module.__dict__)
+def _load_tasks_from_env_codes_impl(code_strings_dict, task_classes, successful_task_ids):
+	"""Historical dynamic-Env-load loop (no instrumentation)."""
+	for task, code_string in code_strings_dict.items():
+		if not code_string:
+			print(f"Warning: No code found for task {task}. Skipping.")
+			continue
 
-				# 4. Extract the 'Env' class that was just defined in the module
-				if hasattr(task_module, "Env"):
-					task_classes.append(task_module.Env)
-					successful_task_ids.append(task)
-				else:
-					print(f"Warning: No 'Env' class found in code for task {task}. Skipping.")
+		try:
+			# 2. Create a new, temporary "virtual" module in memory
+			# We use a unique name to avoid conflicts.
+			task_module = types.ModuleType(task)
 
-			except Exception as e:
-				print(f"Error dynamically loading code for task {task}: {e}")
+			# 3. Execute the code string within the namespace of our new module
+			exec(code_string, task_module.__dict__)
+
+			# 4. Extract the 'Env' class that was just defined in the module
+			if hasattr(task_module, "Env"):
+				task_classes.append(task_module.Env)
+				successful_task_ids.append(task)
+			else:
+				print(f"Warning: No 'Env' class found in code for task {task}. Skipping.")
+
+		except Exception as e:
+			print(f"Error dynamically loading code for task {task}: {e}")
 
 	return task_classes, successful_task_ids
 
