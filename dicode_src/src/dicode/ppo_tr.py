@@ -1094,6 +1094,15 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 
 		final_scoring_window_data = {"traj_batch": flat_traj, "advantages": flat_advantages}
 
+		# [B3] performance.compact_preflight_payload (default off): trim the
+		# scoring payload to what config.dicode_manager.score_function reads, so
+		# the GPU->CPU transfer is smaller. Runs after the single outer scan.
+		# Flag off -> final_scoring_window_data is untouched (historical path).
+		_perf_b3 = config.get("performance", {}) if hasattr(config, "get") else {}
+		if _perf_b3.get("compact_preflight_payload", False):
+			final_scoring_window_data = _compact_eval_scoring_data(
+				final_scoring_window_data, config.dicode_manager.score_function)
+
 		num_env_steps_done = NUM_UPDATES * config.validation.num_envs * config.validation.num_steps
 
 		return {
@@ -1169,6 +1178,39 @@ def run_training_session(
 	results = train_jit(rng, train_state, current_original_return)
 	print(f"Session finished in {time.time() - start_time:.2f} seconds.")
 	return results
+
+
+def _compact_eval_scoring_data(scoring_window_data, score_function):
+	"""[B3] Trim the preflight scoring payload to the fields the score function
+	reads (flag performance.compact_preflight_payload). Runs at the make_eval
+	return site, after the single outer scan. Flag-off callers never reach it.
+
+	Field decisions come from skill_preflight.scoring_contract (audited against
+	scoring.py's _calculate_scores_from_snapshot_impl / _calculate_priority_scores):
+	- learnability keeps only info (incl. Achievements/*), drops reward/value/done
+	  and advantages;
+	- pvl keeps advantages and info, drops reward/value/done;
+	- max_mc keeps reward/value and info, drops done and advantages.
+	Unknown score functions raise (no silent fallback).
+	"""
+	from dicode.skill_preflight.scoring_contract import (
+		compact_field_decisions, scoring_info_keep_keys)
+	decisions = compact_field_decisions(score_function)
+	traj = scoring_window_data["traj_batch"]
+	if decisions["trim_info"]:
+		info = traj.info
+		keep = scoring_info_keep_keys(info.keys())
+		traj = traj.replace(info={k: info[k] for k in keep})
+	if not decisions["keep_reward"]:
+		traj = traj.replace(reward=None)
+	if not decisions["keep_value"]:
+		traj = traj.replace(value=None)
+	if not decisions["keep_done"]:
+		traj = traj.replace(done=None)
+	return {
+		"traj_batch": traj,
+		"advantages": scoring_window_data["advantages"] if decisions["keep_advantages"] else None,
+	}
 
 
 def run_evaluation_rollouts(

@@ -44,3 +44,7 @@ performance:
   # evaluate_new_tasks (skip the second exec of candidate code). Default off ->
   # historical path byte-identical.
   preflight_reuse_loaded_tasks: false
+  # [B3] trim the preflight scoring_window_data to the fields the configured
+  # score function reads (smaller GPU->CPU transfer). Default off -> historical
+  # path byte-identical (single outer scan kept).
+  compact_preflight_payload: false
