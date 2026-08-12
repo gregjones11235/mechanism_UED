@@ -712,6 +712,10 @@ def _real_runtime(manifest: Mapping[str, Any]) -> dict[str, Any]:
         return jax.random.PRNGKey(rng0[0])
 
     def run_rollout(config, rng, classes, updates, embeddings, train_state):
+        import jax.numpy as jnp
+        # the eval env indexes task_embeddings with a traced task_id, so the
+        # embeddings must be a JAX array (numpy indexing on a tracer fails)
+        embeddings = jnp.asarray(embeddings)
         results = run_evaluation_rollouts(config, rng, classes, updates,
                                           task_embeddings=embeddings, train_state=train_state)
         for leaf in jax.tree_util.tree_leaves(results):
