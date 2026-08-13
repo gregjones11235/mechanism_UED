@@ -1283,9 +1283,11 @@ def _install_continuation_v2(*, manifest_path: str, run_dir: str,
     extra_keys = set(entries) - set(refs)
     if extra_keys != quarantine:
         raise ValueError("continuation v2 journal/quarantine inventory mismatch")
+    imported_pairs = {(entries[k].get("session"), entries[k].get("role")) for k in refs}
     for key in quarantine:
         entry = entries.get(key)
-        if not isinstance(entry, Mapping) or not DurablePaidCallJournal(str(journal_path))._valid_entry(key, entry) or int(entry.get("session", 0)) <= n:
+        if (not isinstance(entry, Mapping) or not DurablePaidCallJournal(str(journal_path))._valid_entry(key, entry)
+                or (int(entry.get("session", 0)) <= n and (entry.get("session"), entry.get("role")) not in imported_pairs)):
             raise ValueError("continuation v2 quarantine entry invalid")
     if len(refs)!=2*n or len(set(refs))!=2*n: raise ValueError("continuation v2 refs incomplete")
     target=DurablePaidCallJournal(str(Path(run_dir)/"LLM_PAID_CALL_JOURNAL.json"))
