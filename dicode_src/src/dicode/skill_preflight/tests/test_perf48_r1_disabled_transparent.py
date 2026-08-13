@@ -61,7 +61,7 @@ def test_task_utils_candidate_code_load_guarded():
 
 def test_run_dicode_preflight_spans_guarded():
     src = _text(RUN_DICODE)
-    route_src = _text(Path(__file__).parents[2] / "dicode" / "skill_preflight" / "preflight_route.py")
+    route_src = _text(Path(__file__).parents[1] / "preflight_route.py")
     # preflight_task_reload and route spans remain inline in run_dicode
     assert 'tracker.span("preflight_task_reload")' in src
     assert 'tracker.span("route")' in src

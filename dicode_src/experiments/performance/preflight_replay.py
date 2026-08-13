@@ -35,6 +35,14 @@ SCORE_FUNCTIONS = ("learnability", "pvl", "max_mc")
 CLASSIFICATION = "PREFLIGHT_CANDIDATE_REPLAY"
 VALIDATOR_VERSION = "3"
 
+PREFLIGHT_PHASES = (
+    "candidate_code_load", "candidate_cpu_validation_build",
+    "candidate_cpu_validation_compile", "candidate_cpu_validation_execute",
+    "preflight_task_reload", "preflight_eval_build",
+    "preflight_eval_lower_compile", "preflight_eval_execute",
+    "route", "archive_update", "preflight_wall",
+)
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()

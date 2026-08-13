@@ -13,6 +13,7 @@ import pytest
 PERF = Path(__file__).parents[4] / "experiments" / "performance"
 DICODE = Path(__file__).parents[2]
 RUN_DICODE = Path(__file__).parents[4] / "experiments" / "training" / "run_dicode.py"
+PREFLIGHT_ROUTE = DICODE / "skill_preflight" / "preflight_route.py"
 
 
 def load(name):
@@ -56,7 +57,7 @@ def test_b1_phase_name_set_matches_expected():
     ("preflight_eval_lower_compile", DICODE / "ppo_tr.py"),
     ("preflight_eval_execute", DICODE / "ppo_tr.py"),
     ("route", RUN_DICODE),
-    ("archive_update", RUN_DICODE),
+    ("archive_update", PREFLIGHT_ROUTE),
     ("preflight_wall", RUN_DICODE),
 ])
 def test_b1_instrumentation_site_present(phase, path):
@@ -80,7 +81,9 @@ def test_b1_instrumentation_default_off_invariants():
     # The remaining sites are pure tracker.span / tracker.record calls.
     assert 'tracker.span("preflight_task_reload")' in run
     assert 'tracker.span("preflight_task_reload")' in online
-    assert 'tracker.span("route")' in run and 'tracker.span("archive_update")' in run
+    assert 'tracker.span("route")' in run
+    pr_src = (DICODE / "skill_preflight" / "preflight_route.py").read_text(encoding="utf-8")
+    assert 'tracker.span("archive_update")' in pr_src
     assert 'tracker.record("preflight_wall"' in run
     # The single I/O funnel returns immediately when profiling is disabled.
     rt_src = (DICODE / "runtime_analysis.py").read_text(encoding="utf-8")
@@ -108,6 +111,8 @@ def _replay_spec(tmp_path):
                    "dicode_manager:\n  score_function: learnability\n")
     src = tmp_path / "source.py"
     src.write_text("# frozen source\n")
+    rng_p = tmp_path / "rng.npy"
+    np.save(rng_p, np.array([7, 8], dtype=np.uint32))
     return {
         "base_dir": str(tmp_path),
         "checkpoint": str(ckpt),
@@ -123,6 +128,7 @@ def _replay_spec(tmp_path):
         "source_mapping": {"src/dicode/ppo_tr.py": str(src)},
         "num_envs": 1024,
         "num_steps": 128,
+        "rng_path": str(rng_p),
     }
 
 
@@ -133,10 +139,8 @@ def test_replay_manifest_build_validate_and_tamper(tmp_path):
     assert manifest["classification"] == "PREFLIGHT_CANDIDATE_REPLAY"
     assert manifest["mid_checkpoint_step"] == 2100
     assert manifest["candidate_ids"] == ["cand_a", "cand_b"]
-    assert manifest["rng"] == {
-        "cand_a": replay.derive_rng(42, "cand_a", 0),
-        "cand_b": replay.derive_rng(42, "cand_b", 0),
-    }
+    assert manifest["rng"]["shape"] == [2] and manifest["rng"]["dtype"] == "uint32"
+    assert manifest["rng"]["content_sha256"]
     # validate (recompute hashes) passes on a well-formed manifest
     replay.validate_replay_manifest(dict(manifest))
 
@@ -182,9 +186,16 @@ def test_replay_manifest_rejects_bad_specs(tmp_path):
             replay.build_replay_manifest(bad)
 
 
-def test_replay_rng_derivation_deterministic():
+def test_replay_frozen_rng_artifact():
     replay = load("preflight_replay")
-    assert replay.derive_rng(42, "cand_a", 0) == replay.derive_rng(42, "cand_a", 0)
-    assert replay.derive_rng(42, "cand_a", 0) != replay.derive_rng(43, "cand_a", 0)
-    assert replay.derive_rng(42, "cand_a", 0) != replay.derive_rng(42, "cand_b", 0)
-    assert all(0 <= x < 2**32 for x in replay.derive_rng(42, "cand_a", 0))
+    import tempfile
+    p = Path(tempfile.mkdtemp()) / "rng.npy"
+    np.save(p, np.array([7, 8], dtype=np.uint32))
+    info = replay._rng_artifact_info(p)
+    assert info["shape"] == [2] and info["dtype"] == "uint32"
+    np.save(p, np.array([8, 8], dtype=np.uint32))
+    info2 = replay._rng_artifact_info(p)
+    assert info2["content_sha256"] != info["content_sha256"]
+    np.save(p, np.array([7, 8, 9], dtype=np.uint32))
+    with pytest.raises(ValueError):
+        replay._rng_artifact_info(p)
