@@ -1131,13 +1131,18 @@ def _install_continuation(*, legacy_root: str, manifest_path: str, run_dir: str,
         manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     except Exception as exc:
         raise ValueError(f"continuation manifest unreadable: {exc}") from exc
-    if manifest.get("schema") != "simulator_frontier.e3-continuation/v1":
+    if manifest.get("schema") not in {"simulator_frontier.e3-continuation/v1", "simulator_frontier.e3-continuation/v2"}:
         raise ValueError("continuation manifest schema mismatch")
-    if os.path.realpath(str(manifest.get("legacy_root"))) != os.path.realpath(legacy_root):
+    if manifest.get("schema", "").endswith("/v1") and os.path.realpath(str(manifest.get("legacy_root"))) != os.path.realpath(legacy_root):
         raise ValueError("continuation legacy root mismatch")
-    if manifest.get("prefix_sessions") != 29 or manifest.get("prefix_final_global_update") != 2900 or manifest.get("prefix_final_global_env_steps") != 380108800:
+    prefix_sessions = int(manifest.get("prefix_sessions", 0))
+    if prefix_sessions < 1 or prefix_sessions >= 151:
         raise ValueError("continuation prefix counters mismatch")
     old_root_path = Path(legacy_root)
+    session_inventory = manifest.get("sessions", {})
+    if session_inventory:
+        if set(session_inventory) != {f"{i:03d}" for i in range(1, prefix_sessions + 1)}:
+            raise ValueError("continuation session inventory incomplete")
     old_meta = json.loads((old_root_path / "RUN_METADATA.json").read_text(encoding="utf-8"))
     if (manifest.get("legacy_source_commit") != old_meta.get("source_commit")
             or manifest.get("legacy_auth_hash") != old_meta.get("authorization_manifest_hash")):
@@ -1156,16 +1161,24 @@ def _install_continuation(*, legacy_root: str, manifest_path: str, run_dir: str,
     old_journal_path = Path(legacy_root) / "LLM_PAID_CALL_JOURNAL.json"
     if not old_journal_path.exists():
         raise ValueError("continuation legacy journal missing")
-    from dicode.simulator_frontier.e3_durable_llm_journal import DurablePaidCallJournal
+    import importlib.util
+    journal_file = Path(SRC_DIR) / "dicode" / "simulator_frontier" / "e3_durable_llm_journal.py"
+    spec = importlib.util.spec_from_file_location("_e3_continuation_journal", journal_file)
+    journal_mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(journal_mod)
+    DurablePaidCallJournal = journal_mod.DurablePaidCallJournal
     old = DurablePaidCallJournal(str(old_journal_path))._load()
     old_candidate = old_meta.get("candidate_id") or old_meta.get("candidate")
     refs = []
-    for i in range(1, 30):
-        report_path = Path(legacy_root) / "evidence" / f"session_{i:03d}.json"
+    loaded_reports = []
+    for i in range(1, prefix_sessions + 1):
+        inv = session_inventory.get(f"{i:03d}", {})
+        report_path = Path(inv.get("report_path", Path(legacy_root) / "evidence" / f"session_{i:03d}.json"))
         expected_report_sha = manifest.get("prefix_evidence_sha256", {}).get(f"{i:03d}")
         if not expected_report_sha or _sha256_file(str(report_path)) != expected_report_sha:
             raise ValueError(f"continuation evidence hash mismatch session {i}")
         report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["legacy_prefix"] = True
+        loaded_reports.append(report)
         for ref in report.get("durable_role_journal_refs", []):
             key = str(ref.get("key", "")); entry = old.get("entries", {}).get(key)
             if (not entry or entry.get("session") != i or entry.get("role") != ref.get("role")
@@ -1174,22 +1187,23 @@ def _install_continuation(*, legacy_root: str, manifest_path: str, run_dir: str,
                     or (ref.get("evidence_hash") and entry.get("evidence_hash") != ref.get("evidence_hash"))):
                 raise ValueError("continuation prefix journal/report identity mismatch")
             refs.append(key)
-    if len(refs) != 58 or len(set(refs)) != 58:
+    if len(refs) != 2 * prefix_sessions or len(set(refs)) != 2 * prefix_sessions:
         raise ValueError("continuation prefix journal refs invalid")
     entries = old.get("entries", {})
     prefix = [entries[k] for k in refs if k in entries]
-    if len(prefix) != 58:
+    if len(prefix) != 2 * prefix_sessions:
         raise ValueError("continuation prefix journal entry missing")
     diag_key = str(manifest.get("session30_diag", {}).get("key", ""))
-    if not diag_key or diag_key not in entries:
-        raise ValueError("continuation session30 diagnosis missing")
-    diag = entries[diag_key]
-    if diag.get("role") != "frontier_evidence_diagnostician" or int(diag.get("session", 0)) != 30:
-        raise ValueError("continuation session30 diagnosis invalid")
-    diag_manifest = manifest.get("session30_diag", {})
-    if (diag.get("response_content_hash") != diag_manifest.get("content_hash")
-            or diag.get("validated_output_hash") != diag_manifest.get("validated_output_hash")):
-        raise ValueError("continuation diagnosis hash mismatch")
+    if diag_key:
+        if diag_key not in entries:
+            raise ValueError("continuation diagnosis missing")
+        diag = entries[diag_key]
+        if diag.get("role") != "frontier_evidence_diagnostician":
+            raise ValueError("continuation diagnosis invalid")
+        diag_manifest = manifest.get("session30_diag", {})
+        if (diag.get("response_content_hash") != diag_manifest.get("content_hash")
+                or diag.get("validated_output_hash") != diag_manifest.get("validated_output_hash")):
+            raise ValueError("continuation diagnosis hash mismatch")
     quarantine = manifest.get("quarantine_planner", {})
     quarantine_key = str(quarantine.get("key", ""))
     toxic = entries.get(quarantine_key)
@@ -1207,16 +1221,76 @@ def _install_continuation(*, legacy_root: str, manifest_path: str, run_dir: str,
               "requested_model": getattr(auth, "requested_model", old_id.get("requested_model"))}
     target = DurablePaidCallJournal(str(Path(run_dir) / "LLM_PAID_CALL_JOURNAL.json"))
     installed = target.install_continuation_prefix(
-        prefix_entries=prefix, diagnostician_entry=diag,
-        diagnostician_identity=new_id,
+        prefix_entries=prefix, diagnostician_entry=None,
+        diagnostician_identity=None,
+        prefix_sessions=prefix_sessions,
         provenance={"manifest_hash": _sha256_file(manifest_path),
                     "legacy_journal_sha256": _sha256_file(str(old_journal_path)),
                     "quarantine_key": str(manifest.get("quarantine_planner", {}).get("key", "")),
                     "legacy_root": str(legacy_root)})
     return {"manifest_sha256": _sha256_file(manifest_path), "legacy_root": str(legacy_root),
             "installed_count": len(installed),
-            "previous_checkpoint": str(Path(legacy_root) / "runstate" / "e3_canonical_runstate_s029"),
-            "start_session": 30}
+            "loaded_reports": loaded_reports,
+            "previous_checkpoint": str(Path(manifest.get("final_checkpoint_stem", Path(legacy_root) / "runstate" / f"e3_canonical_runstate_s{prefix_sessions:03d}"))),
+            "start_session": prefix_sessions + 1}
+
+def _install_continuation_v2(*, manifest_path: str, run_dir: str,
+                             source_commit: str, candidate_id: str,
+                             auth: Any, client_hash: str) -> dict[str, Any]:
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    if manifest.get("schema") != "simulator_frontier.e3-continuation/v2":
+        raise ValueError("continuation v2 schema required")
+    n = int(manifest.get("prefix_sessions", 0)); sessions = manifest.get("sessions", {})
+    if n < 1 or n >= 151 or set(sessions) != {f"{i:03d}" for i in range(1, n+1)}:
+        raise ValueError("continuation v2 inventory incomplete")
+    journal_path = Path(manifest["journal_path"]).resolve()
+    if _sha256_file(str(journal_path)) != manifest.get("journal_sha256"):
+        raise ValueError("continuation v2 journal hash mismatch")
+    import importlib.util
+    jf = Path(SRC_DIR) / "dicode" / "simulator_frontier" / "e3_durable_llm_journal.py"
+    js = importlib.util.spec_from_file_location("_e3_v2_journal", jf); jm = importlib.util.module_from_spec(js); js.loader.exec_module(jm)
+    DurablePaidCallJournal = jm.DurablePaidCallJournal
+    journal = DurablePaidCallJournal(str(journal_path))._load(); entries = journal.get("entries", {})
+    refs=[]; reports=[]; prefix=[]
+    for i in range(1,n+1):
+        item=sessions[f"{i:03d}"]; report_path=Path(item["report_path"]).resolve(); stem=Path(item["checkpoint_stem"]).resolve(); state=Path(str(stem)+".state.pkl"); meta=Path(str(stem)+".meta.json")
+        if _sha256_file(str(report_path)) != item.get("report_sha256") or _sha256_file(str(state)) != item.get("state_sha256") or _sha256_file(str(meta)) != item.get("meta_sha256"):
+            raise ValueError("continuation v2 artifact hash mismatch")
+        report=json.loads(report_path.read_text(encoding="utf-8")); rlist=report.get("durable_role_journal_refs", [])
+        if report.get("session_idx") != i or len(rlist)!=2 or report.get("global_update_step") != i*100 or report.get("global_env_steps") != i*100*131072:
+            raise ValueError("continuation v2 report invalid")
+        if [str(r.get("key")) for r in rlist] != list(item.get("journal_refs", [])):
+            raise ValueError("continuation v2 manifest journal refs mismatch")
+        if i>1 and os.path.realpath(str(report.get("previous_checkpoint", ""))) != os.path.realpath(str(sessions[f"{i-1:03d}"]["checkpoint_stem"])): raise ValueError("continuation v2 chain invalid")
+        if report.get("source_commit") != item.get("source_commit") or report.get("authorization_manifest_hash") != item.get("auth_hash"): raise ValueError("continuation v2 identity invalid")
+        if report.get("global_update_step") != item.get("global_update_step") or report.get("global_env_steps") != item.get("global_env_steps"): raise ValueError("continuation v2 counter inventory invalid")
+        md=json.loads(meta.read_text(encoding="utf-8"))
+        if md.get("state_file_sha256") != item.get("state_sha256") or md.get("current_session_idx") != i: raise ValueError("continuation v2 checkpoint meta invalid")
+        for field in ("global_update_step", "global_env_steps", "source_commit"):
+            if field in md and md.get(field) != report.get(field): raise ValueError("continuation v2 checkpoint metadata identity invalid")
+        for ref in rlist:
+            key=str(ref.get("key", "")); entry=entries.get(key)
+            if (not key or not isinstance(entry, Mapping) or entry.get("session") != i or entry.get("role") != ref.get("role")
+                    or entry.get("candidate") != report.get("candidate_id")
+                    or entry.get("source_commit") != report.get("source_commit")
+                    or (ref.get("evidence_hash") and entry.get("evidence_hash") != ref.get("evidence_hash"))
+                    or not DurablePaidCallJournal(str(journal_path))._valid_entry(key,entry)):
+                raise ValueError("continuation v2 journal ref invalid")
+            refs.append(key); prefix.append(entry)
+        report["legacy_prefix"] = True; reports.append(report)
+    quarantine=set(manifest.get("quarantine_keys", []))
+    if quarantine & set(refs): raise ValueError("continuation v2 quarantine intersects imported refs")
+    extra_keys = set(entries) - set(refs)
+    if extra_keys != quarantine:
+        raise ValueError("continuation v2 journal/quarantine inventory mismatch")
+    for key in quarantine:
+        entry = entries.get(key)
+        if not isinstance(entry, Mapping) or not DurablePaidCallJournal(str(journal_path))._valid_entry(key, entry) or int(entry.get("session", 0)) <= n:
+            raise ValueError("continuation v2 quarantine entry invalid")
+    if len(refs)!=2*n or len(set(refs))!=2*n: raise ValueError("continuation v2 refs incomplete")
+    target=DurablePaidCallJournal(str(Path(run_dir)/"LLM_PAID_CALL_JOURNAL.json"))
+    installed=target.install_continuation_prefix(prefix_entries=prefix, diagnostician_entry=None, diagnostician_identity=None, prefix_sessions=n, provenance={"manifest_hash":_sha256_file(manifest_path),"legacy_journal_sha256":manifest["journal_sha256"]})
+    return {"manifest_sha256":_sha256_file(manifest_path),"loaded_reports":reports,"installed_count":len(installed),"start_session":n+1,"previous_checkpoint":manifest["final_checkpoint_stem"]}
 
 
 def main(argv=None, *, _lease_held: bool = False) -> int:
@@ -1418,17 +1492,15 @@ def main(argv=None, *, _lease_held: bool = False) -> int:
     continuation_info = None
     if continue_from_run:
         try:
-            continuation_info = _install_continuation(
-                legacy_root=continue_from_run, manifest_path=continuation_manifest,
-                run_dir=run_dir, source_commit=source_commit,
-                candidate_id=candidate_id, auth=auth, client_hash=client_hash)
-            results = []
-            legacy_evidence = Path(continue_from_run) / "evidence"
-            for idx in range(1, 30):
-                old_report = json.loads((legacy_evidence / f"session_{idx:03d}.json").read_text(encoding="utf-8"))
-                old_report["legacy_prefix"] = True
-                results.append(old_report)
-            start_session = 30
+            manifest_probe = json.loads(Path(continuation_manifest).read_text(encoding="utf-8"))
+            if manifest_probe.get("schema") == "simulator_frontier.e3-continuation/v2":
+                if os.path.realpath(continue_from_run) != os.path.realpath(manifest_probe.get("current_root", continue_from_run)):
+                    raise ValueError("continuation current root mismatch")
+                continuation_info = _install_continuation_v2(manifest_path=continuation_manifest, run_dir=run_dir, source_commit=source_commit, candidate_id=candidate_id, auth=auth, client_hash=client_hash)
+            else:
+                continuation_info = _install_continuation(legacy_root=continue_from_run, manifest_path=continuation_manifest, run_dir=run_dir, source_commit=source_commit, candidate_id=candidate_id, auth=auth, client_hash=client_hash)
+            results = list(continuation_info.get("loaded_reports", []))
+            start_session = continuation_info["start_session"]
             prev_runstate = continuation_info["previous_checkpoint"]
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             print(f"[e3-longrun-ctrl] CONTINUATION_BLOCKED: {exc}", flush=True)

@@ -182,11 +182,11 @@ def _extract_json(text: str) -> dict[str, Any]:
         f"(head: {text[:300]!r})")
 
 
-def _strict_float(value: Any, *, lo: float, hi: float, field: str) -> float:
+def _strict_float(value: Any, *, lo: float, hi: float, field: str, exclusive_lo: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"LLM field {field} must be numeric")
     value = float(value)
-    if not math.isfinite(value) or value < lo or value > hi:
+    if not math.isfinite(value) or (value <= lo if exclusive_lo else value < lo) or value > hi:
         raise ValueError(f"LLM field {field} outside finite range")
     return value
 
@@ -384,7 +384,7 @@ class _PlannerClient:
             '"seed_distribution" (object, non-empty, e.g. {"seed_base": [0, 1]}), '
             '"stochasticity_distribution" (object, non-empty, e.g. '
             '{"epsilon": [0.0, 0.1], "temperature": [1.0, 1.0]}), '
-            '"anchor_ratio" (float 0..1), '
+            '"anchor_ratio" (finite float strictly >0 and <=1; use 0.20 as a valid example), '
             '"retention_constraints" (list of strings), '
             '"reason" (short string); reply with no other keys.')
         user = json.dumps({
@@ -442,7 +442,7 @@ class _PlannerClient:
             "actual_n": max(1, self._actual_n),
             "horizon": max(1, self._horizon),
             "memory_mode": "SAVED_POLICY_MEMORY",
-            "anchor_ratio": _strict_float(raw["anchor_ratio"], lo=0.0, hi=1.0, field="anchor_ratio"),
+            "anchor_ratio": _strict_float(raw["anchor_ratio"], lo=0.0, hi=1.0, field="anchor_ratio", exclusive_lo=True),
             "retention_constraints": retention,
             "reason": _strict_str(raw["reason"], "reason"),
         }

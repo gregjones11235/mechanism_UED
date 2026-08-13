@@ -268,19 +268,20 @@ class DurablePaidCallJournal:
             return installed
 
     def install_continuation_prefix(self, *, prefix_entries: list[Mapping[str, Any]],
-                                    diagnostician_entry: Mapping[str, Any],
-                                    diagnostician_identity: Mapping[str, Any],
-                                    provenance: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """Atomically install immutable s1..s29 entries plus rekeyed s30 diag."""
-        required_provenance = ("manifest_hash", "legacy_journal_sha256", "quarantine_key")
-        if (len(prefix_entries) != 58 or not isinstance(provenance, Mapping)
+                                    diagnostician_entry: Mapping[str, Any] | None = None,
+                                    diagnostician_identity: Mapping[str, Any] | None = None,
+                                    provenance: Mapping[str, Any],
+                                    prefix_sessions: int = 29) -> list[dict[str, Any]]:
+        """Atomically install an immutable N-session continuation prefix."""
+        required_provenance = ("manifest_hash", "legacy_journal_sha256")
+        if (len(prefix_entries) != 2 * int(prefix_sessions) or not isinstance(provenance, Mapping)
                 or any(not str(provenance.get(k, "")) for k in required_provenance)):
-            raise ValueError("continuation prefix requires exactly 58 entries")
-        all_entries = [dict(e) for e in prefix_entries] + [dict(diagnostician_entry)]
+            raise ValueError("continuation prefix requires exactly 2N entries")
+        all_entries = [dict(e) for e in prefix_entries] + ([dict(diagnostician_entry)] if diagnostician_entry else [])
         if any(str(e.get("role")) not in ROLE_COMPLETION_CAPS for e in all_entries):
             raise ValueError("continuation contains unknown role")
         sessions = [(int(e.get("session", 0)), str(e.get("role"))) for e in prefix_entries]
-        if set(sessions) != {(s, r) for s in range(1, 30) for r in ROLE_COMPLETION_CAPS}:
+        if set(sessions) != {(s, r) for s in range(1, int(prefix_sessions) + 1) for r in ROLE_COMPLETION_CAPS}:
             raise ValueError("continuation prefix sessions/roles incomplete")
         for entry in prefix_entries:
             key = str(entry.get("key", ""))
@@ -290,24 +291,26 @@ class DurablePaidCallJournal:
                                                "role", "provider", "requested_model", "client_implementation_hash")
             } or self.composite_key(**dict(identity)) != key or not self._valid_entry(key, entry):
                 raise ValueError("continuation prefix entry identity invalid")
-        if int(diagnostician_entry.get("session", 0)) != 30 or diagnostician_entry.get("role") != "frontier_evidence_diagnostician":
-            raise ValueError("continuation session30 diagnostician required")
-        if not self._valid_entry(str(diagnostician_entry.get("key", "")), diagnostician_entry):
-            raise ValueError("continuation diagnostician entry invalid")
+        if diagnostician_entry is not None:
+            if diagnostician_identity is None or int(diagnostician_entry.get("session", 0)) != int(prefix_sessions) + 1 or diagnostician_entry.get("role") != "frontier_evidence_diagnostician":
+                raise ValueError("continuation next diagnostician invalid")
+            if not self._valid_entry(str(diagnostician_entry.get("key", "")), diagnostician_entry):
+                raise ValueError("continuation diagnostician entry invalid")
         with self._file_lock():
             payload = self._load()
             if payload.get("entries"):
                 raise ValueError("continuation target journal must be empty")
             entries = {str(e["key"]): e for e in prefix_entries}
-            if len(entries) != 58:
+            if len(entries) != 2 * int(prefix_sessions):
                 raise ValueError("continuation prefix duplicate keys")
-            identity = dict(diagnostician_identity)
-            key = self.composite_key(**identity)
-            diag = dict(diagnostician_entry)
-            diag.update({"key": key, **identity, "key_identity": identity})
-            if not self._valid_entry(key, diag):
-                raise ValueError("continuation rekeyed diagnostician invalid")
-            entries[key] = diag
+            if diagnostician_entry is not None:
+                identity = dict(diagnostician_identity)
+                key = self.composite_key(**identity)
+                diag = dict(diagnostician_entry)
+                diag.update({"key": key, **identity, "key_identity": identity})
+                if not self._valid_entry(key, diag):
+                    raise ValueError("continuation rekeyed diagnostician invalid")
+                entries[key] = diag
             payload = {"schema": SCHEMA, "entries": entries,
                        "installed_target_keys": list(entries),
                        "preseed_provenance": dict(provenance)}
