@@ -34,13 +34,19 @@
 
 | 假设 | 判定 |
 |---|---|
-| H1 stale keep-alive（≤120s 空闲触发 retry） | **NOT_OBSERVED**（120s 空闲未触发） |
-| H2 asyncio.run 跨 event loop 复用失败 | **NOT_OBSERVED**（单 event loop 内 persistent 未触发） |
-| H3 并发连接池争用 | **DISPROVED**（D1b + D1c 全 0 retry） |
+| H1 stale keep-alive（≤120s 空闲触发 retry） | **NOT_OBSERVED_AT_IDLE_LE_120S**（仅测到 120s 空闲，未排除更长空闲触发） |
+| H2 asyncio.run 跨 event loop 复用失败 | **NOT_TESTED**（每个 arm/repeat 通过新 asyncio.run 建 loop，client 仅在单 loop 内存活，未测同一 client 跨 loop 复用） |
+| H3 并发连接池争用 | **NOT_OBSERVED_UNDER_TESTED_WORKLOAD**（受控实验全 0 retry，但不构成对所有生产条件的反证） |
 | H4 特定时间窗口服务端状态 | **NOT_OBSERVED**（当前环境无法复现/证实） |
 | H5 remote protocol error（200 后断流） | **NOT_OBSERVED**（无 retry 可诊断） |
 
 **未宣称根因已确定**。Mason 574/575 retry 的触发条件仍未定位；可能依赖分钟级以上的 chat-generation 空闲（本任务明确禁止为模拟历史状态等待数小时），或特定时间窗口的服务状态。
+
+### 代码修复说明（供未来运行使用，历史结果未改动）
+
+- `run_d1c.py`：`ollama_pid_after` 原在 `await embed()` 前即求值（并非真正请求后 PID）。已改为向 `embed()` 传入 getter，在 await 返回/异常后才采样。
+- `d1c_harness.validate_embedding`：现已强制 `len(embedding) == configured embedding_size`，维度不匹配 fail-closed。
+- 历史 `D1C_ALL_RESULTS.json` **未修改**；其 request-level `ollama_pid_after` 不作为真正请求后证据；run-level baseline/final PID 与连续 GPU sampler 证据仍保留。
 
 ## 4. GPU0 连续采样证据
 

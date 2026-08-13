@@ -1,0 +1,31 @@
+{
+  "arms_executed": 0,
+  "arms_planned": [
+    "Ollama 14B",
+    "Qwen3 235B"
+  ],
+  "artifact_sha256": "634b2150b3d496796ed94101f69e2e2b22038e38904dc6439ae3cebaa0b2fc17",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "D2_RESULT_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "blocked_reasons": [
+    "DEEPINFRA_API_KEY not exported in the specified non-interactive shell",
+    "no exact 235B model served on localhost:5000",
+    "no explicit budget authorization evidence"
+  ],
+  "chat_requests": 0,
+  "classification": "RESEARCH_NON_SEMANTIC_MODEL_COMPARISON",
+  "conclusion": "D2_BLOCKED_EXTERNAL_PROVIDER",
+  "embedding_requests": 0,
+  "limitations": [
+    "D2 provider availability gate blocked; no benchmark executed",
+    "no 235B-vs-14B speed or quality conclusion is available"
+  ],
+  "llm_api_calls": 0,
+  "no_semantic_equivalence_claim": true,
+  "performance_comparison_available": false,
+  "provider_probe_path": "/tmp/llm_repair_probe_VFAed5/out/D2_PROVIDER_PROBE.json",
+  "provider_probe_sha256": "58bdb6e90ae5cd05c46d0562744278943b1e5afb76292cae8df5a3d5e7bcbfb6",
+  "quality_comparison_available": false,
+  "stage": "D2",
+  "status": "BLOCKED"
+}

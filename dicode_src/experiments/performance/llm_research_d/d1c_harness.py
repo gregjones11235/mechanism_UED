@@ -65,7 +65,8 @@ def format_input(texts: list[str], instruction: str | None) -> list[str]:
 
 
 def validate_embedding(data: Any, expected_count: int, embedding_size: int):
-    """Return (ok, error_class, item_count, shape)."""
+    """Return (ok, error_class, item_count, shape). Enforces that every item's
+    embedding dimension equals the configured embedding_size (fail-closed)."""
     items = list(getattr(data, "data", []) or [])
     item_count = len(items)
     if item_count == 0:
@@ -77,14 +78,16 @@ def validate_embedding(data: Any, expected_count: int, embedding_size: int):
         emb = getattr(it, "embedding", None)
         if emb is None:
             return False, "empty_result", item_count, None
-        shapes.add(len(emb))
-        if len(emb) < 1:
-            return False, "shape_mismatch", item_count, len(emb)
+        dim = len(emb)
+        if dim != embedding_size:
+            # configured dimension mismatch: fail-closed even if all items agree
+            return False, "shape_mismatch", item_count, dim
+        shapes.add(dim)
         try:
             if not all(__import__("math").isfinite(float(x)) for x in emb):
-                return False, "non_finite_embedding", item_count, len(emb)
+                return False, "non_finite_embedding", item_count, dim
         except Exception:
-            return False, "non_finite_embedding", item_count, len(emb)
+            return False, "non_finite_embedding", item_count, dim
     if len(shapes) != 1:
         return False, "shape_mismatch", item_count, sorted(shapes)
     return True, None, item_count, shapes.pop()
@@ -132,7 +135,7 @@ class D1CEmbeddingClient:
 
     async def embed(self, texts, instruction, sdk_counter, writer, *, run_id, arm,
                     repeat, request_id, batch_index, batch_size, client_lifecycle,
-                    idle_gap_s, ollama_pid_before, ollama_pid_after):
+                    idle_gap_s, ollama_pid_before, ollama_pid_after_getter):
         sdk_counter.reset()
         formatted = format_input(texts, instruction)
         input_sha256 = sha256_text("\n".join(formatted))
@@ -161,6 +164,8 @@ class D1CEmbeddingClient:
             status = "error"
             error_class, exception_class, http_status = classify_error(e)
         end = time.monotonic_ns()
+        # sample the AFTER pid only once the await has returned/raised
+        ollama_pid_after = ollama_pid_after_getter() if callable(ollama_pid_after_getter) else ollama_pid_after_getter
         writer.write({
             "run_id": run_id, "arm": arm, "repeat": repeat, "request_id": request_id,
             "batch_index": batch_index, "batch_size": batch_size,

@@ -76,7 +76,7 @@ async def run_arm(manifest, *, arm, client_lifecycle, idle_gap_s, repeat, out_di
                 run_id=run_id, arm=arm, repeat=repeat, request_id=f"{run_id[:8]}-{bi:02d}",
                 batch_index=bi, batch_size=size, client_lifecycle=client_lifecycle,
                 idle_gap_s=idle_gap_s, ollama_pid_before=pid_before,
-                ollama_pid_after=ollama_pids())
+                ollama_pid_after_getter=ollama_pids)
             results.append(r)
     finally:
         await client.aclose()
