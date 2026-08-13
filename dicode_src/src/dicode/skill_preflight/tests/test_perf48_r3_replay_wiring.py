@@ -225,6 +225,9 @@ def test_result_self_hash(tmp_path):
     assert written["result_sha256"] == replay.fingerprint(
         {k: v for k, v in written.items() if k != "result_sha256"})
     assert result["result_sha256"] == written["result_sha256"]
+    # audit: RESULT must record the score_function from the frozen manifest
+    assert result["score_function"] == "learnability"
+    assert written["score_function"] == "learnability"
 
 
 # --- 10 route/archive equivalence (shared helper off/on) -------------------------
@@ -385,3 +388,45 @@ def test_b2_b3_switch_flags_in_config(tmp_path):
                                           "validation": {"num_envs": 1024, "num_steps": 128}})
     assert flags["preflight_reuse_loaded_tasks"] is False
     assert flags["compact_preflight_payload"] is False
+
+
+def test_run_replay_writes_replay_summary(tmp_path):
+    """run_replay must publish replay_summary.json (audit item 6) alongside the
+    tracker-derived events.csv / critical_path.json."""
+    replay = _replay()
+    _, manifest, spec = _written_manifest(tmp_path, {"fake_src.py": Path(__file__)})
+    rt = _fake_rt(spec, manifest)
+    out = tmp_path / "run"
+    out.mkdir(parents=True, exist_ok=True)
+    # Pre-write the tracker-derived artifacts so run_replay's finally block can
+    # build the summary from them (the real tracker writes these on the server).
+    run_id = "fakereplayrun"
+    line = json.dumps({"run_id": run_id, "phase": "replay_wall", "start_monotonic_ns": 0,
+                       "end_monotonic_ns": 100, "duration_s": 0.1, "status": "ok", "cache_hit": False,
+                       "task_signature": "", "request_id": "", "overlap_group": "", "parent_phase": "",
+                       "session": "replay"}) + chr(10)
+    (out / "events.jsonl").write_text(line, encoding="utf-8")
+    (out / "critical_path.json").write_text(json.dumps({
+        "run_id": run_id,
+        "session_wall": 0.1,
+        "covered_union": 0.1,
+        "unattributed": 0.0,
+        "exclusive_phase_totals": {"replay_wall": 0.1, "route": 0.00001},
+    }), encoding="utf-8")
+    # run_replay calls _real_runtime internally; stub it out with the fake rt so
+    # the summary-writing path (finally block) is exercised without a GPU.
+    orig = replay._real_runtime
+    replay._real_runtime = lambda manifest_, out_dir: rt
+    try:
+        replay.run_replay(manifest, out_dir=out)
+    finally:
+        replay._real_runtime = orig
+    summary_path = out / "replay_summary.json"
+    assert summary_path.is_file(), "replay_summary.json not written"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["run_id"] == run_id
+    assert summary["event_count"] == 1
+    assert summary["session_wall_s"] == 0.1
+    assert summary["exclusive_phase_totals"]["replay_wall"] == 0.1
+    assert summary["exclusive_phase_totals"]["route"] == 0.00001
+

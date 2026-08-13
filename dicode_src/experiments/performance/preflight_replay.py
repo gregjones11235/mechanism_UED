@@ -561,6 +561,7 @@ def _run_replay(manifest: Mapping[str, Any], rt: Mapping[str, Any], out_dir: Pat
             "accepted_ids": accepted,
             "rejected_ids": rejected,
             "scores": scores,
+            "score_function": manifest["score_function"],
             "archive_before_sha256": archive_before,
             "archive_after_sha256": archive_after,
             "task_code_sha256s": {c["id"]: c["code_sha256"] for c in candidates},
@@ -607,6 +608,24 @@ def run_replay(manifest: Mapping[str, Any], *, out_dir, enabled_events: bool = T
         try:
             from dicode.runtime_analysis import tracker
             tracker.derive_reports()
+        except Exception:
+            pass
+        # audit item: also publish a compact replay summary derived from the
+        # production critical_path report (run_id, event_count, session wall,
+        # per-phase exclusive totals). Best-effort; never masks the run outcome.
+        try:
+            cp_path = out / "critical_path.json"
+            if cp_path.is_file():
+                cp = json.loads(cp_path.read_text(encoding="utf-8"))
+                summary = {
+                    "run_id": cp.get("run_id"),
+                    "event_count": len([line for line in (out / "events.jsonl").read_text(
+                        encoding="utf-8").splitlines() if line.strip()])
+                    if (out / "events.jsonl").is_file() else None,
+                    "session_wall_s": cp.get("session_wall"),
+                    "exclusive_phase_totals": cp.get("exclusive_phase_totals", {}),
+                }
+                atomic_json(out / "replay_summary.json", summary)
         except Exception:
             pass
 
