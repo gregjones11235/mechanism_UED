@@ -163,41 +163,44 @@ def _validate_response(content: str | None, *, kind: str, do_cpu_jax: bool,
     if content is None:
         return {"valid": False, "reason": "empty", "code_hash": None,
                 "static_ok": None, "jax_ok": None, "duplicate_of": None}
+    p_start = time.monotonic_ns()
     code = extract_code(content)
+    p_end = time.monotonic_ns()
+    sink.record("response_parse", start_monotonic_ns=p_start, end_monotonic_ns=p_end,
+                status="ok", request_id=request_id, candidate_slot=slot)
     if code is None or not code.strip():
         return {"valid": False, "reason": "no_code", "code_hash": None,
                 "static_ok": None, "jax_ok": None, "duplicate_of": None}
     code_hash = sha256_bytes(code.replace("\r\n", "\n").replace("\r", "\n").encode())
 
-    with sink.span("response_parse", status="ok", request_id=request_id, candidate_slot=slot):
-        pass  # parse span only (extraction already done)
-
     # dedup: identical code -> reuse prior verdict, never drop the slot
     if code_hash in validated_cache:
         prev = validated_cache[code_hash]
-        with sink.span("static_validation", status="ok", request_id=request_id,
-                       candidate_slot=slot):
-            pass
-        with sink.span("cpu_jax_validation", status="ok", request_id=request_id,
-                       candidate_slot=slot):
+        with sink.span("candidate_finalize", status="ok" if prev["valid"] else "error",
+                       request_id=request_id, candidate_slot=slot,
+                       error_class=None if prev["valid"] else "static_invalid"):
             pass
         return {"valid": prev["valid"], "reason": "duplicate", "code_hash": code_hash,
                 "static_ok": prev["static_ok"], "jax_ok": prev["jax_ok"],
                 "duplicate_of": prev["slot"]}
 
+    s_start = time.monotonic_ns()
     static_ok, static_msg = static_lint_fn(code)
-    with sink.span("static_validation", status="ok" if static_ok else "error",
-                   request_id=request_id, candidate_slot=slot,
-                   error_class=None if static_ok else "static_invalid"):
-        pass
+    s_end = time.monotonic_ns()
+    sink.record("static_validation", start_monotonic_ns=s_start, end_monotonic_ns=s_end,
+                status="ok" if static_ok else "error", request_id=request_id,
+                candidate_slot=slot,
+                error_class=None if static_ok else "static_invalid")
 
     jax_ok = None
     if static_ok and do_cpu_jax:
+        j_start = time.monotonic_ns()
         jax_ok, jax_msg = cpu_jax_fn(code)
-        with sink.span("cpu_jax_validation", status="ok" if jax_ok else "error",
-                       request_id=request_id, candidate_slot=slot,
-                       error_class=None if jax_ok else "jax_validation_failed"):
-            pass
+        j_end = time.monotonic_ns()
+        sink.record("cpu_jax_validation", start_monotonic_ns=j_start, end_monotonic_ns=j_end,
+                    status="ok" if jax_ok else "error", request_id=request_id,
+                    candidate_slot=slot,
+                    error_class=None if jax_ok else "jax_validation_failed")
     valid = bool(static_ok and (jax_ok if do_cpu_jax else True))
     verdict = {"valid": valid, "reason": "compiled" if valid else
                ("static_invalid" if not static_ok else "jax_failed"),
