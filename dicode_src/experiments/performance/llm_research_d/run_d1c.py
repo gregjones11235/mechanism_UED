@@ -26,9 +26,17 @@ sys.path.insert(0, TOOLS)
 
 from d1c_harness import D1CEmbeddingClient, EventWriter  # noqa: E402
 from llm_replay_harness import enable_sdk_retry_counting  # noqa: E402
-from llm_replay_manifest import load_manifest, canonical, fingerprint  # noqa: E402
+from llm_replay_manifest import fingerprint  # noqa: E402
 import llm_replay_benchmark as b  # noqa: E402
 import llm_replay_gpu as gpu  # noqa: E402
+
+
+def load_production_manifest(path):
+    raw = json.load(open(path, encoding="utf-8"))
+    recomputed = fingerprint({k: v for k, v in raw.items() if k != "manifest_sha256"})
+    if recomputed != raw.get("manifest_sha256"):
+        raise ValueError("production embedding manifest tamper check failed")
+    return raw
 
 # reuse b91e50b hash contract
 HASH_LEGACY = "legacy_default_json_sha256"
@@ -36,7 +44,7 @@ HASH_CANONICAL = "canonical_json_sha256"
 
 
 def ollama_pids():
-    out = subprocess.run(["pgrep", "-f", "llama-server"], capture_output=True, text=True).stdout
+    out = subprocess.run(["pgrep", "-x", "llama-server"], capture_output=True, text=True).stdout
     return sorted(p for p in out.split() if p.strip())
 
 
@@ -128,7 +136,7 @@ def _write_d1c_csv(csv_path, jsonl_path):
 
 
 def main():
-    manifest = load_manifest(MANIFEST)
+    manifest = load_production_manifest(MANIFEST)
     sdk_counter = enable_sdk_retry_counting()
     baseline_pids = ollama_pids()
     print("baseline ollama pids:", baseline_pids)

@@ -1,0 +1,1297 @@
+{
+  "baseline_ollama_pids": [
+    "3154045",
+    "3156249"
+  ],
+  "final_ollama_pids": [
+    "3154045",
+    "3156249"
+  ],
+  "gpu_stats": {
+    "compute_pids_observed": [
+      "3154045",
+      "3156249"
+    ],
+    "max_temperature": "45",
+    "min_memory_free_mib": 30495,
+    "peak_memory_used_mib": 15573,
+    "pid_consistent_with_baseline": true,
+    "sample_count": 1601,
+    "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+    "uuid_consistent": true
+  },
+  "results": [
+    {
+      "arm": "A",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "81bbfa8e63686b90891b7460468fd78a664fc22554206f1eb30d99d8ae5ea1b5",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "9db0cf1f3356ca454d7319ff548bf3c7f597476e98668be57a04d5815cc42b68",
+          "events.jsonl": "094a1b32851297593a882acfa49fed04ac32689984ff9ff093ded03946a85126"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/A_r1"
+      },
+      "artifact_inventory_sha256": "de5f5d224ec18e1b96d880d85ca4164e4048e6bebfa14d54b5e603a69a0e99cc",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "persistent",
+      "enriched_summary_sha256": "b4a036387b33cc94b37995679970404287bfea13f332a44eb3af576591da124e",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 0.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r1",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "400f68457ff135564a6c258efb7c9cf87f6053ec3d4411efc78ca38fd24c8b6c",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-A-r1-1786613067239071929",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "A",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "1106195831dfd91e291dcbf279cd894caacf9ec549f1c267b186162bdfe3ef69",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "6a8c981e8d16b67f908536e979c68ceea73ed1170cb0e38496f35534916aa2c5",
+          "events.jsonl": "72390ec4fae84a5cd107141300613ce2f94f105875958481f907dce6b4db6c4c"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/A_r2"
+      },
+      "artifact_inventory_sha256": "671a8c4d63bdc1098a38cb5ab6ccc6c86cce8de4a23db5d3e5c9ff95e0315f1e",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "persistent",
+      "enriched_summary_sha256": "2439d3e6b27ba009eb8c5239427a8436a8511dcb10817172dc625b7e3b4c7952",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 0.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r2",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "2c137ca83653a414a511e5a652495425e19db65d4430035c255dba6cbe256133",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-A-r2-1786613074076299908",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "B",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "29fa507de4629381f9a3006ad8157ee81fc39bafb0e8d03d9c4028f301355dc1",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "9fe8f7e4cd1a728595556e67197826ed4b5529f96a7f1a5a65297572469c0fb2",
+          "events.jsonl": "522f14f16ce70407e411c449a1c230af90f7650a6ef1703b544c23ef6e80e142"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/B_r1"
+      },
+      "artifact_inventory_sha256": "1fe73b959f5006241c69f771b30b2b86554e17080469c8dbccd8fba3f4a00cf9",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "fresh",
+      "enriched_summary_sha256": "742fbcee8d70f4639be29941124c1439a6a93f0cce15dfa32be3a5e4f4a88216",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 0.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r1",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "23d369f657218adc72687f34073d8dfd553247f5f08f73b5a37416ae4547fc8b",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-B-r1-1786613079565206253",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "B",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "951a8edc13f16fbb0da6f545a9301e377e557c488beaf98fa9c0e04a8e443167",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "7b567dbab8b2ea62163d658bb18389b2328018d0a01a26b19e5b7c258c93965f",
+          "events.jsonl": "593dee4a35757da3aca88bb07924ef6f4caf315bd94b25ea9a3faadec9c5584c"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/B_r2"
+      },
+      "artifact_inventory_sha256": "e612a1652bf4b734fb2500fecefbabe97c95cef911c50c82e42b672d21e8fb92",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "fresh",
+      "enriched_summary_sha256": "c72183b704c259a2ff5c45575ce098a70ed64a39e0fdd425dccf7fc79b9a2ea8",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 0.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r2",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "b9cb94b0e965c2c8bf2f1c4f086429e863961b2b8077089390dbe9b8607e6c96",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-B-r2-1786613085070754390",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "C30",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "e4e8514c1d85a2c0599cc9d93faeeeda7eba65b0ec981e86c5457f1b44cbb08d",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "6eef864d2c5423b32a8dbdc9ee73213da042a1a4fa2e58c5bda89050f7d17837",
+          "events.jsonl": "90f2e21f51188cba704e82f5d37bd88c10303178c1eea0083df9c9ae06edb7bd"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/C30_r1"
+      },
+      "artifact_inventory_sha256": "d0835a590504d97d33248ea64dde80719848340529c31fab29f476bf2041d158",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "persistent",
+      "enriched_summary_sha256": "0f4ff788b8f08aa782c655dde130c5a6823762c3c5a83330f4ee8c7e83337228",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 30.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r1",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "c6c7f6730906f14e10668a0d3cc2f396f494388bb27d48a7ef2e759369864fbc",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-C30-r1-1786613090444344374",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "C30",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "454f5d33129fecd286da3a6977ad29eafc85eea6d5f50f3c153ef21a8e35845f",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "b3549155a01b60e62bf53771e1e5d9526f41c5745b41be216d08fd496889d156",
+          "events.jsonl": "6b97c3afa8230e8358fedcedf3965ca1bac4fbf49ec2a3bb508df381630d25ec"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/C30_r2"
+      },
+      "artifact_inventory_sha256": "481e15cb885011bd91c45982a96844fb73d1a5f80fa9202b059651fb4d33d2b2",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "persistent",
+      "enriched_summary_sha256": "0810691bb24dfa0893e386aa106c2c5cd5b52bad5d2419957f4d46a3f3be8d4e",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 30.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r2",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "3d182e413752c52118a2ce19ef8ba657dd92452063f201e3fe57f75333b4d52d",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-C30-r2-1786613426193091922",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "C120",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "0422ee1c0b4727359427b2270fe24f49a09ee364f10e7e70a221ae688521e621",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "50dfe669b4aa0aee0637602a624fa93d2e2684faca0eec5b0749e44d3d5a35ca",
+          "events.jsonl": "dc64efc5ac95e603ee8ae19c5984322298eaeb275f22964d04e41c89c0216453"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/C120_r1"
+      },
+      "artifact_inventory_sha256": "6557f783a7d87fc2a14b6c7f42d5ae6aecb180f740af1eb5ccbfc6ebb9454589",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "persistent",
+      "enriched_summary_sha256": "0bedf2e1d54499aca39be20761e2eb270545e3af661818adddc608a29ed8b45e",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 120.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r1",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "bf90cb5b41e0cf1e252332b1e8b4b883d9a2c463e67e31af323e46e70ce6c183",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-C120-r1-1786613761927931696",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    },
+    {
+      "arm": "C120",
+      "artifact_inventory": {
+        "artifact_count": 4,
+        "classification": "ARTIFACT_INVENTORY",
+        "files": {
+          "RESULT.json": "9f764b2a2e8b0964d81a91179cc989b5ca1779bc11f3d9a89f0bb45c2eb11b1d",
+          "critical_path.json": "7c9f4717eeafb2652dbf1d23b7138c4735a799dd83f8b83fd6d0009c619669cc",
+          "events.csv": "acaeb3fe60ea89fb812366021f13d45d645379f50ebfa3622cad4f05b9a81bb2",
+          "events.jsonl": "309f4f43fcf1e5c938fd87c71ffcbaf0e57541834ff05d583e5c14ade5367496"
+        },
+        "out_dir": "/home/oseasy/e2_data_disk2/skill_preflight_runs/llm_research_d1c/out/C120_r2"
+      },
+      "artifact_inventory_sha256": "14369b9abf220c68e471275cb4a8799191fafc31d0205c91818ea4fbf20ff79d",
+      "batch_count": 12,
+      "batch_size_sequence": [
+        5,
+        10,
+        12,
+        13,
+        16,
+        10,
+        15,
+        16,
+        9,
+        16,
+        16,
+        10
+      ],
+      "canonical_summary_hash_algorithm": "canonical_json_sha256",
+      "classification": "D1C_EMBEDDING_ARM_RESULT",
+      "client_lifecycle": "persistent",
+      "enriched_summary_sha256": "ce44a1b1b7d30bdf88ecb94206c3657aea5245948da03464464cdbefde0a4b2c",
+      "enriched_summary_sha256_algorithm": "canonical_json_sha256",
+      "enriched_summary_sha256_scope": "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256",
+      "error_classes": {},
+      "error_request_count": 0,
+      "idle_gap_s": 120.0,
+      "legacy_result_hash_algorithm": "legacy_default_json_sha256",
+      "manifest_sha256": "a8ae10167a44825b21487ad9d4ea77110fe8b429dab434ed43673e70d2757649",
+      "not_end_to_end_ued": true,
+      "repeat": "r2",
+      "request_results": [
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 5,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 12,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 13,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 15,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 9,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 16,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        },
+        {
+          "embedding_shape": 768,
+          "error_class": null,
+          "exception_class": null,
+          "http_status": null,
+          "response_item_count": 10,
+          "sdk_retry_count": 0,
+          "status": "ok"
+        }
+      ],
+      "result_sha256": "837fafb9ed748deb3bbf614e9b29de5c2e8aad95b89ffcff493ae2de84d53a2c",
+      "result_sha256_algorithm": "legacy_default_json_sha256",
+      "result_sha256_scope": "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY",
+      "run_id": "d1c-C120-r2-1786615088280062706",
+      "sdk_retry_request_count": 0,
+      "total_sdk_retries": 0
+    }
+  ]
+}
