@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "classification": "D6_TIMING_OVERLAP_OFFLINE_AUDIT",
+  "generated_utc": "2026-08-13T19:17:59.579432+00:00",
+  "status": "INSUFFICIENT_SESSION_BOUNDARY_TRACE",
+  "queue_decision": "NO_QUEUE_JUSTIFIED_INSUFFICIENT_TRACE",
+  "conclusion": "NO_QUEUE_JUSTIFIED_INSUFFICIENT_TRACE",
+  "network_calls": 0,
+  "completion_requests": 0,
+  "embedding_requests": 0,
+  "gpu_processes_started": 0,
+  "executed_count": 0,
+  "input_paths": [
+    "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\skill_preflight_ued_d3_worktree\\dicode_src\\experiments\\performance\\llm_research_d\\MASON_LLM_BASELINE_AUDIT.json"
+  ],
+  "script_sha256": "567815ac0d4d8cc1aaee18680f211d131fcd6b02762eb522ff52afb9cef4fd79",
+  "source": {
+    "mason_audit": {
+      "path": "MASON_LLM_BASELINE_AUDIT.json",
+      "sha256": "f1ff56f47a217bab03205bf35eaeed6a9f09b3e3e4fb336a1a66c009d05426d8"
+    }
+  },
+  "wall_clock_s": 76400.0,
+  "component_seconds": {
+    "evolution": 32729.41,
+    "compilation": 3669.25,
+    "training": 59767.62,
+    "sum": 96166.28
+  },
+  "overlap": {
+    "component_sum_minus_wall_s_upper_bound": 19766.28,
+    "fraction_of_component_sum": 0.20554273285812863,
+    "interpretation": "upper bound only: component durations exceed wall; background-thread overlap is documented, but actual overlap intervals are not observed"
+  },
+  "phase_duration_distribution_s": {
+    "evolution": {
+      "count": 22,
+      "median": 1516.0700000000002,
+      "p95": 1713.8625
+    },
+    "compilation": {
+      "count": 22,
+      "median": 168.95,
+      "p95": 194.8325
+    }
+  },
+  "synchronized_wait": {
+    "median_s": null,
+    "p95_s": null,
+    "threshold_median_fraction": 0.05,
+    "threshold_p95_s": 120.0,
+    "reason_unavailable": "timings.csv summary has phase durations only; no critical_path/events or aligned producer-consumer wait spans, so the 5% relative median gate cannot be evaluated"
+  },
+  "gpu_idle_attribution": {
+    "gpu3_training_is_historical_only": true,
+    "idle_seconds_observed": null,
+    "reason_unavailable": "no event-level GPU idle intervals in the archived summary"
+  },
+  "guardrails": [
+    "Offline read of archived audit only.",
+    "No fixed sequence queue experiment was launched because the gating median/P95 wait is not observable.",
+    "NO_QUEUE_JUSTIFIED_INSUFFICIENT_TRACE means the threshold cannot be evaluated; it is not a claim that queue overhead is zero."
+  ],
+  "report_sha256": "c3e28803737e9c5e43f4ef5f59032f13349b8a6e6e148ebe367f1d7aa193a74d"
+}

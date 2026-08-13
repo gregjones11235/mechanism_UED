@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "classification": "D5_RETRY_DIAGNOSTIC_OFFLINE_AUDIT",
+  "generated_utc": "2026-08-13T19:17:59.392069+00:00",
+  "status": "INSUFFICIENT_REQUEST_TRACE",
+  "conclusion": "NOT_REPRODUCED",
+  "root_cause": null,
+  "network_calls": 0,
+  "completion_requests": 0,
+  "embedding_requests": 0,
+  "gpu_processes_started": 0,
+  "executed_count": 0,
+  "observed_categories": {
+    "retry_events_total": 863,
+    "retry_events_chat_completions": 289,
+    "retry_events_embeddings": 574,
+    "http_200": 2201,
+    "http_non_200": 0,
+    "parse_failures": 0,
+    "empty_responses": 0,
+    "compilation_failures": 0,
+    "requeue_events": 0,
+    "reflection_events": 0,
+    "api_repair_events": 0
+  },
+  "unavailable_request_level_fields": {
+    "connection_reset_vs_pool_contention": null,
+    "timeout_events": null,
+    "event_loop_identity": null,
+    "http_client_identity": null,
+    "session_boundary": null,
+    "request_id": null,
+    "request_start_end_timestamps": null,
+    "prompt_or_response_payload": null
+  },
+  "transport_evidence": {
+    "all_attempt06_requests_eventually_http_200": true,
+    "rate_limit_or_server_error_observed": false,
+    "retry_description": "All retries are transport-level (openai._base_client 'Retrying request to ... in ~0.40-0.49s'); every request eventually returned HTTP 200 OK. No HTTP 4xx/5xx, no rate-limit, no server-error status observed.",
+    "direct_evidence": [
+      "provider/model/base_url/temperature/max_tokens from overrides.yaml + launch_manifest",
+      "request counts, retry counts, HTTP status histogram from run_dicode.log httpx/openai logs",
+      "zero parse/compile/empty/requeue from trainer.stdout marker grep",
+      "per-session Evolution/Compilation/Training durations from timings.csv",
+      "Ollama -np 1 single-slot server config from process_manifest argv",
+      "embedding batch-size growth series from trainer.stdout",
+      "554 task_graph nodes from task_graph.graphml node count"
+    ],
+    "inference_not_allowed": [
+      "retries are connection/transport-level (all requests eventually 200 OK; backoff ~0.40-0.49s) — exact trigger (connection reset vs pool contention vs server-side close) is not captured in these logs",
+      "the ~30% Evolution slowdown is driven by growing embedding batch + archive context; this is a correlation, not a proven causal attribution",
+      "returned response text length and prompt content are NOT logged in these files — cannot be extracted; only inferable from response-consumption in code",
+      "prompt SHA256 / message hashes are not recorded in this run (profiling disabled, no manifest existed)",
+      "per-request first-token latency is not observable from these logs"
+    ]
+  },
+  "source": {
+    "mason_audit": {
+      "path": "MASON_LLM_BASELINE_AUDIT.json",
+      "sha256": "f1ff56f47a217bab03205bf35eaeed6a9f09b3e3e4fb336a1a66c009d05426d8"
+    },
+    "d1c_report": {
+      "path": "D1C_FINAL_REPORT.md",
+      "sha256": "d502083d759272030699112f420e7d86ffd47d9eaf5fb6dbefe9db8258a94dd2"
+    }
+  },
+  "guardrails": [
+    "No completion, embedding, or metadata provider request was made.",
+    "No credential was read, sourced, or serialized.",
+    "No root cause is asserted without request-level trace fields.",
+    "No D1/D2 evidence file was modified."
+  ],
+  "input_paths": [
+    "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\skill_preflight_ued_d3_worktree\\dicode_src\\experiments\\performance\\llm_research_d\\MASON_LLM_BASELINE_AUDIT.json",
+    "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\skill_preflight_ued_d3_worktree\\dicode_src\\experiments\\performance\\llm_research_d\\D1C_FINAL_REPORT.md"
+  ],
+  "script_sha256": "fd8ffc2e4d59dbdb66d0c0a5f667c2878500b022578a232ec83dee222d60f507",
+  "report_sha256": "334ba43b0832fabdb8dde0fffe3a1b5a965bc2dc940b556005d20a4c56ffbac4"
+}
