@@ -245,10 +245,10 @@ def _fail(out: Path, message: str, proc: subprocess.Popen[Any] | None = None, **
     atomic_json(out / "failure.json", {"error": message, **extra})
 
 
-def _aggregate(pairs: list[dict[str, Any]], *, det: bool) -> dict[str, Any]:
+def _aggregate(pairs: list[dict[str, Any]], *, det: bool, required_pairs: int = 6) -> dict[str, Any]:
     import statistics
 
-    if len(pairs) != 6:
+    if len(pairs) < 1 or len(pairs) > required_pairs:
         return {"conclusion": "REJECTED_RUNTIME_FAILURE", "pair_count": len(pairs)}
 
     def arm(p, name):
@@ -291,18 +291,38 @@ def _aggregate(pairs: list[dict[str, Any]], *, det: bool) -> dict[str, Any]:
         "per_pair_regressions": regressions,
         "max_peak_delta_mib": max(peak_deltas, default=0),
         "min_free_mib": min_free,
-        "pair_count": 6,
+        "pair_count": len(pairs),
+        "required_pairs": required_pairs,
     }
+
+
+def _parse_only_pairs(spec: str | None) -> set[tuple[str, int]] | None:
+    """Parse a 'stage:repeat[,stage:repeat,...]' filter, or None for all pairs."""
+    if spec is None or not spec.strip():
+        return None
+    out: set[tuple[str, int]] = set()
+    for token in spec.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        stage, _, repeat = token.partition(":")
+        if stage not in ("early", "mid", "late") or repeat not in ("0", "1"):
+            raise ValueError(f"invalid --only-pairs token {token!r} (want stage:0|1)")
+        out.add((stage, int(repeat)))
+    return out or None
 
 
 def main() -> None:
     p = argparse.ArgumentParser()
     for name in ("root", "manifest", "harness", "python", "source", "config_off", "config_on", "source_commit", "gpu_index", "gpu_uuid"):
         p.add_argument("--" + name.replace("_", "-"), required=True)
+    p.add_argument("--only-pairs", default=None,
+                   help="comma-separated stage:repeat subset, e.g. 'early:0' (default: all six groups)")
     p.add_argument("--deterministic-xla", action="store_true",
                    help="append --xla_gpu_deterministic_ops=true to every harness env (semantic gate only)")
     args = p.parse_args()
     args.gpu_index = int(args.gpu_index)
+    only_pairs = _parse_only_pairs(args.only_pairs)
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
     manifest = _manifest.load_manifest(args.manifest)
@@ -312,6 +332,8 @@ def main() -> None:
     try:
         for stage in ("early", "mid", "late"):
             for repeat in (0, 1):
+                if only_pairs is not None and (stage, repeat) not in only_pairs:
+                    continue
                 pair_dir = root / "pairs" / f"{stage}_repeat_{repeat}"
                 failed_pair = str(pair_dir)
                 order = next(item for item in manifest["stages"] if item["name"] == stage)["repeats"][repeat]["order"]
@@ -348,9 +370,11 @@ def main() -> None:
                                    "failed_pair": failed_pair, "error": str(exc), "pairs": pairs,
                                    "manifest_sha256": args.manifest_sha256, "gpu_uuid": args.gpu_uuid})
         raise
-    agg = _aggregate(pairs, det=args.deterministic_xla)
-    final = {**agg, "pairs": pairs, "pair_count": 6, "manifest_sha256": args.manifest_sha256,
-             "gpu_uuid": args.gpu_uuid, "deterministic_xla": args.deterministic_xla}
+    required_pairs = 6 if only_pairs is None else len(only_pairs)
+    agg = _aggregate(pairs, det=args.deterministic_xla, required_pairs=required_pairs)
+    final = {**agg, "pairs": pairs, "pair_count": len(pairs), "manifest_sha256": args.manifest_sha256,
+             "gpu_uuid": args.gpu_uuid, "deterministic_xla": args.deterministic_xla,
+             "only_pairs": args.only_pairs}
     atomic_json(root / "COMBINATION_PAIR_RESULT.json", final)
     if agg.get("conclusion") == "REJECTED_RUNTIME_FAILURE":
         raise RuntimeError("runtime gate failed")

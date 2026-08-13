@@ -318,6 +318,56 @@ def test_append_xla_flag_and_arm_env(tmp_path):
     assert env["PYTHONPATH"] == str(src / "src")
 
 
+def test_parse_only_pairs():
+    b = load("perf48_combo_benchmark")
+    assert b._parse_only_pairs(None) is None
+    assert b._parse_only_pairs("") is None
+    assert b._parse_only_pairs("early:0") == {("early", 0)}
+    assert b._parse_only_pairs("early:0,mid:1,late:0") == {("early", 0), ("mid", 1), ("late", 0)}
+    # trailing comma is tolerated (empty tokens skipped)
+    assert b._parse_only_pairs("early:0,") == {("early", 0)}
+    for bad in ("early", "early:2", "foo:0"):
+        try:
+            b._parse_only_pairs(bad)
+            raise AssertionError(f"expected ValueError for {bad!r}")
+        except ValueError:
+            pass
+
+
+def test_harness_verify_gpu(monkeypatch):
+    import types
+    h = load("perf48_combo_harness")
+    fake_jax = types.SimpleNamespace(default_backend=lambda: "gpu", devices=lambda: [1])
+    monkeypatch.setattr(h.os, "environ", {"CUDA_VISIBLE_DEVICES": "GPU-1"})
+    # inject fake jax via the import inside _verify_gpu
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name == "jax":
+            return fake_jax
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    args = types.SimpleNamespace(required_gpu_uuid="GPU-1")
+    h._verify_gpu(args)  # must not raise
+    args_bad = types.SimpleNamespace(required_gpu_uuid="GPU-2")
+    try:
+        h._verify_gpu(args_bad)
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError:
+        pass
+    # CPU backend must fail when a GPU UUID is required
+    fake_jax_cpu = types.SimpleNamespace(default_backend=lambda: "cpu", devices=lambda: [])
+    fake_import_cpu = lambda name, *a, **k: fake_jax_cpu if name == "jax" else real_import(name, *a, **k)
+    monkeypatch.setattr(builtins, "__import__", fake_import_cpu)
+    try:
+        h._verify_gpu(args)
+        raise AssertionError("expected RuntimeError for cpu backend")
+    except RuntimeError:
+        pass
+
+
 # ---- supervisor ----------------------------------------------------------------
 def test_supervisor_conclusion_contract_and_atomic(tmp_path):
     s = load("perf48_combo_supervisor")

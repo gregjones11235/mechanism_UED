@@ -630,13 +630,26 @@ def _real_runtime(manifest: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
     }
 
 
+def _verify_gpu(args) -> None:
+    """Fail-closed GPU/UUID verification for both preflight and run modes.
+
+    When ``required_gpu_uuid`` is set: CUDA_VISIBLE_DEVICES must equal it and
+    JAX must see exactly one GPU (the UUID form selects the exact device).
+    """
+    import jax
+
+    if not args.required_gpu_uuid:
+        return
+    if os.environ.get("CUDA_VISIBLE_DEVICES", "") != args.required_gpu_uuid:
+        raise RuntimeError("CUDA_VISIBLE_DEVICES must be exact GPU UUID")
+    if jax.default_backend() != "gpu" or len(jax.devices()) != 1:
+        raise RuntimeError("JAX must see exactly one GPU")
+
+
 def _preflight(args, loaded: dict[str, Any]) -> dict[str, Any]:
     import jax
 
-    if args.required_gpu_uuid and os.environ.get("CUDA_VISIBLE_DEVICES", "") != args.required_gpu_uuid:
-        raise RuntimeError("CUDA_VISIBLE_DEVICES must be exact GPU UUID")
-    if args.required_gpu_uuid and (jax.default_backend() != "gpu" or len(jax.devices()) != 1):
-        raise RuntimeError("JAX must see exactly one GPU")
+    _verify_gpu(args)
     config = _load_config(args.config)
     _config_contract(config)
     _arm_contract(config, args.arm)
@@ -678,6 +691,7 @@ def main(argv: list[str] | None = None) -> int:
         _preflight(args, load_manifest(args.manifest))
         return 0
 
+    _verify_gpu(args)
     loaded = load_manifest(args.manifest)
     config = _load_config(args.config)
     _config_contract(config)
