@@ -82,9 +82,14 @@ def build_stage_spec(frozen_run: Path, base_config: Path, out: Path) -> dict[str
     for name in STAGES:
         meta = stages_meta[name]
         stage_dir = frozen_run / "stages" / name
+        # the frozen manifest records the exact checkpoint subdir (e.g.
+        # stages/early/checkpoint/600) whose basename matches global_step
+        checkpoint_raw = (meta.get("checkpoint") or {}).get("path")
+        checkpoint = Path(checkpoint_raw) if checkpoint_raw and Path(checkpoint_raw).is_dir() else (
+            stage_dir / "checkpoint" / str(meta["global_step"]))
         stage_spec["stages"][name] = {
             "graph": str(stage_dir / "task_graph.graphml"),
-            "checkpoint": str(stage_dir / "checkpoint"),
+            "checkpoint": str(checkpoint),
             "conditioning_path": str(stage_dir / "conditioning.npy"),
             "task_ids": [str(x) for x in meta["task_ids"]],
             "global_step": int(meta["global_step"]),
