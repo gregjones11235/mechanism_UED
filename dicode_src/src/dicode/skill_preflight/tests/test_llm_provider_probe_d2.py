@@ -1,5 +1,6 @@
 """Tests for the D2 provider availability probe (offline, no network/LLM/GPU)."""
 import importlib.util
+import hashlib
 import io
 import json
 import sys
@@ -64,22 +65,45 @@ def test_1_no_key_blocked(monkeypatch, tmp_path):
 
 # 2. credential value never in JSON
 def test_2_credential_value_never_serialized(monkeypatch, tmp_path):
-    monkeypatch.setenv("DEEPINFRA_API_KEY", "sk-SECRET-VALUE")
-    monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)  # then absent for the probe
+    secret = "sk-" + ("S" * 1006)  # unique 1009-char length for leak detection
+    monkeypatch.setenv("DEEPINFRA_API_KEY", secret)
     _offline_network(monkeypatch)
     p = probe.build_probe(str(_config_root(tmp_path)), "b", "h", "c", "utc")
+    assert p["credential_present"] is True
     assert p["credential_value_serialized"] is False
     serialized = json.dumps(p)
-    assert "sk-SECRET" not in serialized
+    assert secret not in serialized
+    assert str(len(secret)) not in serialized
+    assert hashlib.sha256(secret.encode()).hexdigest()[:16] not in serialized
+    assert p["external_provider_request_performed"] is False
     assert "credential_present" in p and isinstance(p["credential_present"], bool)
 
 
-# 3. external DeepInfra request never called when credential absent
-def test_3_external_request_zero_calls(monkeypatch, tmp_path):
+# 3. external DeepInfra request never called for either credential branch
+@pytest.mark.parametrize("with_credential", [False, True])
+def test_3_external_request_zero_calls(monkeypatch, tmp_path, with_credential):
     src = (LLM_D / "d2_provider_probe.py").read_text(encoding="utf-8")
-    # the tool has no external DeepInfra endpoint call at all
-    assert "api.deepinfra.com" not in src or "external_provider_request_performed" in src
-    p = _build(monkeypatch, tmp_path)
+    assert "api.deepinfra.com" not in src
+    urls = []
+
+    def fake_urlopen(url, timeout):
+        urls.append(str(url))
+        if str(url) == "http://127.0.0.1:5000/v1/models":
+            return _FakeResponse(json.dumps({"data": []}))
+        if str(url) == "http://127.0.0.1:11434/api/tags":
+            return _FakeResponse(json.dumps({"models": []}))
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(probe.urllib.request, "urlopen", fake_urlopen)
+    if with_credential:
+        monkeypatch.setenv("DEEPINFRA_API_KEY", "test-only-secret")
+    else:
+        monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
+    p = probe.build_probe(str(_config_root(tmp_path)), "b", "h", "c", "utc")
+    assert urls == ["http://127.0.0.1:5000/v1/models",
+                    "http://127.0.0.1:11434/api/tags"]
+    assert all("api.deepinfra.com" not in url for url in urls)
+    assert p["credential_present"] is with_credential
     assert p["external_provider_request_performed"] is False
 
 
@@ -246,19 +270,20 @@ def test_17_invalid_json_is_explicit(monkeypatch):
                       "model_names": [], "error_class": "invalid_json"}
 
 
-def test_18_main_offline_fake_end_to_end(monkeypatch, tmp_path):
+@pytest.mark.parametrize("with_credential", [False, True])
+def test_18_main_offline_fake_end_to_end(monkeypatch, tmp_path, with_credential):
     root = _config_root(tmp_path)
     out = tmp_path / "out" / "probe.json"
-    calls = {"urlopen": 0, "git": 0}
+    calls = {"urls": [], "git": 0}
 
     def fake_urlopen(url, timeout):
-        calls["urlopen"] += 1
-        assert str(url).startswith("http://127.0.0.1:")
-        if str(url).endswith("/v1/models"):
+        calls["urls"].append(str(url))
+        if str(url) == "http://127.0.0.1:5000/v1/models":
             return _FakeResponse(json.dumps({"data": [{
                 "id": "Qwen/Qwen3-235B-A22B-Thinking-2507-FP8"}]}))
-        assert str(url).endswith("/api/tags")
-        return _FakeResponse(json.dumps({"models": [{"name": "14b"}]}))
+        if str(url) == "http://127.0.0.1:11434/api/tags":
+            return _FakeResponse(json.dumps({"models": [{"name": "14b"}]}))
+        raise AssertionError(f"unexpected URL: {url}")
 
     def fake_git(cmd, **kwargs):
         calls["git"] += 1
@@ -267,7 +292,10 @@ def test_18_main_offline_fake_end_to_end(monkeypatch, tmp_path):
                   ("git", "rev-parse", "--short", "HEAD"): "commit\n"}
         return values[tuple(cmd)]
 
-    monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
+    if with_credential:
+        monkeypatch.setenv("DEEPINFRA_API_KEY", "test-only-secret")
+    else:
+        monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
     monkeypatch.setattr(probe.urllib.request, "urlopen", fake_urlopen)
     monkeypatch.setattr(probe.subprocess if hasattr(probe, "subprocess") else
                         __import__("subprocess"), "check_output", fake_git)
@@ -276,7 +304,13 @@ def test_18_main_offline_fake_end_to_end(monkeypatch, tmp_path):
         rc = probe.main([str(root), str(out)])
     loaded = probe.load_probe(out)
     assert rc == 0
-    assert calls == {"urlopen": 2, "git": 3}
+    assert calls == {
+        "urls": ["http://127.0.0.1:5000/v1/models",
+                 "http://127.0.0.1:11434/api/tags"],
+        "git": 3,
+    }
+    assert all("api.deepinfra.com" not in url for url in calls["urls"])
+    assert loaded["credential_present"] is with_credential
     assert loaded["decision_inputs"]["local_model_available"] is True
     assert '"local_model_available": true' in stdout.getvalue().lower()
     assert loaded["external_provider_request_performed"] is False
@@ -285,14 +319,16 @@ def test_18_main_offline_fake_end_to_end(monkeypatch, tmp_path):
 
 def test_18b_result_has_persistent_path_and_tmp_provenance(monkeypatch, tmp_path):
     p = _build(monkeypatch, tmp_path)
-    persistent = "experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json"
+    repo_root = Path(__file__).parents[5]
+    persistent = "dicode_src/experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json"
     original = "/tmp/llm_repair_probe_VFAed5/out/D2_PROVIDER_PROBE.json"
     r = probe.build_d2_result(p, persistent, original, True)
     assert r["provider_probe_path"] == persistent
+    assert (repo_root / r["provider_probe_path"]).is_file()
     assert r["provider_probe_provenance"] == {
-        "original_output_path": original,
+        "original_probe_runtime_path": original,
         "sandbox_cleaned": True,
-        "original_output_path_present_after_cleanup": False,
+        "original_probe_runtime_path_present_after_cleanup": False,
     }
 
 
@@ -303,7 +339,10 @@ def test_18c_static_evidence_hashes_and_failure_disclosure():
     report = (LLM_D / "D2_AUDIT_REPAIR.md").read_text(encoding="utf-8")
     provider = probe.load_probe(provider_path)
     result = probe.load_result(result_path)
-    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence = probe.load_final_evidence(evidence_path)
+    independent_hash = probe.canonical_json_sha256(
+        {k: v for k, v in evidence.items() if k != "artifact_sha256"})
+    assert independent_hash == evidence["artifact_sha256"]
     assert evidence["original_probe"]["artifact_sha256"] == provider["artifact_sha256"]
     assert evidence["original_probe"]["file_sha256"] == probe.file_sha256(provider_path)
     assert evidence["original_result"]["artifact_sha256"] == \
@@ -318,6 +357,19 @@ def test_18c_static_evidence_hashes_and_failure_disclosure():
     assert evidence["post_write_failure"]["exit_code_zero"] is False
     assert evidence["real_provider_probe_rerun"] is False
     assert "KeyError" in report and "第二次真实 provider probe" in report
+    repo_root = Path(__file__).parents[5]
+    assert (repo_root / evidence["repaired_result"][
+        "persistent_probe_path"]).is_file()
+
+
+def test_18d_final_evidence_rejects_top_level_tamper(tmp_path):
+    evidence = json.loads((LLM_D / "D2_EVIDENCE_FINAL.json").read_text(
+        encoding="utf-8"))
+    evidence["network_requests_during_repair"] = 999
+    tampered = tmp_path / "tampered_final.json"
+    tampered.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(ValueError, match="tampered"):
+        probe.load_final_evidence(tampered)
 
 
 # 19. no B/C/preflight/PPO import

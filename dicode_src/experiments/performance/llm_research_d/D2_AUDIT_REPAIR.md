@@ -25,6 +25,10 @@
 
 9. **终态证据绑定**：新增 `D2_EVIDENCE_FINAL.json`，绑定原 probe 的 probe UTC、internal canonical SHA、file SHA，旧/新工具 file SHA，首次 post-write failure，以及旧/新 `D2_RESULT.json` 的 internal/file SHA。
 
+10. **第二轮完整性修复**：持久 probe 路径改为可从 Git 仓库根解析的 `dicode_src/experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json`；原始 `/tmp` 路径以 `original_probe_runtime_path` 保留。`D2_EVIDENCE_FINAL.json` 新增排除自身 `artifact_sha256` 字段的 canonical hash、算法和作用域，并由 `load_final_evidence` 复算、篡改拒绝。credential 存在/不存在两条路径均使用 offline fake，精确断言只访问两个 `127.0.0.1` metadata URL，未执行真实网络请求。
+
+`D2_EVIDENCE_FINAL.json` 的内部 canonical hash 写在 JSON 内。其 raw file SHA256 不写入自身，避免自引用循环；raw file SHA256 作为外部审计值仅记录于本报告。
+
 ## 最终结论
 
 `D2_BLOCKED_EXTERNAL_PROVIDER_EVIDENCE_COMPLETE`
@@ -40,3 +44,11 @@
 - 修复后 `D2_RESULT.json` internal canonical `artifact_sha256`：`f0e9b453e64582e583019b0259d0e6a7a8bb4708649ca35bda979a22a5cc9b1e`
 - 修复后 `D2_RESULT.json` raw file SHA256：`ef1054fd596d1ff7afc93c13b48f9067785532897a274462e7a50104f56fa362`
 - `d2_provider_probe.py` 修复前/后 raw file SHA256：`7e155a1d4cc1c876a2985b82b5a4e86c633f42770499b895f959790dbf63c400` / `0f67a7aea730c0b0e4a660bb729be67afe259fbe85d8c0b3e5e59ed2c02d5c09`
+
+第二轮最终值：
+
+- `D2_RESULT.json` internal canonical `artifact_sha256`：`54b1e01d6afa01a98f8fa0396ad8e9ccfec6ca79d87f8e78c55e1ecf557acaa6`
+- `D2_RESULT.json` raw file SHA256：`45e1b0b35d2cbc1cde984685f00981bda055d52f2c368c9cef048d51324a1f0c`
+- `D2_EVIDENCE_FINAL.json` internal canonical `artifact_sha256`：`234b766a8c494d6fa0f3afd875270ae8486a96c4a72b747f81deb92f99c5e037`
+- `D2_EVIDENCE_FINAL.json` raw file SHA256（外部审计值）：`1356d9cfb4ad8ecb2783b7019f3745583c2e5031a3c7d57e831363dfb0797dd2`
+- `d2_provider_probe.py` 第二轮 raw file SHA256：`8087e6301170472ac2efe7c2dd3afc1474dcbe853c89e2c055af1188366bca9a`

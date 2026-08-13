@@ -1,5 +1,8 @@
 {
   "classification": "D2_BLOCKED_PROVIDER_EVIDENCE_REPAIR_FINAL",
+  "artifact_sha256": "234b766a8c494d6fa0f3afd875270ae8486a96c4a72b747f81deb92f99c5e037",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "D2_EVIDENCE_FINAL_FIELDS_EXCLUDING_ARTIFACT_SHA256",
   "conclusion": "D2_BLOCKED_EXTERNAL_PROVIDER_EVIDENCE_COMPLETE",
   "d2_benchmark_executed": false,
   "gpu_used_during_repair": false,
@@ -26,14 +29,14 @@
   },
   "real_provider_probe_rerun": false,
   "repair_tool": {
-    "new_file_sha256": "0f67a7aea730c0b0e4a660bb729be67afe259fbe85d8c0b3e5e59ed2c02d5c09",
+    "new_file_sha256": "8087e6301170472ac2efe7c2dd3afc1474dcbe853c89e2c055af1188366bca9a",
     "old_file_sha256": "7e155a1d4cc1c876a2985b82b5a4e86c633f42770499b895f959790dbf63c400",
     "validation_mode": "offline fakes only"
   },
   "repaired_result": {
-    "artifact_sha256": "f0e9b453e64582e583019b0259d0e6a7a8bb4708649ca35bda979a22a5cc9b1e",
-    "file_sha256": "ef1054fd596d1ff7afc93c13b48f9067785532897a274462e7a50104f56fa362",
-    "persistent_probe_path": "experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json"
+    "artifact_sha256": "54b1e01d6afa01a98f8fa0396ad8e9ccfec6ca79d87f8e78c55e1ecf557acaa6",
+    "file_sha256": "45e1b0b35d2cbc1cde984685f00981bda055d52f2c368c9cef048d51324a1f0c",
+    "persistent_probe_path": "dicode_src/experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json"
   },
   "speed_or_quality_conclusion_available": false
 }

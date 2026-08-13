@@ -28,6 +28,7 @@ SCHEMA_VERSION = 2
 CLASSIFICATION = "D2_PROVIDER_AVAILABILITY_PROBE"
 CANONICAL_ALGORITHM = "canonical_json_sha256"
 CANONICAL_SCOPE = "PROBE_FIELDS_EXCLUDING_ARTIFACT_SHA256"
+FINAL_EVIDENCE_SCOPE = "D2_EVIDENCE_FINAL_FIELDS_EXCLUDING_ARTIFACT_SHA256"
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -271,9 +272,9 @@ def build_d2_result(probe: dict, probe_path: str,
         "provider_probe_sha256": probe.get("artifact_sha256"),
         "provider_probe_path": probe_path,
         "provider_probe_provenance": {
-            "original_output_path": original_probe_path,
+            "original_probe_runtime_path": original_probe_path,
             "sandbox_cleaned": original_probe_path_cleaned,
-            "original_output_path_present_after_cleanup": (
+            "original_probe_runtime_path_present_after_cleanup": (
                 False if original_probe_path_cleaned else None),
         },
         "arms_planned": ["Ollama 14B", "Qwen3 235B"],
@@ -303,6 +304,20 @@ def load_result(path: Path) -> dict:
         {k: v for k, v in raw.items() if k != "artifact_sha256"})
     if recomputed != raw.get("artifact_sha256"):
         raise ValueError("D2 result artifact_sha256 mismatch (tampered)")
+    return raw
+
+
+def load_final_evidence(path: Path) -> dict:
+    """Load final D2 evidence and reject any canonical-content tampering."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    recomputed = canonical_json_sha256(
+        {k: v for k, v in raw.items() if k != "artifact_sha256"})
+    if recomputed != raw.get("artifact_sha256"):
+        raise ValueError("D2 final evidence artifact_sha256 mismatch (tampered)")
+    if raw.get("artifact_sha256_algorithm") != CANONICAL_ALGORITHM:
+        raise ValueError("D2 final evidence hash algorithm mismatch")
+    if raw.get("artifact_sha256_scope") != FINAL_EVIDENCE_SCOPE:
+        raise ValueError("D2 final evidence hash scope mismatch")
     return raw
 
 
