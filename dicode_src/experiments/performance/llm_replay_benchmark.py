@@ -34,7 +34,7 @@ from llm_replay_harness import (
     cpu_jax_validation,
     enable_sdk_retry_counting,
 )
-from llm_replay_manifest import CLASSIFICATION as MANIFEST_CLASSIFICATION
+from llm_replay_manifest import CLASSIFICATION as MANIFEST_CLASSIFICATION, canonical
 
 CLASSIFICATION = "LLM_REPLAY_RESULT"
 
@@ -49,6 +49,30 @@ EVENT_FIELDS = (
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+# Hash-contract constants. ``result_sha256`` uses the LEGACY default-JSON
+# serialization (historical hashes must stay valid); the enriched-summary and
+# artifact-inventory hashes use the CANONICAL serialization.
+HASH_ALGORITHM_LEGACY = "legacy_default_json_sha256"
+HASH_ALGORITHM_CANONICAL = "canonical_json_sha256"
+RESULT_SHA256_SCOPE = "RESULT_FIELDS_EXCLUDING_RESULT_SHA256_AND_ARTIFACT_INVENTORY"
+ENRICHED_SHA256_SCOPE = "ENRICHED_SUMMARY_FIELDS_EXCLUDING_ENRICHED_SUMMARY_SHA256"
+
+
+def legacy_json_sha256(value: Mapping[str, Any]) -> str:
+    """Historical default JSON serialization (default=str) SHA256 — the
+    algorithm that produced all existing ``result_sha256`` values."""
+    return sha256_bytes(json.dumps(value, sort_keys=True, default=str).encode())
+
+
+def canonical_json_sha256(value: Any) -> str:
+    """Canonical JSON SHA256: json.dumps sort_keys=True separators=(',',':')
+    ensure_ascii=False, UTF-8, SHA256, with NaN/inf/array canonicalization."""
+    return sha256_bytes(
+        json.dumps(canonical(value), sort_keys=True, separators=(",", ":"),
+                   ensure_ascii=False).encode("utf-8")
+    )
 
 
 def _union_ns(intervals: list[tuple[int, int]]) -> int:
@@ -401,10 +425,14 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
         "critical_path": derived.get("critical_path", []),
         "do_cpu_jax": do_cpu_jax,
         "enabled_events": enabled_events,
+        # hash-contract metadata (constant; part of the raw RESULT content)
+        "result_sha256_scope": RESULT_SHA256_SCOPE,
+        "result_sha256_algorithm": HASH_ALGORITHM_LEGACY,
+        "legacy_result_hash_algorithm": HASH_ALGORITHM_LEGACY,
+        "canonical_summary_hash_algorithm": HASH_ALGORITHM_CANONICAL,
     }
-    result["result_sha256"] = sha256_bytes(
-        json.dumps({k: v for k, v in result.items() if k != "result_sha256"},
-                   sort_keys=True, default=str).encode())
+    result["result_sha256"] = legacy_json_sha256(
+        {k: v for k, v in result.items() if k != "result_sha256"})
     with sink.span("result_write", status="ok"):
         _atomic_json(out / "RESULT.json", result)
     if enabled_events:
@@ -414,7 +442,13 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
     # every raw artifact is reproducible after the run (audit evidence gate).
     from llm_replay_manifest import write_manifest
     write_manifest(manifest, out / "frozen_manifest.json")
-    result["artifact_inventory"] = _write_artifact_inventory(out)
+    inv = _write_artifact_inventory(out)
+    result["artifact_inventory"] = inv
+    result["artifact_inventory_sha256"] = canonical_json_sha256(inv)
+    result["enriched_summary_sha256_scope"] = ENRICHED_SHA256_SCOPE
+    result["enriched_summary_sha256_algorithm"] = HASH_ALGORITHM_CANONICAL
+    result["enriched_summary_sha256"] = canonical_json_sha256(
+        {k: v for k, v in result.items() if k != "enriched_summary_sha256"})
     return result
 
 

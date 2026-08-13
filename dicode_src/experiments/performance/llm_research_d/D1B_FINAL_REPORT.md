@@ -83,22 +83,26 @@ chat 中位 union：mif=1 ≈ 431.1s，mif=12 ≈ 417.1s（−3.3%，在重复�
 
 `test_llm_replay_d.py`：**33 passed**；py_compile PASS；git diff --check clean。（相关 skill_preflight 测试需 craftax/jax，本地不可跑，未在本地执行。）
 
-## 10. 命题判定
+## 10. 命题判定（修正后）
 
-| 命题 | 判定 | 依据 |
+| 命题 | 结论名 | 判定 |
 |---|---|---|
-| chat 并发没有墙钟收益 | **CONFIRMED** | D1 union 432/420/425s + chat 无界 union 431/417s，均无显著差异（`-np 1` 单槽瓶颈） |
-| embedding retry 由并发导致 | **NOT_CONFIRMED** | D1b 无批+批处理，1/2/4/25 并发下 SDK retry 全 0，未复现 Mason 的 ~100% embedding retry |
-| 有界并发减少 embedding retry | **NOT_CONFIRMED** | 各并发档 retry 均为 0，"减少"无从谈起；Mason 的 retry 来源未由并发解释 |
-| 235B 优于或慢于 14B | **BLOCKED_EXTERNAL_PROVIDER** | 无本地 235B、无 `DEEPINFRA_API_KEY`，未伪造双模型结论 |
+| chat 并发 | `D1_CHAT_CONCURRENCY_NO_LARGE_STABLE_GAIN` | 约 +3.3% 有限改善（wall/union），2 repeat 不足以证明稳定；既不代表零收益，也未证实无收益 |
+| 非批处理 embedding | `EMBEDDING_CONCURRENCY_SPEEDUP_OBSERVED_ON_SYNTHETIC_WORKLOAD` | 1→25 并发约 +76% 墙钟改善（合成 workload，不外推生产） |
+| 批处理 embedding 压力 | `BATCH_EMBEDDING_CONCURRENCY_SPEEDUP_OBSERVED_IN_STRESS_REPLAY` | 约 +27%~30% 改善（25×16-text 压力 replay） |
+| Mason retry 根因 | `D1B_EMBEDDING_RETRY_CAUSE_NOT_CONFIRMED` | 所有受控并发档 retry=0，未复现 Mason 574/575 retry |
+| 235B 对比 14B | `BLOCKED_EXTERNAL_PROVIDER` | 无本地 235B、无 `DEEPINFRA_API_KEY`，未伪造双模型结论 |
 
 ## 11. 最终状态
 
 **`LLM_RESEARCH_PASS_WITH_CONCERNS`**
 
-附加子结论：
-- D1 修订：`D1_CHAT_ONLY_SINGLE_SLOT_NO_SIGNIFICANT_SPEEDUP`。
-- D1b：`D1B_EMBEDDING_NO_IMPROVEMENT`（就"并发导致 retry"这一命题而言无改善，且未复现 retry）。
+四项主要研究结论：
+- Chat 并发：`D1_CHAT_CONCURRENCY_NO_LARGE_STABLE_GAIN`。
+- 非批处理 embedding：`EMBEDDING_CONCURRENCY_SPEEDUP_OBSERVED_ON_SYNTHETIC_WORKLOAD`。
+- 批处理 embedding 压力：`BATCH_EMBEDDING_CONCURRENCY_SPEEDUP_OBSERVED_IN_STRESS_REPLAY`。
+- Mason retry 根因：`D1B_EMBEDDING_RETRY_CAUSE_NOT_CONFIRMED`。
+- 235B：`BLOCKED_EXTERNAL_PROVIDER`。
 
 ## 12. 遗留限制
 

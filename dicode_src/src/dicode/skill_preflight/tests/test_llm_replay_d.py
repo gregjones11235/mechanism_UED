@@ -577,3 +577,166 @@ def test_16_sdk_retry_counter_actually_counts():
     assert counter.count() == 2
     counter.reset()
     assert counter.count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Final-audit tests: hash contract, audited summary, report wording
+# --------------------------------------------------------------------------- #
+import hashlib  # noqa: E402
+
+LLM_D = PERF / "llm_research_d"
+
+# committed SHA256 of the four original evidence files (must stay byte-identical)
+ORIGINAL_FILE_SHAS = {
+    "D1_ALL_RESULTS.json": "0b009e1b02d161af78a39a54dcf23925ff418b44bb943fcf5db9f5ca67e60310",
+    "D1B_ALL_RESULTS.json": "726012108ce8fcb67656727521ab39794bf55eaf9b9991de4ae97eb6ec8d1cae",
+    "D1B_BATCH_RESULTS.json": "08e4a0adc8e3af7327e75cebabbc1ff6b39d53b9a4431f63c1cce3b4faacbae0",
+    "CHAT_UNBOUNDED_RESULTS.json": "0314f63bc5f53ce265a2c4b781807f3a7561e1429bcde84a909ed903d08f1703",
+}
+
+
+def _file_sha256(path):
+    h = hashlib.sha256()
+    h.update(Path(path).read_bytes())
+    return h.hexdigest()
+
+
+def _chat_entries():
+    return json.loads((LLM_D / "CHAT_UNBOUNDED_RESULTS.json").read_text(encoding="utf-8"))
+
+
+def _audited():
+    return json.loads((LLM_D / "CHAT_UNBOUNDED_RESULTS_AUDITED.json").read_text(encoding="utf-8"))
+
+
+def test_a1_raw_result_semantic_hash_recomputable():
+    for e in _chat_entries():
+        raw = {k: v for k, v in e.items() if k not in ("result_sha256", "artifact_inventory")}
+        assert benchmark_mod.legacy_json_sha256(raw) == e["result_sha256"]
+
+
+def test_a2_artifact_inventory_outside_raw_hash_scope():
+    for e in _chat_entries():
+        raw = {k: v for k, v in e.items() if k not in ("result_sha256", "artifact_inventory")}
+        full = {k: v for k, v in e.items() if k != "result_sha256"}  # includes artifact_inventory
+        assert benchmark_mod.legacy_json_sha256(raw) == e["result_sha256"]
+        assert benchmark_mod.legacy_json_sha256(full) != e["result_sha256"]  # proves scope exclusion
+
+
+def test_a3_enriched_summary_hash_recomputable():
+    for a in _audited():
+        recomputed = benchmark_mod.canonical_json_sha256(
+            {k: v for k, v in a.items() if k != "enriched_summary_sha256"})
+        assert recomputed == a["enriched_summary_sha256"]
+
+
+def test_a4_artifact_inventory_hash_recomputable():
+    audited = _audited()
+    entries = _chat_entries()
+    for a, e in zip(audited, entries):
+        assert a["artifact_inventory_sha256"] == benchmark_mod.canonical_json_sha256(e["artifact_inventory"])
+
+
+def test_a5_enriched_hash_no_self_reference():
+    a = _audited()[0]
+    # including enriched_summary_sha256 in its own computation must not match
+    assert benchmark_mod.canonical_json_sha256(a) != a["enriched_summary_sha256"]
+
+
+def test_a6_modifying_enriched_field_breaks_hash():
+    a = dict(_audited()[0])
+    a["wall_clock_s"] = 999999.0
+    recomputed = benchmark_mod.canonical_json_sha256(
+        {k: v for k, v in a.items() if k != "enriched_summary_sha256"})
+    assert recomputed != a["enriched_summary_sha256"]
+
+
+def test_a7_modifying_artifact_inventory_breaks_inventory_hash():
+    e = _chat_entries()[0]
+    inv = dict(e["artifact_inventory"])
+    inv["artifact_count"] = 999
+    assert benchmark_mod.canonical_json_sha256(inv) != benchmark_mod.canonical_json_sha256(e["artifact_inventory"])
+
+
+def test_a8_legacy_enriched_scope_ambiguous_flagged():
+    for a in _audited():
+        assert a["legacy_enriched_hash_scope_ambiguous"] is True
+        assert a["hash_scope"] == "LEGACY_ENRICHED_HASH_SCOPE_AMBIGUOUS"
+
+
+def test_a9_legacy_result_hash_not_full_enriched_hash():
+    for e in _chat_entries():
+        full = {k: v for k, v in e.items() if k != "result_sha256"}
+        assert benchmark_mod.legacy_json_sha256(full) != e["result_sha256"]
+
+
+def test_a10_audited_summary_does_not_modify_original():
+    # the auditor writes to a different path and leaves the original byte-identical
+    assert _file_sha256(LLM_D / "CHAT_UNBOUNDED_RESULTS.json") == ORIGINAL_FILE_SHAS["CHAT_UNBOUNDED_RESULTS.json"]
+
+
+def test_a11_chat_report_no_forbidden_phrases():
+    for name in ("D1_FINAL_AUDIT_REPORT.md", "D1B_FINAL_REPORT.md"):
+        md = (LLM_D / name).read_text(encoding="utf-8")
+        for phrase in ("CONFIRMED_NO_SPEEDUP", "CHAT_CONCURRENCY_NO_IMPROVEMENT",
+                       "chat 并发没有墙钟收益", "确认无收益"):
+            assert phrase not in md
+
+
+def test_a12_chat_report_mentions_limited_gain():
+    md = (LLM_D / "D1_FINAL_AUDIT_REPORT.md").read_text(encoding="utf-8")
+    assert "3.3" in md
+
+
+def test_a13_embedding_report_no_wrong_conclusion():
+    for name in ("D1_FINAL_AUDIT_REPORT.md", "D1B_FINAL_REPORT.md"):
+        md = (LLM_D / name).read_text(encoding="utf-8")
+        assert "D1B_EMBEDDING_NO_IMPROVEMENT" not in md
+
+
+def test_a14_embedding_report_distinguishes_speedup_and_retry():
+    md = (LLM_D / "D1_FINAL_AUDIT_REPORT.md").read_text(encoding="utf-8")
+    assert "EMBEDDING_CONCURRENCY_SPEEDUP_OBSERVED_ON_SYNTHETIC_WORKLOAD" in md
+    assert "D1B_EMBEDDING_RETRY_CAUSE_NOT_CONFIRMED" in md
+
+
+def test_a15_gpu_evidence_limited_window():
+    md = (LLM_D / "D1_FINAL_AUDIT_REPORT.md").read_text(encoding="utf-8")
+    assert "采样窗口" in md
+
+
+def test_a16_gpu_samples_not_covering_600s_chat():
+    md = (LLM_D / "D1_FINAL_AUDIT_REPORT.md").read_text(encoding="utf-8")
+    assert "覆盖全部" not in md
+    assert "不覆盖" in md
+
+
+def test_a17_original_chat_result_core_fields_unchanged():
+    entries = _chat_entries()
+    assert len(entries) == 4
+    for e in entries:
+        for k in ("run_id", "replay_id", "max_in_flight", "repeat_label",
+                  "wall_clock_s", "llm_union_s", "valid_task_rate", "retry_count",
+                  "sdk_transport_retry_count", "result_sha256", "artifact_inventory"):
+            assert k in e
+
+
+def test_a18_original_files_sha_unchanged():
+    for name, sha in ORIGINAL_FILE_SHAS.items():
+        assert _file_sha256(LLM_D / name) == sha, f"{name} changed"
+
+
+def test_a19_audited_chat_summary_4_of_4_enriched_hash():
+    audited = _audited()
+    assert len(audited) == 4
+    for a in audited:
+        recomputed = benchmark_mod.canonical_json_sha256(
+            {k: v for k, v in a.items() if k != "enriched_summary_sha256"})
+        assert recomputed == a["enriched_summary_sha256"]
+
+
+def test_a20_audit_script_no_network_llm_gpu():
+    src = (LLM_D / "audit_existing_results.py").read_text(encoding="utf-8")
+    for forbidden in ("import openai", "import jax", "import requests",
+                      "import httpx", "nvidia-smi", "subprocess", "socket"):
+        assert forbidden not in src
