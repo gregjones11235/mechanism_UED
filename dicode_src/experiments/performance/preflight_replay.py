@@ -423,13 +423,33 @@ def _real_runtime(manifest: Mapping[str, Any], out_dir: Path) -> dict[str, Any]:
             return [{"embedding": self._frozen[i]} for i in range(len(labels))]
 
     def evaluate_and_score(config, rng, train_state, ids, archive):
-        # B2 reuse off: the production evaluate_new_tasks performs the second
-        # task reload itself (production path). one_hot -> production one-hot
-        # generation inside evaluate_new_tasks (no LLM). For embedding
-        # conditioning a frozen provider would be used; one_hot is the frozen
-        # default here and needs no provider.
-        raw = evaluate_new_tasks(config, rng, train_state, ids, archive,
-                                 FrozenEmbeddingProvider(np.zeros((len(ids), CONDITIONING_DIM), dtype=np.float32)))
+        # [B2] honor performance.preflight_reuse_loaded_tasks: when on, reuse the
+        # first load_tasks_from_env_codes result (same source/ids as the second
+        # load) instead of evaluate_new_tasks' internal second reload. When off,
+        # pass None/None so the historical second load happens (B1-identical).
+        # Any preloaded contract violation (flag on but ids/count mismatch, or
+        # preloaded missing) propagates fail-closed via resolve_preloaded_tasks /
+        # PreflightOptimizationContractError -- never a silent fallback.
+        from dicode.skill_preflight.reuse_loaded_tasks import resolve_preloaded_tasks
+        reuse = bool((config.get("performance", {}) if hasattr(config, "get") else {})
+                     .get("preflight_reuse_loaded_tasks", False))
+        preloaded_classes = preloaded_ids = None
+        if reuse:
+            # first load == the production preflight block's first load; the SAME
+            # load_tasks_from_env_codes call evaluate_new_tasks would otherwise
+            # repeat as its second load.
+            preloaded_classes, preloaded_ids = load_tasks_from_env_codes(archive, ids)
+            if [str(x) for x in preloaded_ids] != [str(x) for x in ids]:
+                from dicode.skill_preflight.contract import PreflightOptimizationContractError
+                raise PreflightOptimizationContractError(
+                    "B2 first-load ids %r != candidate ids %r"
+                    % (list(preloaded_ids), list(ids)))
+        raw = evaluate_new_tasks(
+            config, rng, train_state, ids, archive,
+            FrozenEmbeddingProvider(np.zeros((len(ids), CONDITIONING_DIM), dtype=np.float32)),
+            preloaded_task_classes=preloaded_classes,
+            preloaded_task_ids=preloaded_ids,
+        )
         swd = raw.get("scoring_window_data")
         if swd is None:
             raise ValueError("evaluate_new_tasks returned no scoring_window_data")

@@ -430,3 +430,17 @@ def test_run_replay_writes_replay_summary(tmp_path):
     assert summary["exclusive_phase_totals"]["replay_wall"] == 0.1
     assert summary["exclusive_phase_totals"]["route"] == 0.00001
 
+
+
+
+def test_replay_wires_b2_preloaded_contract():
+    """B2: evaluate_and_score must pass the first load as preloaded args to
+    evaluate_new_tasks when performance.preflight_reuse_loaded_tasks is on
+    (fail-closed on mismatch, never a silent second-load fallback)."""
+    replay = _replay()
+    text = (PERF / "preflight_replay.py").read_text(encoding="utf-8")
+    assert "resolve_preloaded_tasks" in text
+    assert "preloaded_task_classes=preloaded_classes" in text
+    assert "preloaded_task_ids=preloaded_ids" in text
+    assert "performance.preflight_reuse_loaded_tasks" in text
+    assert "PreflightOptimizationContractError" in text
