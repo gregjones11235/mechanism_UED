@@ -318,6 +318,96 @@ def test_append_xla_flag_and_arm_env(tmp_path):
     assert env["PYTHONPATH"] == str(src / "src")
 
 
+def test_aggregate_perf_median_and_throughput():
+    b = load("perf48_combo_benchmark")
+    base = {"session_wall_s": 100, "session_throughput_env_s": 1000, "eval_throughput_env_s": 500,
+            "preflight_wall_s": 50, "eval_wall_s": 40, "gpu_peak_memory_mib": 100,
+            "gpu_min_free_mib": 5000, "checkpoint_loadable": True}
+    pairs = [{"off": {**base}, "on": {**base, "session_wall_s": 95, "session_throughput_env_s": 1050}} for _ in range(6)]
+    out = b._aggregate(pairs, det=False)
+    assert out["conclusion"] == "COMBO_PASS"
+    assert abs(out["session_improvement"] - (-0.05)) < 1e-9
+    assert out["median_session_improvement"] < 0  # 95 vs 100 -> negative (faster)
+    # a regression > 1% must be flagged
+    pairs[0]["on"]["session_wall_s"] = 102
+    out2 = b._aggregate(pairs, det=False)
+    assert 0 in out2["per_pair_regressions"]
+
+
+def test_finalize_verdict_pass(tmp_path):
+    f = load("perf48_combo_finalize")
+    def mkpair(session_off, session_on, thr_off, thr_on):
+        return {"status": "SEMANTIC_PASS", "off": {"session_wall_s": session_off, "session_throughput_env_s": thr_off,
+                "preflight_task_reload_occurred": True, "eval_compile_span_count": 0,
+                "gpu_peak_memory_mib": 100, "gpu_min_free_mib": 5000, "checkpoint_loadable": True},
+                "on": {"session_wall_s": session_on, "session_throughput_env_s": thr_on,
+                "preflight_task_reload_occurred": False, "eval_compile_span_count": 1,
+                "eval_cache_hit_count": 1, "eval_first_cache_miss": True,
+                "gpu_peak_memory_mib": 100, "gpu_min_free_mib": 5000, "checkpoint_loadable": True}}
+    det_root = tmp_path / "det"; perf_root = tmp_path / "perf"
+    for root in (det_root, perf_root):
+        (root / "pairs").mkdir(parents=True, exist_ok=True)
+    # 3%+ mean improvement: 100 -> 96 (4% faster) across all six
+    pair = mkpair(100, 96, 1000, 1040)
+    for s in ("early", "mid", "late"):
+        for r in (0, 1):
+            (det_root / "pairs" / f"{s}_repeat_{r}").mkdir(parents=True, exist_ok=True)
+            (perf_root / "pairs" / f"{s}_repeat_{r}").mkdir(parents=True, exist_ok=True)
+            (det_root / "pairs" / f"{s}_repeat_{r}" / "PAIR.json").write_text(json.dumps(pair))
+            (perf_root / "pairs" / f"{s}_repeat_{r}" / "PAIR.json").write_text(json.dumps(pair))
+    v = f.compute_verdict(det_root, perf_root)
+    assert v["conclusion"] == "BC_COMBINATION_PASS"
+    assert all(c["ok"] for c in v["conditions"].values())
+
+
+def test_finalize_verdict_limited_and_rejects(tmp_path):
+    f = load("perf48_combo_finalize")
+    def mkpair(session_off, session_on, det_status="SEMANTIC_PASS", reload_on=False, peak_on=100, min_free=5000):
+        return {"status": det_status, "off": {"session_wall_s": session_off, "session_throughput_env_s": 1000,
+                "preflight_task_reload_occurred": True, "eval_compile_span_count": 0,
+                "gpu_peak_memory_mib": 100, "gpu_min_free_mib": min_free, "checkpoint_loadable": True},
+                "on": {"session_wall_s": session_on, "session_throughput_env_s": 1010,
+                "preflight_task_reload_occurred": reload_on, "eval_compile_span_count": 1,
+                "eval_cache_hit_count": 1, "eval_first_cache_miss": True,
+                "gpu_peak_memory_mib": peak_on, "gpu_min_free_mib": min_free, "checkpoint_loadable": True}}
+    def write_roots(tmp_path, det_pair, perf_pair):
+        det_root = tmp_path / "det2"; perf_root = tmp_path / "perf2"
+        for root in (det_root, perf_root):
+            for s in ("early", "mid", "late"):
+                for r in (0, 1):
+                    d = root / "pairs" / f"{s}_repeat_{r}"
+                    d.mkdir(parents=True, exist_ok=True)
+        for s in ("early", "mid", "late"):
+            for r in (0, 1):
+                (det_root / "pairs" / f"{s}_repeat_{r}" / "PAIR.json").write_text(json.dumps(det_pair))
+                (perf_root / "pairs" / f"{s}_repeat_{r}" / "PAIR.json").write_text(json.dumps(perf_pair))
+        return det_root, perf_root
+    # limited gain: 100 -> 99 (1%)
+    dr, pr = write_roots(tmp_path, mkpair(100, 99), mkpair(100, 99))
+    assert f.compute_verdict(dr, pr)["conclusion"] == "BC_COMBINATION_PASS_LIMITED_GAIN"
+    # no speedup: 100 -> 101
+    dr, pr = write_roots(tmp_path, mkpair(100, 101), mkpair(100, 101))
+    assert f.compute_verdict(dr, pr)["conclusion"] == "REJECTED_NO_SPEEDUP"
+    # semantic reject: det pair not SEMANTIC_PASS
+    dr, pr = write_roots(tmp_path, mkpair(100, 96, det_status="REJECTED_SEMANTIC_MISMATCH"), mkpair(100, 96))
+    assert f.compute_verdict(dr, pr)["conclusion"] == "REJECTED_SEMANTIC_MISMATCH"
+    # runtime reject: B2 reload not eliminated in perf
+    dr, pr = write_roots(tmp_path, mkpair(100, 96), mkpair(100, 96, reload_on=True))
+    assert f.compute_verdict(dr, pr)["conclusion"] == "REJECTED_RUNTIME_FAILURE"
+    # runtime reject: peak delta > 512
+    dr, pr = write_roots(tmp_path, mkpair(100, 96), mkpair(100, 96, peak_on=700))
+    assert f.compute_verdict(dr, pr)["conclusion"] == "REJECTED_RUNTIME_FAILURE"
+
+
+def test_harness_perf_flag_wired_and_metrics_field():
+    h = load("perf48_combo_harness")
+    src = Path(importlib.util.spec_from_file_location(
+        "perf48_combo_harness", PERF / "perf48_combo_harness.py").origin).read_text(encoding="utf-8")
+    assert '"--perf"' in src
+    assert "not args.perf and not sessions_identical" in src
+    assert "evaluation_metrics_second_sha256" in src
+
+
 def test_parse_only_pairs():
     b = load("perf48_combo_benchmark")
     assert b._parse_only_pairs(None) is None

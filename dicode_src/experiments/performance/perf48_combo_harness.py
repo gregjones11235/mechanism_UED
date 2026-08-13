@@ -492,7 +492,12 @@ def _run_arm(manifest: Mapping[str, Any], config, rt: Mapping[str, Any], out: Pa
 
     first_fp = metrics_fp(metrics_first)
     second_fp = metrics_fp(metrics_second)
-    if first_fp != second_fp:
+    sessions_identical = bool(first_fp == second_fp)
+    # --perf (default-XLA performance run): XLA first-compile nondeterminism can
+    # make the recompiled second session differ in low-order bits (P0 root cause).
+    # The perf run records both fingerprints WITHOUT faking byte-identity; the
+    # deterministic run enforces strict equality.
+    if not args.perf and not sessions_identical:
         raise RuntimeError("held-out eval metrics differ between the two sessions")
     evaluation_metrics = {k: float(np.asarray(v)) for k, v in metrics_first.items() if not k.startswith("_")}
 
@@ -552,7 +557,8 @@ def _run_arm(manifest: Mapping[str, Any], config, rt: Mapping[str, Any], out: Pa
         "scoring_wall_s": scoring_wall_s,
         "evaluation_metrics": evaluation_metrics,
         "evaluation_metrics_sha256": first_fp,
-        "evaluation_metrics_equal_across_sessions": True,
+        "evaluation_metrics_second_sha256": second_fp,
+        "evaluation_metrics_equal_across_sessions": bool(sessions_identical),
         "checkpoint_loadable": True,
         "checkpoint_path": str(ckpt_dir / str(save_step)),
         # performance / event evidence
@@ -565,6 +571,8 @@ def _run_arm(manifest: Mapping[str, Any], config, rt: Mapping[str, Any], out: Pa
         "total_env_steps": int(preflight_env_steps + heldout_env_steps),
         "preflight_throughput_env_s": round(preflight_env_steps / max(preflight_wall_s, 1e-9), 3),
         "eval_throughput_env_s": round(heldout_env_steps / max(eval_wall_s, 1e-9), 3),
+        "session_throughput_env_s": round((preflight_env_steps + heldout_env_steps)
+                                          / max((time.monotonic_ns() - session_start_ns) / 1e9, 1e-9), 3),
         "preflight_task_reload_occurred": preflight_task_reload_occurred,
         "preflight_task_reload_explicit_absent": (not preflight_task_reload_occurred),
         "preflight_task_reload_s": round(sum(e["duration_s"] for e in reload_spans), 6),
@@ -684,6 +692,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeat", type=int, choices=(0, 1), required=True)
     parser.add_argument("--arm", choices=("BC_OFF", "BC_ON"), required=True)
     parser.add_argument("--mode", choices=("preflight", "run"), required=True)
+    parser.add_argument("--perf", action="store_true",
+                        help="default-XLA performance run: record heldout session "
+                             "fingerprints without requiring byte-identity (XLA "
+                             "first-compile nondeterminism); semantic proof stays "
+                             "in the deterministic run")
     args = parser.parse_args(argv)
 
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)

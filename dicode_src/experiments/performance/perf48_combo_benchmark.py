@@ -75,7 +75,7 @@ PERF_FIELDS = (
     "eval_compile_span_count", "eval_cache_hit_count", "eval_first_cache_miss",
     "preflight_task_reload_occurred", "preflight_task_reload_explicit_absent",
     "scoring_wall_s", "preflight_env_steps", "heldout_env_steps", "total_env_steps",
-    "preflight_throughput_env_s", "eval_throughput_env_s",
+    "preflight_throughput_env_s", "eval_throughput_env_s", "session_throughput_env_s",
 )
 
 MECHANISM_REQUIREMENTS = {
@@ -199,6 +199,8 @@ def run_combo_arm(args: Any, stage: str, repeat: int, arm: str, out: str | Path)
            "--out", str(out), "--required-gpu-uuid", args.gpu_uuid, "--source-commit",
            args.source_commit, "--stage", stage, "--repeat", str(repeat), "--arm", arm,
            "--mode", "run"]
+    if getattr(args, "perf_mode", False):
+        cmd.append("--perf")
     assert_gpu_free(args.gpu_index, args.gpu_uuid)
     so = (out / "trainer.stdout").open("w")
     se = (out / "trainer.stderr").open("w")
@@ -260,15 +262,17 @@ def _aggregate(pairs: list[dict[str, Any]], *, det: bool, required_pairs: int = 
     pw3 = [float(arm(p, "on").get("preflight_wall_s", 0)) for p in pairs]
     ew0 = [float(arm(p, "off").get("eval_wall_s", 0)) for p in pairs]
     ew3 = [float(arm(p, "on").get("eval_wall_s", 0)) for p in pairs]
-    t0 = [float(arm(p, "off").get("preflight_throughput_env_s", 0)) for p in pairs]
-    t3 = [float(arm(p, "on").get("preflight_throughput_env_s", 0)) for p in pairs]
+    st0 = [float(arm(p, "off").get("session_throughput_env_s", 0)) for p in pairs]
+    st3 = [float(arm(p, "on").get("session_throughput_env_s", 0)) for p in pairs]
     et0 = [float(arm(p, "off").get("eval_throughput_env_s", 0)) for p in pairs]
     et3 = [float(arm(p, "on").get("eval_throughput_env_s", 0)) for p in pairs]
     mean_d0, mean_d3 = statistics.mean(d0), statistics.mean(d3)
+    med_d0, med_d3 = statistics.median(d0), statistics.median(d3)
     duration_imp = (mean_d3 - mean_d0) / mean_d0 if mean_d0 else 0.0
+    median_imp = (med_d3 - med_d0) / med_d0 if med_d0 else 0.0
     preflight_imp = (statistics.mean(pw3) - statistics.mean(pw0)) / statistics.mean(pw0) if statistics.mean(pw0) else 0.0
     eval_imp = (statistics.mean(ew3) - statistics.mean(ew0)) / statistics.mean(ew0) if statistics.mean(ew0) else 0.0
-    preflight_throughput_imp = (statistics.mean(t3) - statistics.mean(t0)) / statistics.mean(t0) if statistics.mean(t0) else 0.0
+    session_throughput_imp = (statistics.mean(st3) - statistics.mean(st0)) / statistics.mean(st0) if statistics.mean(st0) else 0.0
     eval_throughput_imp = (statistics.mean(et3) - statistics.mean(et0)) / statistics.mean(et0) if statistics.mean(et0) else 0.0
     regressions = [i for i, (a, b) in enumerate(zip(d0, d3)) if b > a * 1.01]
     peak_deltas = [float(arm(p, "on").get("gpu_peak_memory_mib", 0)) - float(arm(p, "off").get("gpu_peak_memory_mib", 0)) for p in pairs]
@@ -283,10 +287,12 @@ def _aggregate(pairs: list[dict[str, Any]], *, det: bool, required_pairs: int = 
         "conclusion": conclusion,
         "det": det,
         "mean_session_off": mean_d0, "mean_session_on": mean_d3,
+        "median_session_off": med_d0, "median_session_on": med_d3,
         "session_improvement": duration_imp,
+        "median_session_improvement": median_imp,
         "preflight_improvement": preflight_imp,
         "eval_improvement": eval_imp,
-        "preflight_throughput_improvement": preflight_throughput_imp,
+        "session_throughput_improvement": session_throughput_imp,
         "eval_throughput_improvement": eval_throughput_imp,
         "per_pair_regressions": regressions,
         "max_peak_delta_mib": max(peak_deltas, default=0),
@@ -320,6 +326,10 @@ def main() -> None:
                    help="comma-separated stage:repeat subset, e.g. 'early:0' (default: all six groups)")
     p.add_argument("--deterministic-xla", action="store_true",
                    help="append --xla_gpu_deterministic_ops=true to every harness env (semantic gate only)")
+    p.add_argument("--perf-mode", action="store_true",
+                   help="default-XLA performance run: pass --perf to the harness and SKIP the "
+                        "byte-identical semantic gate (hash divergence is expected and recorded, "
+                        "never faked); mechanisms (B2/C) and runtime gates still enforced")
     args = p.parse_args()
     args.gpu_index = int(args.gpu_index)
     only_pairs = _parse_only_pairs(args.only_pairs)
@@ -341,16 +351,22 @@ def main() -> None:
                 for arm in order:
                     rows[arm] = run_combo_arm(args, stage, repeat, arm, pair_dir / arm.lower())
                 off, on = rows["BC_OFF"], rows["BC_ON"]
-                status = compare_combo_pair(off, on)
+                if args.perf_mode:
+                    # default-XLA performance run: hash divergence is expected
+                    # and recorded, never faked as byte-identical; the semantic
+                    # gate lives in the deterministic run.
+                    status = "SEMANTIC_SKIPPED_PERF"
+                else:
+                    status = compare_combo_pair(off, on)
+                    if status != "SEMANTIC_PASS":
+                        conclusion = "REJECTED_SEMANTIC_MISMATCH" if status == "REJECTED_SEMANTIC_MISMATCH" else "REJECTED_RUNTIME_FAILURE"
+                        atomic_json(root / "COMBINATION_PAIR_RESULT.json",
+                                    {"conclusion": conclusion, "completed_pair_count": len(pairs),
+                                     "evidence": str(pair_dir), "failed_pair": str(pair_dir),
+                                     "pairs": pairs, "manifest_sha256": args.manifest_sha256,
+                                     "gpu_uuid": args.gpu_uuid})
+                        raise RuntimeError(status)
                 mech = verify_mechanisms(off, on)
-                if status != "SEMANTIC_PASS":
-                    conclusion = "REJECTED_SEMANTIC_MISMATCH" if status == "REJECTED_SEMANTIC_MISMATCH" else "REJECTED_RUNTIME_FAILURE"
-                    atomic_json(root / "COMBINATION_PAIR_RESULT.json",
-                                {"conclusion": conclusion, "completed_pair_count": len(pairs),
-                                 "evidence": str(pair_dir), "failed_pair": str(pair_dir),
-                                 "pairs": pairs, "manifest_sha256": args.manifest_sha256,
-                                 "gpu_uuid": args.gpu_uuid})
-                    raise RuntimeError(status)
                 if not mech["ok"]:
                     atomic_json(root / "COMBINATION_PAIR_RESULT.json",
                                 {"conclusion": "REJECTED_MECHANISM", "completed_pair_count": len(pairs),
@@ -374,7 +390,7 @@ def main() -> None:
     agg = _aggregate(pairs, det=args.deterministic_xla, required_pairs=required_pairs)
     final = {**agg, "pairs": pairs, "pair_count": len(pairs), "manifest_sha256": args.manifest_sha256,
              "gpu_uuid": args.gpu_uuid, "deterministic_xla": args.deterministic_xla,
-             "only_pairs": args.only_pairs}
+             "perf_mode": args.perf_mode, "only_pairs": args.only_pairs}
     atomic_json(root / "COMBINATION_PAIR_RESULT.json", final)
     if agg.get("conclusion") == "REJECTED_RUNTIME_FAILURE":
         raise RuntimeError("runtime gate failed")
