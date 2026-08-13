@@ -1,0 +1,75 @@
+{
+  "artifact_sha256": "a37be6d4a04e99b0a11d5282f6cab5b3ddd302dc933426b3228806e50787ed4e",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "D3_METADATA_GATE_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "blocked_reasons": [
+    "Ollama exact qwen2.5-coder:14b model is not listed",
+    "dedicated GPU2 is not present"
+  ],
+  "checked_at_utc": "2026-08-13T18:53:10Z",
+  "classification": "D3_METADATA_GATE",
+  "completion_requests_total": 0,
+  "deepseek": {
+    "base_url": "https://api.deepseek.com/v1",
+    "completion_requests": 0,
+    "credential_env_name": "DEEPSEEK_API_KEY",
+    "credential_present": true,
+    "credential_value_serialized": false,
+    "embedding_requests": 0,
+    "endpoint": "https://api.deepseek.com/v1/models",
+    "error_class": null,
+    "exact_model_available": true,
+    "expected_model": "deepseek-v4-pro",
+    "http_status": 200,
+    "metadata_endpoint_only": true,
+    "metadata_requests": 1,
+    "model_ids": [
+      "deepseek-v4-flash",
+      "deepseek-v4-pro"
+    ],
+    "provider": "deepseek_official",
+    "reachable": true
+  },
+  "embedding_requests_total": 0,
+  "gate_status": "BLOCKED_METADATA_GATE",
+  "gpu": {
+    "gpu2_present": false,
+    "gpus": [],
+    "nvidia_smi_present": true,
+    "query_ok": false,
+    "returncode": 2,
+    "stderr": ""
+  },
+  "gpu2_smoke_allowed": false,
+  "large_arm": {
+    "gpu": "provider-managed",
+    "model": "deepseek-v4-pro",
+    "model_size": "UNKNOWN",
+    "provider": "deepseek_official"
+  },
+  "metadata_requests_total": 2,
+  "ollama": {
+    "base_url": "http://127.0.0.1:11434",
+    "completion_requests": 0,
+    "embedding_requests": 0,
+    "endpoint": "http://127.0.0.1:11434/api/tags",
+    "error_class": "url_error",
+    "exact_model_available": false,
+    "expected_model": "qwen2.5-coder:14b",
+    "http_status": null,
+    "metadata_endpoint_only": true,
+    "metadata_requests": 1,
+    "model_names": [],
+    "provider": "ollama",
+    "reachable": false
+  },
+  "schema_version": 1,
+  "small_arm": {
+    "gpu": 0,
+    "model": "qwen2.5-coder:14b",
+    "provider": "ollama"
+  },
+  "source_branch": "perf/llm-small-large-quality-cost-d3",
+  "source_commit": "8a3eb39",
+  "stage": "D3"
+}
