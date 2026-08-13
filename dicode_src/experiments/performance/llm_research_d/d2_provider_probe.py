@@ -15,14 +15,16 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 CLASSIFICATION = "D2_PROVIDER_AVAILABILITY_PROBE"
 CANONICAL_ALGORITHM = "canonical_json_sha256"
 CANONICAL_SCOPE = "PROBE_FIELDS_EXCLUDING_ARTIFACT_SHA256"
@@ -86,14 +88,18 @@ def check_localhost_5000(timeout_s: float = 3.0) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(url, timeout=timeout_s) as resp:
             body = resp.read().decode("utf-8", errors="replace")
-            model_ids = []
             try:
                 data = json.loads(body)
+                if not isinstance(data, dict):
+                    raise ValueError("models response must be a JSON object")
+                model_ids = []
                 for m in data.get("data", []):
                     if isinstance(m, dict) and m.get("id"):
                         model_ids.append(m["id"])
-            except Exception:
-                pass
+            except (json.JSONDecodeError, ValueError, TypeError):
+                return {"reachable": True, "http_status": resp.status,
+                        "model_ids": [], "local_model_available": False,
+                        "error_class": "invalid_json"}
             return {"reachable": True, "http_status": resp.status,
                     "model_ids": model_ids,
                     "local_model_available": False, "error_class": None}
@@ -109,7 +115,15 @@ def list_ollama_models(timeout_s: float = 3.0) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(url, timeout=timeout_s) as resp:
             body = resp.read().decode("utf-8", errors="replace")
-            names = [m.get("name", "") for m in json.loads(body).get("models", [])]
+            try:
+                data = json.loads(body)
+                if not isinstance(data, dict):
+                    raise ValueError("Ollama response must be a JSON object")
+                names = [m.get("name", "") for m in data.get("models", [])
+                         if isinstance(m, dict)]
+            except (json.JSONDecodeError, ValueError, TypeError):
+                return {"reachable": True, "http_status": resp.status,
+                        "model_names": [], "error_class": "invalid_json"}
             return {"reachable": True, "http_status": resp.status, "model_names": names,
                     "error_class": None}
     except Exception as e:
@@ -118,13 +132,28 @@ def list_ollama_models(timeout_s: float = 3.0) -> dict[str, Any]:
 
 
 def _normalize_error(e: Exception) -> str:
+    if isinstance(e, urllib.error.HTTPError):
+        return "http_error"
+    if isinstance(e, urllib.error.URLError):
+        reason = e.reason
+        if isinstance(reason, BaseException):
+            return _normalize_error(reason)
+        reason_text = str(reason).lower()
+        if "timed out" in reason_text or "timeout" in reason_text:
+            return "timeout"
+        if any(token in reason_text for token in
+               ("connection", "refused", "unreachable", "name resolution")):
+            return "connection_error"
+        return "unknown_error"
+    if isinstance(e, (TimeoutError, socket.timeout)):
+        return "timeout"
+    if isinstance(e, (ConnectionError, ConnectionRefusedError)):
+        return "connection_error"
     name = type(e).__name__.lower()
     if "timeout" in name:
         return "timeout"
     if "connection" in name or "connect" in name:
         return "connection_error"
-    if "http" in name:
-        return "http_error"
     return "unknown_error"
 
 
@@ -139,10 +168,14 @@ def build_probe(config_root: str, source_branch: str, source_head: str,
     local = check_localhost_5000()
     ollama = list_ollama_models()
 
-    # the 235B target model ID (deepinfra) must match a local model ID exactly
+    # Provider targets are intentionally independent. DeepInfra and the local
+    # OpenAI-compatible server use different configured IDs for the same model
+    # family (the local target includes the FP8 suffix).
     model_id = deepinfra["model"]
+    local_model_id = local_gen["model"]
     local_model_available = any(
-        m == model_id for m in local.get("model_ids", []))
+        m == local_model_id for m in local.get("model_ids", []))
+    local["local_model_available"] = local_model_available
 
     blocked_reasons = []
     if not cred_present:
@@ -165,6 +198,8 @@ def build_probe(config_root: str, source_branch: str, source_head: str,
         "base_url": deepinfra["base_url"],
         "model": model_id,
         "model_id_explicit": bool(model_id),
+        "local_model": local_model_id,
+        "local_model_id_explicit": bool(local_model_id),
         "credential_env_name": "DEEPINFRA_API_KEY",
         "credential_present": cred_present,
         "credential_value_serialized": False,
@@ -177,6 +212,7 @@ def build_probe(config_root: str, source_branch: str, source_head: str,
         "decision_inputs": {
             "credential_present": cred_present,
             "local_model_available": local_model_available,
+            "local_target_model": local_model_id,
             "budget_authorization": "NOT_OBSERVED",
         },
         "conclusion": "D2_BLOCKED_EXTERNAL_PROVIDER",
@@ -217,7 +253,9 @@ def load_probe(path: Path) -> dict:
 D2_RESULT_CLASSIFICATION = "RESEARCH_NON_SEMANTIC_MODEL_COMPARISON"
 
 
-def build_d2_result(probe: dict, probe_path: str) -> dict:
+def build_d2_result(probe: dict, probe_path: str,
+                    original_probe_path: str | None = None,
+                    original_probe_path_cleaned: bool | None = None) -> dict:
     """Build the D2 result artifact. Status is BLOCKED (no benchmark ran)."""
     blocked_reasons = []
     if not probe.get("credential_present"):
@@ -232,6 +270,12 @@ def build_d2_result(probe: dict, probe_path: str) -> dict:
         "conclusion": "D2_BLOCKED_EXTERNAL_PROVIDER",
         "provider_probe_sha256": probe.get("artifact_sha256"),
         "provider_probe_path": probe_path,
+        "provider_probe_provenance": {
+            "original_output_path": original_probe_path,
+            "sandbox_cleaned": original_probe_path_cleaned,
+            "original_output_path_present_after_cleanup": (
+                False if original_probe_path_cleaned else None),
+        },
         "arms_planned": ["Ollama 14B", "Qwen3 235B"],
         "arms_executed": 0,
         "chat_requests": 0,
@@ -281,10 +325,13 @@ def main(argv: list[str] | None = None) -> int:
     probe = build_probe(config_root, branch, head, commit,
                         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     atomic_write_refusing_overwrite(Path(output), probe)
-    print(json.dumps({k: probe[k] for k in
-                      ("classification", "conclusion", "credential_present",
-                       "external_provider_request_performed", "local_model_available",
-                       "llm_api_calls", "gpu_used", "artifact_sha256")}, indent=2))
+    summary = {k: probe[k] for k in
+               ("classification", "conclusion", "credential_present",
+                "external_provider_request_performed", "llm_api_calls",
+                "gpu_used", "artifact_sha256")}
+    summary["local_model_available"] = probe["decision_inputs"][
+        "local_model_available"]
+    print(json.dumps(summary, indent=2))
     return 0
 
 

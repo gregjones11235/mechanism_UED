@@ -1,0 +1,39 @@
+{
+  "classification": "D2_BLOCKED_PROVIDER_EVIDENCE_REPAIR_FINAL",
+  "conclusion": "D2_BLOCKED_EXTERNAL_PROVIDER_EVIDENCE_COMPLETE",
+  "d2_benchmark_executed": false,
+  "gpu_used_during_repair": false,
+  "llm_api_calls_during_repair": 0,
+  "network_requests_during_repair": 0,
+  "original_probe": {
+    "artifact_sha256": "58bdb6e90ae5cd05c46d0562744278943b1e5afb76292cae8df5a3d5e7bcbfb6",
+    "file_sha256": "e3746fb814f2ac64fa96744b54902d620e6175dac41ec776d27d225351b268fc",
+    "path": "experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json",
+    "probe_utc": "2026-08-13T10:46:53Z",
+    "preserved_byte_identical": true
+  },
+  "original_result": {
+    "artifact_sha256": "634b2150b3d496796ed94101f69e2e2b22038e38904dc6439ae3cebaa0b2fc17",
+    "file_sha256": "f872e6086120d65ed50c82a8ccb974cb0f5b6b24c101529efbcd561200e6e795"
+  },
+  "post_write_failure": {
+    "artifact_written_before_failure": true,
+    "exception_class": "KeyError",
+    "exit_code_zero": false,
+    "failed_field_access": "probe['local_model_available']",
+    "failure_phase": "post-write CLI summary",
+    "original_probe_successfully_completed": false
+  },
+  "real_provider_probe_rerun": false,
+  "repair_tool": {
+    "new_file_sha256": "0f67a7aea730c0b0e4a660bb729be67afe259fbe85d8c0b3e5e59ed2c02d5c09",
+    "old_file_sha256": "7e155a1d4cc1c876a2985b82b5a4e86c633f42770499b895f959790dbf63c400",
+    "validation_mode": "offline fakes only"
+  },
+  "repaired_result": {
+    "artifact_sha256": "f0e9b453e64582e583019b0259d0e6a7a8bb4708649ca35bda979a22a5cc9b1e",
+    "file_sha256": "ef1054fd596d1ff7afc93c13b48f9067785532897a274462e7a50104f56fa362",
+    "persistent_probe_path": "experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json"
+  },
+  "speed_or_quality_conclusion_available": false
+}

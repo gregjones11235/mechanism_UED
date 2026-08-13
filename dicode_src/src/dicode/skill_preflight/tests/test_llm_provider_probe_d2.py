@@ -1,7 +1,10 @@
 """Tests for the D2 provider availability probe (offline, no network/LLM/GPU)."""
 import importlib.util
+import io
 import json
 import sys
+import urllib.error
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import pytest
@@ -117,9 +120,21 @@ def test_7_localhost_other_model_not_235b(monkeypatch, tmp_path):
 def test_8_exact_235b_model_id(monkeypatch, tmp_path):
     p = _build(monkeypatch, tmp_path, localhost={
         "reachable": True, "http_status": 200,
+        "model_ids": ["Qwen/Qwen3-235B-A22B-Thinking-2507-FP8"],
+        "local_model_available": False, "error_class": None})
+    assert p["decision_inputs"]["local_model_available"] is True
+    assert p["decision_inputs"]["local_target_model"].endswith("-FP8")
+    assert p["model"] == "Qwen/Qwen3-235B-A22B-Thinking-2507"
+    assert p["local_model"] == "Qwen/Qwen3-235B-A22B-Thinking-2507-FP8"
+
+
+def test_8b_deepinfra_id_does_not_impersonate_local_fp8(monkeypatch, tmp_path):
+    p = _build(monkeypatch, tmp_path, localhost={
+        "reachable": True, "http_status": 200,
         "model_ids": ["Qwen/Qwen3-235B-A22B-Thinking-2507"],
         "local_model_available": True, "error_class": None})
-    assert p["decision_inputs"]["local_model_available"] is True
+    assert p["decision_inputs"]["local_model_available"] is False
+    assert p["local_endpoint_probe"]["local_model_available"] is False
 
 
 # 9. budget NOT_OBSERVED
@@ -186,6 +201,123 @@ def test_15_result_gate_blocked_not_completed(monkeypatch, tmp_path):
     assert r["status"] == "BLOCKED"
     assert r["conclusion"] == "D2_BLOCKED_EXTERNAL_PROVIDER"
     assert "completed" not in json.dumps(r).lower()
+
+
+class _FakeResponse:
+    def __init__(self, body, status=200):
+        self._body = body.encode()
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self._body
+
+
+@pytest.mark.parametrize("exc, expected", [
+    (urllib.error.URLError(ConnectionRefusedError(10061, "refused")),
+     "connection_error"),
+    (urllib.error.URLError(TimeoutError("timed out")), "timeout"),
+    (urllib.error.HTTPError("http://127.0.0.1:5000/v1/models", 503,
+                            "unavailable", {}, None), "http_error"),
+])
+def test_16_localhost_error_normalization(monkeypatch, exc, expected):
+    def fail(*args, **kwargs):
+        raise exc
+    monkeypatch.setattr(probe.urllib.request, "urlopen", fail)
+    result = probe.check_localhost_5000()
+    assert result["reachable"] is False
+    assert result["error_class"] == expected
+
+
+def test_17_invalid_json_is_explicit(monkeypatch):
+    monkeypatch.setattr(probe.urllib.request, "urlopen",
+                        lambda *a, **k: _FakeResponse("not-json"))
+    local = probe.check_localhost_5000()
+    ollama = probe.list_ollama_models()
+    assert local == {"reachable": True, "http_status": 200, "model_ids": [],
+                     "local_model_available": False,
+                     "error_class": "invalid_json"}
+    assert ollama == {"reachable": True, "http_status": 200,
+                      "model_names": [], "error_class": "invalid_json"}
+
+
+def test_18_main_offline_fake_end_to_end(monkeypatch, tmp_path):
+    root = _config_root(tmp_path)
+    out = tmp_path / "out" / "probe.json"
+    calls = {"urlopen": 0, "git": 0}
+
+    def fake_urlopen(url, timeout):
+        calls["urlopen"] += 1
+        assert str(url).startswith("http://127.0.0.1:")
+        if str(url).endswith("/v1/models"):
+            return _FakeResponse(json.dumps({"data": [{
+                "id": "Qwen/Qwen3-235B-A22B-Thinking-2507-FP8"}]}))
+        assert str(url).endswith("/api/tags")
+        return _FakeResponse(json.dumps({"models": [{"name": "14b"}]}))
+
+    def fake_git(cmd, **kwargs):
+        calls["git"] += 1
+        values = {("git", "branch", "--show-current"): "branch\n",
+                  ("git", "rev-parse", "HEAD"): "head\n",
+                  ("git", "rev-parse", "--short", "HEAD"): "commit\n"}
+        return values[tuple(cmd)]
+
+    monkeypatch.delenv("DEEPINFRA_API_KEY", raising=False)
+    monkeypatch.setattr(probe.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(probe.subprocess if hasattr(probe, "subprocess") else
+                        __import__("subprocess"), "check_output", fake_git)
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        rc = probe.main([str(root), str(out)])
+    loaded = probe.load_probe(out)
+    assert rc == 0
+    assert calls == {"urlopen": 2, "git": 3}
+    assert loaded["decision_inputs"]["local_model_available"] is True
+    assert '"local_model_available": true' in stdout.getvalue().lower()
+    assert loaded["external_provider_request_performed"] is False
+    assert loaded["llm_api_calls"] == 0 and loaded["gpu_used"] is False
+
+
+def test_18b_result_has_persistent_path_and_tmp_provenance(monkeypatch, tmp_path):
+    p = _build(monkeypatch, tmp_path)
+    persistent = "experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json"
+    original = "/tmp/llm_repair_probe_VFAed5/out/D2_PROVIDER_PROBE.json"
+    r = probe.build_d2_result(p, persistent, original, True)
+    assert r["provider_probe_path"] == persistent
+    assert r["provider_probe_provenance"] == {
+        "original_output_path": original,
+        "sandbox_cleaned": True,
+        "original_output_path_present_after_cleanup": False,
+    }
+
+
+def test_18c_static_evidence_hashes_and_failure_disclosure():
+    provider_path = LLM_D / "D2_PROVIDER_PROBE.json"
+    result_path = LLM_D / "D2_RESULT.json"
+    evidence_path = LLM_D / "D2_EVIDENCE_FINAL.json"
+    report = (LLM_D / "D2_AUDIT_REPAIR.md").read_text(encoding="utf-8")
+    provider = probe.load_probe(provider_path)
+    result = probe.load_result(result_path)
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert evidence["original_probe"]["artifact_sha256"] == provider["artifact_sha256"]
+    assert evidence["original_probe"]["file_sha256"] == probe.file_sha256(provider_path)
+    assert evidence["original_result"]["artifact_sha256"] == \
+        "634b2150b3d496796ed94101f69e2e2b22038e38904dc6439ae3cebaa0b2fc17"
+    assert evidence["original_result"]["file_sha256"] == \
+        "f872e6086120d65ed50c82a8ccb974cb0f5b6b24c101529efbcd561200e6e795"
+    assert evidence["repaired_result"]["artifact_sha256"] == result["artifact_sha256"]
+    assert evidence["repaired_result"]["file_sha256"] == probe.file_sha256(result_path)
+    assert evidence["repair_tool"]["new_file_sha256"] == probe.file_sha256(
+        LLM_D / "d2_provider_probe.py")
+    assert evidence["post_write_failure"]["exception_class"] == "KeyError"
+    assert evidence["post_write_failure"]["exit_code_zero"] is False
+    assert evidence["real_provider_probe_rerun"] is False
+    assert "KeyError" in report and "第二次真实 provider probe" in report
 
 
 # 19. no B/C/preflight/PPO import

@@ -4,7 +4,7 @@
     "Ollama 14B",
     "Qwen3 235B"
   ],
-  "artifact_sha256": "634b2150b3d496796ed94101f69e2e2b22038e38904dc6439ae3cebaa0b2fc17",
+  "artifact_sha256": "f0e9b453e64582e583019b0259d0e6a7a8bb4708649ca35bda979a22a5cc9b1e",
   "artifact_sha256_algorithm": "canonical_json_sha256",
   "artifact_sha256_scope": "D2_RESULT_FIELDS_EXCLUDING_ARTIFACT_SHA256",
   "blocked_reasons": [
@@ -23,7 +23,12 @@
   "llm_api_calls": 0,
   "no_semantic_equivalence_claim": true,
   "performance_comparison_available": false,
-  "provider_probe_path": "/tmp/llm_repair_probe_VFAed5/out/D2_PROVIDER_PROBE.json",
+  "provider_probe_path": "experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json",
+  "provider_probe_provenance": {
+    "original_output_path": "/tmp/llm_repair_probe_VFAed5/out/D2_PROVIDER_PROBE.json",
+    "original_output_path_present_after_cleanup": false,
+    "sandbox_cleaned": true
+  },
   "provider_probe_sha256": "58bdb6e90ae5cd05c46d0562744278943b1e5afb76292cae8df5a3d5e7bcbfb6",
   "quality_comparison_available": false,
   "stage": "D2",
