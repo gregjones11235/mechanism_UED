@@ -334,6 +334,34 @@ def test_parse_only_pairs():
             pass
 
 
+def test_reconstruct_archive_signature_matches_call_site():
+    """Regression: _reconstruct_archive must accept exactly the graph path
+    (a previous version required an unused 'config' arg, breaking the runtime
+    binding -- caught by the GPU2 smoke fail-closed)."""
+    import inspect
+    h = load("perf48_combo_harness")
+    sig = inspect.signature(h._reconstruct_archive)
+    assert len(sig.parameters) == 1, f"got {sig}"
+    # the runtime binding calls it with exactly one positional argument
+    rt_names = set()
+    spec = importlib.util.spec_from_file_location(
+        "perf48_combo_harness", PERF / "perf48_combo_harness.py")
+    src = Path(spec.origin).read_text(encoding="utf-8")
+    assert 'rt["reconstruct_archive"](stage["graph"]["path"])' in src
+
+
+def test_reconstruct_archive_real_jax(tmp_path):
+    pytest.importorskip("jax")
+    h = load("perf48_combo_harness")
+    g = nx.DiGraph()
+    g.add_node("task_1", code="class Env:\n    pass\n")
+    graph = tmp_path / "g.graphml"
+    nx.write_graphml(g, graph)
+    archive = h._reconstruct_archive(str(graph))
+    codes = archive.get_task_codes(["task_1"])
+    assert "task_1" in codes and "class Env" in codes["task_1"]
+
+
 def test_harness_verify_gpu(monkeypatch):
     import types
     h = load("perf48_combo_harness")

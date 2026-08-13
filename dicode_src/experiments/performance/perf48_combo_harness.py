@@ -283,7 +283,7 @@ def _state_hash(tree: Any) -> str:
     return state_hash(tree)
 
 
-def _reconstruct_archive(graph_path: str, config) -> Any:
+def _reconstruct_archive(graph_path: str) -> Any:
     """Copy the frozen graph to a temp archive so route mutations never touch it."""
     from dicode.dreaming.gen_manager import TaskArchive
 
