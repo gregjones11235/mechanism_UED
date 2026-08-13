@@ -134,6 +134,7 @@ def derive_reports(events: list[dict]) -> dict[str, Any]:
                    for e in events if e.get("phase") == phase)
 
     chat = [e for e in events if e.get("phase") == "chat_request"]
+    sem_wait_sum = _sum_phase("queue_wait")
     return {
         "event_count": len(events),
         "wall_clock_s": (wall_end - wall_start) / 1e9,
@@ -142,7 +143,13 @@ def derive_reports(events: list[dict]) -> dict[str, Any]:
         "llm_sum_s": _sum_phase("chat_request"),
         "llm_union_s": _union_ns([(int(e["start_monotonic_ns"]), int(e["end_monotonic_ns"]))
                                   for e in chat]) / 1e9 if chat else 0.0,
-        "queue_wait_sum_s": _sum_phase("queue_wait"),
+        # client-side semaphore wait, precisely named; queue_wait_sum_s is a
+        # legacy alias retained for historical-file compatibility only.
+        "client_semaphore_wait_sum_s": sem_wait_sum,
+        "client_semaphore_wait_union_s": phase_totals.get("queue_wait", 0.0),
+        "client_semaphore_wait_critical_s": exclusive.get("queue_wait", 0.0),
+        "queue_wait_sum_s": sem_wait_sum,
+        "legacy_alias": {"queue_wait_sum_s": True},
         "retry_backoff_sum_s": _sum_phase("retry_backoff"),
         "critical_path": sorted(
             ({"phase": ph, "duration_s": d} for ph, d in exclusive.items()),
@@ -215,6 +222,42 @@ def _validate_response(content: str | None, *, kind: str, do_cpu_jax: bool,
     return verdict
 
 
+REQUIRED_ARTIFACTS = (
+    "RESULT.json", "events.jsonl", "events.csv", "critical_path.json",
+    "frozen_manifest.json", "SHA256SUMS", "ARTIFACT_INVENTORY.json",
+)
+
+
+def verify_run_artifacts(out: Path) -> dict[str, Any]:
+    """Check a run directory has every required raw artifact. A run missing
+    ``events.jsonl`` (or any other required file) is NOT a complete PASS."""
+    missing = [name for name in REQUIRED_ARTIFACTS if not (out / name).is_file()]
+    return {"complete": not missing, "missing": missing,
+            "status": "PASS" if not missing else "INCOMPLETE",
+            "required": list(REQUIRED_ARTIFACTS)}
+
+
+def _write_artifact_inventory(out: Path) -> dict[str, Any]:
+    """Persist a per-run artifact inventory + SHA256SUMS (excluding the
+    inventory/sums files themselves). Returns the inventory dict."""
+    files = sorted(p for p in out.rglob("*") if p.is_file()
+                   and p.name not in ("SHA256SUMS", "ARTIFACT_INVENTORY.json"))
+    entries: dict[str, str] = {}
+    for p in files:
+        h = hashlib.sha256()
+        with p.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+        entries[str(p.relative_to(out))] = h.hexdigest()
+    inv = {"classification": "ARTIFACT_INVENTORY", "artifact_count": len(entries),
+           "out_dir": str(out), "files": entries}
+    _atomic_json(out / "ARTIFACT_INVENTORY.json", inv)
+    with open(out / "SHA256SUMS", "w", encoding="utf-8", newline="\n") as f:
+        for name, h in sorted(entries.items()):
+            f.write(f"{h}  {name}\n")
+    return inv
+
+
 async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
                      out_dir: str | Path, repeat_label: str = "r1",
                      do_cpu_jax: bool = True, enabled_events: bool = True,
@@ -235,8 +278,14 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
         timeout_s=manifest["timeout_s"], max_in_flight=max_in_flight, sink=sink,
     )
 
-    # Fail closed before any measurement.
-    await client.health_check()
+    # Fail closed before any measurement: on provider outage write FAILURE.json
+    # (never a success RESULT) and re-raise.
+    try:
+        await client.health_check()
+    except Exception as e:
+        _atomic_json(out / "FAILURE.json", {"error_class": "provider_unavailable",
+                                            "error": f"{type(e).__name__}: {e}"})
+        raise
 
     system_prompt = manifest["system_prompt"]
     prompts = manifest["user_prompts"]
@@ -320,7 +369,11 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
         "wall_clock_s": derived.get("wall_clock_s", (wall_end - wall_start) / 1e9),
         "llm_sum_s": derived.get("llm_sum_s", 0.0),
         "llm_union_s": llm_union_s,
+        "client_semaphore_wait_sum_s": derived.get("client_semaphore_wait_sum_s", 0.0),
+        "client_semaphore_wait_union_s": derived.get("client_semaphore_wait_union_s", 0.0),
+        "client_semaphore_wait_critical_s": derived.get("client_semaphore_wait_critical_s", 0.0),
         "queue_wait_sum_s": derived.get("queue_wait_sum_s", 0.0),
+        "legacy_alias": {"queue_wait_sum_s": True},
         "retry_backoff_sum_s": derived.get("retry_backoff_sum_s", 0.0),
         "retry_count": retry_count,
         "empty_response_count": empty_count,
@@ -344,6 +397,11 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
     if enabled_events:
         _atomic_csv(out / "events.csv", events)
         _atomic_json(out / "critical_path.json", derived)
+    # Persist the frozen manifest + a per-run artifact inventory/SHA256SUMS so
+    # every raw artifact is reproducible after the run (audit evidence gate).
+    from llm_replay_manifest import write_manifest
+    write_manifest(manifest, out / "frozen_manifest.json")
+    result["artifact_inventory"] = _write_artifact_inventory(out)
     return result
 
 

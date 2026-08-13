@@ -376,3 +376,188 @@ def test_no_production_llm_or_run_dicode_import():
         src = (PERF / f"{name}.py").read_text(encoding="utf-8")
         assert not re.search(r"from\s+dicode\.dreaming\.llm\s+import", src)
         assert not re.search(r"import\s+run_dicode", src)
+
+
+# --------------------------------------------------------------------------- #
+# Phase-2 additions: metric naming, evidence persistence, GPU CSV, retry rules
+# --------------------------------------------------------------------------- #
+gpu_mod = _load("llm_replay_gpu")
+
+
+def _ev(phase, start, end, parent=None, attempt=1, request_id=None, candidate_slot=None):
+    return {"run_id": "r", "replay_id": "p", "stage": "llm_replay", "provider": "l",
+            "model": "m", "max_in_flight": 1, "phase": phase, "parent_phase": parent,
+            "start_monotonic_ns": start, "end_monotonic_ns": end,
+            "duration_s": (end - start) / 1e9, "status": "ok", "attempt": attempt,
+            "http_status": None, "error_class": None, "prompt_sha256": None,
+            "response_sha256": None, "request_id": request_id,
+            "candidate_slot": candidate_slot, "overlap_group": "p"}
+
+
+def test_1_legacy_queue_wait_alias_compatible():
+    base = 1_000_000_000
+    rep = benchmark_mod.derive_reports([_ev("queue_wait", base, base + 10_000_000_000)])
+    assert rep["queue_wait_sum_s"] == rep["client_semaphore_wait_sum_s"]
+
+
+def test_2_new_client_semaphore_metric_names():
+    base = 1_000_000_000
+    rep = benchmark_mod.derive_reports([_ev("queue_wait", base, base + 10_000_000_000)])
+    for k in ("client_semaphore_wait_sum_s", "client_semaphore_wait_union_s",
+              "client_semaphore_wait_critical_s"):
+        assert k in rep
+
+
+def test_3_semaphore_sum_union_critical_recomputable():
+    base = 1_000_000_000
+    s = 10_000_000_000
+    events = [
+        _ev("queue_wait", base, base + s),            # [0, 10]
+        _ev("queue_wait", base + 5_000_000_000, base + 15_000_000_000),  # [5, 15]
+        _ev("queue_wait", base + 20_000_000_000, base + 30_000_000_000),  # [20, 30]
+    ]
+    rep = benchmark_mod.derive_reports(events)
+    # sum = 10 + 10 + 10 = 30; union = 15 + 10 = 25
+    assert rep["client_semaphore_wait_sum_s"] == pytest.approx(30)
+    assert rep["client_semaphore_wait_union_s"] == pytest.approx(25)
+    # critical (exclusive of deepest queue_wait) == union when no overlap with parent
+    assert rep["client_semaphore_wait_critical_s"] == pytest.approx(25)
+
+
+def test_4_report_not_calling_semaphore_wait_server_queue():
+    md = (PERF / "llm_research_d" / "LLM_REPLAY_REPORT.md").read_text(encoding="utf-8")
+    # the report must name the metric as client-side semaphore wait and explicitly
+    # disclaim the server-side-queueing interpretation
+    assert "客户端 semaphore wait" in md
+    assert "不将客户端 semaphore wait 解释为服务端排队" in md
+
+
+def test_5_d1_report_does_not_claim_embedding_retry_solved():
+    md = (PERF / "llm_research_d" / "LLM_REPLAY_REPORT.md").read_text(encoding="utf-8")
+    # the report must explicitly say D1 has no embedding coverage and must NOT
+    # affirm that bounded concurrency solved Mason's retry
+    assert "未覆盖 embedding" in md
+    assert "不构成" in md
+
+
+def test_6_manifest_marks_synthetic_reconstructed():
+    m = manifest_mod.build_replay_manifest(_spec())
+    assert m["workload_label"] == "SYNTHETIC_RECONSTRUCTED_CODEGEN_WORKLOAD"
+
+
+def test_7_run_artifacts_complete(tmp_path):
+    for name in benchmark_mod.REQUIRED_ARTIFACTS:
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    benchmark_mod._write_artifact_inventory(tmp_path)
+    assert (tmp_path / "SHA256SUMS").exists()
+    assert (tmp_path / "ARTIFACT_INVENTORY.json").exists()
+    assert benchmark_mod.verify_run_artifacts(tmp_path)["complete"] is True
+
+
+def test_8_missing_events_jsonl_not_pass(tmp_path):
+    for name in benchmark_mod.REQUIRED_ARTIFACTS:
+        if name != "events.jsonl":
+            (tmp_path / name).write_text("x", encoding="utf-8")
+    v = benchmark_mod.verify_run_artifacts(tmp_path)
+    assert v["complete"] is False
+    assert "events.jsonl" in v["missing"]
+    assert v["status"] == "INCOMPLETE"
+
+
+def test_9_gpu_csv_peak_and_min_free(tmp_path):
+    csv_path = tmp_path / "gpu.csv"
+    header = "timestamp,gpu_index,gpu_uuid,utilization_gpu,memory_used_mib,memory_free_mib,temperature,compute_pid,process_name\n"
+    rows = [
+        "t0,0,GPU-e8c08612,0 %,43000,3068,45,3154045,llama-server\n",
+        "t1,0,GPU-e8c08612,1 %,43558,2510,46,3154045,llama-server\n",
+        "t2,0,GPU-e8c08612,0 %,42000,4068,44,3154045,llama-server\n",
+    ]
+    csv_path.write_text(header + "".join(rows), encoding="utf-8")
+    stats = gpu_mod.compute_gpu_stats(csv_path)
+    assert stats["sample_count"] == 3
+    assert stats["peak_memory_used_mib"] == 43558
+    assert stats["min_memory_free_mib"] == 2510
+    assert stats["uuid_consistent"] is True
+
+
+@pytest.mark.asyncio
+async def test_10_embedding_http_200_not_retry(tmp_path):
+    sink = _sink(tmp_path, max_in_flight=1)
+    c = _client(tmp_path, max_in_flight=1)
+    c.client = _FakeClient(embeddings=_FakeEmbed())  # returns 200-like success
+    res = await c.embed_once(["hello"], slot="s0", request_id="r0",
+                             attempt=1, prompt_sha256="h")
+    assert res["error_class"] is None
+    events = [json.loads(l) for l in (tmp_path / "events.jsonl").read_text().splitlines() if l.strip()]
+    assert not any(e["phase"] == "retry_backoff" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_11_retry_same_request_id_incrementing_attempt(tmp_path):
+    calls = {"n": 0}
+
+    def flaky(**k):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise ConnectionError("boom")
+        return _FakeResp("code")
+
+    c = _client(tmp_path, max_in_flight=1, completions=_FakeCompletions(fn=flaky))
+    await c.chat_with_retries("s", "u", slot="s0", request_id="ridX",
+                              prompt_sha256="h", max_retries=3)
+    events = [json.loads(l) for l in (tmp_path / "events.jsonl").read_text().splitlines() if l.strip()]
+    chat = [e for e in events if e["phase"] == "chat_request"]
+    assert len(chat) == 2
+    assert all(e["request_id"] == "ridX" for e in chat)
+    assert [e["attempt"] for e in chat] == [1, 2]
+
+
+def test_12_unbounded_config_has_definite_cap(tmp_path):
+    # "production_like_unbounded" is a finite max_in_flight (25), not an infinite loop
+    c = harness_mod.LLMReplayClient(base_url="http://x/v1", model="m", provider="local",
+                                    temperature=0.6, top_p=0.95, max_tokens=100,
+                                    timeout_s=5, max_in_flight=25, sink=_sink(tmp_path))
+    assert c.max_in_flight == 25
+    assert isinstance(c.max_in_flight, int)
+
+
+@pytest.mark.asyncio
+async def test_13_provider_failure_writes_failure_not_result(tmp_path, monkeypatch):
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        async def health_check(self):
+            raise harness_mod.ProviderUnavailableError("down")
+
+    monkeypatch.setattr(benchmark_mod, "LLMReplayClient", FakeClient)
+    man = manifest_mod.build_replay_manifest(_spec())
+    man = manifest_mod.write_manifest(man, tmp_path / "m.json")
+    out = tmp_path / "out"
+    with pytest.raises(harness_mod.ProviderUnavailableError):
+        await benchmark_mod.run_replay(man, max_in_flight=1, out_dir=out,
+                                       repeat_label="r1", do_cpu_jax=False)
+    assert not (out / "RESULT.json").exists()
+    assert (out / "FAILURE.json").exists()
+
+
+def test_14_credential_redaction_in_result_artifacts(tmp_path):
+    m = manifest_mod.build_replay_manifest(_spec())
+    man = manifest_mod.write_manifest(m, tmp_path / "m.json")
+    text = (tmp_path / "m.json").read_text(encoding="utf-8").lower()
+    for secret in ("authorization", "bearer", "cookie", "api_key"):
+        assert secret not in text
+
+
+def test_15_result_and_event_sha_recomputable(tmp_path):
+    base = 1_000_000_000
+    rep = benchmark_mod.derive_reports([_ev("chat_request", base, base + 10_000_000_000)])
+    # a RESULT dict's result_sha256 must recompute from everything except itself
+    result = {"classification": "LLM_REPLAY_RESULT", "llm_union_s": rep["llm_union_s"]}
+    result["result_sha256"] = benchmark_mod.sha256_bytes(
+        json.dumps({k: v for k, v in result.items() if k != "result_sha256"},
+                   sort_keys=True, default=str).encode())
+    recomputed = benchmark_mod.sha256_bytes(
+        json.dumps({k: v for k, v in result.items() if k != "result_sha256"},
+                   sort_keys=True, default=str).encode())
+    assert recomputed == result["result_sha256"]

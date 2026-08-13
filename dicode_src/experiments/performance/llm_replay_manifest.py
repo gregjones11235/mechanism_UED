@@ -167,6 +167,10 @@ def build_replay_manifest(spec: Mapping[str, Any]) -> dict[str, Any]:
     validation.setdefault("cpu_jax", True)
     validation.setdefault("dedup_by_code_hash", True)
 
+    workload_label = str(spec.get("workload_label", "SYNTHETIC_RECONSTRUCTED_CODEGEN_WORKLOAD")).strip()
+    if not workload_label:
+        raise ValueError("workload_label must be non-empty")
+
     prompt_stages = spec.get("prompt_stages") or {}
     if prompt_stages:
         for stage, indices in prompt_stages.items():
@@ -183,6 +187,7 @@ def build_replay_manifest(spec: Mapping[str, Any]) -> dict[str, Any]:
     manifest = {
         "classification": CLASSIFICATION,
         "not_end_to_end_ued": True,
+        "workload_label": workload_label,
         "llm_api_calls_expected": len(user_prompts),
         "source_commit": source_commit,
         "tool_sha256": _tool_sha256(),
