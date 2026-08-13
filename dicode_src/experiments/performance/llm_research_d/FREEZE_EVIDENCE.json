@@ -1,0 +1,43 @@
+{
+  "freeze_kind": "RECONSTRUCTED_FROM_SOURCE_AND_ARCHIVE",
+  "graphml_path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/mason_full_budget_gpu3_91a75e5_20260810T1805/attempt_06/run/task_graph.graphml",
+  "manifest_sha256": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+  "note": "prompts reconstructed from source commit + archive; not a byte capture of logged prompts",
+  "num_user_prompts": 12,
+  "prompt_stages": {
+    "early": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "late": [
+      8,
+      9,
+      10,
+      11
+    ],
+    "mid": [
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "selected_task_ids": [
+    "task_1",
+    "task_2",
+    "task_3",
+    "task_4",
+    "task_276",
+    "task_277",
+    "task_278",
+    "task_279",
+    "task_551",
+    "task_552",
+    "task_553",
+    "task_554"
+  ],
+  "source_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+  "system_prompt_sha256": "5cdc991c2a3aced259548a69043be70b87ff083bd969f09f98e6a44fe85772b5"
+}
