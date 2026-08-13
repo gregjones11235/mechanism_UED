@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 import sys
-import tempfile
+import secrets
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -26,11 +26,11 @@ BASE_COMMIT = "453dc356d29dce783dfb7c6e915f5195dc272fe1"
 D2_HEAD = "4fa39478ef02d68ff528155bcfcef429562f7de4"
 BRANCH = "perf/llm-production-shape-d1c"
 
-INPUT_RAW_SHA256 = {
+INPUT_NORMALIZED_TEXT_SHA256 = {
     "D1_ALL_RESULTS.json": "0b009e1b02d161af78a39a54dcf23925ff418b44bb943fcf5db9f5ca67e60310",
     "D1B_ALL_RESULTS.json": "726012108ce8fcb67656727521ab39794bf55eaf9b9991de4ae97eb6ec8d1cae",
     "D1B_BATCH_RESULTS.json": "08e4a0adc8e3af7327e75cebabbc1ff6b39d53b9a4431f63c1cce3b4faacbae0",
-    "CHAT_UNBOUNDED_RESULTS_AUDITED.json": "08b6a15301cc58fc8a19abbcdd9c45c99c5ccf07e4c76125ee7fff04118331c4",
+    "CHAT_UNBOUNDED_RESULTS_AUDITED.json": "c473fcdbfc75ac7864bc2d0197501f71ac8c5faae5a2c08f25ae9e4dc1bb6cf0",
     "D1C_ALL_RESULTS.json": "06574f6a264bb2ffdd0da243d1ca5a0fb699fcbb2b5f2c17dce995fb880551ed",
     "D2_RESULT.json": "45e1b0b35d2cbc1cde984685f00981bda055d52f2c368c9cef048d51324a1f0c",
     "D2_EVIDENCE_FINAL.json": "1356d9cfb4ad8ecb2783b7019f3745583c2e5031a3c7d57e831363dfb0797dd2",
@@ -47,6 +47,16 @@ def sha256_bytes(data: bytes) -> str:
 
 def file_sha256(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
+
+
+def normalized_utf8_text_sha256(path: Path) -> str:
+    """Cross-platform content hash: UTF-8 text with all newlines mapped to LF."""
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise EvidenceError(f"cannot read UTF-8 input {path.name}: {exc}") from exc
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return sha256_bytes(normalized.encode("utf-8"))
 
 
 def canonical(value: Any) -> Any:
@@ -119,14 +129,18 @@ def validate_inputs(evidence_dir: Path) -> dict[str, Any]:
     evidence_dir = Path(evidence_dir)
     loaded: dict[str, Any] = {}
     bindings: dict[str, Any] = {}
-    for name, expected_sha in INPUT_RAW_SHA256.items():
+    for name, expected_sha in INPUT_NORMALIZED_TEXT_SHA256.items():
         path = evidence_dir / name
         _require(path.is_file(), f"missing input artifact: {name}")
-        actual_sha = file_sha256(path)
-        _require(actual_sha == expected_sha,
-                 f"{name}: raw SHA256 mismatch")
+        gate_sha = normalized_utf8_text_sha256(path)
+        _require(gate_sha == expected_sha,
+                 f"{name}: normalized UTF-8 LF SHA256 mismatch")
         loaded[name] = _load_json(path)
-        bindings[name] = {"raw_file_sha256": actual_sha}
+        bindings[name] = {
+            "content_gate_sha256": gate_sha,
+            "content_gate_algorithm": "sha256_utf8_text_newlines_lf",
+            "content_gate_scope": "FULL_UTF8_TEXT_AFTER_CRLF_AND_CR_TO_LF",
+        }
 
     d1_entries = loaded["D1_ALL_RESULTS.json"].get("results", [])
     d1b_entries = loaded["D1B_ALL_RESULTS.json"].get("results", [])
@@ -232,6 +246,7 @@ def validate_inputs(evidence_dir: Path) -> dict[str, Any]:
              "D1c: retry/error evidence changed")
 
     _require(d2_result.get("status") == "BLOCKED" and
+             d2_result.get("conclusion") == "D2_BLOCKED_EXTERNAL_PROVIDER" and
              d2_result.get("arms_executed") == 0 and
              d2_result.get("performance_comparison_available") is False and
              d2_result.get("quality_comparison_available") is False,
@@ -319,16 +334,43 @@ def build_result(evidence_dir: Path) -> dict[str, Any]:
 
 def atomic_write_refusing_overwrite(path: Path, text: str) -> None:
     path = Path(path)
-    if path.exists():
-        raise FileExistsError(f"refusing to overwrite existing {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    # O_EXCL makes the private temporary unique.  os.link then creates the
+    # public target only when it does not already exist; unlike os.replace it
+    # cannot clobber a concurrently-created target.
+    for _ in range(100):
+        temporary = path.parent / (
+            f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}"
+        )
+        try:
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise FileExistsError(f"cannot allocate private temporary for {path}")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        try:
+            os.link(temporary, path)
+        except FileExistsError as exc:
+            raise FileExistsError(f"refusing to overwrite existing {path}") from exc
+        # Best-effort directory durability where opening a directory is
+        # supported.  The artifact itself was already flushed and fsynced.
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            directory_fd = None
+        if directory_fd is not None:
+            try:
+                os.fsync(directory_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(directory_fd)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -341,7 +383,7 @@ def write_result(path: Path, result: dict[str, Any]) -> None:
     )
 
 
-def load_result(path: Path) -> dict[str, Any]:
+def load_result(path: Path, evidence_dir: Path | None = None) -> dict[str, Any]:
     result = _load_json(Path(path))
     _require(isinstance(result, dict), "final result must be a JSON object")
     _require(result.get("artifact_sha256_algorithm") == CANONICAL_ALGORITHM,
@@ -352,25 +394,18 @@ def load_result(path: Path) -> dict[str, Any]:
                if key != "artifact_sha256"}
     _require(canonical_json_sha256(payload) == result.get("artifact_sha256"),
              "final result artifact_sha256 mismatch (tampered)")
-    _require(result.get("phase") == "D" and
-             result.get("phase_execution_status") == "COMPLETE",
-             "final phase state mismatch")
-    _require(result.get("review_status") == REVIEW_STATUS and
-             result.get("conclusion") == CONCLUSION,
-             "final review conclusion mismatch")
-    _require(result.get("eligible_for_mainline_combination") == [],
-             "D phase cannot introduce a mainline combination candidate")
-    d2 = next((item for item in result.get("findings", [])
-               if item.get("stage") == "D2"), None)
-    _require(d2 is not None and d2.get("disposition") == "NO_BENCHMARK_CONCLUSION",
-             "D2 finding improperly represents a benchmark conclusion")
+    evidence_dir = (Path(evidence_dir) if evidence_dir is not None
+                    else Path(path).resolve().parent)
+    expected = build_result(evidence_dir)
+    _require(result == expected,
+             "final result does not exactly match reconstruction from frozen evidence")
     return result
 
 
 def render_report(result: dict[str, Any], result_raw_sha256: str,
                   finalizer_raw_sha256: str) -> str:
     inputs = "\n".join(
-        f"- `{name}` raw SHA256: `{binding['raw_file_sha256']}`"
+        f"- `{name}` normalized UTF-8/LF SHA256: `{binding['content_gate_sha256']}`"
         for name, binding in sorted(result["input_artifacts"].items())
     )
     metrics = result["derived_metrics"]
@@ -406,11 +441,15 @@ def render_report(result: dict[str, Any], result_raw_sha256: str,
 
 {inputs}
 
+- `D2_RESULT.json` internal canonical SHA256: `{result['input_artifacts']['D2_RESULT.json']['internal_artifact_sha256']}`
+- `D2_EVIDENCE_FINAL.json` internal canonical SHA256: `{result['input_artifacts']['D2_EVIDENCE_FINAL.json']['internal_artifact_sha256']}`
 - `D_PHASE_FINAL_RESULT.json` internal canonical SHA256: `{result['artifact_sha256']}`
-- `D_PHASE_FINAL_RESULT.json` raw file SHA256: `{result_raw_sha256}`
-- `d_phase_finalize.py` raw file SHA256: `{finalizer_raw_sha256}`
+- `D_PHASE_FINAL_RESULT.json` observed raw file SHA256（非输入门禁，本机审计值）: `{result_raw_sha256}`
+- `d_phase_finalize.py` observed raw file SHA256（非输入门禁，本机审计值）: `{finalizer_raw_sha256}`
 
-JSON 内部哈希使用 `canonical_json_sha256`，作用域为 `{RESULT_SCOPE}`。输出报告自身 raw SHA 不写入自身，以避免自引用循环。
+输入门禁哈希先以 UTF-8 解码，再把 CRLF/CR 规范化为 LF 后计算 SHA256；因此 fresh Linux 与 Windows checkout 可复现，同时 JSON 内容变化仍会被拒绝。JSON 内部哈希使用 `canonical_json_sha256`，作用域为 `{RESULT_SCOPE}`。输出报告自身 raw SHA 不写入自身，以避免自引用循环。
+
+每个输出文件自身使用 no-clobber 原子创建；JSON 与报告是两个独立 artifact，不宣称二者构成跨文件事务。
 
 ## 遗留关注项
 
@@ -433,7 +472,7 @@ def finalize(evidence_dir: Path, result_path: Path, report_path: Path) -> dict[s
     write_result(result_path, result)
     # A failure after the result write remains fail-closed: a rerun refuses to
     # overwrite, preserving the exact first artifact for diagnosis.
-    loaded = load_result(result_path)
+    loaded = load_result(result_path, evidence_dir)
     report = render_report(
         loaded, file_sha256(Path(result_path)), file_sha256(Path(__file__).resolve()),
     )
