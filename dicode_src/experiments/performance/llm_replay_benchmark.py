@@ -32,6 +32,7 @@ from llm_replay_harness import (
     extract_code,
     static_lint,
     cpu_jax_validation,
+    enable_sdk_retry_counting,
 )
 from llm_replay_manifest import CLASSIFICATION as MANIFEST_CLASSIFICATION
 
@@ -227,6 +228,15 @@ REQUIRED_ARTIFACTS = (
     "frozen_manifest.json", "SHA256SUMS", "ARTIFACT_INVENTORY.json",
 )
 
+_SDK_RETRY_COUNTER = None
+
+
+def _sdk_retry_counter():
+    global _SDK_RETRY_COUNTER
+    if _SDK_RETRY_COUNTER is None:
+        _SDK_RETRY_COUNTER = enable_sdk_retry_counting()
+    return _SDK_RETRY_COUNTER
+
 
 def verify_run_artifacts(out: Path) -> dict[str, Any]:
     """Check a run directory has every required raw artifact. A run missing
@@ -286,6 +296,8 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
         _atomic_json(out / "FAILURE.json", {"error_class": "provider_unavailable",
                                             "error": f"{type(e).__name__}: {e}"})
         raise
+
+    _sdk_retry_counter().reset()
 
     system_prompt = manifest["system_prompt"]
     prompts = manifest["user_prompts"]
@@ -376,6 +388,7 @@ async def run_replay(manifest: Mapping[str, Any], *, max_in_flight: int,
         "legacy_alias": {"queue_wait_sum_s": True},
         "retry_backoff_sum_s": derived.get("retry_backoff_sum_s", 0.0),
         "retry_count": retry_count,
+        "sdk_transport_retry_count": _sdk_retry_counter().count(),
         "empty_response_count": empty_count,
         "error_counts": error_counts,
         "valid_tasks": valid_count,

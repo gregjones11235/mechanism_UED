@@ -561,3 +561,19 @@ def test_15_result_and_event_sha_recomputable(tmp_path):
         json.dumps({k: v for k, v in result.items() if k != "result_sha256"},
                    sort_keys=True, default=str).encode())
     assert recomputed == result["result_sha256"]
+
+
+def test_16_sdk_retry_counter_actually_counts():
+    # verify the SDK retry counter is functional (so a reported 0 is real, not a
+    # broken counter silently returning 0)
+    import logging
+    counter = harness_mod.SDKRetryCounter()
+    rec = logging.LogRecord("openai._base_client", logging.INFO, "", 0,
+                            "Retrying request to /embeddings in 0.4 seconds", (), None)
+    counter.emit(rec)
+    counter.emit(rec)
+    counter.emit(logging.LogRecord("openai._base_client", logging.INFO, "", 0,
+                                   "some other message", (), None))
+    assert counter.count() == 2
+    counter.reset()
+    assert counter.count() == 0

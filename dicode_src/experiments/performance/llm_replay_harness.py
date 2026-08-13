@@ -17,8 +17,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import tempfile
+import threading
 import time
 import traceback
 from contextlib import contextmanager
@@ -46,6 +48,44 @@ EVENT_FIELDS = (
 
 class ProviderUnavailableError(RuntimeError):
     """Raised when the target provider cannot be reached (fail-closed)."""
+
+
+class SDKRetryCounter(logging.Handler):
+    """Counts OpenAI-SDK transport retries (the "Retrying request to ..." logs
+    that produced Mason's 863 retry events). The SDK retries internally inside a
+    single ``create`` call, so this counter observes what the outer request
+    wrapper cannot see. Thread-safe."""
+
+    def __init__(self):
+        super().__init__()
+        self.retries = 0
+        self._lock = threading.Lock()
+
+    def emit(self, record):
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return
+        if "Retrying request" in msg:
+            with self._lock:
+                self.retries += 1
+
+    def reset(self):
+        with self._lock:
+            self.retries = 0
+
+    def count(self) -> int:
+        with self._lock:
+            return self.retries
+
+
+def enable_sdk_retry_counting() -> SDKRetryCounter:
+    """Attach a retry counter to the openai._base_client logger and return it."""
+    counter = SDKRetryCounter()
+    logger = logging.getLogger("openai._base_client")
+    logger.addHandler(counter)
+    logger.setLevel(logging.INFO)
+    return counter
 
 
 def classify_error(exc: BaseException) -> tuple[str, int | None]:
