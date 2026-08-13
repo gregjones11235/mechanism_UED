@@ -61,9 +61,13 @@ def test_task_utils_candidate_code_load_guarded():
 
 def test_run_dicode_preflight_spans_guarded():
     src = _text(RUN_DICODE)
-    for name in ("preflight_task_reload", "route", "archive_update"):
-        # archive_update lives inside _preflight_route which checks tracker.enabled
-        assert f'tracker.span("{name}")' in src
+    route_src = _text(Path(__file__).parents[2] / "dicode" / "skill_preflight" / "preflight_route.py")
+    # preflight_task_reload and route spans remain inline in run_dicode
+    assert 'tracker.span("preflight_task_reload")' in src
+    assert 'tracker.span("route")' in src
+    # archive_update now lives in the shared preflight_route helper (run_dicode delegates)
+    assert 'tracker.span("archive_update")' in route_src
+    assert "preflight_route" in src
     assert 'time.monotonic_ns() if tracker.enabled else None' in src
     assert 'if tracker.enabled:\n                    tracker.record("preflight_wall"' in src
 
