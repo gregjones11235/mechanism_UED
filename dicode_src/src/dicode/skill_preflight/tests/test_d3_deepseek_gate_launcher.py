@@ -149,7 +149,7 @@ class _FakeRemote:
         raise AssertionError(f"unexpected fake argv: {call!r}")
 
 
-def _run(tmp_path: Path, fake: _FakeRemote) -> dict:
+def _run(tmp_path: Path, fake: _FakeRemote, *, local_unlinker=None) -> dict:
     return launcher.run_launcher(
         ssh_target=SSH_TARGET,
         ssh_key=SSH_KEY,
@@ -157,6 +157,7 @@ def _run(tmp_path: Path, fake: _FakeRemote) -> dict:
         remote_env_file=REMOTE_ENV,
         local_output_dir=tmp_path / "output",
         runner=fake,
+        local_unlinker=local_unlinker,
         now=FIXED_NOW,
         token=FIXED_TOKEN,
     )
@@ -286,6 +287,38 @@ def _assert_no_artifact_or_staging(tmp_path: Path) -> None:
     assert list(output.glob(f".{launcher.LOCAL_ARTIFACT_NAME}.*.staging")) == []
 
 
+class _SelectiveUnlinker:
+    def __init__(self, *, fail=(), already_absent=()):
+        self.fail = frozenset(fail)
+        self.already_absent = frozenset(already_absent)
+        self.calls: list[str] = []
+
+    @staticmethod
+    def _label(path: Path) -> str:
+        return "staging" if path.name.endswith(".staging") else "artifact"
+
+    def __call__(self, path: Path) -> None:
+        label = self._label(path)
+        self.calls.append(label)
+        if label in self.already_absent:
+            path.unlink(missing_ok=True)
+            raise FileNotFoundError
+        if label in self.fail:
+            raise OSError("synthetic unlink failure")
+        path.unlink(missing_ok=True)
+
+
+def _force_final_readback_failure(monkeypatch) -> None:
+    original_load = launcher.gate.load_artifact
+
+    def fail_final_readback(path):
+        if Path(path).name == launcher.LOCAL_ARTIFACT_NAME:
+            return {"invalid": "readback"}
+        return original_load(path)
+
+    monkeypatch.setattr(launcher.gate, "load_artifact", fail_final_readback)
+
+
 def test_success_exact_argv_sequence_hashes_cleanup_and_redaction(tmp_path):
     secret = _secret()
     fake = _FakeRemote(_passing_artifact(tmp_path, secret))
@@ -307,6 +340,11 @@ def test_success_exact_argv_sequence_hashes_cleanup_and_redaction(tmp_path):
     assert result["completion_requests"] == 0
     assert result["embedding_requests"] == 0
     assert result["cleanup_verified"] is True
+    assert result["staging_cleanup_attempted"] is True
+    assert result["staging_exists_after_cleanup"] is False
+    assert result["published_artifact_cleanup_attempted"] is False
+    assert result["published_artifact_exists_after_cleanup"] is True
+    assert result["local_cleanup_failure_count"] == 0
     assert fake.root_exists is False
     assert fake.calls == _expected_success_invocations(tmp_path)
     assert len(fake.calls) == 15
@@ -425,17 +463,74 @@ def test_published_artifact_readback_failure_removes_final_and_staging(
     tmp_path, monkeypatch
 ):
     fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
-    original_load = launcher.gate.load_artifact
-
-    def fail_final_readback(path):
-        if Path(path).name == launcher.LOCAL_ARTIFACT_NAME:
-            return {"invalid": "readback"}
-        return original_load(path)
-
-    monkeypatch.setattr(launcher.gate, "load_artifact", fail_final_readback)
+    _force_final_readback_failure(monkeypatch)
     result = _run(tmp_path, fake)
     assert result["status"] == "BLOCKED"
     assert result["reason"] == "artifact_tamper"
+    _assert_no_artifact_or_staging(tmp_path)
+
+
+def test_staging_unlink_failure_does_not_skip_final_removal(tmp_path):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    unlinker = _SelectiveUnlinker(fail={"staging"})
+    result = _run(tmp_path, fake, local_unlinker=unlinker)
+
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "cleanup_failed"
+    assert result["staging_cleanup_attempted"] is True
+    assert result["staging_exists_after_cleanup"] is True
+    assert result["published_artifact_cleanup_attempted"] is True
+    assert result["published_artifact_exists_after_cleanup"] is False
+    assert result["local_cleanup_failure_count"] == 1
+    assert unlinker.calls == ["staging", "artifact"]
+    assert not (tmp_path / "output" / launcher.LOCAL_ARTIFACT_NAME).exists()
+
+
+def test_final_unlink_failure_does_not_skip_staging_removal(tmp_path, monkeypatch):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    _force_final_readback_failure(monkeypatch)
+    unlinker = _SelectiveUnlinker(fail={"artifact"})
+    result = _run(tmp_path, fake, local_unlinker=unlinker)
+
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "cleanup_failed"
+    assert result["staging_cleanup_attempted"] is True
+    assert result["staging_exists_after_cleanup"] is False
+    assert result["published_artifact_cleanup_attempted"] is True
+    assert result["published_artifact_exists_after_cleanup"] is True
+    assert result["local_cleanup_failure_count"] == 1
+    assert unlinker.calls == ["staging", "artifact"]
+    assert list((tmp_path / "output").glob("*.staging")) == []
+
+
+def test_both_unlink_failures_are_attempted_and_recorded(tmp_path, monkeypatch):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    _force_final_readback_failure(monkeypatch)
+    unlinker = _SelectiveUnlinker(fail={"staging", "artifact"})
+    result = _run(tmp_path, fake, local_unlinker=unlinker)
+
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "cleanup_failed"
+    assert result["staging_exists_after_cleanup"] is True
+    assert result["published_artifact_exists_after_cleanup"] is True
+    assert result["local_cleanup_failure_count"] == 2
+    assert unlinker.calls == ["staging", "artifact"]
+
+
+def test_already_absent_cleanup_target_is_not_a_cleanup_failure(
+    tmp_path, monkeypatch
+):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    _force_final_readback_failure(monkeypatch)
+    unlinker = _SelectiveUnlinker(already_absent={"artifact"})
+    result = _run(tmp_path, fake, local_unlinker=unlinker)
+
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "artifact_tamper"
+    assert result["staging_exists_after_cleanup"] is False
+    assert result["published_artifact_exists_after_cleanup"] is False
+    assert result["local_cleanup_failure_count"] == 0
+    assert unlinker.calls == ["staging", "artifact"]
     _assert_no_artifact_or_staging(tmp_path)
 
 
@@ -519,6 +614,11 @@ def _rehashed_result(result: dict, path: str, replacement) -> dict:
         ("external_execution_hashes_verified", False),
         ("external_artifact_hash_verified", False),
         ("cleanup_verified", False),
+        ("staging_cleanup_attempted", False),
+        ("staging_exists_after_cleanup", True),
+        ("published_artifact_cleanup_attempted", True),
+        ("published_artifact_exists_after_cleanup", False),
+        ("local_cleanup_failure_count", 1),
     ],
 )
 def test_rehashed_pass_counterexamples_are_rejected(

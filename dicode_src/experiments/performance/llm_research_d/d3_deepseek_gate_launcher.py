@@ -62,18 +62,23 @@ RESULT_KEYS = frozenset(
         "http_status",
         "exact_model_advertised",
         "local_artifact_sha256",
+        "local_cleanup_failure_count",
         "manifest_sha256",
         "model",
         "base_url",
         "credential_variable",
         "observed_utc",
         "post_execution_sha256",
+        "published_artifact_cleanup_attempted",
+        "published_artifact_exists_after_cleanup",
         "pre_execution_sha256",
         "reason",
         "remote_artifact_sha256",
         "remote_root",
         "schema_version",
         "status",
+        "staging_cleanup_attempted",
+        "staging_exists_after_cleanup",
     }
 )
 ALLOWED_REASONS = frozenset(
@@ -160,6 +165,7 @@ class CommandInvocation:
 
 
 CommandRunner = Callable[[CommandInvocation], CommandResult]
+LocalUnlinker = Callable[[Path], None]
 
 
 def _default_runner(invocation: CommandInvocation) -> CommandResult:
@@ -424,6 +430,7 @@ def _base_result(
         "post_execution_sha256": None,
         "remote_artifact_sha256": None,
         "local_artifact_sha256": None,
+        "local_cleanup_failure_count": 0,
         "artifact_path": None,
         "artifact_internal_sha256": None,
         "artifact_status": None,
@@ -437,6 +444,10 @@ def _base_result(
         "completion_requests": 0,
         "embedding_requests": 0,
         "cleanup_verified": False,
+        "staging_cleanup_attempted": False,
+        "staging_exists_after_cleanup": False,
+        "published_artifact_cleanup_attempted": False,
+        "published_artifact_exists_after_cleanup": False,
         "observed_utc": observed_utc,
         "artifact_sha256_algorithm": CANONICAL_ALGORITHM,
         "artifact_sha256_scope": CANONICAL_SCOPE,
@@ -492,6 +503,12 @@ def _pass_semantics_are_complete(result: Mapping[str, Any]) -> bool:
         and result["external_execution_hashes_verified"] is True
         and result["external_artifact_hash_verified"] is True
         and result["cleanup_verified"] is True
+        and result["staging_cleanup_attempted"] is True
+        and result["staging_exists_after_cleanup"] is False
+        and result["published_artifact_cleanup_attempted"] is False
+        and result["published_artifact_exists_after_cleanup"] is True
+        and type(result["local_cleanup_failure_count"]) is int
+        and result["local_cleanup_failure_count"] == 0
     )
 
 
@@ -545,6 +562,10 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
         "external_execution_hashes_verified",
         "external_artifact_hash_verified",
         "cleanup_verified",
+        "staging_cleanup_attempted",
+        "staging_exists_after_cleanup",
+        "published_artifact_cleanup_attempted",
+        "published_artifact_exists_after_cleanup",
     ):
         if type(result[flag]) is not bool:
             raise LauncherError("artifact_tamper")
@@ -553,6 +574,8 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
     if (
         type(result["completion_requests"]) is not int
         or type(result["embedding_requests"]) is not int
+        or type(result["local_cleanup_failure_count"]) is not int
+        or not 0 <= result["local_cleanup_failure_count"] <= 2
     ):
         raise LauncherError("artifact_tamper")
     _validate_remote_root(result["remote_root"])
@@ -590,6 +613,21 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
     ] is not False:
         raise LauncherError("artifact_tamper")
     elif _pass_semantics_are_complete(result):
+        raise LauncherError("artifact_tamper")
+    if (
+        result["staging_exists_after_cleanup"]
+        or (
+            result["published_artifact_cleanup_attempted"]
+            and result["published_artifact_exists_after_cleanup"]
+        )
+        or result["local_cleanup_failure_count"]
+    ) and (result["status"] != "BLOCKED" or result["reason"] != "cleanup_failed"):
+        raise LauncherError("artifact_tamper")
+    retained_cleanup_targets = int(result["staging_exists_after_cleanup"]) + int(
+        result["published_artifact_cleanup_attempted"]
+        and result["published_artifact_exists_after_cleanup"]
+    )
+    if result["local_cleanup_failure_count"] < retained_cleanup_targets:
         raise LauncherError("artifact_tamper")
     return result
 
@@ -632,28 +670,109 @@ def _create_private_staging(path: Path) -> None:
     os.close(fd)
 
 
-def _publish_verified_artifact(
-    staging_path: Path,
-    artifact_path: Path,
-    expected_sha256: str,
-    expected_artifact: Mapping[str, Any],
-) -> None:
+def _publish_artifact_no_clobber(staging_path: Path, artifact_path: Path) -> None:
     try:
         os.link(staging_path, artifact_path)
     except FileExistsError:
         raise LauncherError("local_output_exists") from None
     except OSError:
         raise LauncherError("artifact_tamper") from None
+
+
+def _verify_published_artifact(
+    artifact_path: Path,
+    expected_sha256: str,
+    expected_artifact: Mapping[str, Any],
+) -> None:
     try:
         gate.verify_external_artifact_hash(artifact_path, expected_sha256)
         if gate.load_artifact(artifact_path) != expected_artifact:
             raise LauncherError("artifact_tamper")
     except (LauncherError, gate.GateArtifactError, OSError, ValueError, TypeError):
-        try:
-            artifact_path.unlink()
-        except OSError:
-            pass
         raise LauncherError("artifact_tamper") from None
+
+
+def _default_local_unlinker(path: Path) -> None:
+    path.unlink(missing_ok=True)
+
+
+def _local_cleanup_evidence(
+    *,
+    staging_path: Path,
+    artifact_path: Path,
+    staging_created: bool,
+    published_by_launcher: bool,
+    failure_present: bool,
+    unlinker: LocalUnlinker,
+) -> dict[str, bool | int]:
+    failed_targets: set[str] = set()
+    staging_attempted = staging_created
+    if staging_attempted:
+        try:
+            unlinker(staging_path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            failed_targets.add("staging")
+
+    try:
+        staging_exists_before_final = staging_path.exists()
+    except OSError:
+        staging_exists_before_final = True
+        failed_targets.add("staging")
+
+    final_attempted = published_by_launcher and (
+        failure_present or bool(failed_targets) or staging_exists_before_final
+    )
+    if final_attempted:
+        try:
+            unlinker(artifact_path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            failed_targets.add("artifact")
+
+    try:
+        staging_exists = staging_path.exists()
+    except OSError:
+        staging_exists = True
+        failed_targets.add("staging")
+    try:
+        artifact_exists = artifact_path.exists()
+    except OSError:
+        artifact_exists = True
+        failed_targets.add("artifact")
+
+    if published_by_launcher and not final_attempted and failed_targets:
+        final_attempted = True
+        try:
+            unlinker(artifact_path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            failed_targets.add("artifact")
+        try:
+            staging_exists = staging_path.exists()
+        except OSError:
+            staging_exists = True
+            failed_targets.add("staging")
+        try:
+            artifact_exists = artifact_path.exists()
+        except OSError:
+            artifact_exists = True
+            failed_targets.add("artifact")
+
+    if staging_exists:
+        failed_targets.add("staging")
+    if final_attempted and artifact_exists:
+        failed_targets.add("artifact")
+    return {
+        "staging_cleanup_attempted": staging_attempted,
+        "staging_exists_after_cleanup": staging_exists,
+        "published_artifact_cleanup_attempted": final_attempted,
+        "published_artifact_exists_after_cleanup": artifact_exists,
+        "local_cleanup_failure_count": len(failed_targets),
+    }
 
 
 def _observed_utc(now: datetime) -> str:
@@ -668,10 +787,12 @@ def run_launcher(
     remote_env_file: str,
     local_output_dir: str | Path,
     runner: CommandRunner | None = None,
+    local_unlinker: LocalUnlinker | None = None,
     now: datetime | None = None,
     token: str | None = None,
 ) -> dict[str, Any]:
     command_runner = runner or _default_runner
+    unlinker = local_unlinker or _default_local_unlinker
     target = _validate_ssh_target(ssh_target)
     python_path = _validate_remote_path(remote_python)
     env_path = _validate_remote_path(remote_env_file)
@@ -892,24 +1013,31 @@ def run_launcher(
 
     if failure is None and verified_artifact is not None:
         try:
-            _publish_verified_artifact(
+            _publish_artifact_no_clobber(
                 staging_path,
+                artifact_path,
+            )
+            published_by_launcher = True
+            _verify_published_artifact(
                 artifact_path,
                 result["remote_artifact_sha256"],
                 verified_artifact,
             )
-            published_by_launcher = True
             result["artifact_path"] = LOCAL_ARTIFACT_NAME
             result["external_artifact_hash_verified"] = True
         except LauncherError as exc:
             failure = exc
 
-    try:
-        if staging_created:
-            staging_path.unlink(missing_ok=True)
-        if failure is not None and published_by_launcher:
-            artifact_path.unlink(missing_ok=True)
-    except OSError:
+    local_cleanup = _local_cleanup_evidence(
+        staging_path=staging_path,
+        artifact_path=artifact_path,
+        staging_created=staging_created,
+        published_by_launcher=published_by_launcher,
+        failure_present=failure is not None,
+        unlinker=unlinker,
+    )
+    result.update(local_cleanup)
+    if local_cleanup["local_cleanup_failure_count"]:
         failure = LauncherError("cleanup_failed")
     if failure is not None:
         result["artifact_path"] = None
