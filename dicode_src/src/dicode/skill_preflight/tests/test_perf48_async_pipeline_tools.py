@@ -5,6 +5,8 @@ import hashlib
 import importlib.util
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -114,6 +116,7 @@ def _async_result(**changes):
         },
         "double_apply_rejected": True,
         "route_calls": 1,
+        "barrier": {"enabled": False, "mode": "control_direct"},
         "score_projection": projection,
         "score_fingerprint": harness.fingerprint(projection),
         "kept_ids": ["one"],
@@ -176,6 +179,7 @@ def _reference_result(**changes):
         "summary_mode": "fused",
         "return_payload_bytes": 8,
         "route_calls": 1,
+        "barrier": {"enabled": False, "mode": "control_direct"},
         "runtime_source_evidence": _reference_source_evidence(),
         "env_evidence": {"jax_version": "fake"},
         "component_started_monotonic_ns": 1,
@@ -376,6 +380,7 @@ def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path, monkeypatch)
         source_commit="source",
         source=str(tmp_path),
         result_timeout_s=1,
+        barrier_receipt={"enabled": False, "mode": "control_direct"},
     )
     monkeypatch.setenv("JAX_PLATFORMS", "cpu")
     result = harness.run_async_controller(
@@ -520,6 +525,24 @@ def test_concurrent_launch_order_alternates_by_repeat():
         benchmark.concurrent_launch_order(2)
 
 
+def test_concurrent_command_carries_tool_owned_barrier(tmp_path):
+    benchmark = load("perf48_async_pipeline_benchmark")
+    args = SimpleNamespace(
+        python="python", harness="harness", manifest="manifest", config="config",
+        source="source", source_commit="f" * 40, stage="early", repeat=0,
+        result_timeout_s=10, gpu2_uuid=benchmark.GPU2[1], gpu3_uuid=benchmark.GPU3[1],
+        active_barrier={
+            "ready_paths": {"ASYNC": tmp_path / "READY_ASYNC", "B": tmp_path / "READY_B"},
+            "go_path": tmp_path / "GO", "barrier_id": "id", "timeout_s": 5,
+        },
+    )
+    command = benchmark.command(args, "ASYNC", tmp_path / "out")
+    assert command[command.index("--barrier-id") + 1] == "id"
+    assert command[command.index("--ready-path") + 1].endswith("READY_ASYNC")
+    args.active_barrier = None
+    assert "--barrier-id" not in benchmark.command(args, "B", tmp_path / "out-b")
+
+
 def _cell(stage, repeat, conclusion="ASYNC_PIPELINE_PASS", overlap=10.0):
     return {
         "stage": stage,
@@ -577,6 +600,10 @@ def test_fake_B_delegation_preserves_100_update_result(monkeypatch, tmp_path):
     result = harness.run_component_b({}, {}, {}, {}, tmp_path, args)
     assert result == {"updates": 100, "env_steps": 13_107_200, "checkpoint_loadable": True}
     assert calls == [("B", {"enabled": False, "mode": "control_direct"})]
+    receipt = {"enabled": True, "mode": "ready_go", "barrier_id": "id"}
+    args = SimpleNamespace(component="unused", barrier_receipt=receipt)
+    harness.run_component_b({}, {}, {}, {}, tmp_path, args)
+    assert calls[-1] == ("B", receipt)
 
 
 def test_component_env_exact_gpu_and_independent_caches(tmp_path):
@@ -628,6 +655,316 @@ def test_cuda_plugin_traceback_remains_fatal(tmp_path):
     log = tmp_path / "stderr"
     log.write_text("CUDA plugin init failed\nTraceback (most recent call last):\n", encoding="utf-8")
     assert benchmark._pair.fatal_in([log]) == "Traceback (most recent call last):"
+
+
+def _barrier_args(tmp_path, timeout=1.0):
+    return SimpleNamespace(
+        ready_path=str(tmp_path / "READY_ASYNC.json"),
+        go_path=str(tmp_path / "GO.json"),
+        barrier_id="barrier-id",
+        barrier_timeout_s=timeout,
+    )
+
+
+def test_harness_ready_go_success_and_control(tmp_path):
+    harness = load("perf48_async_pipeline_harness")
+    args = _barrier_args(tmp_path)
+    source = {"source": "evidence"}
+
+    def release():
+        ready_path = Path(args.ready_path)
+        deadline = time.monotonic() + 1
+        while not ready_path.exists():
+            assert time.monotonic() < deadline
+            time.sleep(0.005)
+        ready = harness.load_hashed_json(ready_path)
+        harness.atomic_json(
+            args.go_path,
+            {
+                "classification": harness.CLASSIFICATION,
+                "barrier_id": args.barrier_id,
+                "components": ["ASYNC", "B"],
+                "ready_sha256": {
+                    "ASYNC": ready["result_sha256"], "B": "b" * 64,
+                },
+                "go_monotonic_ns": time.monotonic_ns(),
+                "llm_api_calls": 0,
+            },
+        )
+
+    thread = threading.Thread(target=release)
+    thread.start()
+    receipt = harness.wait_for_async_go(args, "ASYNC", source)
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+    assert receipt["enabled"] and receipt["mode"] == "ready_go"
+    assert receipt["runtime_source_evidence_sha256"] == harness.fingerprint(source)
+    assert receipt["go_observed_monotonic_ns"] >= receipt["go_monotonic_ns"]
+    control = SimpleNamespace(ready_path=None, go_path=None, barrier_id=None)
+    assert harness.wait_for_async_go(control, "REFERENCE", source) == {
+        "enabled": False, "mode": "control_direct",
+    }
+
+
+def test_harness_go_tamper_and_timeout_fail_closed(tmp_path):
+    harness = load("perf48_async_pipeline_harness")
+    args = _barrier_args(tmp_path / "tamper")
+    Path(args.ready_path).parent.mkdir()
+
+    def bad_release():
+        while not Path(args.ready_path).exists():
+            time.sleep(0.005)
+        harness.atomic_json(
+            args.go_path,
+            {
+                "classification": harness.CLASSIFICATION,
+                "barrier_id": args.barrier_id,
+                "components": ["ASYNC", "B"],
+                "ready_sha256": {"ASYNC": "0" * 64, "B": "b" * 64},
+                "go_monotonic_ns": time.monotonic_ns(),
+                "llm_api_calls": 0,
+            },
+        )
+
+    thread = threading.Thread(target=bad_release)
+    thread.start()
+    with pytest.raises(RuntimeError, match="GO barrier receipt invalid"):
+        harness.wait_for_async_go(args, "ASYNC", {"source": "evidence"})
+    thread.join(timeout=1)
+    timeout_root = tmp_path / "timeout"
+    timeout_root.mkdir()
+    with pytest.raises(TimeoutError, match="GO barrier timeout"):
+        harness.wait_for_async_go(
+            _barrier_args(timeout_root, timeout=0.01), "ASYNC", {"source": "evidence"}
+        )
+
+
+def _parent_barrier(harness, source, component="ASYNC"):
+    source_sha = harness.fingerprint(source)
+    ready = harness._dual._hashed_document(
+        {
+            "classification": harness.CLASSIFICATION,
+            "barrier_id": "barrier-id",
+            "component": component,
+            "pid": 101,
+            "ready_monotonic_ns": 10,
+            "runtime_source_evidence_sha256": source_sha,
+            "llm_api_calls": 0,
+        }
+    )
+    other = "B" if component == "ASYNC" else "ASYNC"
+    other_ready = harness._dual._hashed_document(
+        {
+            "classification": harness.CLASSIFICATION,
+            "barrier_id": "barrier-id",
+            "component": other,
+            "pid": 102,
+            "ready_monotonic_ns": 11,
+            "runtime_source_evidence_sha256": "b" * 64,
+            "llm_api_calls": 0,
+        }
+    )
+    ready_map = {component: ready, other: other_ready}
+    go = harness._dual._hashed_document(
+        {
+            "classification": harness.CLASSIFICATION,
+            "barrier_id": "barrier-id",
+            "components": ["ASYNC", "B"],
+            "ready_sha256": {name: row["result_sha256"] for name, row in ready_map.items()},
+            "go_monotonic_ns": 20,
+            "llm_api_calls": 0,
+        }
+    )
+    return {"barrier_id": "barrier-id", "components": ["ASYNC", "B"], "ready": ready_map, "go": go, "timeout_s": 1.0}
+
+
+def test_parent_child_barrier_link_and_workload_after_go():
+    harness = load("perf48_async_pipeline_harness")
+    benchmark = load("perf48_async_pipeline_benchmark")
+    source = {"source": "evidence"}
+    parent = _parent_barrier(harness, source)
+    ready = parent["ready"]["ASYNC"]
+    go = parent["go"]
+    result = {
+        "runtime_source_evidence": source,
+        "component_started_monotonic_ns": 31,
+        "barrier": {
+            "enabled": True,
+            "barrier_id": "barrier-id",
+            "ready_sha256": ready["result_sha256"],
+            "ready_monotonic_ns": ready["ready_monotonic_ns"],
+            "runtime_source_evidence_sha256": ready["runtime_source_evidence_sha256"],
+            "go_sha256": go["result_sha256"],
+            "go_monotonic_ns": go["go_monotonic_ns"],
+            "go_observed_monotonic_ns": 30,
+        },
+    }
+    benchmark.verify_async_barrier_link(result, parent, "ASYNC")
+    early = json.loads(json.dumps(result))
+    early["component_started_monotonic_ns"] = 29
+    with pytest.raises(RuntimeError, match="parent/child"):
+        benchmark.verify_async_barrier_link(early, parent, "ASYNC")
+    tampered = json.loads(json.dumps(result))
+    tampered["barrier"]["go_sha256"] = "0" * 64
+    with pytest.raises(RuntimeError, match="parent/child"):
+        benchmark.verify_async_barrier_link(tampered, parent, "ASYNC")
+    source_mismatch = json.loads(json.dumps(result))
+    source_mismatch["barrier"]["runtime_source_evidence_sha256"] = "a" * 64
+    source_mismatch_parent = json.loads(json.dumps(parent))
+    source_mismatch_parent["ready"]["ASYNC"]["runtime_source_evidence_sha256"] = "a" * 64
+    with pytest.raises(RuntimeError, match="parent/child"):
+        benchmark.verify_async_barrier_link(
+            source_mismatch, source_mismatch_parent, "ASYNC"
+        )
+
+
+def test_parent_ready_validation_pid_source_tamper_and_early_exit(tmp_path, monkeypatch):
+    harness = load("perf48_async_pipeline_harness")
+    benchmark = load("perf48_async_pipeline_benchmark")
+    args = SimpleNamespace(
+        manifest_sha256="manifest", source_commit="f" * 40,
+        stage="early", repeat=0, barrier_timeout_s=0.05,
+    )
+    barrier = benchmark.make_async_barrier(args, tmp_path, "concurrent")
+    evidence = {}
+
+    class Process:
+        def __init__(self, pid, rc=None): self.pid, self.rc = pid, rc
+        def poll(self): return self.rc
+
+    processes = {"ASYNC": Process(101), "B": Process(102)}
+    monitors = {name: (None, None, []) for name in ("ASYNC", "B")}
+    for component in ("ASYNC", "B"):
+        out = tmp_path / component
+        out.mkdir()
+        evidence[component] = {"out": str(out)}
+    monkeypatch.setattr(benchmark._pair, "fatal_in", lambda paths: None)
+    monkeypatch.setattr(benchmark._pair, "arm_gpu_metrics", lambda path: (0, 5000))
+
+    def write_ready(component, pid, source_sha="a" * 64):
+        harness.atomic_json(
+            barrier["ready_paths"][component],
+            {
+                "classification": harness.CLASSIFICATION,
+                "barrier_id": barrier["barrier_id"],
+                "component": component,
+                "pid": pid,
+                "ready_monotonic_ns": time.monotonic_ns(),
+                "runtime_source_evidence_sha256": source_sha,
+                "llm_api_calls": 0,
+            },
+        )
+
+    write_ready("ASYNC", 101)
+    write_ready("B", 102)
+    parent = benchmark.release_async_barrier(barrier, processes, evidence, monitors)
+    assert parent["go"]["components"] == ["ASYNC", "B"]
+
+    for label, pid, source_sha, message in (
+        ("pid", 999, "a" * 64, "READY receipt invalid"),
+        ("source", 101, "bad", "READY receipt invalid"),
+    ):
+        case = tmp_path / label
+        case.mkdir()
+        case_barrier = benchmark.make_async_barrier(args, case, "concurrent")
+        case_evidence = {}
+        for component in ("ASYNC", "B"):
+            out = case / component
+            out.mkdir()
+            case_evidence[component] = {"out": str(out)}
+        target = "ASYNC"
+        harness.atomic_json(
+            case_barrier["ready_paths"][target],
+            {
+                "classification": harness.CLASSIFICATION,
+                "barrier_id": case_barrier["barrier_id"],
+                "component": target,
+                "pid": pid,
+                "ready_monotonic_ns": 1,
+                "runtime_source_evidence_sha256": source_sha,
+                "llm_api_calls": 0,
+            },
+        )
+        write_processes = {"ASYNC": Process(101), "B": Process(102, 1)}
+        with pytest.raises(RuntimeError, match=message):
+            benchmark.release_async_barrier(
+                case_barrier, write_processes, case_evidence, monitors
+            )
+
+    early = tmp_path / "early"
+    early.mkdir()
+    early_barrier = benchmark.make_async_barrier(args, early, "concurrent")
+    early_evidence = {}
+    for component in ("ASYNC", "B"):
+        out = early / component
+        out.mkdir()
+        early_evidence[component] = {"out": str(out)}
+    with pytest.raises(RuntimeError, match="exited before READY"):
+        benchmark.release_async_barrier(
+            early_barrier,
+            {"ASYNC": Process(101, 1), "B": Process(102)},
+            early_evidence,
+            monitors,
+        )
+
+
+def test_parent_ready_selfhash_tamper_and_timeout(tmp_path, monkeypatch):
+    harness = load("perf48_async_pipeline_harness")
+    benchmark = load("perf48_async_pipeline_benchmark")
+    args = SimpleNamespace(
+        manifest_sha256="manifest", source_commit="f" * 40,
+        stage="early", repeat=0, barrier_timeout_s=0.01,
+    )
+
+    class Process:
+        def __init__(self, pid): self.pid = pid
+        def poll(self): return None
+
+    processes = {"ASYNC": Process(101), "B": Process(102)}
+    monitors = {name: (None, None, []) for name in ("ASYNC", "B")}
+    monkeypatch.setattr(benchmark._pair, "fatal_in", lambda paths: None)
+    monkeypatch.setattr(benchmark._pair, "arm_gpu_metrics", lambda path: (0, 5000))
+
+    timeout_barrier = benchmark.make_async_barrier(args, tmp_path, "timeout")
+    timeout_evidence = {}
+    for component in ("ASYNC", "B"):
+        out = tmp_path / f"timeout_{component}"
+        out.mkdir()
+        timeout_evidence[component] = {"out": str(out)}
+    with pytest.raises(TimeoutError, match="READY barrier timeout"):
+        benchmark.release_async_barrier(
+            timeout_barrier, processes, timeout_evidence, monitors
+        )
+
+    tamper_root = tmp_path / "tamper"
+    tamper_root.mkdir()
+    tamper_barrier = benchmark.make_async_barrier(args, tamper_root, "concurrent")
+    tamper_evidence = {}
+    for component, pid in (("ASYNC", 101), ("B", 102)):
+        out = tamper_root / component
+        out.mkdir()
+        tamper_evidence[component] = {"out": str(out)}
+        document = harness.atomic_json(
+            tamper_barrier["ready_paths"][component],
+            {
+                "classification": harness.CLASSIFICATION,
+                "barrier_id": tamper_barrier["barrier_id"],
+                "component": component,
+                "pid": pid,
+                "ready_monotonic_ns": 1,
+                "runtime_source_evidence_sha256": "a" * 64,
+                "llm_api_calls": 0,
+            },
+        )
+        if component == "ASYNC":
+            document["pid"] = 999
+            Path(tamper_barrier["ready_paths"][component]).write_text(
+                json.dumps(document), encoding="utf-8"
+            )
+    with pytest.raises(ValueError, match="hash mismatch"):
+        benchmark.release_async_barrier(
+            tamper_barrier, processes, tamper_evidence, monitors
+        )
 
 
 def test_benchmark_prepared_output_is_accepted_but_finalized_output_is_not(tmp_path):

@@ -218,6 +218,69 @@ def launch_worker_without_cpu_platform(manager: Any, **kwargs: Any) -> Path:
             os.environ["JAX_PLATFORMS"] = str(parent_platform)
 
 
+def wait_for_async_go(
+    args: Any, component: str, runtime_source_evidence: Mapping[str, Any]
+) -> dict[str, Any]:
+    values = (args.ready_path, args.go_path, args.barrier_id)
+    if not any(values):
+        return {"enabled": False, "mode": "control_direct"}
+    if not all(values) or component not in ("ASYNC", "B"):
+        raise RuntimeError("incomplete or invalid async barrier arguments")
+    ready_path = Path(args.ready_path)
+    go_path = Path(args.go_path)
+    if ready_path.exists() or go_path.exists():
+        raise FileExistsError("async barrier artifact already exists")
+    source_sha = fingerprint(runtime_source_evidence)
+    ready_ns = time.monotonic_ns()
+    ready = atomic_json(
+        ready_path,
+        {
+            "classification": CLASSIFICATION,
+            "barrier_id": args.barrier_id,
+            "component": component,
+            "pid": os.getpid(),
+            "ready_monotonic_ns": ready_ns,
+            "runtime_source_evidence_sha256": source_sha,
+            "llm_api_calls": 0,
+        },
+    )
+    deadline = time.monotonic() + float(args.barrier_timeout_s)
+    while not go_path.is_file():
+        if time.monotonic() >= deadline:
+            raise TimeoutError("async GO barrier timeout")
+        time.sleep(0.05)
+    go = load_hashed_json(go_path)
+    ready_hashes = go.get("ready_sha256")
+    if (
+        go.get("classification") != CLASSIFICATION
+        or go.get("barrier_id") != args.barrier_id
+        or go.get("components") != ["ASYNC", "B"]
+        or not isinstance(ready_hashes, Mapping)
+        or set(ready_hashes) != {"ASYNC", "B"}
+        or any(
+            not isinstance(value, str) or len(value) != 64
+            for value in ready_hashes.values()
+        )
+        or ready_hashes.get(component) != ready["result_sha256"]
+        or not isinstance(go.get("go_monotonic_ns"), int)
+        or go.get("llm_api_calls") != 0
+    ):
+        raise RuntimeError("async GO barrier receipt invalid")
+    return {
+        "enabled": True,
+        "mode": "ready_go",
+        "barrier_id": args.barrier_id,
+        "ready_path": str(ready_path.resolve()),
+        "ready_sha256": ready["result_sha256"],
+        "ready_monotonic_ns": ready_ns,
+        "runtime_source_evidence_sha256": source_sha,
+        "go_path": str(go_path.resolve()),
+        "go_sha256": go["result_sha256"],
+        "go_monotonic_ns": go["go_monotonic_ns"],
+        "go_observed_monotonic_ns": time.monotonic_ns(),
+    }
+
+
 def run_async_controller(manifest: Mapping[str, Any], config: Any, config_evidence: Mapping[str, str], runtime: Mapping[str, Any], out: Path, args: Any) -> dict[str, Any]:
     stage, repeat = stage_repeat(manifest, args.stage, args.repeat)
     started = time.monotonic_ns()
@@ -334,6 +397,7 @@ def run_async_controller(manifest: Mapping[str, Any], config: Any, config_eviden
         "worker_route_calls": result["route_calls"],
         "main_route_calls": receipts["APPLIED"]["route_calls"],
         "receipt_sha256": {name: value["result_sha256"] for name, value in receipts.items()},
+        "barrier": dict(args.barrier_receipt),
         "runtime_source_evidence": runtime["source_evidence"],
         "component_started_monotonic_ns": started,
         "worker_launched_monotonic_ns": launch_ns,
@@ -408,6 +472,7 @@ def run_sync_reference(manifest: Mapping[str, Any], config: Any, config_evidence
         "summary_mode": mode,
         "return_payload_bytes": payload_bytes,
         "route_calls": 1,
+        "barrier": dict(args.barrier_receipt),
         "runtime_source_evidence": runtime["source_evidence"](manifest),
         "env_evidence": runtime["env_evidence"](),
         "component_started_monotonic_ns": started,
@@ -420,7 +485,8 @@ def run_sync_reference(manifest: Mapping[str, Any], config: Any, config_evidence
 
 def run_component_b(manifest: Mapping[str, Any], config: Any, config_evidence: Mapping[str, str], runtime: Mapping[str, Any], out: Path, args: Any):
     args.component = "B"
-    args.barrier_receipt = {"enabled": False, "mode": "control_direct"}
+    if not hasattr(args, "barrier_receipt"):
+        args.barrier_receipt = {"enabled": False, "mode": "control_direct"}
     return _dual.run_component_b(manifest, config, config_evidence, runtime, out, args)
 
 
@@ -444,6 +510,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stage", choices=("early", "mid", "late"), required=True)
     parser.add_argument("--repeat", type=int, choices=(0, 1), required=True)
     parser.add_argument("--result-timeout-s", type=float, default=1800.0)
+    parser.add_argument("--ready-path")
+    parser.add_argument("--go-path")
+    parser.add_argument("--barrier-id")
+    parser.add_argument("--barrier-timeout-s", type=float, default=120.0)
     args = parser.parse_args(argv)
     out = prepare_output(args.out)
     try:
@@ -456,13 +526,24 @@ def main(argv: list[str] | None = None) -> int:
             runtime = production_async_runtime(manifest)
             if runtime["jax"].default_backend() != "cpu":
                 raise RuntimeError("async controller backend must be CPU")
+            args.barrier_receipt = wait_for_async_go(
+                args, "ASYNC", runtime["source_evidence"]
+            )
             run_async_controller(manifest, config, config_evidence, runtime, out, args)
         elif args.component == "REFERENCE":
             _dual._verify_gpu(args.required_gpu_uuid)
-            run_sync_reference(manifest, config, config_evidence, production_reference_runtime(manifest, out), out, args)
+            runtime = production_reference_runtime(manifest, out)
+            args.barrier_receipt = wait_for_async_go(
+                args, "REFERENCE", runtime["source_evidence"](manifest)
+            )
+            run_sync_reference(manifest, config, config_evidence, runtime, out, args)
         else:
             _dual._verify_gpu(args.required_gpu_uuid)
-            run_component_b(manifest, config, config_evidence, _dual._production_runtime_b(manifest), out, args)
+            runtime = _dual._production_runtime_b(manifest)
+            args.barrier_receipt = wait_for_async_go(
+                args, "B", runtime["source_evidence"](manifest)
+            )
+            run_component_b(manifest, config, config_evidence, runtime, out, args)
     except Exception as exc:
         atomic_json(out / "FAILURE.json", {"classification": CLASSIFICATION, "component": args.component, "conclusion": "REJECTED_RUNTIME", "error_class": type(exc).__name__, "error": str(exc), "traceback": traceback.format_exc(), "llm_api_calls": 0})
         raise

@@ -189,6 +189,8 @@ def validate_reference_result(document: Mapping[str, Any], args: Any) -> dict[st
     for key, value in expected.items():
         if document.get(key) != value:
             raise RuntimeError(f"reference result mismatch: {key}")
+    if document.get("barrier") != {"enabled": False, "mode": "control_direct"}:
+        raise RuntimeError("reference control barrier mismatch")
     if _harness._dual._hashed_document(document)["result_sha256"] != document.get("result_sha256"):
         raise RuntimeError("reference result self-hash mismatch")
     if any(bool(document.get(marker)) for marker in _harness.RUNTIME_MARKERS):
@@ -362,7 +364,7 @@ def component_env(args: Any, component: str, out: Path) -> dict[str, str]:
 
 def command(args: Any, component: str, out: Path) -> list[str]:
     uuid = args.gpu2_uuid if component in ("ASYNC", "REFERENCE") else args.gpu3_uuid
-    return [
+    result = [
         args.python,
         args.harness,
         "--manifest", args.manifest,
@@ -376,6 +378,140 @@ def command(args: Any, component: str, out: Path) -> list[str]:
         "--repeat", str(args.repeat),
         "--result-timeout-s", str(args.result_timeout_s),
     ]
+    barrier = getattr(args, "active_barrier", None)
+    if barrier is not None:
+        result.extend(
+            [
+                "--ready-path", str(barrier["ready_paths"][component]),
+                "--go-path", str(barrier["go_path"]),
+                "--barrier-id", barrier["barrier_id"],
+                "--barrier-timeout-s", str(barrier["timeout_s"]),
+            ]
+        )
+    return result
+
+
+def make_async_barrier(args: Any, root: Path, label: str) -> dict[str, Any]:
+    barrier_dir = root / label / "barrier"
+    barrier_dir.mkdir(parents=True)
+    barrier_id = _harness.fingerprint(
+        {
+            "root": str(root.resolve()),
+            "label": label,
+            "manifest_sha256": args.manifest_sha256,
+            "source_commit": args.source_commit,
+            "stage": args.stage,
+            "repeat": args.repeat,
+            "components": ["ASYNC", "B"],
+        }
+    )
+    return {
+        "barrier_id": barrier_id,
+        "ready_paths": {
+            component: barrier_dir / f"READY_{component}.json"
+            for component in ("ASYNC", "B")
+        },
+        "go_path": barrier_dir / "GO.json",
+        "timeout_s": float(args.barrier_timeout_s),
+    }
+
+
+def release_async_barrier(
+    barrier: Mapping[str, Any],
+    processes: Mapping[str, subprocess.Popen[Any]],
+    evidence: Mapping[str, dict[str, Any]],
+    monitors: Mapping[str, tuple[Any, Any, list[str]]],
+) -> dict[str, Any]:
+    deadline = time.monotonic() + float(barrier["timeout_s"])
+    ready: dict[str, dict[str, Any]] = {}
+    while len(ready) != 2:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("parent async READY barrier timeout")
+        for component in ("ASYNC", "B"):
+            if component in ready:
+                continue
+            process = processes[component]
+            if process.poll() is not None:
+                raise RuntimeError(f"component {component} exited before READY")
+            if monitors[component][2]:
+                raise RuntimeError(f"component {component} GPU violation before READY")
+            out = Path(evidence[component]["out"])
+            fatal = _pair.fatal_in([out / "harness.stdout", out / "harness.stderr"])
+            if fatal:
+                raise RuntimeError(f"component {component} fatal before READY: {fatal}")
+            _, minimum = _pair.arm_gpu_metrics(out / "gpu_memory.csv")
+            if minimum is None:
+                continue
+            if minimum < 4096:
+                raise RuntimeError(f"component {component} below 4GiB before READY")
+            ready_path = Path(barrier["ready_paths"][component])
+            if not ready_path.is_file():
+                continue
+            document = _harness.load_hashed_json(ready_path)
+            source_sha = document.get("runtime_source_evidence_sha256")
+            if (
+                document.get("classification") != CLASSIFICATION
+                or document.get("barrier_id") != barrier["barrier_id"]
+                or document.get("component") != component
+                or document.get("pid") != process.pid
+                or not isinstance(document.get("ready_monotonic_ns"), int)
+                or not isinstance(source_sha, str)
+                or len(source_sha) != 64
+                or any(char not in "0123456789abcdef" for char in source_sha)
+                or document.get("llm_api_calls") != 0
+            ):
+                raise RuntimeError(f"component {component} READY receipt invalid")
+            ready[component] = document
+        time.sleep(0.05)
+    go_path = Path(barrier["go_path"])
+    if go_path.exists():
+        raise FileExistsError("async GO barrier already exists")
+    go = _harness.atomic_json(
+        go_path,
+        {
+            "classification": CLASSIFICATION,
+            "barrier_id": barrier["barrier_id"],
+            "components": ["ASYNC", "B"],
+            "go_monotonic_ns": time.monotonic_ns(),
+            "ready_sha256": {
+                component: ready[component]["result_sha256"]
+                for component in ("ASYNC", "B")
+            },
+            "llm_api_calls": 0,
+        },
+    )
+    return {
+        "barrier_id": barrier["barrier_id"],
+        "components": ["ASYNC", "B"],
+        "ready": ready,
+        "go": go,
+        "timeout_s": barrier["timeout_s"],
+    }
+
+
+def verify_async_barrier_link(
+    result: Mapping[str, Any], parent: Mapping[str, Any], component: str
+) -> None:
+    child = result.get("barrier")
+    ready = parent.get("ready", {}).get(component, {})
+    go = parent.get("go", {})
+    if (
+        not isinstance(child, Mapping)
+        or child.get("enabled") is not True
+        or child.get("barrier_id") != parent.get("barrier_id")
+        or child.get("ready_sha256") != ready.get("result_sha256")
+        or child.get("ready_monotonic_ns") != ready.get("ready_monotonic_ns")
+        or child.get("runtime_source_evidence_sha256")
+        != ready.get("runtime_source_evidence_sha256")
+        or ready.get("runtime_source_evidence_sha256")
+        != _harness.fingerprint(result.get("runtime_source_evidence"))
+        or child.get("go_sha256") != go.get("result_sha256")
+        or child.get("go_monotonic_ns") != go.get("go_monotonic_ns")
+        or go.get("ready_sha256", {}).get(component) != ready.get("result_sha256")
+        or int(result.get("component_started_monotonic_ns", -1))
+        < int(child.get("go_observed_monotonic_ns", 0))
+    ):
+        raise RuntimeError(f"component {component} parent/child async barrier mismatch")
 
 
 def _run_group(args: Any, root: Path, label: str, components: tuple[str, ...]) -> dict[str, dict[str, Any]]:
@@ -383,6 +519,12 @@ def _run_group(args: Any, root: Path, label: str, components: tuple[str, ...]) -
     streams: dict[str, tuple[Any, Any]] = {}
     monitors: dict[str, tuple[Any, Any, list[str]]] = {}
     evidence: dict[str, dict[str, Any]] = {}
+    barrier = (
+        make_async_barrier(args, root, label)
+        if len(components) == 2 and set(components) == {"ASYNC", "B"}
+        else None
+    )
+    args.active_barrier = barrier
     try:
         for component in components:
             index, uuid = GPU2 if component in ("ASYNC", "REFERENCE") else GPU3
@@ -402,6 +544,12 @@ def _run_group(args: Any, root: Path, label: str, components: tuple[str, ...]) -
             index, uuid = GPU2 if component in ("ASYNC", "REFERENCE") else GPU3
             monitors[component] = _dual_benchmark._strict_monitor_popen(process, index, uuid, out)
             evidence[component] = {"pid": process.pid, "argv": cmd, "out": str(out), "started_monotonic_ns": started, "compile_cache_dir": str(out / "jax_compilation")}
+        if barrier is not None:
+            parent_barrier = release_async_barrier(
+                barrier, processes, evidence, monitors
+            )
+            for component in components:
+                evidence[component]["parent_barrier"] = parent_barrier
         while any(process.poll() is None for process in processes.values()):
             for component, process in processes.items():
                 out = Path(evidence[component]["out"])
@@ -427,9 +575,16 @@ def _run_group(args: Any, root: Path, label: str, components: tuple[str, ...]) -
             elif component == "REFERENCE":
                 evidence[component]["result"] = validate_reference_result(document, args)
             else:
-                evidence[component]["result"] = _dual_benchmark.validate_component_result(document, component="B", manifest_sha256=args.manifest_sha256, source_commit=args.source_commit, gpu_uuid=args.gpu3_uuid, stage=args.stage, repeat=args.repeat, expected_barrier=False)
+                evidence[component]["result"] = _dual_benchmark.validate_component_result(document, component="B", manifest_sha256=args.manifest_sha256, source_commit=args.source_commit, gpu_uuid=args.gpu3_uuid, stage=args.stage, repeat=args.repeat, expected_barrier=barrier is not None)
+            if barrier is not None:
+                verify_async_barrier_link(
+                    evidence[component]["result"],
+                    evidence[component]["parent_barrier"],
+                    component,
+                )
         return evidence
     finally:
+        args.active_barrier = None
         for process in processes.values():
             if process.poll() is None:
                 _pair.stop_owned(process.pid)
@@ -511,6 +666,7 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
         "validation_replay_reference": "6f0625d_external_not_timed",
         "xla_mode": XLA_MODE,
         "concurrent_launch_order": list(concurrent_launch_order(args.repeat)),
+        "parent_barrier": async_run["parent_barrier"],
         "static_evidence": static,
         "semantic": {"async_vs_sync": semantic, "B_control_vs_concurrent": b_semantic},
         "schedule": {"ok": schedule_ok, "checks": schedule_checks, "session_N": async_run["result"]["session_N"], "session_N1": async_run["result"]["session_N1"], "double_apply_rejected": async_run["result"]["double_apply_rejected"], "thresholds": {"component_start_skew_max_s": START_SKEW_LIMIT_S, "hidden_wall_min_s": HIDDEN_WALL_MIN_S, "async_slowdown_max": SLOWDOWN_LIMIT, "B_slowdown_max": SLOWDOWN_LIMIT}},
@@ -594,6 +750,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gpu3-index", type=int, default=3)
     parser.add_argument("--gpu3-uuid", default=GPU3[1])
     parser.add_argument("--result-timeout-s", type=float, default=1800.0)
+    parser.add_argument("--barrier-timeout-s", type=float, default=120.0)
     args = parser.parse_args(argv)
     try:
         run_matrix(args)
