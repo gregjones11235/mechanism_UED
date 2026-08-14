@@ -239,6 +239,18 @@ def _contains_sensitive_output(value: str) -> bool:
     return any(pattern.search(value) for pattern in _SENSITIVE_OUTPUT_PATTERNS)
 
 
+def _strip_ssh_informational(stderr: str) -> str:
+    """Drop OpenSSH client informational messages (e.g. the post-quantum key
+    exchange warning emitted by OpenSSH 10.x) that land on stderr but are not
+    remote-command output. Applied only AFTER the sensitive-output scan so a
+    secret embedded in such a line is still caught first."""
+    if not stderr:
+        return stderr
+    return "\n".join(
+        line for line in stderr.splitlines() if not line.lstrip().startswith("** ")
+    )
+
+
 def _run_command(
     runner: CommandRunner,
     argv: Sequence[str],
@@ -256,6 +268,11 @@ def _run_command(
         raise LauncherError("remote_command_failed") from None
     if _contains_sensitive_output(result.stdout) or _contains_sensitive_output(result.stderr):
         raise LauncherError("secret_like_output")
+    result = CommandResult(
+        result.returncode,
+        result.stdout,
+        _strip_ssh_informational(result.stderr),
+    )
     if result.returncode not in allowed_returncodes:
         raise LauncherError("remote_command_failed")
     return result

@@ -831,3 +831,16 @@ def test_pre_request_block_requires_count_zero(tmp_path):
     # count stays 1, but pre_request_blocked requires count == 0
     with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
         launcher.verify_launcher_result(forged)
+
+
+def test_ssh_informational_stripped_but_secret_not():
+    # benign OpenSSH informational lines are dropped from stderr
+    assert launcher._strip_ssh_informational(
+        "** WARNING: post-quantum\n** This session may be vulnerable\nreal stderr\n"
+    ) == "real stderr"
+    assert launcher._strip_ssh_informational("") == ""
+    assert launcher._strip_ssh_informational("only stderr") == "only stderr"
+    # a secret embedded in a "** " line is still caught by the sensitive scan
+    assert launcher._contains_sensitive_output(
+        "** WARNING: Bearer sk-abcdefghijklmnopqrstuvwxyz"
+    ) is True
