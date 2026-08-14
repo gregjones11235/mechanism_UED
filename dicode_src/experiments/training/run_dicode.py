@@ -153,6 +153,25 @@ def main(config: DictConfig):
     evolution_interval = config.dicode_manager.get("evolution_interval", 2)
     sessions_since_evolution = evolution_interval  # Start with sync on first loop
 
+    # Research-only delayed preflight scheduling.  The import and manager
+    # construction are deliberately absent from the default-off path so that it
+    # performs no snapshot/hash/clock/subprocess work and consumes no RNG.
+    _async_pf_manager = None
+    _async_plan_session = None
+    _async_pf_enabled = bool(
+        (config.get("performance", {}) if hasattr(config, "get") else {}).get(
+            "async_preflight_pipeline", False
+        )
+    )
+    if _async_pf_enabled:
+        from dicode.skill_preflight.async_preflight import (
+            AsyncPreflightManager,
+            plan_async_session,
+        )
+
+        _async_pf_manager = AsyncPreflightManager(config)
+        _async_plan_session = plan_async_session
+
     # =========================================================================
     # Phase 3: Main Curriculum Loop
     # =========================================================================
@@ -164,8 +183,24 @@ def main(config: DictConfig):
         print(f"--- Starting Session {current_session_idx} ---")
         print(f"{'=' * 60}")
 
+        # Collect the prior session's immutable score receipt before processing
+        # this session's fresh generation batch.  Polling is non-blocking by
+        # default and route/archive mutation happens only in this main process.
+        _async_delayed_task_ids = []
+        if _async_pf_manager is not None:
+            from dicode.skill_preflight.preflight import route as _async_route
+
+            _async_applied = _async_pf_manager.poll_and_apply(
+                archive=gen_manager.archive,
+                current_session_idx=current_session_idx,
+                route_apply_fn=_preflight_route,
+                route_fn=_async_route,
+            )
+            if _async_applied is not None:
+                _async_delayed_task_ids = list(_async_applied)
+
         # --- Step 1: Check if we should sync with evolution worker ---
-        new_task_ids = []
+        fresh_task_ids = []
         compiled_count = 0
         generation_table = None
         current_worker_wait_time = 0.0
@@ -192,7 +227,7 @@ def main(config: DictConfig):
                     print(f"  [Timing] Waited: {current_worker_wait_time:.2f}s | "
                           f"Total: {current_worker_total_time:.2f}s")
 
-                    new_task_ids, compiled_count = _process_worker_results(
+                    fresh_task_ids, compiled_count = _process_worker_results(
                         worker_results, gen_manager, config
                     )
                 except concurrent.futures.TimeoutError:
@@ -209,7 +244,7 @@ def main(config: DictConfig):
                         f"on the next sync."
                     )
                     # Keep evolve_future alive so we do NOT dispatch a duplicate job;
-                    # new_task_ids/compiled_count stay at their empty defaults so
+                    # fresh_task_ids/compiled_count stay at their empty defaults so
                     # training proceeds on the archive instead of blocking.
 
             sessions_since_evolution = 1
@@ -290,6 +325,31 @@ def main(config: DictConfig):
                 executor, evolve_future, gen_manager, config, evaluation_metrics
             )
 
+        # The async arm launches fresh candidates against the exact checkpoint
+        # that predates this session's training.  Fresh candidates are excluded
+        # now; only a prior accepted receipt can enter this session.
+        if _async_pf_manager is not None:
+            _async_plan = _async_plan_session(
+                async_enabled=True,
+                delayed_ids=_async_delayed_task_ids,
+                fresh_ids=fresh_task_ids,
+                pending=_async_pf_manager.pending,
+            )
+            if _async_plan["launch_ids"]:
+                rng, _async_pf_rng = jax.random.split(rng)
+                _async_pf_manager.launch(
+                    session_idx=current_session_idx,
+                    global_update_step=global_update_step,
+                    task_ids=_async_plan["launch_ids"],
+                    pf_rng=_async_pf_rng,
+                    archive=gen_manager.archive,
+                    rl_ckpt_manager=rl_ckpt_manager,
+                    rl_ckpt_path=rl_ckpt_path,
+                )
+            new_task_ids = _async_plan["training_new_ids"]
+        else:
+            new_task_ids = fresh_task_ids
+
         # --- Step 3: Sample tasks for training ---
         print("Sampling tasks for training...")
         target_batch_size = config.dicode_manager.training_sample_size_n
@@ -308,7 +368,8 @@ def main(config: DictConfig):
         #     (batched frozen-policy rollouts, embeddings, masks) ->
         #     calculate_scores_from_snapshot (per-task SR) -> route() (accept/reject).
         #     Flag-gated (default off) -> baseline behaviour unchanged.
-        if config.get("skill_preflight", {}).get("use_preflight", False) and new_task_ids:
+        if (config.get("skill_preflight", {}).get("use_preflight", False)
+                and new_task_ids and _async_pf_manager is None):
             try:
                 from dicode.evaluation import evaluate_new_tasks
                 from dicode.scoring import calculate_scores_from_snapshot
@@ -612,6 +673,9 @@ def main(config: DictConfig):
     # =========================================================================
     # Phase 4: Final Cleanup
     # =========================================================================
+    if _async_pf_manager is not None:
+        _async_pf_manager.shutdown()
+
     if config.use_wandb:
         print("\n--- Run complete. Closing W&B run. ---")
         _finish_start = time.monotonic_ns()

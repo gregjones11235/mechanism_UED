@@ -53,3 +53,11 @@ performance:
   # trajectory and calculating GAE. Default off preserves the historical
   # pvl/max_mc/learnability rollout and scoring path.
   learnability_fused_preflight_summary: false
+  # Research-only scheduling prototype: evaluate fresh candidates on a second
+  # GPU and apply their route receipt at a later session. Default off preserves
+  # the synchronous historical schedule and RNG stream.
+  async_preflight_pipeline: false
+  async_preflight_gpu_uuid: null
+  async_preflight_root: "async_preflight"
+  async_preflight_result_timeout_s: 0
+  async_preflight_shutdown_timeout_s: 120
