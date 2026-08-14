@@ -260,7 +260,7 @@ def _result_doc(benchmark, *, comparison="B4_SINGLE", arm="B4_OFF", wall=100.0,
         "preflight_task_reload_explicit_absent": flags["preflight_reuse_loaded_tasks"],
         "eval_compile_span_count": 1 if flags["eval_compile_cache"] else 0,
         "eval_cache_hit_count": 1 if flags["eval_compile_cache"] else 0,
-        "eval_first_cache_miss": flags["eval_compile_cache"],
+        "eval_first_cache_miss": True,
         **{marker: False for marker in benchmark.RUNTIME_MARKERS},
     }
 
@@ -323,6 +323,35 @@ def test_mechanism_gate_requires_validation_unexercised():
     assert not benchmark.verify_mechanisms(
         pair["left"], pair["right"], comparison="FINAL_COMBO"
     )["ok"]
+
+
+@pytest.mark.parametrize(
+    ("comparison", "cache_off_arm", "cache_on_arm"),
+    (("FINAL_COMBO", "BASELINE", "FAST_COMBO"),
+     ("B4_SINGLE", "B4_OFF", "B4_ON")),
+)
+def test_mechanism_gate_first_execute_is_a_miss_in_both_cache_modes(
+    comparison, cache_off_arm, cache_on_arm
+):
+    benchmark = load("perf48_fastpath_benchmark")
+    cache_off = _result_doc(
+        benchmark, comparison=comparison, arm=cache_off_arm
+    )
+    cache_on = _result_doc(
+        benchmark, comparison=comparison, arm=cache_on_arm
+    )
+    assert cache_off["eval_first_cache_miss"] is True
+    assert cache_on["eval_first_cache_miss"] is True
+    assert benchmark.verify_mechanisms(
+        cache_off, cache_on, comparison=comparison
+    )["ok"]
+
+    cache_off["eval_first_cache_miss"] = False
+    gate = benchmark.verify_mechanisms(
+        cache_off, cache_on, comparison=comparison
+    )
+    assert not gate["ok"]
+    assert not gate["checks"][f"{cache_off_arm}.eval_first_cache_miss"]["ok"]
 
 
 def test_pair_filter_alternation_and_early_stoploss():

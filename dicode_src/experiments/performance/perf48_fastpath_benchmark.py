@@ -200,7 +200,10 @@ def verify_mechanisms(
             "preflight_task_reload_explicit_absent": flags["preflight_reuse_loaded_tasks"],
             "eval_compile_span_count": 1 if flags["eval_compile_cache"] else 0,
             "eval_cache_hit_count": 1 if flags["eval_compile_cache"] else 0,
-            "eval_first_cache_miss": flags["eval_compile_cache"],
+            # The first evaluation execute is necessarily a miss in both modes:
+            # cache-off never retains the compiled evaluator, while cache-on
+            # records the initial miss before its subsequent hit.
+            "eval_first_cache_miss": True,
             "validation_cache_enabled": flags["validation_cache"],
             "validation_cache_exercised": False,
             "validation_cache_speedup_claimed": False,
