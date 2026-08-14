@@ -90,7 +90,7 @@ def _parse_env_value(raw: str, *, line_no: int) -> str:
         return value
     try:
         decoded = ast.literal_eval(value)
-    except (SyntaxError, ValueError) as exc:
+    except (SyntaxError, ValueError):
         raise DeepSeekConfigError(f"invalid quoted env value at line {line_no}") from None
     if not isinstance(decoded, str) or any(char in decoded for char in ("\x00", "\n", "\r")):
         raise DeepSeekConfigError(f"invalid quoted env value at line {line_no}")
@@ -230,6 +230,20 @@ class DeepSeekProviderConfig:
         escaped = json.dumps(self.__credential, ensure_ascii=True)[1:-1].encode("utf-8")
         return direct in body or escaped in body
 
+    def _decoded_credential_echoes(self, value: Any) -> bool:
+        """Recursively inspect decoded JSON before any value becomes public."""
+        if isinstance(value, str):
+            return self.__credential in value
+        if isinstance(value, Mapping):
+            return any(
+                self._decoded_credential_echoes(key)
+                or self._decoded_credential_echoes(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return any(self._decoded_credential_echoes(item) for item in value)
+        return False
+
     def public_metadata(self) -> dict[str, Any]:
         return {
             "provider_variable": self.provider_var,
@@ -310,30 +324,48 @@ class DeepSeekMetadataClient:
             },
             method="GET",
         )
+        body: bytes = b""
+        status = 0
+        failure_reason: str | None = None
+        failure_status: int | None = None
         try:
             with self._urlopen(request, timeout=float(timeout_s)) as response:
                 status = int(getattr(response, "status", 200))
                 body = response.read()
         except urllib.error.HTTPError as exc:
-            status = int(exc.code)
             try:
+                status = int(exc.code)
                 body = exc.read()
             except Exception:
                 body = b""
-            self._check_echo(body)
-            reason = "unauthorized" if status == 401 else "http_error"
-            raise MetadataGateBlocked(reason, http_status=status) from None
+            failure_reason = "unauthorized" if status == 401 else "http_error"
+            failure_status = status
         except Exception:
-            raise MetadataGateBlocked("transport_error") from None
+            # Do not retain or chain a possibly secret-bearing exception.
+            failure_reason = "transport_error"
+        # Raising only after the handlers have exited guarantees that source
+        # exceptions are neither causes nor contexts of sanitized gate errors.
+        if not isinstance(body, bytes):
+            body = b""
         self._check_echo(body)
+        if failure_reason is not None:
+            if self._decoded_body_echoes(body):
+                raise CredentialEchoError()
+            raise MetadataGateBlocked(failure_reason, http_status=failure_status)
         if status == 401:
             raise MetadataGateBlocked("unauthorized", http_status=status)
         if not 200 <= status < 300:
             raise MetadataGateBlocked("http_error", http_status=status)
+        invalid_json = False
         try:
             decoded = json.loads(body.decode("utf-8", errors="strict"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            raise MetadataGateBlocked("invalid_json", http_status=status) from None
+            decoded = None
+            invalid_json = True
+        if invalid_json:
+            raise MetadataGateBlocked("invalid_json", http_status=status)
+        if self.config._decoded_credential_echoes(decoded):
+            raise CredentialEchoError()
         if not isinstance(decoded, dict) or not isinstance(decoded.get("data"), list):
             raise MetadataGateBlocked("invalid_model_list", http_status=status)
         model_ids = tuple(
@@ -349,6 +381,14 @@ class DeepSeekMetadataClient:
     def _check_echo(self, body: bytes) -> None:
         if self.config._credential_echoes(body):
             raise CredentialEchoError()
+
+    def _decoded_body_echoes(self, body: bytes) -> bool:
+        """Inspect a JSON HTTP-error body without retaining parse failures."""
+        try:
+            decoded = json.loads(body.decode("utf-8", errors="strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        return self.config._decoded_credential_echoes(decoded)
 
     def build_chat_payload(self, messages: Sequence[Mapping[str, str]]) -> dict[str, Any]:
         """Build the exact thinking payload, but only after the metadata gate."""

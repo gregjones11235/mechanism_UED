@@ -1,9 +1,11 @@
 """Offline fake tests for the secure D3 DeepSeek provider adapter."""
 from __future__ import annotations
 
+import io
 import json
 import pickle
 import sys
+import traceback
 import urllib.error
 import uuid
 from pathlib import Path
@@ -59,6 +61,21 @@ def _config(tmp_path: Path, secret: str) -> DeepSeekProviderConfig:
         encoding="utf-8",
     )
     return DeepSeekProviderConfig.from_snapshot(parse_env_file(env_path), DECLARATION)
+
+
+def _assert_sanitized_failure(error, secret: str, config: DeepSeekProviderConfig) -> None:
+    rendered = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__)
+    )
+    public_output = public_json(config) + json.dumps(
+        {"reason": error.reason, "http_status": error.http_status}, sort_keys=True
+    )
+    assert secret not in str(error)
+    assert secret not in repr(error)
+    assert secret not in rendered
+    assert secret not in public_output
+    assert error.__cause__ is None
+    assert error.__context__ is None
 
 
 class _Response:
@@ -241,6 +258,21 @@ def test_unauthorized_and_other_http_fail_closed(tmp_path):
     assert caught.value.reason == "http_error"
 
 
+def test_secret_bearing_http_error_is_sanitized_without_exception_chain(tmp_path):
+    secret = _unique_secret()
+    config = _config(tmp_path, secret)
+
+    def unauthorized(request, timeout=0):
+        body = json.dumps({"error": secret}).encode("utf-8")
+        raise urllib.error.HTTPError(
+            request.full_url, 401, secret, {}, io.BytesIO(body)
+        )
+
+    with pytest.raises(CredentialEchoError) as caught:
+        DeepSeekMetadataClient(config, urlopen=unauthorized).fetch_models()
+    _assert_sanitized_failure(caught.value, secret, config)
+
+
 def test_transport_invalid_json_and_invalid_model_list_fail_closed(tmp_path):
     secret = _unique_secret()
     config = _config(tmp_path, secret)
@@ -252,9 +284,7 @@ def test_transport_invalid_json_and_invalid_model_list_fail_closed(tmp_path):
     with pytest.raises(MetadataGateBlocked) as caught:
         client.fetch_models()
     assert caught.value.reason == "transport_error"
-    assert secret not in str(caught.value)
-    assert secret not in repr(caught.value)
-    assert caught.value.__cause__ is None
+    _assert_sanitized_failure(caught.value, secret, config)
     assert client.requests_used == 1
 
     for body, reason in ((b"{broken", "invalid_json"), (b'{"data":{}}', "invalid_model_list")):
@@ -264,6 +294,7 @@ def test_transport_invalid_json_and_invalid_model_list_fail_closed(tmp_path):
         with pytest.raises(MetadataGateBlocked) as caught:
             client.fetch_models()
         assert caught.value.reason == reason
+        _assert_sanitized_failure(caught.value, secret, config)
         assert client.gate_passed is False
 
 
@@ -277,10 +308,39 @@ def test_plain_and_json_escaped_credential_echo_fail_closed_without_leak(tmp_pat
         )
         with pytest.raises(CredentialEchoError) as caught:
             client.fetch_models()
-        assert secret not in str(caught.value)
-        assert secret not in repr(caught.value)
-        assert caught.value.__cause__ is None
+        _assert_sanitized_failure(caught.value, secret, config)
         assert client.gate_passed is False
+
+
+@pytest.mark.parametrize(
+    "body_template",
+    [
+        '{{"data":[{{"id":"{encoded}"}},{{"id":"deepseek-v4-flash"}}]}}',
+        (
+            '{{"meta":[{{"{encoded}":"safe"}}],'
+            '"data":[{{"id":"deepseek-v4-flash"}}]}}'
+        ),
+        (
+            '{{"meta":{{"safe":["prefix-{encoded}-suffix"]}},'
+            '"data":[{{"id":"deepseek-v4-flash"}}]}}'
+        ),
+    ],
+)
+def test_fully_unicode_escaped_recursive_echo_never_enters_metadata(
+    tmp_path, body_template
+):
+    secret = _unique_secret()
+    config = _config(tmp_path, secret)
+    encoded = "".join(f"\\u{ord(character):04x}" for character in secret)
+    body = body_template.format(encoded=encoded).encode("ascii")
+    client = DeepSeekMetadataClient(
+        config, urlopen=lambda *args, **kwargs: _RawResponse(body)
+    )
+    with pytest.raises(CredentialEchoError) as caught:
+        client.fetch_models()
+    _assert_sanitized_failure(caught.value, secret, config)
+    assert client.gate_passed is False
+    assert client.requests_used == 1
 
 
 def test_completion_requires_gate_and_payload_is_exact(tmp_path):
