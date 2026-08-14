@@ -164,6 +164,15 @@ def evaluate_new_tasks(
 	"""
 	if not new_task_ids:
 		return {}
+	_perf = config.get("performance", {}) if hasattr(config, "get") else {}
+	_fused_learnability = bool(
+		_perf.get("learnability_fused_preflight_summary", False)
+	)
+	if _fused_learnability:
+		from dicode.skill_preflight.learnability_summary import (
+			require_learnability_fused_contract,
+		)
+		require_learnability_fused_contract(config.dicode_manager.score_function)
 
 	print(f"  - Evaluating {len(new_task_ids)} newly generated tasks...")
 
@@ -190,19 +199,34 @@ def evaluate_new_tasks(
 	# 2. Get Embeddings if needed
 	task_embeddings = _get_new_task_embeddings(config, task_classes, embedding_model)
 
-	# 3. Create Achievement Mask (needed for the Smart Calculator)
-	num_total_achievements = len(Achievement)
-	task_achievement_mask = jnp.zeros((num_new_tasks, num_total_achievements), dtype=jnp.bool)
-	task_completed_mask = jnp.zeros((num_new_tasks, num_total_achievements), dtype=jnp.bool)
-	for i, task_cls in enumerate(task_classes):
-		# Instantiate with dummy params to access attributes
-		temp_task = task_cls(StaticEnvParams(), EnvParams())
-		if temp_task.relevant_achievements:
-			achievement_indices = jnp.array([ach.value for ach in temp_task.relevant_achievements])
-			task_achievement_mask = task_achievement_mask.at[i, achievement_indices].set(True)
-		if temp_task.completed_achievements:
-			completed_indices = jnp.array([ach.value for ach in temp_task.completed_achievements])
-			task_completed_mask = task_completed_mask.at[i, completed_indices].set(True)
+	# 3. Create Achievement Mask (needed only by the historical Smart
+	# Calculator path). The fused learnability reducer never consumes
+	# achievements, so it avoids both masks and the extra task instantiations.
+	if not _fused_learnability:
+		num_total_achievements = len(Achievement)
+		task_achievement_mask = jnp.zeros(
+			(num_new_tasks, num_total_achievements), dtype=jnp.bool
+		)
+		task_completed_mask = jnp.zeros(
+			(num_new_tasks, num_total_achievements), dtype=jnp.bool
+		)
+		for i, task_cls in enumerate(task_classes):
+			# Instantiate with dummy params to access attributes
+			temp_task = task_cls(StaticEnvParams(), EnvParams())
+			if temp_task.relevant_achievements:
+				achievement_indices = jnp.array(
+					[ach.value for ach in temp_task.relevant_achievements]
+				)
+				task_achievement_mask = task_achievement_mask.at[
+					i, achievement_indices
+				].set(True)
+			if temp_task.completed_achievements:
+				completed_indices = jnp.array(
+					[ach.value for ach in temp_task.completed_achievements]
+				)
+				task_completed_mask = task_completed_mask.at[
+					i, completed_indices
+				].set(True)
 
 	# 4. Call our new "heavyweight" rollout collector
 	# --- START OF REPLACED BLOCK ---
@@ -220,6 +244,14 @@ def evaluate_new_tasks(
 		task_embeddings=task_embeddings,
 	)
 	print("  - Evaluation run finished.")
+	if _fused_learnability:
+		from dicode.skill_preflight.contract import PreflightOptimizationContractError
+		summary = session_results.get("metrics", {}).get("learnability_summary")
+		if summary is None:
+			raise PreflightOptimizationContractError(
+				"fused learnability rollout produced no learnability_summary"
+			)
+		return {"learnability_summary": summary}
 
 	# 5. Extract the raw data needed for the calculator
 	scoring_window_data = session_results.get("metrics", {}).get("scoring_window_data")

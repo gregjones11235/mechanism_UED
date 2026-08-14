@@ -755,6 +755,14 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 	"""Identical to make_train, but deletes the Policy/Value update step.
 	It runs rollouts and GAE (for scoring) but returns the train_state UNCHANGED.
 	"""
+	_perf = config.get("performance", {}) if hasattr(config, "get") else {}
+	_fused_learnability = bool(_perf.get("learnability_fused_preflight_summary", False))
+	if _fused_learnability:
+		from dicode.skill_preflight.learnability_summary import (
+			require_learnability_fused_contract,
+		)
+		require_learnability_fused_contract(config.dicode_manager.score_function)
+
 	# --- 1. Environment Setup (Same as Train) ---
 	NUM_UPDATES = num_training_updates
 	num_tasks = len(task_classes)
@@ -902,6 +910,155 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 			0,
 			_rng,
 		)
+
+		# [BC fast path] Learnability routing only needs per-task episode and
+		# success counts. Keep the historical environment, action sampling,
+		# transformer-memory and RNG transitions, but carry two O(num_tasks)
+		# int32 accumulators through the scans. No Transition, log_prob, tail
+		# critic call, GAE, advantages, or trajectory output is constructed.
+		if _fused_learnability:
+			from dicode.skill_preflight.learnability_summary import (
+				accumulate_learnability_counts,
+			)
+
+			def _fused_update_step(summary_carry, unused):
+				runner_state, finished_counts, success_counts = summary_carry
+
+				def _fused_env_step(step_carry, _):
+					(
+						train_state,
+						env_state,
+						memories,
+						memories_mask,
+						memories_mask_idx,
+						last_obs,
+						done,
+						step_env_currentloop,
+						rng,
+						finished_counts,
+						success_counts,
+					) = step_carry
+
+					memories_mask_idx = jnp.where(
+						done,
+						config.training.window_mem,
+						jnp.clip(memories_mask_idx - 1, 0, config.training.window_mem),
+					)
+					memories_mask = jnp.where(
+						done[:, None, None, None],
+						jnp.zeros(
+							(
+								config.validation.num_envs,
+								config.training.num_heads,
+								1,
+								config.training.window_mem + 1,
+							),
+							dtype=jnp.bool_,
+						),
+						memories_mask,
+					)
+					memories_mask_idx_ohot = jax.nn.one_hot(
+						memories_mask_idx, config.training.window_mem + 1
+					)
+					memories_mask_idx_ohot = memories_mask_idx_ohot[:, None, None, :].repeat(
+						config.training.num_heads, 1
+					)
+					memories_mask = jnp.logical_or(memories_mask, memories_mask_idx_ohot)
+
+					rng, _rng = jax.random.split(rng)
+					pi, _value, memories_out = network.apply(
+						train_state.params,
+						memories,
+						last_obs,
+						memories_mask,
+						method=network.model_forward_eval,
+					)
+					action = pi.sample(seed=_rng)
+					memories = jnp.roll(memories, -1, axis=1).at[:, -1].set(memories_out)
+
+					rng, _rng = jax.random.split(rng)
+					obsv, env_state, _reward, done, info = env.step(
+						_rng, env_state, action, env_params
+					)
+					finished_counts, success_counts = accumulate_learnability_counts(
+						finished_counts,
+						success_counts,
+						info["task_id"],
+						info["returned_episode"],
+						info["is_success"],
+					)
+
+					return (
+						train_state,
+						env_state,
+						memories,
+						memories_mask,
+						memories_mask_idx,
+						obsv,
+						done,
+						step_env_currentloop + 1,
+						rng,
+						finished_counts,
+						success_counts,
+					), None
+
+				initial_step_carry = runner_state + (finished_counts, success_counts)
+				final_step_carry, _ = jax.lax.scan(
+					_fused_env_step,
+					initial_step_carry,
+					None,
+					config.validation.num_steps,
+				)
+				(
+					train_state,
+					final_env_state,
+					final_memories,
+					final_mask,
+					final_mask_idx,
+					final_obs,
+					done,
+					_final_step_loop,
+					rng,
+					finished_counts,
+					success_counts,
+				) = final_step_carry
+
+				next_runner_state = (
+					train_state,
+					final_env_state,
+					final_memories,
+					final_mask,
+					final_mask_idx,
+					final_obs,
+					done,
+					0,
+					rng,
+				)
+				return (next_runner_state, finished_counts, success_counts), None
+
+			initial_summary_carry = (
+				init_runner_state,
+				jnp.zeros((num_tasks,), dtype=jnp.int32),
+				jnp.zeros((num_tasks,), dtype=jnp.int32),
+			)
+			(final_runner_state, finished_counts, success_counts), _ = jax.lax.scan(
+				_fused_update_step,
+				initial_summary_carry,
+				None,
+				length=NUM_UPDATES,
+			)
+			num_env_steps_done = NUM_UPDATES * config.validation.num_envs * config.validation.num_steps
+			return {
+				"train_state": final_runner_state[0],
+				"metrics": {
+					"learnability_summary": {
+						"finished_counts": finished_counts,
+						"success_counts": success_counts,
+					},
+					"num_updates_done": NUM_UPDATES,
+					"num_env_steps_done": num_env_steps_done,
+				},
+			}
 
 		# --------------------------
 		# The Evaluation Step (NO UPDATE)

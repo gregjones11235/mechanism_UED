@@ -53,6 +53,31 @@ def _preflight_route(scores, ok_ids, kept, archive, route_fn):
     _impl(scores, ok_ids, kept, archive, route_fn, tracker=tracker)
 
 
+def _learnability_scores_from_counts(finished_counts, success_counts, num_tasks):
+    """Pure conversion from fused counters to the route's minimal score map."""
+    finished = [int(value) for value in finished_counts]
+    successes = [int(value) for value in success_counts]
+    if len(finished) != num_tasks or len(successes) != num_tasks:
+        raise PreflightOptimizationContractError(
+            "fused learnability counter length does not match loaded task count"
+        )
+
+    scores = {}
+    for task_idx, (num_finished, num_successes) in enumerate(zip(finished, successes)):
+        if num_finished < 0 or num_successes < 0 or num_successes > num_finished:
+            raise PreflightOptimizationContractError(
+                "invalid fused learnability counters: expected "
+                "0 <= successes <= finished"
+            )
+        sr = -1.0 if num_finished == 0 else num_successes / num_finished
+        clipped_sr = min(1.0, max(0.0, sr)) if sr >= 0.0 else 0.0
+        scores[str(task_idx)] = {
+            "sr": float(sr),
+            "priority_score": float(clipped_sr * (1.0 - clipped_sr)),
+        }
+    return scores
+
+
 @hydra.main(version_base="1.2", config_path="../../conf/", config_name="config")
 def main(config: DictConfig):
     """Main entry point for the DiCode training loop."""
@@ -330,24 +355,68 @@ def main(config: DictConfig):
                     if _compact_payload:
                         from dicode.skill_preflight.scoring_contract import compact_field_decisions
                         compact_field_decisions(config.dicode_manager.score_function)
+                    _fused_summary = bool((config.get("performance", {})
+                                           if hasattr(config, "get") else {})
+                                          .get("learnability_fused_preflight_summary", False))
+                    if _fused_summary:
+                        from dicode.skill_preflight.learnability_summary import (
+                            require_learnability_fused_contract,
+                        )
+                        # Contract validation intentionally precedes rollout
+                        # construction/execution. Invalid PVL/MaxMC use is fatal.
+                        require_learnability_fused_contract(
+                            config.dicode_manager.score_function
+                        )
                     _pf_raw = evaluate_new_tasks(
                         config, _pf_rng, rl_train_state, _pf_ok_ids,
                         gen_manager.archive, gen_manager.selector.embedding_model,
                         preloaded_task_classes=(_pf_classes if _reuse_tasks else None),
                         preloaded_task_ids=(_pf_ok_ids if _reuse_tasks else None),
                     )
-                    _pf_swd = _pf_raw.get("scoring_window_data")
-                    if _pf_swd is None:
-                        print("  [Preflight] WARNING: rollouts returned no scoring data; "
-                              "keeping all new tasks")
-                        _kept = list(new_task_ids)
+                    if _fused_summary:
+                        _pf_summary = _pf_raw.get("learnability_summary")
+                        if _pf_summary is None:
+                            raise PreflightOptimizationContractError(
+                                "fused learnability evaluation returned no summary"
+                            )
+                        if tracker.enabled:
+                            with tracker.span("scoring_transfer"):
+                                _pf_finished, _pf_successes = jax.device_get((
+                                    _pf_summary.get("finished_counts"),
+                                    _pf_summary.get("success_counts"),
+                                ))
+                        else:
+                            _pf_finished, _pf_successes = jax.device_get((
+                                _pf_summary.get("finished_counts"),
+                                _pf_summary.get("success_counts"),
+                            ))
+                        if _pf_finished is None or _pf_successes is None:
+                            raise PreflightOptimizationContractError(
+                                "fused learnability summary is missing counters"
+                            )
+                        if tracker.enabled:
+                            with tracker.span("scoring_cpu"):
+                                _pf_scores = _learnability_scores_from_counts(
+                                    _pf_finished, _pf_successes, len(_pf_ok_ids)
+                                )
+                        else:
+                            _pf_scores = _learnability_scores_from_counts(
+                                _pf_finished, _pf_successes, len(_pf_ok_ids)
+                            )
                     else:
-                        _pf_scores = calculate_scores_from_snapshot(
-                            _pf_swd, len(_pf_ok_ids),
-                            _pf_raw["task_achievement_mask"],
-                            _pf_raw["task_completed_mask"],
-                            config,
-                        )
+                        _pf_swd = _pf_raw.get("scoring_window_data")
+                        if _pf_swd is None:
+                            print("  [Preflight] WARNING: rollouts returned no scoring data; "
+                                  "keeping all new tasks")
+                            _kept = list(new_task_ids)
+                        else:
+                            _pf_scores = calculate_scores_from_snapshot(
+                                _pf_swd, len(_pf_ok_ids),
+                                _pf_raw["task_achievement_mask"],
+                                _pf_raw["task_completed_mask"],
+                                config,
+                            )
+                    if _fused_summary or _pf_swd is not None:
                         if tracker.enabled:
                             with tracker.span("route"):
                                 _preflight_route(_pf_scores, _pf_ok_ids, _kept,
