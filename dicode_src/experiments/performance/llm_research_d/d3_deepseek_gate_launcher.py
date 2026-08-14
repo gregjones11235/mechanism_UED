@@ -583,6 +583,12 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
     gate_blocked = result["reason"] in {"pre_request_blocked", "request_attempted_blocked"}
     if gate_blocked != (result["gate_reason"] is not None):
         raise LauncherError("artifact_tamper")
+    # Cross-field consistency: the gate-blocked reason type must match the
+    # observed request count (0 = pre-request, 1 = request-attempted).
+    if result["reason"] == "pre_request_blocked" and result["artifact_request_count"] != 0:
+        raise LauncherError("artifact_tamper")
+    if result["reason"] == "request_attempted_blocked" and result["artifact_request_count"] != 1:
+        raise LauncherError("artifact_tamper")
     for flag in (
         "external_execution_hashes_verified",
         "external_artifact_hash_verified",

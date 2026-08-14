@@ -813,3 +813,21 @@ def test_gate_reason_field_is_validated_on_launcher_result(tmp_path):
     bad = _rehashed_result(result, "gate_reason", "not_a_real_gate_reason")
     with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
         launcher.verify_launcher_result(bad)
+
+
+def test_request_attempted_block_requires_count_one(tmp_path):
+    fake = _FakeRemote(_pre_request_blocked_artifact(tmp_path))
+    result = _run(tmp_path, fake)  # reason=pre_request_blocked, count=0
+    forged = _rehashed_result(result, "reason", "request_attempted_blocked")
+    # count stays 0, but request_attempted_blocked requires count == 1
+    with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
+        launcher.verify_launcher_result(forged)
+
+
+def test_pre_request_block_requires_count_zero(tmp_path):
+    fake = _FakeRemote(_request_attempted_blocked_artifact(tmp_path, _secret()))
+    result = _run(tmp_path, fake)  # reason=request_attempted_blocked, count=1
+    forged = _rehashed_result(result, "reason", "pre_request_blocked")
+    # count stays 1, but pre_request_blocked requires count == 0
+    with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
+        launcher.verify_launcher_result(forged)
