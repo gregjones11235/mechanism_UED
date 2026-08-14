@@ -259,32 +259,51 @@ def _run_command(
     return result
 
 
-def _ssh_base(ssh_target: str, ssh_key: str | Path) -> list[str]:
-    return [
-        "ssh",
-        "-i",
-        str(ssh_key),
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=yes",
-        "--",
-        ssh_target,
+def _require_exact_identity_selection(argv: Sequence[str]) -> list[str]:
+    identity_options = [
+        argv[index + 1]
+        for index, item in enumerate(argv[:-1])
+        if item == "-o" and argv[index + 1].startswith("IdentitiesOnly=")
     ]
+    if identity_options != ["IdentitiesOnly=yes"]:
+        raise LauncherError("remote_command_failed")
+    return list(argv)
+
+
+def _ssh_base(ssh_target: str, ssh_key: str | Path) -> list[str]:
+    return _require_exact_identity_selection(
+        [
+            "ssh",
+            "-i",
+            str(ssh_key),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "--",
+            ssh_target,
+        ]
+    )
 
 
 def _scp_base(ssh_key: str | Path) -> list[str]:
-    return [
-        "scp",
-        "-q",
-        "-i",
-        str(ssh_key),
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=yes",
-        "--",
-    ]
+    return _require_exact_identity_selection(
+        [
+            "scp",
+            "-q",
+            "-i",
+            str(ssh_key),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "--",
+        ]
+    )
 
 
 def _ssh_argv(

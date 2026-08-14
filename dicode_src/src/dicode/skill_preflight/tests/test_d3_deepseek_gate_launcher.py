@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -181,52 +182,72 @@ def _expected_success_invocations(tmp_path: Path) -> list[launcher.CommandInvoca
         (tmp_path / "output").resolve()
         / f".{launcher.LOCAL_ARTIFACT_NAME}.{FIXED_TOKEN}.staging"
     )
+    ssh_base = [
+        "ssh",
+        "-i",
+        str(SSH_KEY),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "--",
+        SSH_TARGET,
+    ]
+    scp_base = [
+        "scp",
+        "-q",
+        "-i",
+        str(SSH_KEY),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "--",
+    ]
+
+    def ssh(remote_command: list[str]) -> list[str]:
+        return ssh_base + [shlex.join(remote_command)]
+
+    def remote_python(script: str, *args: str) -> list[str]:
+        return ssh([REMOTE_PYTHON, "-c", script, *args])
+
     argv = [
-        launcher._remote_python_argv(
-            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._EXISTENCE_SCRIPT, root
-        ),
-        launcher._remote_python_argv(
-            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._CREATE_SCRIPT, root
-        ),
-        launcher._scp_base(SSH_KEY)
+        remote_python(launcher._EXISTENCE_SCRIPT, root),
+        remote_python(launcher._CREATE_SCRIPT, root),
+        scp_base
         + [
             str(source_dir / launcher.REMOTE_PROVIDER_NAME),
             f"{SSH_TARGET}:{remote_provider}",
         ],
-        launcher._scp_base(SSH_KEY)
+        scp_base
         + [
             str(source_dir / launcher.REMOTE_GATE_NAME),
             f"{SSH_TARGET}:{remote_gate}",
         ],
-        launcher._remote_python_argv(
-            SSH_TARGET,
-            SSH_KEY,
-            REMOTE_PYTHON,
+        remote_python(
             launcher._HASH_FILES_SCRIPT,
             remote_gate,
             remote_provider,
         ),
-        launcher._ssh_argv(
-            SSH_TARGET,
-            SSH_KEY,
+        ssh(
             [
                 "nvidia-smi",
                 "--query-gpu=index,uuid,memory.free",
                 "--format=csv,noheader,nounits",
             ],
         ),
-        launcher._ssh_argv(
-            SSH_TARGET,
-            SSH_KEY,
+        ssh(
             [
                 "nvidia-smi",
                 "--query-compute-apps=gpu_uuid,pid",
                 "--format=csv,noheader,nounits",
             ],
         ),
-        launcher._ssh_argv(
-            SSH_TARGET,
-            SSH_KEY,
+        ssh(
             [
                 REMOTE_PYTHON,
                 remote_gate,
@@ -236,47 +257,32 @@ def _expected_success_invocations(tmp_path: Path) -> list[launcher.CommandInvoca
                 remote_artifact,
             ],
         ),
-        launcher._ssh_argv(
-            SSH_TARGET,
-            SSH_KEY,
+        ssh(
             [
                 "nvidia-smi",
                 "--query-gpu=index,uuid,memory.free",
                 "--format=csv,noheader,nounits",
             ],
         ),
-        launcher._ssh_argv(
-            SSH_TARGET,
-            SSH_KEY,
+        ssh(
             [
                 "nvidia-smi",
                 "--query-compute-apps=gpu_uuid,pid",
                 "--format=csv,noheader,nounits",
             ],
         ),
-        launcher._remote_python_argv(
-            SSH_TARGET,
-            SSH_KEY,
-            REMOTE_PYTHON,
+        remote_python(
             launcher._HASH_FILES_SCRIPT,
             remote_gate,
             remote_provider,
         ),
-        launcher._remote_python_argv(
-            SSH_TARGET,
-            SSH_KEY,
-            REMOTE_PYTHON,
+        remote_python(
             launcher._HASH_ONE_SCRIPT,
             remote_artifact,
         ),
-        launcher._scp_base(SSH_KEY)
-        + [f"{SSH_TARGET}:{remote_artifact}", str(staging)],
-        launcher._remote_python_argv(
-            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._CLEANUP_SCRIPT, root
-        ),
-        launcher._remote_python_argv(
-            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._EXISTENCE_SCRIPT, root
-        ),
+        scp_base + [f"{SSH_TARGET}:{remote_artifact}", str(staging)],
+        remote_python(launcher._CLEANUP_SCRIPT, root),
+        remote_python(launcher._EXISTENCE_SCRIPT, root),
     ]
     return [launcher.CommandInvocation(tuple(item), shell=False) for item in argv]
 
@@ -437,6 +443,30 @@ def test_nvidia_smi_unavailable_fails_before_api(tmp_path):
     assert result["reason"] == "gpu_unavailable"
     assert _gate_calls(fake) == []
     _assert_no_artifact_or_staging(tmp_path)
+
+
+@pytest.mark.parametrize("tool", ["ssh", "scp"])
+@pytest.mark.parametrize("mutation", ["missing", "duplicated", "wrong"])
+def test_transport_base_rejects_invalid_identity_selection(tool, mutation):
+    base = (
+        launcher._ssh_base(SSH_TARGET, SSH_KEY)
+        if tool == "ssh"
+        else launcher._scp_base(SSH_KEY)
+    )
+    option_index = base.index("IdentitiesOnly=yes")
+    if mutation == "missing":
+        invalid = base[: option_index - 1] + base[option_index + 1 :]
+    elif mutation == "duplicated":
+        invalid = (
+            base[:option_index]
+            + ["IdentitiesOnly=yes", "-o"]
+            + base[option_index:]
+        )
+    else:
+        invalid = list(base)
+        invalid[option_index] = "IdentitiesOnly=no"
+    with pytest.raises(launcher.LauncherError, match="remote_command_failed"):
+        launcher._require_exact_identity_selection(invalid)
 
 
 def test_cleanup_prefix_safety_rejects_any_other_path_without_command():
