@@ -1,0 +1,48 @@
+{
+  "artifact_internal_sha256": "2b0966d5bfc049dc0835a4b6e7b1435a31c9113b6fe5974949c3c2516bc20742",
+  "artifact_path": null,
+  "artifact_request_count": 0,
+  "artifact_sha256": "c6e2501917cd215a316c24ad7aa62ed423f3320748e5d1d8a31ede0529d06c8b",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "ALL_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "artifact_status": "BLOCKED",
+  "base_url": "https://api.deepseek.com",
+  "classification": "D3_DEEPSEEK_GATE_LAUNCHER",
+  "cleanup_verified": true,
+  "completion_requests": 0,
+  "credential_variable": "EXP_DEEPSEEK_API_KEY",
+  "embedding_requests": 0,
+  "exact_model_advertised": false,
+  "external_artifact_hash_verified": false,
+  "external_execution_hashes_verified": false,
+  "gpu_post": null,
+  "gpu_pre": {
+    "external_compute_pids": [],
+    "gpu_index": 2,
+    "memory_free_mib": 45619,
+    "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+  },
+  "http_status": null,
+  "local_artifact_sha256": null,
+  "local_cleanup_failure_count": 0,
+  "manifest_sha256": {
+    "provider": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+    "tool": "fe07053a6d6d706237a0b0bb84d69b47cf571c4222e415b46e99d8267fa822dd"
+  },
+  "model": "deepseek-v4-flash",
+  "observed_utc": "2026-08-14T05:29:22Z",
+  "post_execution_sha256": null,
+  "pre_execution_sha256": {
+    "provider": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+    "tool": "fe07053a6d6d706237a0b0bb84d69b47cf571c4222e415b46e99d8267fa822dd"
+  },
+  "published_artifact_cleanup_attempted": false,
+  "published_artifact_exists_after_cleanup": false,
+  "reason": "artifact_request_count_invalid",
+  "remote_artifact_sha256": null,
+  "remote_root": "/tmp/d3_deepseek_flash_gate_20260814T052922Z_e7a8608d2d69",
+  "schema_version": 1,
+  "staging_cleanup_attempted": false,
+  "staging_exists_after_cleanup": false,
+  "status": "BLOCKED"
+}
