@@ -1,0 +1,69 @@
+{
+  "artifact_sha256": "390f9f3b0f1f55ebe1d6ff019abf02962987c7522249752b3eafe5c8cf1ed13f",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "ALL_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "authorization_header_serialized": false,
+  "base_url": "https://api.deepseek.com",
+  "classification": "D3_DEEPSEEK_METADATA_GATE",
+  "completion_requests": 0,
+  "credential_present": true,
+  "credential_value_serialized": false,
+  "deepseek_models_endpoint_requests": 1,
+  "deepseek_other_endpoint_requests": 0,
+  "embedding_requests": 0,
+  "environment_declaration": {
+    "base_url_variable": "EXP_DEEPSEEK_BASE_URL",
+    "credential_variable": "EXP_DEEPSEEK_API_KEY",
+    "model_variable": "EXP_DEEPSEEK_MODEL",
+    "provider_variable": "EXP_DEEPSEEK_PROVIDER"
+  },
+  "exact_model_advertised": true,
+  "http_status": 200,
+  "integrity_contract": {
+    "artifact_replacement_detection_boundary": "externally_retained_raw_artifact_file_sha256",
+    "executing_identity_boundary": "external_launcher_supervisor_pre_and_post_execution_sha256",
+    "external_artifact_file_sha256_retention_required": true,
+    "external_artifact_file_sha256_verification_required": true,
+    "external_provider_sha256_verification_required": true,
+    "external_tool_sha256_verification_required": true,
+    "internal_canonical_hash_adversarial_tamper_boundary": false,
+    "internal_canonical_hash_detection": "accidental_or_non_rehashed_corruption_only",
+    "metadata_result_acceptance_requires_external_verification": true,
+    "observed_file_hash_claim": "observed_file_bytes_only_not_executing_code_identity",
+    "self_attestation_security_boundary": false,
+    "threat_model": "trusted_process_no_in_process_adversary"
+  },
+  "metadata_method": "GET",
+  "metadata_path": "/models",
+  "model": "deepseek-v4-flash",
+  "observed_utc": "2026-08-14T15:02:54Z",
+  "official_references": [
+    "https://api-docs.deepseek.com/api/list-models",
+    "https://api-docs.deepseek.com/api/create-chat-completion",
+    "https://api-docs.deepseek.com/quick_start/pricing",
+    "https://api-docs.deepseek.com/updates/"
+  ],
+  "provenance": {
+    "observed_source_files": {
+      "adapter": {
+        "hash_algorithm": "sha256",
+        "identity_claim": "observed_file_bytes_only_not_executing_code_identity",
+        "observed_file_bytes_sha256": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+        "source": "d3_deepseek_provider.py"
+      },
+      "tool": {
+        "hash_algorithm": "sha256",
+        "identity_claim": "observed_file_bytes_only_not_executing_code_identity",
+        "observed_file_bytes_sha256": "80ac2d92fb8e04a653058c50de06853973a8e67eae9fea1f633e7af0f9d96031",
+        "source": "d3_deepseek_metadata_gate_remote.py"
+      }
+    }
+  },
+  "provider": "deepseek",
+  "qwen_endpoint_requests": 0,
+  "reason": null,
+  "request_count": 1,
+  "response_body_serialized": false,
+  "schema_version": 1,
+  "status": "PASS"
+}

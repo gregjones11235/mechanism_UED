@@ -1,0 +1,57 @@
+{
+  "artifact_internal_sha256": "390f9f3b0f1f55ebe1d6ff019abf02962987c7522249752b3eafe5c8cf1ed13f",
+  "artifact_path": "deepseek_metadata_gate_artifact.json",
+  "artifact_request_count": 1,
+  "artifact_sha256": "652e59623e8070a95a4af1c4eab936c89b6ef573c9930839854e6be435bb1713",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "ALL_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "artifact_status": "PASS",
+  "base_url": "https://api.deepseek.com",
+  "classification": "D3_DEEPSEEK_GATE_LAUNCHER",
+  "cleanup_verified": true,
+  "completion_requests": 0,
+  "credential_variable": "EXP_DEEPSEEK_API_KEY",
+  "embedding_requests": 0,
+  "exact_model_advertised": true,
+  "external_artifact_hash_verified": true,
+  "external_execution_hashes_verified": true,
+  "gate_reason": null,
+  "gpu_post": {
+    "external_compute_pids": [],
+    "gpu_index": 2,
+    "memory_free_mib": 45619,
+    "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+  },
+  "gpu_pre": {
+    "external_compute_pids": [],
+    "gpu_index": 2,
+    "memory_free_mib": 45619,
+    "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+  },
+  "http_status": 200,
+  "local_artifact_sha256": "e16f44e03f295cf90876f6c78e6cd8b6f3a0d67e9859df713f13c8a24c7bb125",
+  "local_cleanup_failure_count": 0,
+  "manifest_sha256": {
+    "provider": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+    "tool": "80ac2d92fb8e04a653058c50de06853973a8e67eae9fea1f633e7af0f9d96031"
+  },
+  "model": "deepseek-v4-flash",
+  "observed_utc": "2026-08-14T15:02:53Z",
+  "post_execution_sha256": {
+    "provider": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+    "tool": "80ac2d92fb8e04a653058c50de06853973a8e67eae9fea1f633e7af0f9d96031"
+  },
+  "pre_execution_sha256": {
+    "provider": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+    "tool": "80ac2d92fb8e04a653058c50de06853973a8e67eae9fea1f633e7af0f9d96031"
+  },
+  "published_artifact_cleanup_attempted": false,
+  "published_artifact_exists_after_cleanup": true,
+  "reason": null,
+  "remote_artifact_sha256": "e16f44e03f295cf90876f6c78e6cd8b6f3a0d67e9859df713f13c8a24c7bb125",
+  "remote_root": "/tmp/d3_deepseek_flash_gate_20260814T150253Z_626d8686ccb4",
+  "schema_version": 1,
+  "staging_cleanup_attempted": true,
+  "staging_exists_after_cleanup": false,
+  "status": "PASS"
+}
