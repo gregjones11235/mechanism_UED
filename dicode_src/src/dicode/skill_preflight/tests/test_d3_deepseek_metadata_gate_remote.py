@@ -1,6 +1,7 @@
 """Offline tests for the audited DeepSeek metadata-only gate wrapper."""
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import sys
@@ -179,9 +180,11 @@ def test_exact_model_base_and_fixed_zero_request_fields(tmp_path):
 def test_artifact_write_load_and_refuse_overwrite(tmp_path):
     artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
     output = tmp_path / "gate.json"
-    gate.atomic_write_refusing_overwrite(output, artifact)
+    published_sha256 = gate.atomic_write_refusing_overwrite(output, artifact)
     assert gate.load_artifact(output) == artifact
     original = output.read_bytes()
+    assert published_sha256 == hashlib.sha256(original).hexdigest()
+    assert gate.verify_external_artifact_hash(output, published_sha256) is True
     with pytest.raises(FileExistsError):
         gate.atomic_write_refusing_overwrite(output, artifact)
     assert output.read_bytes() == original
@@ -224,7 +227,16 @@ def test_provenance_and_official_references_are_bound(tmp_path):
     contract = artifact["integrity_contract"]
     assert contract == gate.INTEGRITY_CONTRACT
     assert contract["threat_model"] == "trusted_process_no_in_process_adversary"
+    assert contract["internal_canonical_hash_detection"] == (
+        "accidental_or_non_rehashed_corruption_only"
+    )
+    assert contract["internal_canonical_hash_adversarial_tamper_boundary"] is False
     assert contract["self_attestation_security_boundary"] is False
+    assert contract["artifact_replacement_detection_boundary"] == (
+        "externally_retained_raw_artifact_file_sha256"
+    )
+    assert contract["external_artifact_file_sha256_retention_required"] is True
+    assert contract["external_artifact_file_sha256_verification_required"] is True
     assert contract["external_tool_sha256_verification_required"] is True
     assert contract["external_provider_sha256_verification_required"] is True
     assert contract["metadata_result_acceptance_requires_external_verification"] is True
@@ -292,6 +304,33 @@ def test_external_execution_hashes_require_manifest_match_and_stability():
 def test_external_execution_hashes_fail_closed(pre, post, manifest):
     with pytest.raises(gate.GateArtifactError):
         gate.verify_external_execution_hashes(pre, post, manifest)
+
+
+def test_rehashed_known_replacement_requires_retained_external_file_hash(tmp_path):
+    artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
+    path = tmp_path / "published.json"
+    retained_sha256 = gate.atomic_write_refusing_overwrite(path, artifact)
+
+    replacement = json.loads(json.dumps(artifact))
+    replacement["observed_utc"] = "2026-08-14T03:04:06Z"
+    _recompute_artifact_hash(replacement)
+    path.write_text(
+        json.dumps(replacement, sort_keys=True, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    # Under the honest-process contract, a rehashed known-field replacement
+    # can satisfy internal structure/invariants.  The retained raw SHA catches it.
+    assert gate.load_artifact(path) == replacement
+    with pytest.raises(gate.GateArtifactError, match="file SHA256 mismatch"):
+        gate.verify_external_artifact_hash(path, retained_sha256)
+
+
+@pytest.mark.parametrize("expected", ["A" * 64, "short", "0" * 64])
+def test_external_artifact_hash_rejects_malformed_or_incorrect_values(tmp_path, expected):
+    path = tmp_path / "artifact.json"
+    path.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(gate.GateArtifactError):
+        gate.verify_external_artifact_hash(path, expected)
 
 
 def test_observed_source_file_hash_change_is_rejected(tmp_path):

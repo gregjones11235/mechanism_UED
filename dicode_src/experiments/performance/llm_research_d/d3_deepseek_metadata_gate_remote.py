@@ -31,11 +31,15 @@ FILE_HASH_ALGORITHM = "sha256"
 FILE_HASH_CLAIM = "observed_file_bytes_only_not_executing_code_identity"
 INTEGRITY_CONTRACT = {
     "threat_model": "trusted_process_no_in_process_adversary",
-    "canonical_integrity_claim": (
-        "exact_schema_and_canonical_hash_detect_post_write_content_tamper"
-    ),
+    "internal_canonical_hash_detection": "accidental_or_non_rehashed_corruption_only",
+    "internal_canonical_hash_adversarial_tamper_boundary": False,
     "self_attestation_security_boundary": False,
     "observed_file_hash_claim": FILE_HASH_CLAIM,
+    "artifact_replacement_detection_boundary": (
+        "externally_retained_raw_artifact_file_sha256"
+    ),
+    "external_artifact_file_sha256_retention_required": True,
+    "external_artifact_file_sha256_verification_required": True,
     "executing_identity_boundary": (
         "external_launcher_supervisor_pre_and_post_execution_sha256"
     ),
@@ -100,9 +104,13 @@ PROVENANCE_KEYS = frozenset({"observed_source_files"})
 INTEGRITY_CONTRACT_KEYS = frozenset(
     {
         "threat_model",
-        "canonical_integrity_claim",
+        "internal_canonical_hash_detection",
+        "internal_canonical_hash_adversarial_tamper_boundary",
         "self_attestation_security_boundary",
         "observed_file_hash_claim",
+        "artifact_replacement_detection_boundary",
+        "external_artifact_file_sha256_retention_required",
+        "external_artifact_file_sha256_verification_required",
         "executing_identity_boundary",
         "external_tool_sha256_verification_required",
         "external_provider_sha256_verification_required",
@@ -366,7 +374,10 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
     if integrity_contract != INTEGRITY_CONTRACT:
         raise GateArtifactError("gate artifact integrity contract mismatch")
     for contract_flag in (
+        "internal_canonical_hash_adversarial_tamper_boundary",
         "self_attestation_security_boundary",
+        "external_artifact_file_sha256_retention_required",
+        "external_artifact_file_sha256_verification_required",
         "external_tool_sha256_verification_required",
         "external_provider_sha256_verification_required",
         "metadata_result_acceptance_requires_external_verification",
@@ -463,15 +474,34 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
     return artifact
 
 
-def load_artifact(path: str | Path) -> dict[str, Any]:
+def _read_verified_artifact(path: str | Path) -> tuple[dict[str, Any], bytes]:
     try:
-        parsed = json.loads(Path(path).read_text(encoding="utf-8"))
+        raw = Path(path).read_bytes()
+        parsed = json.loads(raw.decode("utf-8", errors="strict"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         raise GateArtifactError("unable to load gate artifact") from None
-    return verify_artifact(parsed)
+    return verify_artifact(parsed), raw
 
 
-def atomic_write_refusing_overwrite(path: str | Path, artifact: Mapping[str, Any]) -> None:
+def load_artifact(path: str | Path) -> dict[str, Any]:
+    return _read_verified_artifact(path)[0]
+
+
+def verify_external_artifact_hash(path: str | Path, expected_sha256: str) -> bool:
+    """Verify artifact bytes against a SHA256 retained outside this process."""
+    expected = _require_sha256(expected_sha256, "external artifact file")
+    try:
+        raw = Path(path).read_bytes()
+    except OSError:
+        raise GateArtifactError("unable to read external artifact file") from None
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise GateArtifactError("external artifact file SHA256 mismatch")
+    return True
+
+
+def atomic_write_refusing_overwrite(
+    path: str | Path, artifact: Mapping[str, Any]
+) -> str:
     target = Path(path)
     verify_artifact(dict(artifact))
     text = json.dumps(canonical(artifact), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
@@ -496,12 +526,17 @@ def atomic_write_refusing_overwrite(path: str | Path, artifact: Mapping[str, Any
             os.link(temporary, target)
         except FileExistsError:
             raise FileExistsError("refusing to overwrite existing gate artifact") from None
+        # Read the public path back, rerun the closed verifier, and return the
+        # raw-file SHA for retention by an external launcher/supervisor.
+        _, published_raw = _read_verified_artifact(target)
+        published_sha256 = hashlib.sha256(published_raw).hexdigest()
     finally:
         if temporary is not None:
             try:
                 temporary.unlink()
             except FileNotFoundError:
                 pass
+    return published_sha256
 
 
 def _parser() -> argparse.ArgumentParser:
