@@ -29,7 +29,7 @@ from typing import Any, Mapping
 CLASSIFICATION = "D3_METADATA_GATE"
 SCHEMA_VERSION = 1
 OLLAMA_MODEL = "qwen2.5-coder:14b"
-DEEPSEEK_MODEL = "deepseek-v4-pro"
+DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_OLLAMA_BASE = "http://127.0.0.1:11434"
 DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
 CANONICAL_ALGORITHM = "canonical_json_sha256"

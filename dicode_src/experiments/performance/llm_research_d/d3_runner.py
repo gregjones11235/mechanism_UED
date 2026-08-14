@@ -24,7 +24,7 @@ if str(HERE) not in sys.path:
 import d3_metadata_gate as metadata_gate  # noqa: E402
 
 SMALL_MODEL = "qwen2.5-coder:14b"
-LARGE_MODEL = "deepseek-v4-pro"
+LARGE_MODEL = "deepseek-v4-flash"
 SAMPLING = {"temperature": 0.6, "top_p": 0.95, "max_tokens": 8192}
 EXPECTED_STAGES = {"early": 4, "mid": 4, "late": 4}
 ARM_ORDER = (
