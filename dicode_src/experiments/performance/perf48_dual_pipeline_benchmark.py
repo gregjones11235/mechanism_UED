@@ -45,6 +45,8 @@ COMMON_FIELDS = (
     "stage",
     "repeat",
     "llm_api_calls",
+    "validation_cache_speedup_included",
+    "validation_replay_scope",
     "task_ids",
     "task_assignment_sha256",
     "task_code_hashes",
@@ -63,8 +65,9 @@ COMMON_FIELDS = (
     "env_evidence",
 )
 A_SEMANTIC_FIELDS = COMMON_FIELDS + (
-    "candidate_validation_ids",
-    "candidate_validation_sha256",
+    "component_scope",
+    "candidate_task_load_ids",
+    "candidate_task_load_sha256",
     "preflight_rng_sha256",
     "params_sha256_before",
     "optimizer_sha256_before",
@@ -77,8 +80,6 @@ A_SEMANTIC_FIELDS = COMMON_FIELDS + (
     "preflight_env_steps",
     "preflight_summary_mode",
     "preflight_return_payload_bytes",
-    "validation_cache_enabled",
-    "validation_cache_exercised",
 )
 B_SEMANTIC_FIELDS = COMMON_FIELDS + (
     "params_sha256_before",
@@ -223,6 +224,7 @@ def validate_component_result(
     gpu_uuid: str,
     stage: str,
     repeat: int,
+    expected_barrier: bool = False,
 ) -> dict[str, Any]:
     if component not in EXPECTED_GPU:
         raise ValueError("invalid component")
@@ -265,6 +267,24 @@ def validate_component_result(
         raise RuntimeError("environment evidence invalid")
     if not document.get("compile_cache_dir"):
         raise RuntimeError("independent compile cache evidence missing")
+    if document.get("validation_replay_scope") != "not_executed_not_timed":
+        raise RuntimeError("validation replay timing scope mismatch")
+    barrier = document.get("barrier")
+    if not isinstance(barrier, Mapping) or barrier.get("enabled") is not expected_barrier:
+        raise RuntimeError("component barrier evidence mismatch")
+    if expected_barrier:
+        required_barrier = (
+            "barrier_id",
+            "ready_sha256",
+            "ready_monotonic_ns",
+            "go_sha256",
+            "go_monotonic_ns",
+            "go_observed_monotonic_ns",
+        )
+        if any(not barrier.get(field) for field in required_barrier):
+            raise RuntimeError("component concurrent barrier receipt incomplete")
+    elif barrier.get("mode") != "control_direct":
+        raise RuntimeError("component control barrier mode mismatch")
     started = document.get("component_started_monotonic_ns")
     ended = document.get("component_ended_monotonic_ns")
     wall = document.get("component_wall_s")
@@ -276,17 +296,19 @@ def validate_component_result(
         or abs(float(wall) - (ended - started) / 1e9) > 1e-9
     ):
         raise RuntimeError("component monotonic timing evidence invalid")
+    if expected_barrier and started < barrier["go_observed_monotonic_ns"]:
+        raise RuntimeError("component workload started before GO observation")
     if component == "A":
-        if document.get("candidate_validation_ids") != document.get("task_ids"):
-            raise RuntimeError("component A candidate order mismatch")
+        if document.get("component_scope") != "fused_preflight_only":
+            raise RuntimeError("component A scope mismatch")
+        if document.get("candidate_task_load_ids") != document.get("task_ids"):
+            raise RuntimeError("component A task-load order mismatch")
         if document.get("preflight_summary_mode") != "fused":
             raise RuntimeError("component A did not use fused preflight")
         if document.get("preflight_env_steps") != 40 * 1024 * 128:
             raise RuntimeError("component A env-step mismatch")
-        if document.get("validation_cache_enabled") is not True:
-            raise RuntimeError("component A validation-cache flag mismatch")
-        if document.get("validation_cache_exercised") is not False:
-            raise RuntimeError("component A validation-cache exercise mismatch")
+        if document.get("validation_cache_speedup_included") is not False:
+            raise RuntimeError("component A validation-cache claim mismatch")
         accepted = document.get("accepted_ids", [])
         rejected = document.get("rejected_ids", [])
         if (
@@ -404,7 +426,7 @@ def _component_env(args: Any, component: str, out: Path) -> dict[str, str]:
 
 def _command(args: Any, component: str, out: Path) -> list[str]:
     uuid = args.gpu_a_uuid if component == "A" else args.gpu_b_uuid
-    return [
+    command = [
         args.python,
         args.harness,
         "--manifest",
@@ -426,6 +448,129 @@ def _command(args: Any, component: str, out: Path) -> list[str]:
         "--mode",
         "run",
     ]
+    barrier = getattr(args, "active_barrier", None)
+    if barrier is not None:
+        command.extend(
+            [
+                "--ready-path",
+                str(barrier["ready_paths"][component]),
+                "--go-path",
+                str(barrier["go_path"]),
+                "--barrier-id",
+                barrier["barrier_id"],
+                "--barrier-timeout-s",
+                str(barrier["timeout_s"]),
+            ]
+        )
+    return command
+
+
+def _make_barrier(args: Any, root: Path, label: str) -> dict[str, Any]:
+    barrier_dir = root / label / "barrier"
+    barrier_dir.mkdir(parents=True)
+    barrier_id = _harness._fingerprint(
+        {
+            "root": str(root.resolve()),
+            "label": label,
+            "manifest_sha256": args.manifest_sha256,
+            "source_commit": args.source_commit,
+            "stage": args.stage,
+            "repeat": args.repeat,
+        }
+    )
+    return {
+        "barrier_id": barrier_id,
+        "ready_paths": {
+            component: barrier_dir / f"READY_{component}.json"
+            for component in ("A", "B")
+        },
+        "go_path": barrier_dir / "GO.json",
+        "timeout_s": float(args.barrier_timeout_s),
+    }
+
+
+def _release_barrier(
+    barrier: Mapping[str, Any],
+    processes: Mapping[str, subprocess.Popen[Any]],
+    evidence: Mapping[str, dict[str, Any]],
+    monitors: Mapping[str, tuple[Any, Any, list[str]]],
+) -> dict[str, Any]:
+    deadline = time.monotonic() + float(barrier["timeout_s"])
+    ready: dict[str, dict[str, Any]] = {}
+    while len(ready) != 2:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("parent READY barrier timeout")
+        for component in ("A", "B"):
+            if component in ready:
+                continue
+            process = processes[component]
+            if process.poll() is not None:
+                raise RuntimeError(f"component {component} exited before READY")
+            if monitors[component][2]:
+                raise RuntimeError(f"component {component} GPU violation before READY")
+            out = Path(evidence[component]["out"])
+            fatal = _pair.fatal_in([out / "harness.stdout", out / "harness.stderr"])
+            if fatal:
+                raise RuntimeError(f"component {component} fatal before READY: {fatal}")
+            _, minimum_free = _pair.arm_gpu_metrics(out / "gpu_memory.csv")
+            if minimum_free is not None and minimum_free < 4096:
+                raise RuntimeError(f"component {component} below 4GiB before READY")
+            path = Path(barrier["ready_paths"][component])
+            if not path.is_file():
+                continue
+            document = _harness.load_hashed_json(path)
+            if (
+                document.get("classification") != CLASSIFICATION
+                or document.get("barrier_id") != barrier["barrier_id"]
+                or document.get("component") != component
+                or document.get("pid") != process.pid
+                or document.get("llm_api_calls") != 0
+                or not isinstance(document.get("ready_monotonic_ns"), int)
+            ):
+                raise RuntimeError(f"component {component} READY receipt invalid")
+            ready[component] = document
+        time.sleep(0.05)
+    go_path = Path(barrier["go_path"])
+    if go_path.exists():
+        raise FileExistsError("GO barrier already exists")
+    go_ns = time.monotonic_ns()
+    go = _harness.atomic_json(
+        go_path,
+        {
+            "classification": CLASSIFICATION,
+            "barrier_id": barrier["barrier_id"],
+            "components": ["A", "B"],
+            "go_monotonic_ns": go_ns,
+            "ready_sha256": {
+                component: ready[component]["result_sha256"]
+                for component in ("A", "B")
+            },
+            "llm_api_calls": 0,
+        },
+    )
+    return {
+        "barrier_id": barrier["barrier_id"],
+        "ready": ready,
+        "go": go,
+        "timeout_s": barrier["timeout_s"],
+    }
+
+
+def _verify_barrier_link(
+    result: Mapping[str, Any], parent: Mapping[str, Any], component: str
+) -> None:
+    child = result.get("barrier", {})
+    ready = parent.get("ready", {}).get(component, {})
+    go = parent.get("go", {})
+    if (
+        child.get("barrier_id") != parent.get("barrier_id")
+        or child.get("ready_sha256") != ready.get("result_sha256")
+        or child.get("ready_monotonic_ns") != ready.get("ready_monotonic_ns")
+        or child.get("go_sha256") != go.get("result_sha256")
+        or child.get("go_monotonic_ns") != go.get("go_monotonic_ns")
+        or go.get("ready_sha256", {}).get(component) != ready.get("result_sha256")
+    ):
+        raise RuntimeError(f"component {component} parent/child barrier mismatch")
 
 
 def _launch_group(
@@ -436,6 +581,8 @@ def _launch_group(
     monitors: dict[str, tuple[Any, Any, list[str]]] = {}
     evidence: dict[str, dict[str, Any]] = {}
     runtime_error: str | None = None
+    barrier = _make_barrier(args, root, label) if len(components) == 2 else None
+    args.active_barrier = barrier
     try:
         for component in components:
             index, uuid = EXPECTED_GPU[component]
@@ -471,6 +618,12 @@ def _launch_group(
                 "out": str(out),
                 "compile_cache_dir": str(out / "jax_compilation"),
             }
+        if barrier is not None:
+            parent_barrier = _release_barrier(
+                barrier, processes, evidence, monitors
+            )
+            for component in components:
+                evidence[component]["parent_barrier"] = parent_barrier
         while any(process.poll() is None for process in processes.values()):
             for component, process in processes.items():
                 if (
@@ -539,9 +692,20 @@ def _launch_group(
                 gpu_uuid=uuid,
                 stage=args.stage,
                 repeat=args.repeat,
+                expected_barrier=barrier is not None,
             )
+            if barrier is not None:
+                _verify_barrier_link(
+                    evidence[component]["result"],
+                    evidence[component]["parent_barrier"],
+                    component,
+                )
         return evidence
     finally:
+        args.active_barrier = None
+        for process in processes.values():
+            if process.poll() is None:
+                _pair.stop_owned(process.pid)
         for stop, thread, violations in monitors.values():
             stop.set()
             thread.join(timeout=5)
@@ -615,13 +779,23 @@ def run_benchmark(args: Any) -> dict[str, Any]:
                 concurrent["B"]["started_monotonic_ns"],
             )
         ) / 1e9
-        control_a_wall = float(control_a["process_wall_s"])
-        control_b_wall = float(control_b["process_wall_s"])
-        concurrent_a_wall = float(concurrent["A"]["process_wall_s"])
-        concurrent_b_wall = float(concurrent["B"]["process_wall_s"])
+        control_a_wall = float(control_a["result"]["component_wall_s"])
+        control_b_wall = float(control_b["result"]["component_wall_s"])
+        concurrent_a_wall = float(concurrent["A"]["result"]["component_wall_s"])
+        concurrent_b_wall = float(concurrent["B"]["result"]["component_wall_s"])
+        concurrent_component_wall_s = (
+            max(
+                concurrent["A"]["result"]["component_ended_monotonic_ns"],
+                concurrent["B"]["result"]["component_ended_monotonic_ns"],
+            )
+            - min(
+                concurrent["A"]["result"]["component_started_monotonic_ns"],
+                concurrent["B"]["result"]["component_started_monotonic_ns"],
+            )
+        ) / 1e9
         slowdown_a = (concurrent_a_wall - control_a_wall) / control_a_wall
         slowdown_b = (concurrent_b_wall - control_b_wall) / control_b_wall
-        hidden_wall_s = control_a_wall + control_b_wall - concurrent_wall_s
+        hidden_wall_s = control_a_wall + control_b_wall - concurrent_component_wall_s
         memory_deltas = {
             "A": concurrent["A"]["gpu_peak_memory_mib"]
             - control_a["gpu_peak_memory_mib"],
@@ -657,6 +831,9 @@ def run_benchmark(args: Any) -> dict[str, Any]:
             "stage": args.stage,
             "repeat": args.repeat,
             "llm_api_calls": 0,
+            "validation_cache_speedup_included": False,
+            "validation_replay_scope": "not_executed_not_timed",
+            "component_A_scope": "fused_preflight_only",
             "static_evidence": static,
             "controls": {"A": control_a, "B": control_b},
             "concurrent": concurrent,
@@ -667,17 +844,30 @@ def run_benchmark(args: Any) -> dict[str, Any]:
                 "component_start_skew_s": start_skew_s,
                 "process_launch_skew_s": launch_skew_s,
                 "start_skew_limit_s": 2.0,
-                "control_A_wall_s": control_a_wall,
-                "control_B_wall_s": control_b_wall,
-                "concurrent_A_wall_s": concurrent_a_wall,
-                "concurrent_B_wall_s": concurrent_b_wall,
-                "concurrent_makespan_wall_s": concurrent_wall_s,
+                "timing_basis": "component_monotonic",
+                "control_A_component_wall_s": control_a_wall,
+                "control_B_component_wall_s": control_b_wall,
+                "concurrent_A_component_wall_s": concurrent_a_wall,
+                "concurrent_B_component_wall_s": concurrent_b_wall,
+                "concurrent_component_makespan_wall_s": concurrent_component_wall_s,
                 "component_A_slowdown": slowdown_a,
                 "component_B_slowdown": slowdown_b,
                 "slowdown_limit": 0.10,
                 "hidden_wall_s": hidden_wall_s,
+                "hidden_wall_formula": (
+                    "control_A_component_wall_s + control_B_component_wall_s - "
+                    "concurrent_component_makespan_wall_s"
+                ),
                 "hidden_wall_min_s": 400.0,
+                "operational_process_wall_s": {
+                    "control_A": float(control_a["process_wall_s"]),
+                    "control_B": float(control_b["process_wall_s"]),
+                    "concurrent_A": float(concurrent["A"]["process_wall_s"]),
+                    "concurrent_B": float(concurrent["B"]["process_wall_s"]),
+                    "concurrent_makespan": concurrent_wall_s,
+                },
             },
+            "barrier": concurrent["A"].get("parent_barrier"),
             "gpu_safety": {
                 "ok": runtime_ok,
                 "concurrent_minus_control_peak_mib": memory_deltas,
@@ -722,6 +912,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gpu-a-uuid", required=True)
     parser.add_argument("--gpu-b-index", type=int, required=True)
     parser.add_argument("--gpu-b-uuid", required=True)
+    parser.add_argument("--barrier-timeout-s", type=float, default=120.0)
     args = parser.parse_args(argv)
     run_benchmark(args)
     return 0

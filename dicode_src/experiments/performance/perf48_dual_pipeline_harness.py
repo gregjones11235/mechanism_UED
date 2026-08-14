@@ -124,6 +124,61 @@ def load_hashed_json(path: str | Path) -> dict[str, Any]:
     return document
 
 
+def _wait_for_go(
+    args: Any, runtime_source_evidence: Mapping[str, Any]
+) -> dict[str, Any]:
+    paths = (args.ready_path, args.go_path, args.barrier_id)
+    if not any(paths):
+        return {"enabled": False, "mode": "control_direct"}
+    if not all(paths):
+        raise RuntimeError("incomplete concurrent barrier arguments")
+    ready_path = Path(args.ready_path)
+    go_path = Path(args.go_path)
+    if ready_path.exists() or go_path.exists():
+        raise FileExistsError("concurrent barrier artifact already exists")
+    ready_ns = time.monotonic_ns()
+    ready = atomic_json(
+        ready_path,
+        {
+            "classification": CLASSIFICATION,
+            "barrier_id": args.barrier_id,
+            "component": args.component,
+            "pid": os.getpid(),
+            "ready_monotonic_ns": ready_ns,
+            "runtime_source_evidence_sha256": _fingerprint(
+                runtime_source_evidence
+            ),
+            "llm_api_calls": 0,
+        },
+    )
+    deadline = time.monotonic() + float(args.barrier_timeout_s)
+    while not go_path.is_file():
+        if time.monotonic() >= deadline:
+            raise TimeoutError("concurrent GO barrier timeout")
+        time.sleep(0.05)
+    go = load_hashed_json(go_path)
+    if (
+        go.get("classification") != CLASSIFICATION
+        or go.get("barrier_id") != args.barrier_id
+        or go.get("components") != list(COMPONENTS)
+        or go.get("llm_api_calls") != 0
+        or not isinstance(go.get("go_monotonic_ns"), int)
+    ):
+        raise RuntimeError("concurrent GO barrier receipt invalid")
+    return {
+        "enabled": True,
+        "mode": "ready_go",
+        "barrier_id": args.barrier_id,
+        "ready_path": str(ready_path.resolve()),
+        "ready_sha256": ready["result_sha256"],
+        "ready_monotonic_ns": ready_ns,
+        "go_path": str(go_path.resolve()),
+        "go_sha256": go["result_sha256"],
+        "go_monotonic_ns": go["go_monotonic_ns"],
+        "go_observed_monotonic_ns": time.monotonic_ns(),
+    }
+
+
 def _stage_repeat(
     manifest: Mapping[str, Any], stage_name: str, repeat_index: int
 ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
@@ -260,6 +315,8 @@ def _common_result(
         "stage": args.stage,
         "repeat": args.repeat,
         "llm_api_calls": 0,
+        "validation_cache_speedup_included": False,
+        "validation_replay_scope": "not_executed_not_timed",
         "task_ids": task_ids,
         "task_assignment_sha256": _fingerprint(task_ids),
         "task_code_hashes": code_hashes,
@@ -275,6 +332,7 @@ def _common_result(
         "conditioning_dtype": stage["conditioning"]["dtype"],
         "config_evidence": dict(config_evidence),
         "compile_cache_dir": os.environ.get("JAX_COMPILATION_CACHE_DIR"),
+        "barrier": dict(args.barrier_receipt),
         "runtime_failure": False,
         "fatal_error": False,
         "oom": False,
@@ -329,11 +387,11 @@ def run_component_a(
     archive_before = runtime["archive_hash"](archive)
     task_ids, code_hashes = _verify_frozen_tasks(stage, archive, runtime)
 
-    validation_started = time.monotonic_ns()
+    task_load_started = time.monotonic_ns()
     classes, ok_ids = runtime["load_tasks_from_env_codes"](archive, task_ids)
-    validation_wall_s = (time.monotonic_ns() - validation_started) / 1e9
+    candidate_task_load_wall_s = (time.monotonic_ns() - task_load_started) / 1e9
     if list(ok_ids) != task_ids:
-        raise RuntimeError("candidate validation/order mismatch")
+        raise RuntimeError("candidate task load/order mismatch")
 
     preflight_started = time.monotonic_ns()
     raw = runtime["evaluate_new_tasks"](
@@ -379,8 +437,9 @@ def run_component_a(
     ended = time.monotonic_ns()
     result = {
         **common,
-        "candidate_validation_ids": list(ok_ids),
-        "candidate_validation_sha256": _fingerprint(list(ok_ids)),
+        "component_scope": "fused_preflight_only",
+        "candidate_task_load_ids": list(ok_ids),
+        "candidate_task_load_sha256": _fingerprint(list(ok_ids)),
         "preflight_rng_sha256": runtime["rng_hash"](preflight_rng),
         "params_sha256_before": runtime["state_hash"](train_state.params),
         "optimizer_sha256_before": runtime["state_hash"](train_state.opt_state),
@@ -391,7 +450,7 @@ def run_component_a(
         "archive_before_sha256": archive_before,
         "archive_after_sha256": archive_after,
         "preflight_env_steps": env_steps,
-        "validation_wall_s": validation_wall_s,
+        "candidate_task_load_wall_s": candidate_task_load_wall_s,
         "preflight_wall_s": preflight_wall_s,
         "route_wall_s": route_wall_s,
         "component_started_monotonic_ns": started,
@@ -399,8 +458,6 @@ def run_component_a(
         "component_wall_s": (ended - started) / 1e9,
         "preflight_summary_mode": summary_mode,
         "preflight_return_payload_bytes": payload_bytes,
-        "validation_cache_enabled": True,
-        "validation_cache_exercised": False,
         "runtime_source_evidence": runtime["source_evidence"](manifest),
         "env_evidence": runtime["env_evidence"](),
     }
@@ -582,12 +639,8 @@ def _preflight(
     config: Any,
     config_evidence: Mapping[str, str],
     out: Path,
+    runtime: Mapping[str, Any],
 ) -> dict[str, Any]:
-    runtime = (
-        _production_runtime_a(manifest, out)
-        if args.component == "A"
-        else _production_runtime_b(manifest)
-    )
     result = {
         "classification": CLASSIFICATION,
         "component": args.component,
@@ -615,6 +668,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeat", type=int, choices=(0, 1), required=True)
     parser.add_argument("--component", choices=COMPONENTS, required=True)
     parser.add_argument("--mode", choices=("preflight", "run"), required=True)
+    parser.add_argument("--ready-path")
+    parser.add_argument("--go-path")
+    parser.add_argument("--barrier-id")
+    parser.add_argument("--barrier-timeout-s", type=float, default=120.0)
     args = parser.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -625,14 +682,21 @@ def main(argv: list[str] | None = None) -> int:
         verify_dual_manifest(manifest, args.source_commit)
         _stage_repeat(manifest, args.stage, args.repeat)
         _verify_gpu(args.required_gpu_uuid)
+        runtime = (
+            _production_runtime_a(manifest, out)
+            if args.component == "A"
+            else _production_runtime_b(manifest)
+        )
+        runtime_source_evidence = runtime["source_evidence"](manifest)
+        args.barrier_receipt = _wait_for_go(args, runtime_source_evidence)
         if args.mode == "preflight":
-            _preflight(args, manifest, config, config_evidence, out)
+            _preflight(args, manifest, config, config_evidence, out, runtime)
         elif args.component == "A":
             run_component_a(
                 manifest,
                 config,
                 config_evidence,
-                _production_runtime_a(manifest, out),
+                runtime,
                 out,
                 args,
             )
@@ -641,7 +705,7 @@ def main(argv: list[str] | None = None) -> int:
                 manifest,
                 config,
                 config_evidence,
-                _production_runtime_b(manifest),
+                runtime,
                 out,
                 args,
             )
