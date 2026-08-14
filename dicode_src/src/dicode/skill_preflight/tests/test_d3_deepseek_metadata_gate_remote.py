@@ -62,6 +62,12 @@ def _serialized(artifact) -> str:
     return json.dumps(artifact, sort_keys=True, ensure_ascii=False)
 
 
+def _recompute_artifact_hash(artifact) -> None:
+    artifact["artifact_sha256"] = gate.canonical_json_sha256(
+        {key: value for key, value in artifact.items() if key != "artifact_sha256"}
+    )
+
+
 def test_success_is_exactly_one_models_get_and_redacted(tmp_path):
     secret = _secret()
     calls = []
@@ -191,9 +197,7 @@ def test_loader_rejects_canonical_tampering(tmp_path):
 
     artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
     artifact["model"] = "deepseek-v4-pro"
-    artifact["artifact_sha256"] = gate.canonical_json_sha256(
-        {key: value for key, value in artifact.items() if key != "artifact_sha256"}
-    )
+    _recompute_artifact_hash(artifact)
     path.write_text(json.dumps(artifact), encoding="utf-8")
     with pytest.raises(gate.GateArtifactError, match="fixed field mismatch"):
         gate.load_artifact(path)
@@ -208,11 +212,76 @@ def test_provenance_and_official_references_are_bound(tmp_path):
         "https://api-docs.deepseek.com/quick_start/pricing",
         "https://api-docs.deepseek.com/updates/",
     ]
-    assert artifact["provenance"]["tool"]["source"] == gate.TOOL_SOURCE
-    assert artifact["provenance"]["adapter"]["source"] == gate.ADAPTER_SOURCE
-    assert all(
-        len(binding["sha256"]) == 64 for binding in artifact["provenance"].values()
+    observed = artifact["provenance"]["observed_source_files"]
+    assert observed["tool"]["source"] == gate.TOOL_SOURCE
+    assert observed["adapter"]["source"] == gate.ADAPTER_SOURCE
+    for binding in observed.values():
+        assert binding["hash_algorithm"] == "sha256"
+        assert binding["identity_claim"] == (
+            "observed_file_bytes_only_not_executing_code_identity"
+        )
+        assert len(binding["observed_file_bytes_sha256"]) == 64
+    runtime = artifact["provenance"]["runtime_callable_fingerprint"]
+    assert runtime["algorithm"] == "python_code_objects_canonical_sha256_v1"
+    assert "adapter.parse_env_file" in runtime["scope"]
+    assert "adapter.DeepSeekMetadataClient.fetch_models" in runtime["scope"]
+    assert runtime["python_implementation"]
+    assert runtime["python_version"]
+    assert len(runtime["sha256"]) == 64
+
+
+@pytest.mark.parametrize(
+    ("mapping_path", "forbidden_key"),
+    [
+        ((), "response_body"),
+        (("environment_declaration",), "credential_length"),
+        (("provenance",), "authorization_header"),
+        (("provenance", "observed_source_files"), "model_ids"),
+        (("provenance", "observed_source_files", "tool"), "credential_hash"),
+        (("provenance", "observed_source_files", "adapter"), "credential_prefix"),
+        (("provenance", "runtime_callable_fingerprint"), "credential_value"),
+    ],
+)
+def test_closed_schema_rejects_rehashed_unknown_fields(
+    tmp_path, mapping_path, forbidden_key
+):
+    artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
+    target = artifact
+    for key in mapping_path:
+        target = target[key]
+    target[forbidden_key] = "forbidden-extension"
+    _recompute_artifact_hash(artifact)
+    with pytest.raises(gate.GateArtifactError, match="schema mismatch"):
+        gate.verify_artifact(artifact)
+    output = tmp_path / f"{forbidden_key}.json"
+    with pytest.raises(gate.GateArtifactError, match="schema mismatch"):
+        gate.atomic_write_refusing_overwrite(output, artifact)
+    assert not output.exists()
+
+
+def test_runtime_callable_monkeypatch_rejected_even_with_rehashed_artifact(
+    tmp_path, monkeypatch
+):
+    artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
+    original = gate.provider.parse_env_file
+    monkeypatch.setattr(
+        gate.provider,
+        "parse_env_file",
+        lambda path: original(path),
     )
+    _recompute_artifact_hash(artifact)
+    with pytest.raises(gate.GateArtifactError, match="provenance mismatch"):
+        gate.verify_artifact(artifact)
+
+
+def test_observed_source_file_hash_change_is_rejected(tmp_path):
+    artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
+    artifact["provenance"]["observed_source_files"]["tool"][
+        "observed_file_bytes_sha256"
+    ] = "0" * 64
+    _recompute_artifact_hash(artifact)
+    with pytest.raises(gate.GateArtifactError, match="provenance mismatch"):
+        gate.verify_artifact(artifact)
 
 
 def test_cli_has_no_model_or_base_override_and_no_completion_path(tmp_path, capsys):

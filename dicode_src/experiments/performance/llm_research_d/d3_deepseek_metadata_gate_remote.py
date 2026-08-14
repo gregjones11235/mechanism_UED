@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Audited one-request DeepSeek metadata gate for remote execution.
 
-This module performs no work at import time.  It delegates dotenv parsing,
-credential handling, echo detection, and the single ``GET /models`` request
-to :mod:`d3_deepseek_provider`.  It has no completion, embedding, shell, GPU,
-or cross-provider request path.
+This module performs no environment or remote access at import time.  It
+delegates dotenv parsing, credential handling, echo detection, and the single
+``GET /models`` request to :mod:`d3_deepseek_provider`.  It has no completion,
+embedding, shell, GPU, or cross-provider request path.
 """
 from __future__ import annotations
 
@@ -12,10 +12,12 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import secrets
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import CodeType
 from typing import Any, Callable, Mapping, Sequence
 
 import d3_deepseek_provider as provider
@@ -27,6 +29,10 @@ CANONICAL_ALGORITHM = "canonical_json_sha256"
 CANONICAL_SCOPE = "ALL_FIELDS_EXCLUDING_ARTIFACT_SHA256"
 TOOL_SOURCE = "d3_deepseek_metadata_gate_remote.py"
 ADAPTER_SOURCE = "d3_deepseek_provider.py"
+FILE_HASH_ALGORITHM = "sha256"
+FILE_HASH_CLAIM = "observed_file_bytes_only_not_executing_code_identity"
+RUNTIME_FINGERPRINT_ALGORITHM = "python_code_objects_canonical_sha256_v1"
+_RUNTIME_CALLABLE_BASELINE: dict[str, Any] | None = None
 
 PROVIDER_VARIABLE = "EXP_DEEPSEEK_PROVIDER"
 BASE_URL_VARIABLE = "EXP_DEEPSEEK_BASE_URL"
@@ -37,6 +43,50 @@ ENV_DECLARATION = provider.EnvDeclaration(
     BASE_URL_VARIABLE,
     MODEL_VARIABLE,
     CREDENTIAL_VARIABLE,
+)
+
+TOP_LEVEL_KEYS = frozenset(
+    {
+        "artifact_sha256",
+        "artifact_sha256_algorithm",
+        "artifact_sha256_scope",
+        "authorization_header_serialized",
+        "base_url",
+        "classification",
+        "completion_requests",
+        "credential_present",
+        "credential_value_serialized",
+        "deepseek_models_endpoint_requests",
+        "deepseek_other_endpoint_requests",
+        "embedding_requests",
+        "environment_declaration",
+        "exact_model_advertised",
+        "http_status",
+        "metadata_method",
+        "metadata_path",
+        "model",
+        "observed_utc",
+        "official_references",
+        "provenance",
+        "provider",
+        "qwen_endpoint_requests",
+        "reason",
+        "request_count",
+        "response_body_serialized",
+        "schema_version",
+        "status",
+    }
+)
+ENVIRONMENT_DECLARATION_KEYS = frozenset(
+    {"provider_variable", "base_url_variable", "model_variable", "credential_variable"}
+)
+PROVENANCE_KEYS = frozenset({"observed_source_files", "runtime_callable_fingerprint"})
+OBSERVED_SOURCE_FILES_KEYS = frozenset({"tool", "adapter"})
+OBSERVED_FILE_BINDING_KEYS = frozenset(
+    {"source", "hash_algorithm", "observed_file_bytes_sha256", "identity_claim"}
+)
+RUNTIME_FINGERPRINT_KEYS = frozenset(
+    {"algorithm", "scope", "python_implementation", "python_version", "sha256"}
 )
 
 
@@ -75,12 +125,141 @@ def _file_sha256(path: Path) -> str:
         raise GateArtifactError("unable to hash gate provenance") from None
 
 
-def _current_provenance() -> dict[str, dict[str, str]]:
+def _constant_descriptor(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return {"float_hex": value.hex()}
+    if isinstance(value, bytes):
+        return {"bytes_hex": value.hex()}
+    if isinstance(value, tuple):
+        return {"tuple": [_constant_descriptor(item) for item in value]}
+    if isinstance(value, frozenset):
+        members = [_constant_descriptor(item) for item in value]
+        members.sort(key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+        return {"frozenset": members}
+    if isinstance(value, CodeType):
+        return {"code": _code_descriptor(value)}
+    if value is Ellipsis:
+        return {"singleton": "Ellipsis"}
+    return {"constant_type": f"{type(value).__module__}.{type(value).__qualname__}"}
+
+
+def _code_descriptor(code: CodeType) -> dict[str, Any]:
+    """Normalize executable code without claiming whole-module identity."""
+    return {
+        "argcount": code.co_argcount,
+        "posonlyargcount": code.co_posonlyargcount,
+        "kwonlyargcount": code.co_kwonlyargcount,
+        "nlocals": code.co_nlocals,
+        "stacksize": code.co_stacksize,
+        "flags": code.co_flags,
+        "bytecode_hex": code.co_code.hex(),
+        "exceptiontable_hex": getattr(code, "co_exceptiontable", b"").hex(),
+        "constants": [_constant_descriptor(item) for item in code.co_consts],
+        "names": list(code.co_names),
+        "varnames": list(code.co_varnames),
+        "freevars": list(code.co_freevars),
+        "cellvars": list(code.co_cellvars),
+    }
+
+
+def _selected_runtime_callables() -> list[tuple[str, Callable[..., Any]]]:
+    """Resolve callables dynamically so monkeypatching changes the digest."""
+    return [
+        ("gate._artifact_payload", _artifact_payload),
+        ("gate._base_artifact", _base_artifact),
+        ("gate._code_descriptor", _code_descriptor),
+        ("gate._constant_descriptor", _constant_descriptor),
+        ("gate._current_provenance", _current_provenance),
+        ("gate._file_sha256", _file_sha256),
+        ("gate._runtime_callable_fingerprint", _runtime_callable_fingerprint),
+        ("gate._seal", _seal),
+        ("gate._selected_runtime_callables", _selected_runtime_callables),
+        ("gate._utc_text", _utc_text),
+        ("gate.canonical", canonical),
+        ("gate.canonical_json_sha256", canonical_json_sha256),
+        ("gate.run_metadata_gate", run_metadata_gate),
+        ("gate.verify_artifact", verify_artifact),
+        ("adapter._parse_env_value", provider._parse_env_value),
+        ("adapter._reject_shell_tokens", provider._reject_shell_tokens),
+        ("adapter.DeepSeekMetadataClient.__init__", provider.DeepSeekMetadataClient.__init__),
+        ("adapter.DeepSeekMetadataClient._check_echo", provider.DeepSeekMetadataClient._check_echo),
+        (
+            "adapter.DeepSeekMetadataClient._decoded_body_echoes",
+            provider.DeepSeekMetadataClient._decoded_body_echoes,
+        ),
+        (
+            "adapter.DeepSeekMetadataClient.fetch_models",
+            provider.DeepSeekMetadataClient.fetch_models,
+        ),
+        (
+            "adapter.DeepSeekProviderConfig._credential_echoes",
+            provider.DeepSeekProviderConfig._credential_echoes,
+        ),
+        (
+            "adapter.DeepSeekProviderConfig._decoded_credential_echoes",
+            provider.DeepSeekProviderConfig._decoded_credential_echoes,
+        ),
+        (
+            "adapter.DeepSeekProviderConfig.from_snapshot",
+            provider.DeepSeekProviderConfig.from_snapshot,
+        ),
+        ("adapter.EnvSnapshot.__init__", provider.EnvSnapshot.__init__),
+        ("adapter.parse_env_file", provider.parse_env_file),
+    ]
+
+
+def _runtime_callable_fingerprint() -> dict[str, Any]:
+    implementation = platform.python_implementation()
+    version = platform.python_version()
+    descriptors: dict[str, Any] = {}
+    scope: list[str] = []
+    for label, callable_value in _selected_runtime_callables():
+        target = getattr(callable_value, "__func__", callable_value)
+        code = getattr(target, "__code__", None)
+        if not isinstance(code, CodeType):
+            raise GateArtifactError("runtime callable fingerprint unavailable")
+        scope.append(label)
+        descriptors[label] = _code_descriptor(code)
+    digest_payload = {
+        "python_implementation": implementation,
+        "python_version": version,
+        "callables": descriptors,
+    }
+    return {
+        "algorithm": RUNTIME_FINGERPRINT_ALGORITHM,
+        "scope": scope,
+        "python_implementation": implementation,
+        "python_version": version,
+        "sha256": canonical_json_sha256(digest_payload),
+    }
+
+
+def _observed_file_binding(source: str, path: Path) -> dict[str, str]:
+    return {
+        "source": source,
+        "hash_algorithm": FILE_HASH_ALGORITHM,
+        "observed_file_bytes_sha256": _file_sha256(path),
+        "identity_claim": FILE_HASH_CLAIM,
+    }
+
+
+def _current_provenance() -> dict[str, Any]:
     adapter_path = Path(provider.__file__).resolve()
     tool_path = Path(__file__).resolve()
+    runtime_fingerprint = _runtime_callable_fingerprint()
+    if (
+        _RUNTIME_CALLABLE_BASELINE is not None
+        and runtime_fingerprint != _RUNTIME_CALLABLE_BASELINE
+    ):
+        raise GateArtifactError("gate artifact provenance mismatch: runtime callable changed")
     return {
-        "tool": {"source": TOOL_SOURCE, "sha256": _file_sha256(tool_path)},
-        "adapter": {"source": ADAPTER_SOURCE, "sha256": _file_sha256(adapter_path)},
+        "observed_source_files": {
+            "tool": _observed_file_binding(TOOL_SOURCE, tool_path),
+            "adapter": _observed_file_binding(ADAPTER_SOURCE, adapter_path),
+        },
+        "runtime_callable_fingerprint": runtime_fingerprint,
     }
 
 
@@ -183,15 +362,53 @@ def _artifact_payload(artifact: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in artifact.items() if key != "artifact_sha256"}
 
 
+def _require_exact_keys(value: Any, allowed: frozenset[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != allowed:
+        raise GateArtifactError(f"gate artifact {label} schema mismatch")
+    return value
+
+
+def _require_sha256(value: Any, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise GateArtifactError(f"gate artifact {label} SHA256 invalid")
+    return value
+
+
 def verify_artifact(artifact: Any) -> dict[str, Any]:
-    """Validate canonical integrity and all fixed safety invariants."""
-    if not isinstance(artifact, dict):
-        raise GateArtifactError("gate artifact must be an object")
+    """Validate a recursively closed schema, integrity, and safety invariants."""
+    artifact = _require_exact_keys(artifact, TOP_LEVEL_KEYS, "top-level")
+    environment = _require_exact_keys(
+        artifact["environment_declaration"],
+        ENVIRONMENT_DECLARATION_KEYS,
+        "environment declaration",
+    )
+    provenance = _require_exact_keys(artifact["provenance"], PROVENANCE_KEYS, "provenance")
+    observed_files = _require_exact_keys(
+        provenance["observed_source_files"],
+        OBSERVED_SOURCE_FILES_KEYS,
+        "observed source files",
+    )
+    tool_binding = _require_exact_keys(
+        observed_files["tool"], OBSERVED_FILE_BINDING_KEYS, "tool source binding"
+    )
+    adapter_binding = _require_exact_keys(
+        observed_files["adapter"], OBSERVED_FILE_BINDING_KEYS, "adapter source binding"
+    )
+    runtime_fingerprint = _require_exact_keys(
+        provenance["runtime_callable_fingerprint"],
+        RUNTIME_FINGERPRINT_KEYS,
+        "runtime callable fingerprint",
+    )
     if artifact.get("artifact_sha256_algorithm") != CANONICAL_ALGORITHM:
         raise GateArtifactError("gate artifact hash algorithm mismatch")
     if artifact.get("artifact_sha256_scope") != CANONICAL_SCOPE:
         raise GateArtifactError("gate artifact hash scope mismatch")
-    if canonical_json_sha256(_artifact_payload(artifact)) != artifact.get("artifact_sha256"):
+    artifact_sha256 = _require_sha256(artifact["artifact_sha256"], "canonical")
+    if canonical_json_sha256(_artifact_payload(artifact)) != artifact_sha256:
         raise GateArtifactError("gate artifact hash mismatch")
     expected_fixed = {
         "classification": CLASSIFICATION,
@@ -213,7 +430,16 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
     for key, expected in expected_fixed.items():
         if artifact.get(key) != expected:
             raise GateArtifactError("gate artifact fixed field mismatch")
-    if artifact.get("environment_declaration") != {
+    if type(artifact["schema_version"]) is not int:
+        raise GateArtifactError("gate artifact schema version type invalid")
+    for redaction_flag in (
+        "credential_value_serialized",
+        "authorization_header_serialized",
+        "response_body_serialized",
+    ):
+        if type(artifact[redaction_flag]) is not bool or artifact[redaction_flag] is not False:
+            raise GateArtifactError("gate artifact redaction flag invalid")
+    if environment != {
         "provider_variable": PROVIDER_VARIABLE,
         "base_url_variable": BASE_URL_VARIABLE,
         "model_variable": MODEL_VARIABLE,
@@ -221,8 +447,21 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
     }:
         raise GateArtifactError("gate artifact env declaration mismatch")
     count = artifact.get("request_count")
-    if count not in {0, 1} or artifact.get("deepseek_models_endpoint_requests") != count:
+    if (
+        type(count) is not int
+        or count not in {0, 1}
+        or type(artifact.get("deepseek_models_endpoint_requests")) is not int
+        or artifact.get("deepseek_models_endpoint_requests") != count
+    ):
         raise GateArtifactError("gate artifact request count mismatch")
+    for zero_count_field in (
+        "deepseek_other_endpoint_requests",
+        "qwen_endpoint_requests",
+        "completion_requests",
+        "embedding_requests",
+    ):
+        if type(artifact[zero_count_field]) is not int or artifact[zero_count_field] != 0:
+            raise GateArtifactError("gate artifact zero request field invalid")
     status = artifact.get("status")
     if status not in {"PASS", "BLOCKED"}:
         raise GateArtifactError("gate artifact status invalid")
@@ -249,12 +488,15 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
         ):
             raise GateArtifactError("gate artifact pass fields invalid")
     elif (
-        artifact.get("reason") not in blocked_reasons
+        type(artifact.get("reason")) is not str
+        or artifact.get("reason") not in blocked_reasons
         or artifact.get("exact_model_advertised") is not False
     ):
         raise GateArtifactError("gate artifact blocked fields invalid")
-    if not isinstance(artifact.get("credential_present"), bool):
+    if type(artifact.get("credential_present")) is not bool:
         raise GateArtifactError("gate artifact credential presence invalid")
+    if artifact["http_status"] is not None and type(artifact["http_status"]) is not int:
+        raise GateArtifactError("gate artifact HTTP status invalid")
     observed_utc = artifact.get("observed_utc")
     if not isinstance(observed_utc, str) or not observed_utc.endswith("Z"):
         raise GateArtifactError("gate artifact UTC invalid")
@@ -264,9 +506,34 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
         raise GateArtifactError("gate artifact UTC invalid") from None
     if parsed_utc.utcoffset() != timezone.utc.utcoffset(parsed_utc):
         raise GateArtifactError("gate artifact UTC invalid")
-    if artifact.get("provenance") != _current_provenance():
+    for binding, expected_source in (
+        (tool_binding, TOOL_SOURCE),
+        (adapter_binding, ADAPTER_SOURCE),
+    ):
+        if (
+            binding["source"] != expected_source
+            or binding["hash_algorithm"] != FILE_HASH_ALGORITHM
+            or binding["identity_claim"] != FILE_HASH_CLAIM
+        ):
+            raise GateArtifactError("gate artifact observed file binding invalid")
+        _require_sha256(binding["observed_file_bytes_sha256"], "observed file bytes")
+    if (
+        runtime_fingerprint["algorithm"] != RUNTIME_FINGERPRINT_ALGORITHM
+        or not isinstance(runtime_fingerprint["scope"], list)
+        or not all(isinstance(item, str) for item in runtime_fingerprint["scope"])
+        or not isinstance(runtime_fingerprint["python_implementation"], str)
+        or not isinstance(runtime_fingerprint["python_version"], str)
+    ):
+        raise GateArtifactError("gate artifact runtime fingerprint invalid")
+    _require_sha256(runtime_fingerprint["sha256"], "runtime callable fingerprint")
+    if provenance != _current_provenance():
         raise GateArtifactError("gate artifact provenance mismatch")
     return artifact
+
+
+# Capture the actual loaded code objects once all selected callables exist.
+# This is pure runtime introspection: it reads no env file, key, network, or GPU.
+_RUNTIME_CALLABLE_BASELINE = _runtime_callable_fingerprint()
 
 
 def load_artifact(path: str | Path) -> dict[str, Any]:
