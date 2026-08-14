@@ -4,6 +4,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -127,6 +128,7 @@ def _async_result(**changes):
         },
         "worker_jax_backend": "gpu",
         "worker_jax_device_count": 1,
+        "controller_backend": "cpu",
         "worker_route_calls": 0,
         "main_route_calls": 1,
         "receipt_sha256": {name: name.lower() for name in ("JOB", "RUNNING", "RESULT", "APPLYING", "APPLIED")},
@@ -267,7 +269,7 @@ def test_apply_once_route_exact_once_and_double_apply_rejected():
     assert guard.route_calls == 1
 
 
-def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path):
+def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path, monkeypatch):
     harness = load("perf48_async_pipeline_harness")
     from dicode.skill_preflight.async_preflight import plan_async_session
 
@@ -313,6 +315,7 @@ def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path):
             self.root = Path(cfg.performance.async_preflight_root)
 
         def launch(self, **kwargs):
+            assert "JAX_PLATFORMS" not in os.environ
             job = self.root / "job"
             job.mkdir(parents=True)
             harness.atomic_json(job / "JOB.json", {"kind": "job"})
@@ -362,6 +365,7 @@ def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path):
         "route": object(),
         "preflight_route": apply,
         "source_evidence": {"verified": True},
+        "controller_backend": "cpu",
     }
     out = tmp_path / "out"
     out.mkdir()
@@ -373,9 +377,12 @@ def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path):
         source=str(tmp_path),
         result_timeout_s=1,
     )
+    monkeypatch.setenv("JAX_PLATFORMS", "cpu")
     result = harness.run_async_controller(
         manifest, config, {"path": "config", "sha256": "config"}, runtime, out, args
     )
+    assert os.environ["JAX_PLATFORMS"] == "cpu"
+    assert result["controller_backend"] == "cpu"
     assert result["session_N"]["training_new_ids"] == []
     assert result["session_N1"]["training_new_ids"] == ["one"]
     assert result["route_calls"] == 1 and result["double_apply_rejected"]
@@ -464,6 +471,7 @@ def test_timing_uses_component_makespan_and_separates_process_wall():
     control_b = run(0, 10_000_000_000, 10.0, 0, 11_000_000_000, 11.0)
     timing = benchmark.calculate_timing(async_run, concurrent_b, reference, control_b)
     assert timing["concurrent_component_makespan_s"] == 10.0
+    assert timing["component_start_skew_s"] == 1.0
     assert timing["concurrent_component_overlap_s"] == 7.0
     assert timing["overlap_hidden_wall_s"] == 12.0
     assert timing["slowdown"] == {
@@ -474,16 +482,55 @@ def test_timing_uses_component_makespan_and_separates_process_wall():
     assert timing["hidden_wall_formula"].startswith("sync_reference_component_wall_s")
 
 
+def test_schedule_threshold_boundaries_and_epsilon_reject():
+    benchmark = load("perf48_async_pipeline_benchmark")
+    result = _async_result()
+    timing = {
+        "concurrent_component_overlap_s": 0.0,
+        "component_start_skew_s": 2.0,
+        "overlap_hidden_wall_s": 400.0,
+        "slowdown": {
+            "async_vs_sync_reference": 0.05,
+            "B_concurrent_vs_control": 0.05,
+        },
+    }
+    assert benchmark.schedule_gate(timing, result)[0]
+    for path, value in (
+        (("component_start_skew_s",), 2.000001),
+        (("overlap_hidden_wall_s",), 399.999999),
+        (("slowdown", "async_vs_sync_reference"), 0.050001),
+        (("slowdown", "B_concurrent_vs_control"), 0.050001),
+        (("concurrent_component_overlap_s",), -0.000001),
+    ):
+        changed = json.loads(json.dumps(timing))
+        target = changed
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        assert not benchmark.schedule_gate(changed, result)[0]
+    changed_result = dict(result, double_apply_rejected=False)
+    assert not benchmark.schedule_gate(timing, changed_result)[0]
+
+
+def test_concurrent_launch_order_alternates_by_repeat():
+    benchmark = load("perf48_async_pipeline_benchmark")
+    assert benchmark.concurrent_launch_order(0) == ("ASYNC", "B")
+    assert benchmark.concurrent_launch_order(1) == ("B", "ASYNC")
+    with pytest.raises(ValueError, match="repeat"):
+        benchmark.concurrent_launch_order(2)
+
+
 def _cell(stage, repeat, conclusion="ASYNC_PIPELINE_PASS", overlap=10.0):
     return {
         "stage": stage,
         "repeat": repeat,
         "conclusion": conclusion,
+        "xla_mode": "deterministic_gate_not_production_timing",
         "timing": {
             "overlap_hidden_wall_s": overlap,
             "slowdown": {
-                "async_vs_sync_reference": 0.1,
-                "B_concurrent_vs_control": 0.2,
+                "async_vs_sync_reference": 0.01,
+                "B_concurrent_vs_control": 0.02,
             },
         },
     }
@@ -496,13 +543,25 @@ def test_aggregate_requires_exact_six_and_projects_only_model():
     assert result["conclusion"] == "ASYNC_PIPELINE_PASS"
     assert result["cell_count"] == 6
     assert result["timing"]["overlap_hidden_wall_s_total"] == 60.0
+    assert result["timing"]["overlap_hidden_wall_s_median"] == 10.0
+    assert result["timing"]["async_slowdown_median"] == 0.01
+    assert result["timing"]["B_slowdown_median"] == 0.02
     assert result["model_projection"]["projected_attempt06_savings_s"] == 220.0
+    assert result["xla_mode"] == "deterministic_gate_not_production_timing"
     assert result["validation_cache_exercised"] is False
     with pytest.raises(RuntimeError, match="exact unique"):
         benchmark.aggregate_exact_six(cells[:-1])
     rejected = list(cells)
     rejected[0] = _cell("early", 0, "REJECTED_SEMANTIC")
     assert benchmark.aggregate_exact_six(rejected)["conclusion"] == "REJECTED_SEMANTIC"
+    unknown = list(cells)
+    unknown[0] = _cell("early", 0, "MISSING")
+    with pytest.raises(RuntimeError, match="unknown conclusion"):
+        benchmark.aggregate_exact_six(unknown)
+    wrong_xla = list(cells)
+    wrong_xla[0] = {**wrong_xla[0], "xla_mode": "production"}
+    with pytest.raises(RuntimeError, match="XLA mode"):
+        benchmark.aggregate_exact_six(wrong_xla)
 
 
 def test_fake_B_delegation_preserves_100_update_result(monkeypatch, tmp_path):
@@ -538,9 +597,37 @@ def test_component_env_exact_gpu_and_independent_caches(tmp_path):
     env_r = benchmark.component_env(args, "REFERENCE", outs[1])
     env_b = benchmark.component_env(args, "B", outs[2])
     assert env_a["CUDA_VISIBLE_DEVICES"] == ""
+    assert env_a["JAX_PLATFORMS"] == "cpu"
     assert env_r["CUDA_VISIBLE_DEVICES"] == benchmark.GPU2[1]
+    assert "JAX_PLATFORMS" not in env_r
     assert env_b["CUDA_VISIBLE_DEVICES"] == benchmark.GPU3[1]
     assert len({env_a["JAX_COMPILATION_CACHE_DIR"], env_r["JAX_COMPILATION_CACHE_DIR"], env_b["JAX_COMPILATION_CACHE_DIR"]}) == 3
+
+
+def test_worker_platform_override_restores_parent_even_on_failure(monkeypatch):
+    harness = load("perf48_async_pipeline_harness")
+    seen = []
+
+    class Manager:
+        def launch(self, **kwargs):
+            seen.append(os.environ.get("JAX_PLATFORMS"))
+            if kwargs.get("fail"):
+                raise RuntimeError("launch failed")
+            return Path("job")
+
+    monkeypatch.setenv("JAX_PLATFORMS", "cpu")
+    assert harness.launch_worker_without_cpu_platform(Manager()) == Path("job")
+    assert seen == [None] and os.environ["JAX_PLATFORMS"] == "cpu"
+    with pytest.raises(RuntimeError, match="launch failed"):
+        harness.launch_worker_without_cpu_platform(Manager(), fail=True)
+    assert seen == [None, None] and os.environ["JAX_PLATFORMS"] == "cpu"
+
+
+def test_cuda_plugin_traceback_remains_fatal(tmp_path):
+    benchmark = load("perf48_async_pipeline_benchmark")
+    log = tmp_path / "stderr"
+    log.write_text("CUDA plugin init failed\nTraceback (most recent call last):\n", encoding="utf-8")
+    assert benchmark._pair.fatal_in([log]) == "Traceback (most recent call last):"
 
 
 def test_benchmark_prepared_output_is_accepted_but_finalized_output_is_not(tmp_path):

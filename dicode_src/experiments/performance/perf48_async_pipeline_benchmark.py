@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import json
 import os
+import statistics
 import subprocess
 import time
 import traceback
@@ -32,6 +33,10 @@ if CLASSIFICATION != _harness.CLASSIFICATION:
 CONCLUSIONS = _harness.CONCLUSIONS
 GPU2 = (2, "GPU-8df11537-ab79-722d-606f-411966196c4c")
 GPU3 = (3, "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd")
+START_SKEW_LIMIT_S = 2.0
+HIDDEN_WALL_MIN_S = 400.0
+SLOWDOWN_LIMIT = 0.05
+XLA_MODE = "deterministic_gate_not_production_timing"
 ASYNC_REFERENCE_FIELDS = (
     "task_ids",
     "task_code_rows",
@@ -125,6 +130,7 @@ def validate_async_result(document: Mapping[str, Any], args: Any) -> dict[str, A
         "main_route_calls": 1,
         "worker_jax_backend": "gpu",
         "worker_jax_device_count": 1,
+        "controller_backend": "cpu",
     }
     for key, value in expected.items():
         if document.get(key) != value:
@@ -258,8 +264,13 @@ def calculate_timing(
     ) / 1e9
     component_overlap = async_wall + concurrent_b_wall - component_makespan
     hidden_wall = reference_wall + control_b_wall - component_makespan
+    component_start_skew = abs(
+        int(async_result["component_started_monotonic_ns"])
+        - int(concurrent_b_result["component_started_monotonic_ns"])
+    ) / 1e9
     return {
         "timing_basis": "component_monotonic",
+        "component_start_skew_s": component_start_skew,
         "async_component_wall_s": async_wall,
         "sync_reference_component_wall_s": reference_wall,
         "B_control_component_wall_s": control_b_wall,
@@ -283,6 +294,35 @@ def calculate_timing(
             "B_concurrent": float(concurrent_b["process_wall_s"]),
         },
     }
+
+
+def schedule_gate(timing: Mapping[str, Any], async_result: Mapping[str, Any]) -> tuple[bool, dict[str, bool]]:
+    task_ids = async_result.get("task_ids")
+    kept = async_result.get("kept_ids")
+    checks = {
+        "session_N_excludes_fresh": async_result.get("session_N") == {
+            "fresh_ids": task_ids, "training_new_ids": [], "launch_ids": task_ids,
+        },
+        "session_N1_includes_delayed": async_result.get("session_N1") == {
+            "fresh_ids": [], "delayed_kept_ids": kept,
+            "training_new_ids": kept, "launch_ids": [],
+        },
+        "double_apply_rejected": async_result.get("double_apply_rejected") is True,
+        "component_overlap_nonnegative": float(timing["concurrent_component_overlap_s"]) >= 0.0,
+        "component_start_skew_within_limit": float(timing["component_start_skew_s"]) <= START_SKEW_LIMIT_S,
+        "hidden_wall_meets_minimum": float(timing["overlap_hidden_wall_s"]) >= HIDDEN_WALL_MIN_S,
+        "async_slowdown_within_limit": float(timing["slowdown"]["async_vs_sync_reference"]) <= SLOWDOWN_LIMIT,
+        "B_slowdown_within_limit": float(timing["slowdown"]["B_concurrent_vs_control"]) <= SLOWDOWN_LIMIT,
+    }
+    return all(checks.values()), checks
+
+
+def concurrent_launch_order(repeat: int) -> tuple[str, str]:
+    if int(repeat) == 0:
+        return ("ASYNC", "B")
+    if int(repeat) == 1:
+        return ("B", "ASYNC")
+    raise ValueError("repeat must be 0 or 1")
 
 
 def _prepare(root: Path, label: str, component: str) -> Path:
@@ -312,7 +352,10 @@ def component_env(args: Any, component: str, out: Path) -> dict[str, str]:
         WANDB_DIR=str(out / "wandb"),
         JAX_COMPILATION_CACHE_DIR=str(out / "jax_compilation"),
     )
-    env.pop("JAX_PLATFORMS", None)
+    if component == "ASYNC":
+        env["JAX_PLATFORMS"] = "cpu"
+    else:
+        env.pop("JAX_PLATFORMS", None)
     env["XLA_FLAGS"] = _pair.append_xla_flag(env.get("XLA_FLAGS"))
     return env
 
@@ -434,7 +477,9 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
         elif label == "REFERENCE":
             runs[label] = _run_group(args, root, "sync_reference", ("REFERENCE",))["REFERENCE"]
         else:
-            runs[label] = _run_group(args, root, "session_N_concurrent", ("ASYNC", "B"))
+            runs[label] = _run_group(
+                args, root, "session_N_concurrent", concurrent_launch_order(args.repeat)
+            )
     async_run = runs["CONCURRENT"]["ASYNC"]
     concurrent_b = runs["CONCURRENT"]["B"]
     control_b = runs["B_CONTROL"]
@@ -449,7 +494,7 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
         fatal_markers=[async_run["fatal_marker"], reference["fatal_marker"], concurrent_b["fatal_marker"], control_b["fatal_marker"]],
         violations=[],
     )
-    schedule_ok = timing["concurrent_component_overlap_s"] >= 0 and async_run["result"]["session_N"]["training_new_ids"] == [] and async_run["result"]["session_N1"]["training_new_ids"] == async_run["result"]["kept_ids"]
+    schedule_ok, schedule_checks = schedule_gate(timing, async_run["result"])
     conclusion = classify_conclusion(runtime_ok=runtime_ok, semantic_ok=semantic["ok"] and b_semantic["ok"], schedule_ok=schedule_ok)
     result = {
         "classification": CLASSIFICATION,
@@ -464,9 +509,11 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
         "validation_cache_exercised": False,
         "validation_cache_speedup_included": False,
         "validation_replay_reference": "6f0625d_external_not_timed",
+        "xla_mode": XLA_MODE,
+        "concurrent_launch_order": list(concurrent_launch_order(args.repeat)),
         "static_evidence": static,
         "semantic": {"async_vs_sync": semantic, "B_control_vs_concurrent": b_semantic},
-        "schedule": {"ok": schedule_ok, "session_N": async_run["result"]["session_N"], "session_N1": async_run["result"]["session_N1"], "double_apply_rejected": async_run["result"]["double_apply_rejected"]},
+        "schedule": {"ok": schedule_ok, "checks": schedule_checks, "session_N": async_run["result"]["session_N"], "session_N1": async_run["result"]["session_N1"], "double_apply_rejected": async_run["result"]["double_apply_rejected"], "thresholds": {"component_start_skew_max_s": START_SKEW_LIMIT_S, "hidden_wall_min_s": HIDDEN_WALL_MIN_S, "async_slowdown_max": SLOWDOWN_LIMIT, "B_slowdown_max": SLOWDOWN_LIMIT}},
         "runtime": {"ok": runtime_ok, "memory_peak_deltas_mib": memory_deltas, "peak_delta_limit_mib": 512, "min_free_mib": 4096, "monitor_interval_s": 2.0},
         "timing": timing,
         "model_projection": {"kind": "linear_schedule_model_not_full_budget_measurement", "formula": "overlap_hidden_wall_s * 22 design sessions", "projected_attempt06_savings_s": timing["overlap_hidden_wall_s"] * 22.0, "dual_overlap_not_added_elsewhere": True},
@@ -480,11 +527,19 @@ def aggregate_exact_six(results: list[Mapping[str, Any]]) -> dict[str, Any]:
     keys = [(str(item.get("stage")), int(item.get("repeat", -1))) for item in results]
     if len(results) != 6 or set(keys) != expected or len(set(keys)) != 6:
         raise RuntimeError("aggregate requires exact unique early/mid/late x repeat0/1")
+    conclusions = [item.get("conclusion") for item in results]
+    unknown = [value for value in conclusions if value not in CONCLUSIONS]
+    if unknown:
+        raise RuntimeError(f"aggregate contains unknown conclusion: {unknown}")
+    if any(item.get("xla_mode") != XLA_MODE for item in results):
+        raise RuntimeError("aggregate XLA mode mismatch")
     conclusion = "ASYNC_PIPELINE_PASS"
     for rejected in ("REJECTED_RUNTIME", "REJECTED_SEMANTIC", "REJECTED_SCHEDULE"):
-        if any(item.get("conclusion") == rejected for item in results):
+        if rejected in conclusions:
             conclusion = rejected
             break
+    if conclusion == "ASYNC_PIPELINE_PASS" and any(value != "ASYNC_PIPELINE_PASS" for value in conclusions):
+        raise RuntimeError("aggregate pass requires six passing cells")
     overlaps = [float(item["timing"]["overlap_hidden_wall_s"]) for item in results]
     b_slow = [float(item["timing"]["slowdown"]["B_concurrent_vs_control"]) for item in results]
     a_slow = [float(item["timing"]["slowdown"]["async_vs_sync_reference"]) for item in results]
@@ -497,7 +552,8 @@ def aggregate_exact_six(results: list[Mapping[str, Any]]) -> dict[str, Any]:
         "llm_api_calls": 0,
         "validation_cache_exercised": False,
         "validation_cache_speedup_included": False,
-        "timing": {"overlap_hidden_wall_s_total": sum(overlaps), "overlap_hidden_wall_s_mean": sum(overlaps) / 6, "async_slowdown_mean": sum(a_slow) / 6, "B_slowdown_mean": sum(b_slow) / 6},
+        "xla_mode": XLA_MODE,
+        "timing": {"overlap_hidden_wall_s_total": sum(overlaps), "overlap_hidden_wall_s_mean": statistics.mean(overlaps), "overlap_hidden_wall_s_median": statistics.median(overlaps), "async_slowdown_mean": statistics.mean(a_slow), "async_slowdown_median": statistics.median(a_slow), "B_slowdown_mean": statistics.mean(b_slow), "B_slowdown_median": statistics.median(b_slow)},
         "model_projection": {"kind": "linear_model_not_full_budget_measurement", "formula": "mean_overlap_hidden_wall_s * 22", "projected_attempt06_savings_s": sum(overlaps) / 6 * 22.0},
     }
 
@@ -518,7 +574,7 @@ def run_matrix(args: Any) -> dict[str, Any]:
     if len(results) == 6:
         result = aggregate_exact_six(results)
     else:
-        result = {"classification": CLASSIFICATION, "conclusion": results[0]["conclusion"] if len(results) == 1 else "REJECTED_SCHEDULE", "cell_count": len(results), "cells": results, "llm_api_calls": 0, "validation_cache_exercised": False, "validation_cache_speedup_included": False}
+        result = {"classification": CLASSIFICATION, "conclusion": results[0]["conclusion"] if len(results) == 1 else "REJECTED_SCHEDULE", "cell_count": len(results), "cells": results, "llm_api_calls": 0, "validation_cache_exercised": False, "validation_cache_speedup_included": False, "xla_mode": XLA_MODE}
     return _harness.atomic_json(root / "ASYNC_PIPELINE_MATRIX_RESULT.json", result)
 
 

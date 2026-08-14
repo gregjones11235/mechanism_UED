@@ -181,8 +181,12 @@ def production_async_runtime(manifest: Mapping[str, Any]) -> dict[str, Any]:
     from dicode.skill_preflight.preflight import route
     from dicode.skill_preflight.preflight_route import preflight_route
 
+    controller_backend = jax.default_backend()
+    if controller_backend != "cpu":
+        raise RuntimeError("async controller runtime must be CPU")
     return {
         "jax": jax,
+        "controller_backend": controller_backend,
         "array_rng": lambda value: jax.numpy.asarray(np.asarray(value, dtype=np.uint32)),
         "split_rng": jax.random.split,
         "rng_hash": _dual._fast.rng_hash,
@@ -199,6 +203,19 @@ def production_async_runtime(manifest: Mapping[str, Any]) -> dict[str, Any]:
             "preflight_route": _source_binding(preflight_route, manifest, "src/dicode/skill_preflight/preflight_route.py"),
         },
     }
+
+
+def launch_worker_without_cpu_platform(manager: Any, **kwargs: Any) -> Path:
+    """Let only the fresh worker discover its exact visible GPU, then restore parent env."""
+    missing = object()
+    parent_platform = os.environ.pop("JAX_PLATFORMS", missing)
+    try:
+        return manager.launch(**kwargs)
+    finally:
+        if parent_platform is missing:
+            os.environ.pop("JAX_PLATFORMS", None)
+        else:
+            os.environ["JAX_PLATFORMS"] = str(parent_platform)
 
 
 def run_async_controller(manifest: Mapping[str, Any], config: Any, config_evidence: Mapping[str, str], runtime: Mapping[str, Any], out: Path, args: Any) -> dict[str, Any]:
@@ -220,9 +237,12 @@ def run_async_controller(manifest: Mapping[str, Any], config: Any, config_eviden
         async_config,
         source_root=Path(args.source),
     )
+    if runtime.get("controller_backend") != "cpu":
+        raise RuntimeError("async controller backend must be CPU")
     checkpoint = Path(stage["checkpoint"]["path"])
     launch_ns = time.monotonic_ns()
-    job_dir = manager.launch(
+    job_dir = launch_worker_without_cpu_platform(
+        manager,
         session_idx=0,
         global_update_step=int(stage["global_step"]),
         task_ids=task_ids,
@@ -308,6 +328,7 @@ def run_async_controller(manifest: Mapping[str, Any], config: Any, config_eviden
         "archive_before_sha256": archive_before,
         "archive_after_sha256": runtime["archive_hash"](archive),
         "worker_gpu_preflight": result["gpu_preflight"],
+        "controller_backend": runtime["controller_backend"],
         "worker_jax_backend": result["jax_backend"],
         "worker_jax_device_count": result["jax_device_count"],
         "worker_route_calls": result["route_calls"],
