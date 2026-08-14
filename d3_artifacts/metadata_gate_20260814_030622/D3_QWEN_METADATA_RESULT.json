@@ -1,0 +1,105 @@
+{
+  "artifact_sha256": "e8f98012a45e172b9911270d9fa5104e2b92d55c75472cdd4a3a850014210ffa",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "D3Q_RESULT_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "base_url_variable": "EXP_QWEN_BASE_URL",
+  "blocked_reasons": [
+    "configured Qwen model qwen-flash-2025-07-28 absent from Qwen models"
+  ],
+  "classification": "D3Q_QWEN_METADATA_RESULT",
+  "completion_requests": 0,
+  "conclusion": "BLOCKED_QWEN_MODEL_NOT_ADVERTISED",
+  "credential_present": true,
+  "credential_value_serialized": false,
+  "credential_variable": "EXP_QWEN_API_KEY",
+  "deepseek_endpoint_requests": 0,
+  "embedding_requests": 0,
+  "final_gate_evidence": {
+    "ollama": {
+      "credential_echo": false,
+      "exact_model_advertised": true,
+      "expected_model": "qwen2.5-coder:14b",
+      "http_status": 200,
+      "model_ids": [
+        "qwen2.5-coder:14b"
+      ],
+      "request_count": 1
+    },
+    "qwen": {
+      "catalog_namespace_filter": "qwen-only",
+      "credential_echo": false,
+      "cross_vendor_ids_serialized": false,
+      "exact_model_advertised": false,
+      "expected_model": "qwen-flash-2025-07-28",
+      "http_status": 200,
+      "model_ids": [],
+      "request_count": 1
+    }
+  },
+  "first_gate_evidence": {
+    "completion_requests": 0,
+    "embedding_requests": 0,
+    "gpu_query_available": false,
+    "launcher_model_ids": [],
+    "ollama_request_count": 0,
+    "qwen_request_count": 0,
+    "reason": "qwen_launcher_model_uncertain",
+    "secret_values_serialized": false,
+    "status": "BLOCKED"
+  },
+  "gpu2_gate": {
+    "external_pid_clear_after": true,
+    "external_pid_clear_before": true,
+    "free_ge_4gib_after": true,
+    "free_ge_4gib_before": true,
+    "gpu3_or_gpu1_touched": false,
+    "uuid_expected": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+    "uuid_match": true
+  },
+  "gpu_after": {
+    "gpu0": {
+      "external_pid_present": true,
+      "index": 0,
+      "memory_free_mib": 30046,
+      "memory_total_mib": 46068,
+      "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+    },
+    "gpu2": {
+      "external_pid_present": false,
+      "index": 2,
+      "memory_free_mib": 45619,
+      "memory_total_mib": 46068,
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    }
+  },
+  "gpu_before": {
+    "gpu0": {
+      "external_pid_present": true,
+      "index": 0,
+      "memory_free_mib": 30046,
+      "memory_total_mib": 46068,
+      "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+    },
+    "gpu2": {
+      "external_pid_present": false,
+      "index": 2,
+      "memory_free_mib": 45619,
+      "memory_total_mib": 46068,
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    }
+  },
+  "large_model": "qwen-flash-2025-07-28",
+  "large_model_source": "run_four_api_smoke.sh:qwen_model",
+  "metadata_requests_total": 2,
+  "provider": "qwen_api",
+  "remote_safety": {
+    "completion_or_embedding_sent": false,
+    "remote_files_modified": 0,
+    "remote_processes_started": 0,
+    "secret_values_serialized": false
+  },
+  "schema_version": 1,
+  "small_model": "qwen2.5-coder:14b",
+  "stage": "D3Q",
+  "status": "BLOCKED_QWEN_MODEL_NOT_ADVERTISED"
+}

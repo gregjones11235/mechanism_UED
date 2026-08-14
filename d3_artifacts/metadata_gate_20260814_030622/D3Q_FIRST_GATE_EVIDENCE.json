@@ -1,0 +1,14 @@
+{
+  "artifact_sha256": "6c0416f52cfca651a3b0ff8076ac9d0f3ad0ab4bcf0e57ae18347a94a31afe2d",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "D3Q_FIRST_GATE_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "classification": "D3Q_FIRST_GATE_EVIDENCE",
+  "completion_requests": 0,
+  "credential_present": true,
+  "credential_value_serialized": false,
+  "embedding_requests": 0,
+  "ollama_request_count": 0,
+  "qwen_request_count": 0,
+  "reason": "qwen_launcher_model_uncertain",
+  "status": "BLOCKED"
+}
