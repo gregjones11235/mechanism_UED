@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 import sys
 import uuid
@@ -104,14 +103,16 @@ class _FakeRemote:
         self.apps = ""
         self.gpu_returncode = 0
         self.root_exists = False
+        self.cleanup_stdout = "REMOVED\n"
         self.gate_stdout = json.dumps(artifact, sort_keys=True, separators=(",", ":")) + "\n"
         self.gate_stderr = ""
-        self.calls: list[list[str]] = []
+        self.calls: list[launcher.CommandInvocation] = []
         self._hash_calls = 0
 
-    def __call__(self, argv):
-        call = list(argv)
-        self.calls.append(call)
+    def __call__(self, invocation):
+        assert isinstance(invocation, launcher.CommandInvocation)
+        call = list(invocation.argv)
+        self.calls.append(invocation)
         if call[0] == "scp":
             source, destination = call[-2:]
             if source.startswith(SSH_TARGET + ":") and source.endswith(
@@ -129,7 +130,7 @@ class _FakeRemote:
             return launcher.CommandResult(0, "CREATED\n")
         if "shutil.rmtree" in remote:
             self.root_exists = False
-            return launcher.CommandResult(0, "REMOVED\n")
+            return launcher.CommandResult(0, self.cleanup_stdout)
         if "--query-gpu=index,uuid,memory.free" in remote:
             stdout = f"2, {self.gpu_uuid}, {self.gpu_free_mib}\n"
             return launcher.CommandResult(self.gpu_returncode, stdout)
@@ -161,8 +162,128 @@ def _run(tmp_path: Path, fake: _FakeRemote) -> dict:
     )
 
 
-def _gate_calls(fake: _FakeRemote) -> list[list[str]]:
-    return [call for call in fake.calls if call[0] == "ssh" and "--env-file" in call[-1]]
+def _gate_calls(fake: _FakeRemote) -> list[launcher.CommandInvocation]:
+    return [
+        call
+        for call in fake.calls
+        if call.argv[0] == "ssh" and "--env-file" in call.argv[-1]
+    ]
+
+
+def _expected_success_invocations(tmp_path: Path) -> list[launcher.CommandInvocation]:
+    root = launcher._remote_root(FIXED_NOW, FIXED_TOKEN)
+    remote_gate = root + "/" + launcher.REMOTE_GATE_NAME
+    remote_provider = root + "/" + launcher.REMOTE_PROVIDER_NAME
+    remote_artifact = root + "/" + launcher.REMOTE_ARTIFACT_NAME
+    source_dir = Path(launcher.__file__).resolve().parent
+    staging = (
+        (tmp_path / "output").resolve()
+        / f".{launcher.LOCAL_ARTIFACT_NAME}.{FIXED_TOKEN}.staging"
+    )
+    argv = [
+        launcher._remote_python_argv(
+            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._EXISTENCE_SCRIPT, root
+        ),
+        launcher._remote_python_argv(
+            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._CREATE_SCRIPT, root
+        ),
+        launcher._scp_base(SSH_KEY)
+        + [
+            str(source_dir / launcher.REMOTE_PROVIDER_NAME),
+            f"{SSH_TARGET}:{remote_provider}",
+        ],
+        launcher._scp_base(SSH_KEY)
+        + [
+            str(source_dir / launcher.REMOTE_GATE_NAME),
+            f"{SSH_TARGET}:{remote_gate}",
+        ],
+        launcher._remote_python_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            REMOTE_PYTHON,
+            launcher._HASH_FILES_SCRIPT,
+            remote_gate,
+            remote_provider,
+        ),
+        launcher._ssh_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            [
+                "nvidia-smi",
+                "--query-gpu=index,uuid,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+        ),
+        launcher._ssh_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            [
+                "nvidia-smi",
+                "--query-compute-apps=gpu_uuid,pid",
+                "--format=csv,noheader,nounits",
+            ],
+        ),
+        launcher._ssh_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            [
+                REMOTE_PYTHON,
+                remote_gate,
+                "--env-file",
+                REMOTE_ENV,
+                "--output",
+                remote_artifact,
+            ],
+        ),
+        launcher._ssh_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            [
+                "nvidia-smi",
+                "--query-gpu=index,uuid,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+        ),
+        launcher._ssh_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            [
+                "nvidia-smi",
+                "--query-compute-apps=gpu_uuid,pid",
+                "--format=csv,noheader,nounits",
+            ],
+        ),
+        launcher._remote_python_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            REMOTE_PYTHON,
+            launcher._HASH_FILES_SCRIPT,
+            remote_gate,
+            remote_provider,
+        ),
+        launcher._remote_python_argv(
+            SSH_TARGET,
+            SSH_KEY,
+            REMOTE_PYTHON,
+            launcher._HASH_ONE_SCRIPT,
+            remote_artifact,
+        ),
+        launcher._scp_base(SSH_KEY)
+        + [f"{SSH_TARGET}:{remote_artifact}", str(staging)],
+        launcher._remote_python_argv(
+            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._CLEANUP_SCRIPT, root
+        ),
+        launcher._remote_python_argv(
+            SSH_TARGET, SSH_KEY, REMOTE_PYTHON, launcher._EXISTENCE_SCRIPT, root
+        ),
+    ]
+    return [launcher.CommandInvocation(tuple(item), shell=False) for item in argv]
+
+
+def _assert_no_artifact_or_staging(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    assert not (output / launcher.LOCAL_ARTIFACT_NAME).exists()
+    assert list(output.glob(f".{launcher.LOCAL_ARTIFACT_NAME}.*.staging")) == []
 
 
 def test_success_exact_argv_sequence_hashes_cleanup_and_redaction(tmp_path):
@@ -181,38 +302,22 @@ def test_success_exact_argv_sequence_hashes_cleanup_and_redaction(tmp_path):
     assert result["remote_artifact_sha256"] == fake.remote_artifact_sha
     assert result["local_artifact_sha256"] == fake.remote_artifact_sha
     assert result["artifact_request_count"] == 1
+    assert result["http_status"] == 200
+    assert result["exact_model_advertised"] is True
     assert result["completion_requests"] == 0
     assert result["embedding_requests"] == 0
     assert result["cleanup_verified"] is True
     assert fake.root_exists is False
+    assert fake.calls == _expected_success_invocations(tmp_path)
     assert len(fake.calls) == 15
-    assert [call[0] for call in fake.calls[:5]] == ["ssh", "ssh", "scp", "scp", "ssh"]
-    assert [call[0] for call in fake.calls[-4:]] == ["ssh", "scp", "ssh", "ssh"]
-    assert "EXISTS" in fake.calls[0][-1] and "ABSENT" in fake.calls[0][-1]
-    assert "mkdir(mode=0o700)" in fake.calls[1][-1]
-    assert fake.calls[2][-2].endswith(launcher.REMOTE_PROVIDER_NAME)
-    assert fake.calls[3][-2].endswith(launcher.REMOTE_GATE_NAME)
-    assert "hashlib.sha256" in fake.calls[4][-1]
-    assert "--query-gpu=index,uuid,memory.free" in fake.calls[5][-1]
-    assert "--query-compute-apps=gpu_uuid,pid" in fake.calls[6][-1]
-    assert "--env-file" in fake.calls[7][-1]
-    assert "--query-gpu=index,uuid,memory.free" in fake.calls[8][-1]
-    assert "--query-compute-apps=gpu_uuid,pid" in fake.calls[9][-1]
-    assert "hashlib.sha256" in fake.calls[10][-1]
-    assert "hashlib.sha256" in fake.calls[11][-1]
-    assert fake.calls[12][-2].endswith(launcher.REMOTE_ARTIFACT_NAME)
-    assert "shutil.rmtree" in fake.calls[13][-1]
-    assert "EXISTS" in fake.calls[14][-1] and "ABSENT" in fake.calls[14][-1]
-    assert all(isinstance(call, list) for call in fake.calls)
-    assert all("shell=True" not in item for call in fake.calls for item in call)
+    assert all(call.shell is False for call in fake.calls)
     assert len(_gate_calls(fake)) == 1
-    gate_argv = _gate_calls(fake)[0]
+    gate_argv = _gate_calls(fake)[0].argv
     assert "--model" not in gate_argv[-1]
     assert "--base-url" not in gate_argv[-1]
-    runner_source = inspect.getsource(launcher._default_runner)
-    assert "shell=False" in runner_source
-    assert "shell=True" not in runner_source
-    flattened = json.dumps(fake.calls) + json.dumps(result, sort_keys=True)
+    flattened = json.dumps([call.argv for call in fake.calls]) + json.dumps(
+        result, sort_keys=True
+    )
     assert secret not in flattened
     assert "Bearer " not in flattened
     assert launcher.REMOTE_ROOT_PREFIX in result["remote_root"]
@@ -221,6 +326,10 @@ def test_success_exact_argv_sequence_hashes_cleanup_and_redaction(tmp_path):
         (tmp_path / "output" / launcher.LOCAL_RESULT_NAME).read_text(encoding="utf-8")
     )
     assert saved == result
+    artifact_path = tmp_path / "output" / launcher.LOCAL_ARTIFACT_NAME
+    assert artifact_path.exists()
+    assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == fake.remote_artifact_sha
+    assert list((tmp_path / "output").glob("*.staging")) == []
 
 
 def test_pre_execution_hash_mismatch_fails_before_gate_and_cleans(tmp_path):
@@ -231,6 +340,7 @@ def test_pre_execution_hash_mismatch_fails_before_gate_and_cleans(tmp_path):
     assert result["reason"] == "hash_mismatch"
     assert _gate_calls(fake) == []
     assert result["cleanup_verified"] is True
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 def test_post_execution_hash_mutation_fails_after_one_gate_and_cleans(tmp_path):
@@ -242,6 +352,7 @@ def test_post_execution_hash_mutation_fails_after_one_gate_and_cleans(tmp_path):
     assert len(_gate_calls(fake)) == 1
     assert result["artifact_request_count"] == 1
     assert result["cleanup_verified"] is True
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 def test_unexpected_gate_output_is_rejected_without_retry(tmp_path):
@@ -251,6 +362,7 @@ def test_unexpected_gate_output_is_rejected_without_retry(tmp_path):
     assert result["reason"] == "unexpected_remote_output"
     assert len(_gate_calls(fake)) == 1
     assert result["cleanup_verified"] is True
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -277,6 +389,7 @@ def test_gpu2_identity_and_external_apps_fail_before_api(
     assert result["gpu_pre"]["uuid"] == uuid_value
     if apps:
         assert result["gpu_pre"]["external_compute_pids"] == [4242]
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 def test_nvidia_smi_unavailable_fails_before_api(tmp_path):
@@ -285,6 +398,7 @@ def test_nvidia_smi_unavailable_fails_before_api(tmp_path):
     result = _run(tmp_path, fake)
     assert result["reason"] == "gpu_unavailable"
     assert _gate_calls(fake) == []
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 def test_cleanup_prefix_safety_rejects_any_other_path_without_command():
@@ -304,6 +418,35 @@ def test_downloaded_artifact_tamper_is_blocked(tmp_path):
     result = _run(tmp_path, fake)
     assert result["reason"] == "artifact_tamper"
     assert result["cleanup_verified"] is True
+    _assert_no_artifact_or_staging(tmp_path)
+
+
+def test_published_artifact_readback_failure_removes_final_and_staging(
+    tmp_path, monkeypatch
+):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    original_load = launcher.gate.load_artifact
+
+    def fail_final_readback(path):
+        if Path(path).name == launcher.LOCAL_ARTIFACT_NAME:
+            return {"invalid": "readback"}
+        return original_load(path)
+
+    monkeypatch.setattr(launcher.gate, "load_artifact", fail_final_readback)
+    result = _run(tmp_path, fake)
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "artifact_tamper"
+    _assert_no_artifact_or_staging(tmp_path)
+
+
+def test_cleanup_failure_prevents_artifact_publication(tmp_path):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    fake.cleanup_stdout = "UNEXPECTED\n"
+    result = _run(tmp_path, fake)
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "cleanup_failed"
+    assert result["external_artifact_hash_verified"] is False
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 def test_secret_like_remote_output_is_not_retained(tmp_path):
@@ -316,6 +459,7 @@ def test_secret_like_remote_output_is_not_retained(tmp_path):
     assert secret not in saved
     assert "Bearer " not in saved
     assert len(_gate_calls(fake)) == 1
+    _assert_no_artifact_or_staging(tmp_path)
 
 
 def test_existing_remote_root_is_never_created_or_cleaned(tmp_path):
@@ -325,3 +469,72 @@ def test_existing_remote_root_is_never_created_or_cleaned(tmp_path):
     assert result["reason"] == "remote_root_exists"
     assert len(fake.calls) == 1
     assert fake.root_exists is True
+    _assert_no_artifact_or_staging(tmp_path)
+
+
+def _rehashed_result(result: dict, path: str, replacement) -> dict:
+    changed = json.loads(json.dumps(result))
+    target = changed
+    parts = path.split(".")
+    for part in parts[:-1]:
+        target = target[part]
+    target[parts[-1]] = replacement
+    payload = {
+        key: value for key, value in changed.items() if key != "artifact_sha256"
+    }
+    changed["artifact_sha256"] = launcher._canonical_sha256(payload)
+    return changed
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("manifest_sha256.tool", "0" * 64),
+        ("pre_execution_sha256", None),
+        ("pre_execution_sha256.tool", "0" * 64),
+        ("post_execution_sha256", None),
+        ("post_execution_sha256.provider", "0" * 64),
+        ("remote_artifact_sha256", None),
+        ("local_artifact_sha256", None),
+        ("local_artifact_sha256", "0" * 64),
+        ("artifact_internal_sha256", None),
+        ("artifact_path", None),
+        ("artifact_status", "BLOCKED"),
+        ("artifact_request_count", None),
+        ("artifact_request_count", 0),
+        ("http_status", None),
+        ("http_status", 401),
+        ("exact_model_advertised", None),
+        ("exact_model_advertised", False),
+        ("gpu_pre", None),
+        ("gpu_pre.gpu_index", 1),
+        ("gpu_pre.uuid", "GPU-wrong"),
+        ("gpu_pre.memory_free_mib", launcher.MINIMUM_GPU2_FREE_MIB - 1),
+        ("gpu_pre.external_compute_pids", [4242]),
+        ("gpu_post", None),
+        ("gpu_post.gpu_index", 1),
+        ("gpu_post.uuid", "GPU-wrong"),
+        ("gpu_post.memory_free_mib", launcher.MINIMUM_GPU2_FREE_MIB - 1),
+        ("gpu_post.external_compute_pids", [4242]),
+        ("external_execution_hashes_verified", False),
+        ("external_artifact_hash_verified", False),
+        ("cleanup_verified", False),
+    ],
+)
+def test_rehashed_pass_counterexamples_are_rejected(
+    tmp_path, field, replacement
+):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    result = _run(tmp_path, fake)
+    counterexample = _rehashed_result(result, field, replacement)
+    with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
+        launcher.verify_launcher_result(counterexample)
+
+
+def test_rehashed_blocked_result_cannot_masquerade_as_complete_pass(tmp_path):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    result = _run(tmp_path, fake)
+    masquerade = _rehashed_result(result, "status", "BLOCKED")
+    masquerade = _rehashed_result(masquerade, "reason", "hash_mismatch")
+    with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
+        launcher.verify_launcher_result(masquerade)

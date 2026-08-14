@@ -59,6 +59,8 @@ RESULT_KEYS = frozenset(
         "external_execution_hashes_verified",
         "gpu_post",
         "gpu_pre",
+        "http_status",
+        "exact_model_advertised",
         "local_artifact_sha256",
         "manifest_sha256",
         "model",
@@ -151,12 +153,20 @@ class CommandResult:
     stderr: str = ""
 
 
-CommandRunner = Callable[[Sequence[str]], CommandResult]
+@dataclass(frozen=True, slots=True)
+class CommandInvocation:
+    argv: tuple[str, ...]
+    shell: bool = False
 
 
-def _default_runner(argv: Sequence[str]) -> CommandResult:
+CommandRunner = Callable[[CommandInvocation], CommandResult]
+
+
+def _default_runner(invocation: CommandInvocation) -> CommandResult:
+    if invocation.shell is not False:
+        raise LauncherError("remote_command_failed")
     completed = subprocess.run(
-        list(argv),
+        list(invocation.argv),
         capture_output=True,
         text=True,
         timeout=60,
@@ -232,7 +242,8 @@ def _run_command(
     ):
         raise LauncherError("remote_command_failed")
     try:
-        result = runner(list(argv))
+        invocation = CommandInvocation(tuple(argv), shell=False)
+        result = runner(invocation)
     except Exception:
         raise LauncherError("remote_command_failed") from None
     if _contains_sensitive_output(result.stdout) or _contains_sensitive_output(result.stderr):
@@ -417,6 +428,8 @@ def _base_result(
         "artifact_internal_sha256": None,
         "artifact_status": None,
         "artifact_request_count": None,
+        "http_status": None,
+        "exact_model_advertised": None,
         "external_execution_hashes_verified": False,
         "external_artifact_hash_verified": False,
         "gpu_pre": None,
@@ -434,6 +447,52 @@ def _require_exact_mapping(value: Any, keys: frozenset[str], label: str) -> dict
     if not isinstance(value, dict) or set(value) != keys:
         raise LauncherError("artifact_tamper")
     return value
+
+
+def _valid_pass_gpu_snapshot(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == GPU_KEYS
+        and type(value["gpu_index"]) is int
+        and value["gpu_index"] == 2
+        and value["uuid"] == EXPECTED_GPU2_UUID
+        and type(value["memory_free_mib"]) is int
+        and value["memory_free_mib"] >= MINIMUM_GPU2_FREE_MIB
+        and isinstance(value["external_compute_pids"], list)
+        and value["external_compute_pids"] == []
+    )
+
+
+def _pass_semantics_are_complete(result: Mapping[str, Any]) -> bool:
+    manifest = result["manifest_sha256"]
+    pre = result["pre_execution_sha256"]
+    post = result["post_execution_sha256"]
+    hashes_match = (
+        isinstance(manifest, dict)
+        and isinstance(pre, dict)
+        and isinstance(post, dict)
+        and manifest == pre == post
+        and set(manifest) == HASH_KEYS
+        and all(_is_sha256(manifest[key]) for key in HASH_KEYS)
+    )
+    return (
+        hashes_match
+        and _is_sha256(result["remote_artifact_sha256"])
+        and result["remote_artifact_sha256"] == result["local_artifact_sha256"]
+        and _is_sha256(result["artifact_internal_sha256"])
+        and result["artifact_path"] == LOCAL_ARTIFACT_NAME
+        and result["artifact_status"] == "PASS"
+        and type(result["artifact_request_count"]) is int
+        and result["artifact_request_count"] == 1
+        and type(result["http_status"]) is int
+        and result["http_status"] == 200
+        and result["exact_model_advertised"] is True
+        and _valid_pass_gpu_snapshot(result["gpu_pre"])
+        and _valid_pass_gpu_snapshot(result["gpu_post"])
+        and result["external_execution_hashes_verified"] is True
+        and result["external_artifact_hash_verified"] is True
+        and result["cleanup_verified"] is True
+    )
 
 
 def verify_launcher_result(value: Any) -> dict[str, Any]:
@@ -510,6 +569,12 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
         result["artifact_request_count"]
     ) is not int:
         raise LauncherError("artifact_tamper")
+    if result["http_status"] is not None and type(result["http_status"]) is not int:
+        raise LauncherError("artifact_tamper")
+    if result["exact_model_advertised"] is not None and type(
+        result["exact_model_advertised"]
+    ) is not bool:
+        raise LauncherError("artifact_tamper")
     if result["artifact_path"] is not None and result["artifact_path"] != LOCAL_ARTIFACT_NAME:
         raise LauncherError("artifact_tamper")
     if result["artifact_status"] is not None and result["artifact_status"] not in {
@@ -518,17 +583,14 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
     }:
         raise LauncherError("artifact_tamper")
     if result["status"] == "PASS":
-        if not all(
-            result[key] is True
-            for key in (
-                "external_execution_hashes_verified",
-                "external_artifact_hash_verified",
-                "cleanup_verified",
-            )
-        ):
+        if not _pass_semantics_are_complete(result):
             raise LauncherError("artifact_tamper")
-        if result["artifact_status"] != "PASS" or result["artifact_request_count"] != 1:
-            raise LauncherError("artifact_tamper")
+    elif result["artifact_path"] is not None or result[
+        "external_artifact_hash_verified"
+    ] is not False:
+        raise LauncherError("artifact_tamper")
+    elif _pass_semantics_are_complete(result):
+        raise LauncherError("artifact_tamper")
     return result
 
 
@@ -560,6 +622,40 @@ def _write_result(path: Path, result: Mapping[str, Any]) -> None:
             pass
 
 
+def _create_private_staging(path: Path) -> None:
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise LauncherError("local_output_exists") from None
+    except OSError:
+        raise LauncherError("artifact_tamper") from None
+    os.close(fd)
+
+
+def _publish_verified_artifact(
+    staging_path: Path,
+    artifact_path: Path,
+    expected_sha256: str,
+    expected_artifact: Mapping[str, Any],
+) -> None:
+    try:
+        os.link(staging_path, artifact_path)
+    except FileExistsError:
+        raise LauncherError("local_output_exists") from None
+    except OSError:
+        raise LauncherError("artifact_tamper") from None
+    try:
+        gate.verify_external_artifact_hash(artifact_path, expected_sha256)
+        if gate.load_artifact(artifact_path) != expected_artifact:
+            raise LauncherError("artifact_tamper")
+    except (LauncherError, gate.GateArtifactError, OSError, ValueError, TypeError):
+        try:
+            artifact_path.unlink()
+        except OSError:
+            pass
+        raise LauncherError("artifact_tamper") from None
+
+
 def _observed_utc(now: datetime) -> str:
     return now.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -580,11 +676,13 @@ def run_launcher(
     python_path = _validate_remote_path(remote_python)
     env_path = _validate_remote_path(remote_env_file)
     observed = now or datetime.now(timezone.utc)
-    root = _remote_root(observed, token or secrets.token_hex(6))
-    output_dir = Path(local_output_dir)
+    token_value = token or secrets.token_hex(6)
+    root = _remote_root(observed, token_value)
+    output_dir = Path(local_output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = output_dir / LOCAL_ARTIFACT_NAME
     result_path = output_dir / LOCAL_RESULT_NAME
+    staging_path = output_dir / f".{LOCAL_ARTIFACT_NAME}.{token_value}.staging"
 
     source_dir = Path(__file__).resolve().parent
     provider_source = source_dir / REMOTE_PROVIDER_NAME
@@ -599,6 +697,9 @@ def run_launcher(
         observed_utc=_observed_utc(observed),
     )
     root_created = False
+    staging_created = False
+    published_by_launcher = False
+    verified_artifact: dict[str, Any] | None = None
     failure: LauncherError | None = None
     remote_gate = root + "/" + REMOTE_GATE_NAME
     remote_provider = root + "/" + REMOTE_PROVIDER_NAME
@@ -678,12 +779,22 @@ def run_launcher(
         result["artifact_internal_sha256"] = stdout_artifact["artifact_sha256"]
         result["artifact_status"] = stdout_artifact["status"]
         result["artifact_request_count"] = stdout_artifact["request_count"]
+        result["http_status"] = stdout_artifact["http_status"]
+        result["exact_model_advertised"] = stdout_artifact[
+            "exact_model_advertised"
+        ]
         if stdout_artifact["request_count"] != 1:
             raise LauncherError("artifact_request_count_invalid")
         if stdout_artifact["completion_requests"] != 0 or stdout_artifact[
             "embedding_requests"
         ] != 0:
             raise LauncherError("artifact_tamper")
+        if (
+            stdout_artifact["status"] != "PASS"
+            or stdout_artifact["http_status"] != 200
+            or stdout_artifact["exact_model_advertised"] is not True
+        ):
+            raise LauncherError("artifact_gate_blocked")
 
         result["gpu_post"] = _gpu_snapshot(command_runner, target, ssh_key)
         _enforce_gpu_snapshot(result["gpu_post"])
@@ -724,29 +835,35 @@ def run_launcher(
             raise LauncherError("unexpected_remote_output")
         result["remote_artifact_sha256"] = artifact_hash_result.stdout.strip()
 
+        _create_private_staging(staging_path)
+        staging_created = True
         downloaded = _run_command(
             command_runner,
-            _scp_base(ssh_key) + [f"{target}:{remote_artifact}", str(artifact_path)],
+            _scp_base(ssh_key) + [f"{target}:{remote_artifact}", str(staging_path)],
         )
         if downloaded.stdout or downloaded.stderr:
             raise LauncherError("unexpected_remote_output")
-        result["local_artifact_sha256"] = _sha256_file(artifact_path)
+        result["local_artifact_sha256"] = _sha256_file(staging_path)
         if result["local_artifact_sha256"] != result["remote_artifact_sha256"]:
             raise LauncherError("hash_mismatch")
         gate.verify_external_artifact_hash(
-            artifact_path, result["remote_artifact_sha256"]
+            staging_path, result["remote_artifact_sha256"]
         )
-        result["external_artifact_hash_verified"] = True
-        local_artifact = gate.load_artifact(artifact_path)
+        local_artifact = gate.load_artifact(staging_path)
         if local_artifact != stdout_artifact:
             raise LauncherError("artifact_tamper")
-        result["artifact_path"] = LOCAL_ARTIFACT_NAME
         if local_artifact["request_count"] != 1:
             raise LauncherError("artifact_request_count_invalid")
         if local_artifact["completion_requests"] != 0 or local_artifact["embedding_requests"] != 0:
             raise LauncherError("artifact_tamper")
         if local_artifact["status"] != "PASS":
             raise LauncherError("artifact_gate_blocked")
+        if (
+            local_artifact["http_status"] != 200
+            or local_artifact["exact_model_advertised"] is not True
+        ):
+            raise LauncherError("artifact_gate_blocked")
+        verified_artifact = local_artifact
     except LauncherError as exc:
         failure = exc
     except (gate.GateArtifactError, OSError, ValueError, TypeError):
@@ -773,14 +890,47 @@ def run_launcher(
             except LauncherError:
                 failure = LauncherError("cleanup_failed")
 
+    if failure is None and verified_artifact is not None:
+        try:
+            _publish_verified_artifact(
+                staging_path,
+                artifact_path,
+                result["remote_artifact_sha256"],
+                verified_artifact,
+            )
+            published_by_launcher = True
+            result["artifact_path"] = LOCAL_ARTIFACT_NAME
+            result["external_artifact_hash_verified"] = True
+        except LauncherError as exc:
+            failure = exc
+
+    try:
+        if staging_created:
+            staging_path.unlink(missing_ok=True)
+        if failure is not None and published_by_launcher:
+            artifact_path.unlink(missing_ok=True)
+    except OSError:
+        failure = LauncherError("cleanup_failed")
+    if failure is not None:
+        result["artifact_path"] = None
+        result["external_artifact_hash_verified"] = False
+
     if failure is None:
         result["status"] = "PASS"
         result["reason"] = None
     else:
         result["status"] = "BLOCKED"
         result["reason"] = failure.reason
-    sealed = _seal_result(result)
-    _write_result(result_path, sealed)
+    try:
+        sealed = _seal_result(result)
+        _write_result(result_path, sealed)
+    except (LauncherError, OSError, ValueError, TypeError):
+        if published_by_launcher:
+            try:
+                artifact_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise LauncherError("artifact_tamper") from None
     return sealed
 
 
