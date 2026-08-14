@@ -480,7 +480,7 @@ def _production_runtime_b(manifest: Mapping[str, Any]) -> dict[str, Any]:
     required = {
         "TaskArchive": "src/dicode/dreaming/gen_manager.py",
         "load_tasks_from_env_codes": "src/dicode/task_utils.py",
-        "run_training_session": "src/dicode/training.py",
+        "run_training_session": "src/dicode/ppo_tr.py",
         "_calculate_task_distribution": "src/dicode/training.py",
         "_create_achievement_masks": "src/dicode/training.py",
         "calculate_scores_from_snapshot": "src/dicode/scoring.py",

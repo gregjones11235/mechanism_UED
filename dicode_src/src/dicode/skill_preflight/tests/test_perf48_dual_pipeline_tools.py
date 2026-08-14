@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import threading
@@ -348,9 +349,9 @@ def test_strict_frozen_input_tamper_fails_closed(tmp_path, monkeypatch, target):
         harness.load_inputs(manifest_path, config)
 
 
-def test_training_runtime_source_binding_detects_post_manifest_tamper(tmp_path):
+def test_reexported_training_runtime_binds_to_ppo_definition_and_tamper(tmp_path):
     harness = load("perf48_dual_pipeline_harness")
-    module_path = tmp_path / "src" / "dicode" / "training.py"
+    module_path = tmp_path / "src" / "dicode" / "ppo_tr.py"
     module_path.parent.mkdir(parents=True)
     module_path.write_text(
         "def run_training_session():\n    return 1\n", encoding="utf-8"
@@ -362,7 +363,7 @@ def test_training_runtime_source_binding_detects_post_manifest_tamper(tmp_path):
     manifest = {
         "source_config": {
             "source": {
-                "src/dicode/training.py": {
+                "src/dicode/ppo_tr.py": {
                     "path": str(module_path.resolve()),
                     "sha256": harness._file_sha256(module_path),
                 }
@@ -372,11 +373,11 @@ def test_training_runtime_source_binding_detects_post_manifest_tamper(tmp_path):
     evidence = harness._bind_sources(
         {"run_training_session": module.run_training_session},
         manifest,
-        {"run_training_session": "src/dicode/training.py"},
+        {"run_training_session": "src/dicode/ppo_tr.py"},
     )
     assert evidence["verified"]
     assert evidence["expected_relatives"]["run_training_session"] == (
-        "src/dicode/training.py"
+        "src/dicode/ppo_tr.py"
     )
     module_path.write_text(
         "def run_training_session():\n    return 2\n", encoding="utf-8"
@@ -385,8 +386,37 @@ def test_training_runtime_source_binding_detects_post_manifest_tamper(tmp_path):
         harness._bind_sources(
             {"run_training_session": module.run_training_session},
             manifest,
-            {"run_training_session": "src/dicode/training.py"},
+            {"run_training_session": "src/dicode/ppo_tr.py"},
         )
+
+
+def test_real_training_reexport_source_is_ppo_tr():
+    from dicode.training import (
+        _calculate_task_distribution,
+        _create_achievement_masks,
+        run_training_session,
+    )
+
+    assert Path(inspect.getsourcefile(run_training_session)).resolve() == (
+        SOURCE_ROOT / "src/dicode/ppo_tr.py"
+    ).resolve()
+    assert Path(inspect.getsourcefile(_calculate_task_distribution)).resolve() == (
+        SOURCE_ROOT / "src/dicode/training.py"
+    ).resolve()
+    assert Path(inspect.getsourcefile(_create_achievement_masks)).resolve() == (
+        SOURCE_ROOT / "src/dicode/training.py"
+    ).resolve()
+    harness = load("perf48_dual_pipeline_harness")
+    benchmark = load("perf48_dual_pipeline_benchmark")
+    deploy = load("perf48_dual_pipeline_deploy")
+    harness_source = Path(harness.__file__).read_text(encoding="utf-8")
+    assert '"run_training_session": "src/dicode/ppo_tr.py"' in harness_source
+    assert benchmark.B_RUNTIME_SOURCES["run_training_session"] == (
+        "src/dicode/ppo_tr.py"
+    )
+    assert {"src/dicode/ppo_tr.py", "src/dicode/training.py"}.issubset(
+        deploy.ALL_SOURCE_FILES
+    )
 
 
 def _derived_dual_manifest(tmp_path: Path):
