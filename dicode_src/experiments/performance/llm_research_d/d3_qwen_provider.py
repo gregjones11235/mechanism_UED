@@ -87,8 +87,7 @@ def _parse_env_value(raw: str, *, line_no: int) -> str:
         return ""
     if "\x00" in value or "\n" in value or "\r" in value:
         raise QwenConfigError(f"invalid env value at line {line_no}")
-    if "$(`" in value or "$(" in value or "`" in value:
-        raise QwenConfigError(f"shell expansion syntax at line {line_no}")
+    _reject_shell_tokens(value, line_no=line_no)
     if value[0] in ("'", '"'):
         try:
             parsed = ast.literal_eval(value)
@@ -96,10 +95,20 @@ def _parse_env_value(raw: str, *, line_no: int) -> str:
             raise QwenConfigError(f"invalid quoted env value at line {line_no}") from exc
         if not isinstance(parsed, str) or "\n" in parsed or "\r" in parsed:
             raise QwenConfigError(f"invalid quoted env value at line {line_no}")
+        # literal_eval decodes escapes (for example ``"\\x60"`` and
+        # ``"\\x24("``), so repeat the shell-token check on the decoded
+        # value before retaining it in memory.
+        _reject_shell_tokens(parsed, line_no=line_no)
         return parsed
     # Inline comments are not stripped: silently changing an API URL or key is
     # less safe than requiring the launcher to quote a value that contains '#'.
     return value
+
+
+def _reject_shell_tokens(value: str, *, line_no: int) -> None:
+    """Reject shell expansion markers before and after quoted decoding."""
+    if "$" + "(" in value or "`" in value:
+        raise QwenConfigError(f"shell expansion syntax at line {line_no}")
 
 
 @dataclass(frozen=True)
@@ -392,4 +401,3 @@ def public_json(value: Any) -> str:
     elif isinstance(value, MetadataResult):
         value = value.public_metadata()
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-

@@ -58,6 +58,11 @@ class _Response:
         return self._body
 
 
+class _RawResponse(_Response):
+    def __init__(self, body: bytes):
+        self._body = body
+
+
 def test_env_loader_does_not_execute_shell_or_serialize_secret(tmp_path):
     path = tmp_path / "experiment_llm.env"
     path.write_text(
@@ -83,6 +88,19 @@ def test_loader_rejects_shell_syntax_and_export(tmp_path):
     with pytest.raises(QwenProviderError):
         parse_env_file(path)
     path.write_text("QWEN_API_KEY=$(cat /key)\n", encoding="utf-8")
+    with pytest.raises(QwenProviderError):
+        parse_env_file(path)
+    path.write_text('QWEN_API_KEY="\\x60"\n', encoding="utf-8")
+    with pytest.raises(QwenProviderError):
+        parse_env_file(path)
+    path.write_text('QWEN_API_KEY="\\x24("\n', encoding="utf-8")
+    with pytest.raises(QwenProviderError):
+        parse_env_file(path)
+
+
+def test_loader_rejects_duplicate_keys(tmp_path):
+    path = tmp_path / "duplicate.env"
+    path.write_text("QWEN_MODEL=one\nQWEN_MODEL=two\n", encoding="utf-8")
     with pytest.raises(QwenProviderError):
         parse_env_file(path)
 
@@ -134,6 +152,25 @@ def test_401_and_secret_echo_fail_closed(tmp_path):
         QwenMetadataClient(config, urlopen=echoed).fetch_models()
 
 
+def test_transport_and_invalid_json_fail_closed(tmp_path):
+    config = _config(tmp_path)
+
+    def transport_error(request, timeout=0):
+        raise urllib.error.URLError("connection refused")
+
+    client = QwenMetadataClient(config, urlopen=transport_error)
+    with pytest.raises(MetadataGateBlocked) as exc:
+        client.fetch_models()
+    assert exc.value.reason == "transport_error"
+    assert client.requests_used == 1
+
+    invalid = QwenMetadataClient(config, urlopen=lambda *a, **k: _RawResponse(b"{not-json"))
+    with pytest.raises(MetadataGateBlocked) as exc:
+        invalid.fetch_models()
+    assert exc.value.reason == "invalid_json"
+    assert invalid.requests_used == 1
+
+
 def test_model_missing_blocks_and_completion_payload_requires_pass(tmp_path):
     config = _config(tmp_path)
 
@@ -154,4 +191,3 @@ def test_model_missing_blocks_and_completion_payload_requires_pass(tmp_path):
     assert payload["temperature"] == 0.6
     assert payload["top_p"] == 0.95
     assert payload["max_tokens"] == 8192
-
