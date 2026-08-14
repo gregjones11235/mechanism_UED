@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shlex
 import sys
+import urllib.error
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -668,3 +670,146 @@ def test_rehashed_blocked_result_cannot_masquerade_as_complete_pass(tmp_path):
     masquerade = _rehashed_result(masquerade, "reason", "hash_mismatch")
     with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
         launcher.verify_launcher_result(masquerade)
+
+
+# --- D3 pre-request-block diagnosis: request_count state machine ---
+
+
+def _rehash_gate_artifact(artifact: dict, **mutations) -> dict:
+    """Deep-copy a gate artifact, apply mutations, and recompute its canonical hash."""
+    raw = json.loads(json.dumps(artifact))
+    for key, value in mutations.items():
+        raw[key] = value
+    raw.pop("artifact_sha256", None)
+    raw["artifact_sha256"] = launcher.gate.canonical_json_sha256(raw)
+    return raw
+
+
+def _pre_request_blocked_artifact(tmp_path: Path) -> dict:
+    """A gate artifact blocked before any HTTP request (credential absent)."""
+    env = tmp_path / "no_credential.env"
+    env.write_text(
+        "EXP_DEEPSEEK_PROVIDER=deepseek\n"
+        "EXP_DEEPSEEK_BASE_URL=https://api.deepseek.com\n"
+        "EXP_DEEPSEEK_MODEL=deepseek-v4-flash\n"
+        "EXP_DEEPSEEK_API_KEY=\n",  # declared but empty -> credential_missing
+        encoding="utf-8",
+    )
+    return launcher.gate.run_metadata_gate(env, now=FIXED_NOW)
+
+
+def _request_attempted_blocked_artifact(tmp_path: Path, secret: str) -> dict:
+    """A gate artifact that sent one request and was blocked with 401."""
+    env = tmp_path / "credential.env"
+    env.write_text(
+        "EXP_DEEPSEEK_PROVIDER=deepseek\n"
+        "EXP_DEEPSEEK_BASE_URL=https://api.deepseek.com\n"
+        "EXP_DEEPSEEK_MODEL=deepseek-v4-flash\n"
+        f"EXP_DEEPSEEK_API_KEY={secret}\n",
+        encoding="utf-8",
+    )
+
+    def raise_401(*args, **kwargs):
+        raise urllib.error.HTTPError(
+            "https://api.deepseek.com/models", 401, "Unauthorized", {}, io.BytesIO(b"{}")
+        )
+
+    return launcher.gate.run_metadata_gate(env, urlopen=raise_401, now=FIXED_NOW)
+
+
+def test_pre_request_blocked_is_not_rewritten_as_request_count_invalid(tmp_path):
+    artifact = _pre_request_blocked_artifact(tmp_path)
+    assert artifact["status"] == "BLOCKED"
+    assert artifact["request_count"] == 0
+    assert artifact["reason"] == "credential_missing"
+
+    fake = _FakeRemote(artifact)
+    result = _run(tmp_path, fake)
+
+    # A legitimate pre-request block must be preserved, never collapsed into
+    # the generic artifact_request_count_invalid classification.
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "pre_request_blocked"
+    assert result["artifact_request_count"] == 0
+    assert result["gate_reason"] == "credential_missing"
+    assert len(_gate_calls(fake)) == 1
+    assert result["cleanup_verified"] is True
+    _assert_no_artifact_or_staging(tmp_path)
+
+
+def test_request_attempted_block_preserves_gate_reason(tmp_path):
+    secret = _secret()
+    artifact = _request_attempted_blocked_artifact(tmp_path, secret)
+    assert artifact["status"] == "BLOCKED"
+    assert artifact["request_count"] == 1
+    assert artifact["reason"] == "unauthorized"
+    assert artifact["http_status"] == 401
+
+    fake = _FakeRemote(artifact)
+    result = _run(tmp_path, fake)
+
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "request_attempted_blocked"
+    assert result["artifact_request_count"] == 1
+    assert result["gate_reason"] == "unauthorized"
+    assert result["http_status"] == 401
+    assert len(_gate_calls(fake)) == 1
+    assert result["cleanup_verified"] is True
+    _assert_no_artifact_or_staging(tmp_path)
+
+
+def test_configuration_invalid_preserves_pre_request_block(tmp_path):
+    env = tmp_path / "bad_provider.env"
+    env.write_text(
+        "EXP_DEEPSEEK_PROVIDER=wrong-provider\n"
+        "EXP_DEEPSEEK_BASE_URL=https://api.deepseek.com\n"
+        "EXP_DEEPSEEK_MODEL=deepseek-v4-flash\n"
+        "EXP_DEEPSEEK_API_KEY=some-credential\n",
+        encoding="utf-8",
+    )
+    artifact = launcher.gate.run_metadata_gate(env, now=FIXED_NOW)
+    assert artifact["request_count"] == 0
+    assert artifact["reason"] == "configuration_invalid"
+
+    fake = _FakeRemote(artifact)
+    result = _run(tmp_path, fake)
+    assert result["reason"] == "pre_request_blocked"
+    assert result["gate_reason"] == "configuration_invalid"
+    assert result["artifact_request_count"] == 0
+
+
+def test_blocked_gate_never_retries(tmp_path):
+    fake = _FakeRemote(_pre_request_blocked_artifact(tmp_path))
+    result = _run(tmp_path, fake)
+    assert result["reason"] == "pre_request_blocked"
+    # exactly one gate invocation, no retry path
+    assert len(_gate_calls(fake)) == 1
+
+
+def test_request_count_two_is_rejected_at_gate(tmp_path):
+    artifact = _passing_artifact(tmp_path, _secret())
+    raw = _rehash_gate_artifact(
+        artifact, request_count=2, deepseek_models_endpoint_requests=2
+    )
+    with pytest.raises(launcher.gate.GateArtifactError):
+        launcher.gate.verify_artifact(raw)
+
+
+def test_request_count_zero_pass_is_rejected_at_gate(tmp_path):
+    artifact = _passing_artifact(tmp_path, _secret())
+    # status remains PASS but count becomes 0 -> PASS requires count == 1
+    raw = _rehash_gate_artifact(
+        artifact, request_count=0, deepseek_models_endpoint_requests=0
+    )
+    with pytest.raises(launcher.gate.GateArtifactError):
+        launcher.gate.verify_artifact(raw)
+
+
+def test_gate_reason_field_is_validated_on_launcher_result(tmp_path):
+    fake = _FakeRemote(_passing_artifact(tmp_path, _secret()))
+    result = _run(tmp_path, fake)
+    assert result["gate_reason"] is None
+    # a launcher result with a bogus gate_reason must be rejected
+    bad = _rehashed_result(result, "gate_reason", "not_a_real_gate_reason")
+    with pytest.raises(launcher.LauncherError, match="artifact_tamper"):
+        launcher.verify_launcher_result(bad)

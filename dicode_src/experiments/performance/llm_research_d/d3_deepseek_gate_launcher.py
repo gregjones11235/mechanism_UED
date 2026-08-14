@@ -57,6 +57,7 @@ RESULT_KEYS = frozenset(
         "embedding_requests",
         "external_artifact_hash_verified",
         "external_execution_hashes_verified",
+        "gate_reason",
         "gpu_post",
         "gpu_pre",
         "http_status",
@@ -83,7 +84,6 @@ RESULT_KEYS = frozenset(
 )
 ALLOWED_REASONS = frozenset(
     {
-        "artifact_gate_blocked",
         "artifact_request_count_invalid",
         "artifact_tamper",
         "cleanup_failed",
@@ -93,8 +93,10 @@ ALLOWED_REASONS = frozenset(
         "gpu_unavailable",
         "hash_mismatch",
         "local_output_exists",
+        "pre_request_blocked",
         "remote_command_failed",
         "remote_root_exists",
+        "request_attempted_blocked",
         "secret_like_output",
         "unexpected_remote_output",
     }
@@ -458,6 +460,7 @@ def _base_result(
         "exact_model_advertised": None,
         "external_execution_hashes_verified": False,
         "external_artifact_hash_verified": False,
+        "gate_reason": None,
         "gpu_pre": None,
         "gpu_post": None,
         "completion_requests": 0,
@@ -577,6 +580,9 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
         raise LauncherError("artifact_tamper")
     if result["status"] == "BLOCKED" and result["reason"] not in ALLOWED_REASONS:
         raise LauncherError("artifact_tamper")
+    gate_blocked = result["reason"] in {"pre_request_blocked", "request_attempted_blocked"}
+    if gate_blocked != (result["gate_reason"] is not None):
+        raise LauncherError("artifact_tamper")
     for flag in (
         "external_execution_hashes_verified",
         "external_artifact_hash_verified",
@@ -610,6 +616,11 @@ def verify_launcher_result(value: Any) -> dict[str, Any]:
     if result["artifact_request_count"] is not None and type(
         result["artifact_request_count"]
     ) is not int:
+        raise LauncherError("artifact_tamper")
+    if result["gate_reason"] is not None and (
+        type(result["gate_reason"]) is not str
+        or result["gate_reason"] not in gate.BLOCKED_REASONS
+    ):
         raise LauncherError("artifact_tamper")
     if result["http_status"] is not None and type(result["http_status"]) is not int:
         raise LauncherError("artifact_tamper")
@@ -923,18 +934,31 @@ def run_launcher(
         result["exact_model_advertised"] = stdout_artifact[
             "exact_model_advertised"
         ]
-        if stdout_artifact["request_count"] != 1:
-            raise LauncherError("artifact_request_count_invalid")
+        # Preserve the gate's precise, sanitized failure_class verbatim so a
+        # legitimate BLOCKED (pre-request or request-attempted) is never
+        # collapsed into a generic launcher-level reason.
+        result["gate_reason"] = stdout_artifact["reason"]
         if stdout_artifact["completion_requests"] != 0 or stdout_artifact[
             "embedding_requests"
         ] != 0:
             raise LauncherError("artifact_tamper")
-        if (
-            stdout_artifact["status"] != "PASS"
-            or stdout_artifact["http_status"] != 200
-            or stdout_artifact["exact_model_advertised"] is not True
-        ):
-            raise LauncherError("artifact_gate_blocked")
+        if stdout_artifact["status"] == "PASS":
+            if (
+                stdout_artifact["request_count"] != 1
+                or stdout_artifact["http_status"] != 200
+                or stdout_artifact["exact_model_advertised"] is not True
+                or stdout_artifact["reason"] is not None
+            ):
+                raise LauncherError("artifact_tamper")
+        else:
+            # BLOCKED: request_count=0 is a legitimate pre-request block (no
+            # HTTP was sent); request_count=1 is a request-attempted block.
+            count = stdout_artifact["request_count"]
+            if count == 0:
+                raise LauncherError("pre_request_blocked")
+            if count == 1:
+                raise LauncherError("request_attempted_blocked")
+            raise LauncherError("artifact_request_count_invalid")
 
         result["gpu_post"] = _gpu_snapshot(command_runner, target, ssh_key)
         _enforce_gpu_snapshot(result["gpu_post"])
@@ -992,17 +1016,6 @@ def run_launcher(
         local_artifact = gate.load_artifact(staging_path)
         if local_artifact != stdout_artifact:
             raise LauncherError("artifact_tamper")
-        if local_artifact["request_count"] != 1:
-            raise LauncherError("artifact_request_count_invalid")
-        if local_artifact["completion_requests"] != 0 or local_artifact["embedding_requests"] != 0:
-            raise LauncherError("artifact_tamper")
-        if local_artifact["status"] != "PASS":
-            raise LauncherError("artifact_gate_blocked")
-        if (
-            local_artifact["http_status"] != 200
-            or local_artifact["exact_model_advertised"] is not True
-        ):
-            raise LauncherError("artifact_gate_blocked")
         verified_artifact = local_artifact
     except LauncherError as exc:
         failure = exc

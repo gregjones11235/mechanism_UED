@@ -49,6 +49,25 @@ INTEGRITY_CONTRACT = {
 }
 EXTERNAL_HASH_KEYS = frozenset({"tool", "provider"})
 
+# The closed, sanitized failure classification the gate may emit. A BLOCKED
+# gate artifact's ``reason`` is always exactly one of these; the launcher
+# imports this set so it can preserve the precise failure_class instead of
+# collapsing it into a generic launcher-level reason.
+BLOCKED_REASONS = frozenset(
+    {
+        "configuration_invalid",
+        "credential_echo_detected",
+        "credential_missing",
+        "http_error",
+        "invalid_json",
+        "invalid_model_list",
+        "metadata_request_budget_exhausted",
+        "model_missing",
+        "transport_error",
+        "unauthorized",
+    }
+)
+
 PROVIDER_VARIABLE = "EXP_DEEPSEEK_PROVIDER"
 BASE_URL_VARIABLE = "EXP_DEEPSEEK_BASE_URL"
 MODEL_VARIABLE = "EXP_DEEPSEEK_MODEL"
@@ -417,18 +436,6 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
     status = artifact.get("status")
     if status not in {"PASS", "BLOCKED"}:
         raise GateArtifactError("gate artifact status invalid")
-    blocked_reasons = {
-        "configuration_invalid",
-        "credential_echo_detected",
-        "credential_missing",
-        "http_error",
-        "invalid_json",
-        "invalid_model_list",
-        "metadata_request_budget_exhausted",
-        "model_missing",
-        "transport_error",
-        "unauthorized",
-    }
     if status == "PASS":
         if (
             artifact.get("reason") is not None
@@ -441,7 +448,7 @@ def verify_artifact(artifact: Any) -> dict[str, Any]:
             raise GateArtifactError("gate artifact pass fields invalid")
     elif (
         type(artifact.get("reason")) is not str
-        or artifact.get("reason") not in blocked_reasons
+        or artifact.get("reason") not in BLOCKED_REASONS
         or artifact.get("exact_model_advertised") is not False
     ):
         raise GateArtifactError("gate artifact blocked fields invalid")
