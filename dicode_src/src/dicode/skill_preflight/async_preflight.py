@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import subprocess
 import sys
@@ -24,6 +25,8 @@ from typing import Any, Callable, Mapping, Sequence
 
 
 CLASSIFICATION = "RESEARCH_SCHEDULE_CHANGE_NOT_SEMANTIC_MAINLINE"
+POSIX_SIGTERM = getattr(signal, "SIGTERM", 15)
+POSIX_SIGKILL = getattr(signal, "SIGKILL", 9)
 
 SOURCE_RELATIVES = {
     "async_preflight": "src/dicode/skill_preflight/async_preflight.py",
@@ -317,6 +320,183 @@ def _validate_source_evidence(evidence: Mapping[str, Any]) -> None:
     current = _source_evidence(source_root)
     if current["hashes"] != evidence.get("hashes") or current["sha256"] != evidence.get("sha256"):
         raise AsyncPreflightError("async source hash mismatch")
+
+
+def _run_nvidia_smi(command: Sequence[str]) -> str:
+    try:
+        completed = subprocess.run(
+            list(command), capture_output=True, text=True, check=False
+        )
+    except (FileNotFoundError, OSError) as exc:
+        raise AsyncPreflightError("nvidia-smi is unavailable") from exc
+    if completed.returncode != 0:
+        raise AsyncPreflightError(
+            f"nvidia-smi failed with return code {completed.returncode}"
+        )
+    return completed.stdout
+
+
+def _parse_csv_rows(output: str, expected_columns: int, label: str) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for raw in output.splitlines():
+        line = raw.strip()
+        if not line or line.lower().startswith("no running processes found"):
+            continue
+        values = [value.strip() for value in line.split(",")]
+        if len(values) != expected_columns or any(not value for value in values):
+            raise AsyncPreflightError(f"cannot parse nvidia-smi {label} row")
+        rows.append(values)
+    return rows
+
+
+def validate_gpu_preflight_evidence(
+    evidence: Mapping[str, Any], required_uuid: str
+) -> dict[str, Any]:
+    if not isinstance(evidence, Mapping):
+        raise AsyncPreflightError("worker GPU preflight evidence is missing")
+    if evidence.get("uuid") != required_uuid:
+        raise AsyncPreflightError("worker GPU preflight UUID mismatch")
+    index = evidence.get("index")
+    free_mib = evidence.get("free_mib")
+    external = evidence.get("external")
+    if not isinstance(index, int) or index < 0:
+        raise AsyncPreflightError("worker GPU preflight index is invalid")
+    if not isinstance(free_mib, int) or free_mib < 4096:
+        raise AsyncPreflightError("worker GPU preflight has less than 4GiB free")
+    if external != []:
+        raise AsyncPreflightError("worker GPU preflight found external compute apps")
+    return {
+        "uuid": required_uuid,
+        "index": index,
+        "free_mib": free_mib,
+        "external": [],
+    }
+
+
+def nvidia_gpu_preflight(
+    required_uuid: str,
+    *,
+    runner: Callable[[Sequence[str]], str] = _run_nvidia_smi,
+) -> dict[str, Any]:
+    """Prove exact/free/unused GPU state before importing or initializing JAX."""
+    gpu_rows = _parse_csv_rows(
+        runner(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,uuid,memory.free",
+                "--format=csv,noheader,nounits",
+            ]
+        ),
+        3,
+        "GPU",
+    )
+    matches = [row for row in gpu_rows if row[1] == required_uuid]
+    if len(matches) != 1:
+        raise AsyncPreflightError(
+            "nvidia-smi did not return exactly one required GPU UUID"
+        )
+    row = matches[0]
+    try:
+        index = int(row[0])
+        free_mib = int(row[2])
+    except ValueError as exc:
+        raise AsyncPreflightError("cannot parse nvidia-smi GPU numeric fields") from exc
+    app_rows = _parse_csv_rows(
+        runner(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=gpu_uuid,pid",
+                "--format=csv,noheader,nounits",
+            ]
+        ),
+        2,
+        "compute-app",
+    )
+    external = []
+    for gpu_uuid, pid_text in app_rows:
+        if gpu_uuid != required_uuid:
+            continue
+        try:
+            external.append(int(pid_text))
+        except ValueError as exc:
+            raise AsyncPreflightError(
+                "cannot parse nvidia-smi compute-app PID"
+            ) from exc
+    return validate_gpu_preflight_evidence(
+        {
+            "uuid": required_uuid,
+            "index": index,
+            "free_mib": free_mib,
+            "external": external,
+        },
+        required_uuid,
+    )
+
+
+def shutdown_owned_process(
+    process: Any,
+    timeout_s: float,
+    job_dir: str | Path | None,
+    *,
+    platform_name: str | None = None,
+    getpgid: Callable[[int], int] | None = None,
+    killpg: Callable[[int, int], Any] | None = None,
+) -> dict[str, Any]:
+    """Stop only the owned Popen/process-group and persist what was signalled."""
+    platform_name = os.name if platform_name is None else platform_name
+    evidence: dict[str, Any] = {
+        "classification": CLASSIFICATION,
+        "llm_api_calls": 0,
+        "pid": int(process.pid),
+        "pgid": None,
+        "platform": platform_name,
+        "owned_group_verified": False,
+        "signals": [],
+        "returncode": process.poll(),
+    }
+    error: Exception | None = None
+    try:
+        if process.poll() is None and platform_name == "posix":
+            getpgid_fn = getpgid or os.getpgid
+            killpg_fn = killpg or os.killpg
+            pgid = int(getpgid_fn(int(process.pid)))
+            evidence["pgid"] = pgid
+            if pgid != int(process.pid):
+                raise AsyncPreflightError(
+                    "owned async worker process-group mismatch; refusing to signal"
+                )
+            evidence["owned_group_verified"] = True
+            killpg_fn(pgid, POSIX_SIGTERM)
+            evidence["signals"].append("SIGTERM")
+            try:
+                process.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                killpg_fn(pgid, POSIX_SIGKILL)
+                evidence["signals"].append("SIGKILL")
+                process.wait(timeout=max(1.0, timeout_s))
+        elif process.poll() is None:
+            # Windows and injected fake runtimes have no POSIX session group.
+            process.terminate()
+            evidence["signals"].append("terminate")
+            try:
+                process.wait(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                evidence["signals"].append("kill")
+                process.wait(timeout=max(1.0, timeout_s))
+        evidence["returncode"] = process.poll()
+    except Exception as exc:
+        error = exc
+        evidence["error_class"] = type(exc).__name__
+        evidence["error"] = str(exc)
+        evidence["returncode"] = process.poll()
+    if job_dir is not None:
+        atomic_json(
+            Path(job_dir) / "SHUTDOWN.json", evidence, require_absent=True
+        )
+    if error is not None:
+        raise error
+    return evidence
 
 
 class AsyncPreflightManager:
@@ -710,6 +890,7 @@ class AsyncPreflightManager:
             or result.get("embedding_model_used") is not False
         ):
             raise AsyncPreflightError("async worker mechanism receipt mismatch")
+        validate_gpu_preflight_evidence(result.get("gpu_preflight"), job["gpu_uuid"])
         for row in projection:
             sr = float(row.get("sr"))
             priority = float(row.get("priority_score"))
@@ -725,15 +906,12 @@ class AsyncPreflightManager:
         if process is None:
             self._finish_streams()
             return
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=self.shutdown_timeout_s)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=max(1.0, self.shutdown_timeout_s))
-        self._finish_streams()
-        self._process = None
+        job_dir = self._pending_job_dir
+        try:
+            shutdown_owned_process(process, self.shutdown_timeout_s, job_dir)
+        finally:
+            self._finish_streams()
+            self._process = None
 
 
 def _install_network_guard() -> None:
@@ -813,6 +991,8 @@ def run_worker_job(
         raise AsyncPreflightError("async worker checkpoint hash mismatch")
     _validate_source_evidence(job["source_evidence"])
     if runtime is None:
+        # This safety gate must precede every JAX import and backend/device init.
+        gpu_preflight = nvidia_gpu_preflight(job["gpu_uuid"])
         _install_network_guard()
         import jax
         import jax.numpy as jnp
@@ -836,6 +1016,10 @@ def run_worker_job(
             "backend": jax.default_backend(),
             "device_count": len(devices),
         }
+    else:
+        gpu_preflight = validate_gpu_preflight_evidence(
+            runtime.get("gpu_preflight"), job["gpu_uuid"]
+        )
     if runtime.get("backend") != "gpu" or int(runtime.get("device_count", 0)) != 1:
         raise AsyncPreflightError("async worker runtime did not prove gpu/device1")
     resolved = json.loads(Path(job["config_path"]).read_text(encoding="utf-8"))
@@ -889,6 +1073,7 @@ def run_worker_job(
             "gpu_uuid": job["gpu_uuid"],
             "jax_backend": runtime["backend"],
             "jax_device_count": int(runtime["device_count"]),
+            "gpu_preflight": gpu_preflight,
             "score_projection": projection,
             "score_fingerprint": _fingerprint(projection),
             "route_calls": 0,

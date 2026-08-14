@@ -189,6 +189,12 @@ def _worker_runtime(captured=None):
     return {
         "backend": "gpu",
         "device_count": 1,
+        "gpu_preflight": {
+            "uuid": "GPU-test-exact",
+            "index": 2,
+            "free_mib": 45000,
+            "external": [],
+        },
         "jax": FakeJax,
         "jnp": FakeJnp,
         "OmegaConf": FakeOmegaConf,
@@ -304,6 +310,10 @@ def test_worker_fused_receipt_then_next_session_routes_exactly_once(tmp_path, mo
     assert len(route_calls) == 1
     assert result["route_calls"] == 0 and result["archive_mutations"] == 0
     assert result["jax_backend"] == "gpu" and result["jax_device_count"] == 1
+    assert result["gpu_preflight"] == {
+        "uuid": "GPU-test-exact", "index": 2, "free_mib": 45000,
+        "external": [],
+    }
     assert captured["embedding_model"] is None
     assert captured["preloaded_task_ids"] == ["fresh_a", "fresh_b"]
     assert len(captured["preloaded_task_classes"]) == 2
@@ -554,11 +564,14 @@ def test_applying_receipt_is_unrecoverable_and_never_routes_twice(tmp_path, monk
 def test_shutdown_signals_only_owned_process_object(tmp_path):
     setup = _setup(tmp_path)
     _, _, _, _, _, manager, _ = setup
-    _, process = _launch(setup)
+    job_dir, process = _launch(setup)
     manager.shutdown()
     assert process.terminate_calls == 1
     assert process.kill_calls == 0
     assert manager._process is None
+    receipt = ap.load_hashed_json(job_dir / "SHUTDOWN.json")
+    assert receipt["pid"] == process.pid
+    assert receipt["signals"] == ["terminate"]
 
 
 def test_shutdown_escalates_owned_process_only_after_timeout(tmp_path):
@@ -599,6 +612,180 @@ def test_shutdown_escalates_owned_process_only_after_timeout(tmp_path):
     assert process.terminate_calls == 1 and process.kill_calls == 1
 
 
+def test_posix_shutdown_targets_only_verified_owned_process_group(tmp_path):
+    process = FakeProcess(["worker"], {})
+    signals = []
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    receipt = ap.shutdown_owned_process(
+        process,
+        5,
+        job_dir,
+        platform_name="posix",
+        getpgid=lambda pid: pid,
+        killpg=lambda pgid, sig: signals.append((pgid, sig)),
+    )
+    assert process.terminate_calls == process.kill_calls == 0
+    assert signals == [(process.pid, ap.POSIX_SIGTERM)]
+    assert receipt["owned_group_verified"] is True
+    assert receipt["pgid"] == process.pid
+    assert receipt["signals"] == ["SIGTERM"]
+    assert ap.load_hashed_json(job_dir / "SHUTDOWN.json")["pid"] == process.pid
+
+
+def test_posix_pgid_mismatch_never_signals_external_group(tmp_path):
+    process = FakeProcess(["worker"], {})
+    signals = []
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    with pytest.raises(ap.AsyncPreflightError, match="process-group mismatch"):
+        ap.shutdown_owned_process(
+            process,
+            0,
+            job_dir,
+            platform_name="posix",
+            getpgid=lambda pid: pid + 100,
+            killpg=lambda pgid, sig: signals.append((pgid, sig)),
+        )
+    assert signals == []
+    assert process.terminate_calls == process.kill_calls == 0
+    receipt = ap.load_hashed_json(job_dir / "SHUTDOWN.json")
+    assert receipt["owned_group_verified"] is False
+    assert receipt["signals"] == []
+    assert receipt["pgid"] == process.pid + 100
+
+
+def test_posix_shutdown_escalates_verified_group_term_to_kill(tmp_path):
+    class Stuck(FakeProcess):
+        def wait(self, timeout=None):
+            self.wait_calls.append(timeout)
+            if self.returncode is None:
+                raise ap.subprocess.TimeoutExpired(self.command, timeout)
+            return self.returncode
+
+    process = Stuck(["worker"], {})
+    signals = []
+
+    def killpg(pgid, sig):
+        signals.append((pgid, sig))
+        if sig == ap.POSIX_SIGKILL:
+            process.returncode = -9
+
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    receipt = ap.shutdown_owned_process(
+        process,
+        0,
+        job_dir,
+        platform_name="posix",
+        getpgid=lambda pid: pid,
+        killpg=killpg,
+    )
+    assert signals == [
+        (process.pid, ap.POSIX_SIGTERM),
+        (process.pid, ap.POSIX_SIGKILL),
+    ]
+    assert receipt["signals"] == ["SIGTERM", "SIGKILL"]
+    assert receipt["returncode"] == -9
+
+
+def _gpu_runner(gpu_output, apps_output):
+    calls = []
+
+    def run(command):
+        calls.append(list(command))
+        if "--query-gpu=index,uuid,memory.free" in command:
+            return gpu_output
+        if "--query-compute-apps=gpu_uuid,pid" in command:
+            return apps_output
+        raise AssertionError(command)
+
+    return run, calls
+
+
+def test_nvidia_gpu_preflight_success_and_command_contract():
+    runner, calls = _gpu_runner(
+        "0, GPU-other, 10000\n2, GPU-test-exact, 45000\n",
+        "GPU-other, 999\n",
+    )
+    evidence = ap.nvidia_gpu_preflight("GPU-test-exact", runner=runner)
+    assert evidence == {
+        "uuid": "GPU-test-exact", "index": 2, "free_mib": 45000,
+        "external": [],
+    }
+    assert calls[0][0] == calls[1][0] == "nvidia-smi"
+    assert calls[0][1] == "--query-gpu=index,uuid,memory.free"
+    assert calls[1][1] == "--query-compute-apps=gpu_uuid,pid"
+
+
+@pytest.mark.parametrize(
+    "gpu_output,apps_output,match",
+    [
+        ("2, GPU-other, 45000\n", "", "exactly one"),
+        (
+            "2, GPU-test-exact, 45000\n3, GPU-test-exact, 44000\n",
+            "",
+            "exactly one",
+        ),
+        ("2, GPU-test-exact, bad\n", "", "numeric"),
+        ("2, GPU-test-exact, 4000\n", "", "less than 4GiB"),
+        ("malformed\n", "", "parse"),
+        ("2, GPU-test-exact, 45000\n", "GPU-test-exact, 123\n", "external"),
+        ("2, GPU-test-exact, 45000\n", "GPU-test-exact, bad\n", "PID"),
+    ],
+)
+def test_nvidia_gpu_preflight_fail_closed(gpu_output, apps_output, match):
+    runner, _ = _gpu_runner(gpu_output, apps_output)
+    with pytest.raises(ap.AsyncPreflightError, match=match):
+        ap.nvidia_gpu_preflight("GPU-test-exact", runner=runner)
+
+
+def test_nvidia_smi_missing_and_nonzero_fail_closed(monkeypatch):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("nvidia-smi")
+
+    monkeypatch.setattr(ap.subprocess, "run", missing)
+    with pytest.raises(ap.AsyncPreflightError, match="unavailable"):
+        ap._run_nvidia_smi(["nvidia-smi"])
+
+    class Completed:
+        returncode = 9
+        stdout = ""
+
+    monkeypatch.setattr(ap.subprocess, "run", lambda *args, **kwargs: Completed())
+    with pytest.raises(ap.AsyncPreflightError, match="return code 9"):
+        ap._run_nvidia_smi(["nvidia-smi"])
+
+
+def test_fake_runtime_must_supply_trusted_gpu_preflight(tmp_path, monkeypatch):
+    setup = _setup(tmp_path)
+    job_dir, _ = _launch(setup)
+    job = ap.load_hashed_json(job_dir / "JOB.json")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", job["gpu_uuid"])
+    runtime = _worker_runtime()
+    del runtime["gpu_preflight"]
+    with pytest.raises(ap.AsyncPreflightError, match="evidence is missing"):
+        ap.run_worker_job(job_dir / "JOB.json", runtime=runtime)
+
+
+def test_main_rejects_tampered_gpu_preflight_receipt(tmp_path, monkeypatch):
+    setup = _setup(tmp_path)
+    _, archive, _, _, _, manager, _ = setup
+    job_dir, process = _launch(setup)
+    result = _run_fake_worker(monkeypatch, job_dir)
+    result["gpu_preflight"] = {
+        "uuid": "GPU-test-exact", "index": 2, "free_mib": 45000,
+        "external": [777],
+    }
+    ap.atomic_json(job_dir / "RESULT.json", result)
+    process.returncode = 0
+    with pytest.raises(ap.AsyncPreflightError, match="external"):
+        manager.poll_and_apply(
+            archive=archive, current_session_idx=9,
+            route_apply_fn=lambda *args: None, route_fn=object(),
+        )
+
+
 def test_worker_rejects_wrong_gpu_env_and_never_stores_full_code(tmp_path, monkeypatch):
     setup = _setup(tmp_path)
     job_dir, _ = _launch(setup)
@@ -618,6 +805,9 @@ def test_source_audit_has_no_client_or_prompt_path_and_wiring_is_delayed():
     assert "openai" not in module.lower()
     assert "requests." not in module and "urllib.request" not in module
     assert "prompt" not in module.lower()
+    assert module.index("gpu_preflight = nvidia_gpu_preflight") < module.index(
+        "import jax\n"
+    )
     driver = (SOURCE_ROOT / "experiments/training/run_dicode.py").read_text(encoding="utf-8")
     assert driver.index("poll_and_apply(") < driver.index("# --- Step 1:")
     launch = driver.index("_async_pf_manager.launch(")
