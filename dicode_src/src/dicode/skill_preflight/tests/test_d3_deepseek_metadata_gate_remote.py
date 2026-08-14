@@ -221,13 +221,13 @@ def test_provenance_and_official_references_are_bound(tmp_path):
             "observed_file_bytes_only_not_executing_code_identity"
         )
         assert len(binding["observed_file_bytes_sha256"]) == 64
-    runtime = artifact["provenance"]["runtime_callable_fingerprint"]
-    assert runtime["algorithm"] == "python_code_objects_canonical_sha256_v1"
-    assert "adapter.parse_env_file" in runtime["scope"]
-    assert "adapter.DeepSeekMetadataClient.fetch_models" in runtime["scope"]
-    assert runtime["python_implementation"]
-    assert runtime["python_version"]
-    assert len(runtime["sha256"]) == 64
+    contract = artifact["integrity_contract"]
+    assert contract == gate.INTEGRITY_CONTRACT
+    assert contract["threat_model"] == "trusted_process_no_in_process_adversary"
+    assert contract["self_attestation_security_boundary"] is False
+    assert contract["external_tool_sha256_verification_required"] is True
+    assert contract["external_provider_sha256_verification_required"] is True
+    assert contract["metadata_result_acceptance_requires_external_verification"] is True
 
 
 @pytest.mark.parametrize(
@@ -239,7 +239,7 @@ def test_provenance_and_official_references_are_bound(tmp_path):
         (("provenance", "observed_source_files"), "model_ids"),
         (("provenance", "observed_source_files", "tool"), "credential_hash"),
         (("provenance", "observed_source_files", "adapter"), "credential_prefix"),
-        (("provenance", "runtime_callable_fingerprint"), "credential_value"),
+        (("integrity_contract",), "credential_value"),
     ],
 )
 def test_closed_schema_rejects_rehashed_unknown_fields(
@@ -259,19 +259,39 @@ def test_closed_schema_rejects_rehashed_unknown_fields(
     assert not output.exists()
 
 
-def test_runtime_callable_monkeypatch_rejected_even_with_rehashed_artifact(
-    tmp_path, monkeypatch
-):
-    artifact = gate.run_metadata_gate(_env(tmp_path, ""), now=FIXED_NOW)
-    original = gate.provider.parse_env_file
-    monkeypatch.setattr(
-        gate.provider,
-        "parse_env_file",
-        lambda path: original(path),
-    )
-    _recompute_artifact_hash(artifact)
-    with pytest.raises(gate.GateArtifactError, match="provenance mismatch"):
-        gate.verify_artifact(artifact)
+def test_external_execution_hashes_require_manifest_match_and_stability():
+    expected = {"tool": "a" * 64, "provider": "b" * 64}
+    assert gate.verify_external_execution_hashes(expected, dict(expected), expected) is True
+
+
+@pytest.mark.parametrize(
+    ("pre", "post", "manifest"),
+    [
+        (
+            {"tool": "a" * 64, "provider": "b" * 64},
+            {"tool": "c" * 64, "provider": "b" * 64},
+            {"tool": "a" * 64, "provider": "b" * 64},
+        ),
+        (
+            {"tool": "a" * 64, "provider": "b" * 64},
+            {"tool": "a" * 64, "provider": "b" * 64},
+            {"tool": "a" * 64, "provider": "c" * 64},
+        ),
+        (
+            {"tool": "invalid", "provider": "b" * 64},
+            {"tool": "invalid", "provider": "b" * 64},
+            {"tool": "invalid", "provider": "b" * 64},
+        ),
+        (
+            {"tool": "a" * 64, "provider": "b" * 64, "extra": "c" * 64},
+            {"tool": "a" * 64, "provider": "b" * 64},
+            {"tool": "a" * 64, "provider": "b" * 64},
+        ),
+    ],
+)
+def test_external_execution_hashes_fail_closed(pre, post, manifest):
+    with pytest.raises(gate.GateArtifactError):
+        gate.verify_external_execution_hashes(pre, post, manifest)
 
 
 def test_observed_source_file_hash_change_is_rejected(tmp_path):
