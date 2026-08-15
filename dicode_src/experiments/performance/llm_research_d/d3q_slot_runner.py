@@ -353,6 +353,46 @@ DANGEROUS_BUILTIN_CALLS = frozenset(
     {"open", "eval", "exec", "compile", "__import__", "input", "breakpoint", "memoryview"}
 )
 
+# Frozen Craftax 1.4.5 API maps (extracted from the pinned remote training
+# venv skill_preflight_e0e1; source file sha256 b37c1b654483b4139b2643f609cec21afc57f8570baa164bccf31aaccdabf994).
+# The remote runner must not import craftax/jax in-process, so static lint
+# uses these embedded maps instead of a lazy import.
+CRAFTAX_MAP_SOURCE_SHA256 = "b37c1b654483b4139b2643f609cec21afc57f8570baa164bccf31aaccdabf994"
+CRAFTAX_BLOCK_TYPES = frozenset({
+    "CHEST", "COAL", "CRAFTING_TABLE", "DARKNESS", "DIAMOND",
+    "ENCHANTMENT_TABLE_FIRE", "ENCHANTMENT_TABLE_ICE", "FIRE_GRASS", "FIRE_TREE",
+    "FOUNTAIN", "FURNACE", "GRASS", "GRAVE", "GRAVE2", "GRAVE3", "GRAVEL",
+    "ICE_GRASS", "ICE_SHRUB", "INVALID", "IRON", "LAVA", "NECROMANCER",
+    "NECROMANCER_VULNERABLE", "OUT_OF_BOUNDS", "PATH", "PLANT", "RIPE_PLANT",
+    "RUBY", "SAND", "SAPPHIRE", "STALAGMITE", "STONE", "TREE", "WALL",
+    "WALL_MOSS", "WATER", "WOOD",
+})
+CRAFTAX_ACHIEVEMENTS = frozenset({
+    "CAST_FIREBALL", "CAST_ICEBALL", "COLLECT_COAL", "COLLECT_DIAMOND",
+    "COLLECT_DRINK", "COLLECT_IRON", "COLLECT_RUBY", "COLLECT_SAPLING",
+    "COLLECT_SAPPHIRE", "COLLECT_STONE", "COLLECT_WOOD", "DAMAGE_NECROMANCER",
+    "DEFEAT_ARCHER", "DEFEAT_DEEP_THING", "DEFEAT_FIRE_ELEMENTAL",
+    "DEFEAT_FROST_TROLL", "DEFEAT_GNOME_ARCHER", "DEFEAT_GNOME_WARRIOR",
+    "DEFEAT_ICE_ELEMENTAL", "DEFEAT_KNIGHT", "DEFEAT_KOBOLD", "DEFEAT_LIZARD",
+    "DEFEAT_NECROMANCER", "DEFEAT_ORC_MAGE", "DEFEAT_ORC_SOLIDER",
+    "DEFEAT_PIGMAN", "DEFEAT_SKELETON", "DEFEAT_TROLL", "DEFEAT_ZOMBIE",
+    "DRINK_POTION", "EAT_BAT", "EAT_COW", "EAT_PLANT", "EAT_SNAIL",
+    "ENCHANT_ARMOUR", "ENCHANT_SWORD", "ENTER_DUNGEON", "ENTER_FIRE_REALM",
+    "ENTER_GNOMISH_MINES", "ENTER_GRAVEYARD", "ENTER_ICE_REALM", "ENTER_SEWERS",
+    "ENTER_TROLL_MINES", "ENTER_VAULT", "FIND_BOW", "FIRE_BOW",
+    "LEARN_FIREBALL", "LEARN_ICEBALL", "MAKE_ARROW", "MAKE_DIAMOND_ARMOUR",
+    "MAKE_DIAMOND_PICKAXE", "MAKE_DIAMOND_SWORD", "MAKE_IRON_ARMOUR",
+    "MAKE_IRON_PICKAXE", "MAKE_IRON_SWORD", "MAKE_STONE_PICKAXE",
+    "MAKE_STONE_SWORD", "MAKE_TORCH", "MAKE_WOOD_PICKAXE", "MAKE_WOOD_SWORD",
+    "OPEN_CHEST", "PLACE_FURNACE", "PLACE_PLANT", "PLACE_STONE", "PLACE_TABLE",
+    "PLACE_TORCH", "WAKE_UP",
+})
+CRAFTAX_INVENTORY_FIELDS = frozenset({
+    "armour", "arrows", "books", "bow", "coal", "diamond", "iron",
+    "pickaxe", "potions", "ruby", "sapling", "sapphire", "stone", "sword",
+    "torches", "wood",
+})
+
 
 def static_lint(
     code: str,
@@ -364,30 +404,21 @@ def static_lint(
 
     ``("", "")`` means pass.  Mirrors the frozen production lint for syntax /
     Craftax enums / Inventory kwargs and adds forbidden-import and dangerous
-    capability checks.  When the craftax environment is unavailable and no map
-    is injected the check fails closed with ``environment_unavailable``.
+    capability checks.  Enum/Inventory maps are frozen from craftax 1.4.5 so the
+    runner process never imports craftax/jax.
     """
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
         return "syntax_error", f"Compilation error: {exc}"
 
-    if enum_members is None or inventory_fields is None:
-        try:
-            from craftax.craftax.constants import BlockType, Achievement  # type: ignore
-            from craftax.craftax.craftax_state import Inventory  # type: ignore
-            from dataclasses import fields  # type: ignore
-
-            enum_members = {
-                "BlockType": set(BlockType.__members__),
-                "Achievement": set(Achievement.__members__),
-            }
-            try:
-                inventory_fields = {field.name for field in fields(Inventory)}
-            except Exception:
-                inventory_fields = set(getattr(Inventory, "__annotations__", {}))
-        except Exception as exc:
-            return "environment_unavailable", f"Static lint environment unavailable: {exc}"
+    if enum_members is None:
+        enum_members = {
+            "BlockType": set(CRAFTAX_BLOCK_TYPES),
+            "Achievement": set(CRAFTAX_ACHIEVEMENTS),
+        }
+    if inventory_fields is None:
+        inventory_fields = set(CRAFTAX_INVENTORY_FIELDS)
 
     aliases: dict[str, str] = {}
     inventory_aliases: set[str] = set()
@@ -698,8 +729,9 @@ class D3QSlotRunner:
 
         from d3q_budget import D3QLedger  # deployed next to this module
 
+        # D3QLedger.__init__ auto-loads an existing ledger file; calling
+        # load() again would double-apply every event and fail closed.
         self.ledger = D3QLedger(self.ledger_path)
-        self.ledger.load()
 
         self.attempts: list[dict[str, Any]] = []
         self.repair_requests = 0
@@ -1209,8 +1241,7 @@ def fs_sha256_file(path: str) -> str:
 def fs_ledger_summary(path: str) -> dict[str, Any]:
     from d3q_budget import D3QLedger
 
-    ledger = D3QLedger(path)
-    ledger.load()
+    ledger = D3QLedger(path)  # __init__ auto-loads when the file exists
     slot_counts = {}
     for slot_id, budget in sorted(getattr(ledger, "_slots", {}).items()):
         slot_counts[slot_id] = budget.post_count

@@ -186,6 +186,26 @@ def test_ledger_resume_consistent(tmp_path):
     assert resumed.slot_post_count("slot_r1_small_p00") == 3
 
 
+def test_fs_ledger_summary_no_double_load(tmp_path):
+    # D3QLedger.__init__ auto-loads an existing ledger; a second explicit
+    # load() would double-apply events.  fs_ledger_summary must report the
+    # rebuilt counts exactly once.
+    path = tmp_path / "ledger.jsonl"
+    ledger = d3q_budget.D3QLedger(path)
+    ledger.reserve(**_event(kind="initial", attempt_index=1))
+    summary = runner.fs_ledger_summary(str(path))
+    assert summary["exists"] is True
+    assert summary["slot_counts"] == {"slot_r1_small_p00": 1}
+    assert summary["provider_counts"] == {"ollama": 1}
+    resumed = d3q_budget.D3QLedger(path)
+    event = resumed.reserve(**_event(kind="transport_retry", attempt_index=2))
+    assert event["post_index_in_slot"] == 2
+    assert event["post_index_for_provider"] == 2
+    summary = runner.fs_ledger_summary(str(path))
+    assert summary["slot_counts"] == {"slot_r1_small_p00": 2}
+    assert summary["provider_counts"] == {"ollama": 2}
+
+
 def test_over_budget_ledger_fails_closed(tmp_path):
     path = tmp_path / "ledger.jsonl"
     with open(path, "w", encoding="utf-8") as handle:
@@ -339,8 +359,11 @@ def test_static_lint_dangerous_builtin_classified():
     assert "dangerous builtin call: open" in message
 
 
-def test_static_lint_environment_unavailable_fails_closed(monkeypatch):
+def test_static_lint_uses_frozen_maps_without_craftax_import(monkeypatch):
+    # The remote runner must not import craftax/jax in-process; static lint
+    # uses frozen maps instead, so blocking craftax imports must not matter.
     import builtins
+
     real_import = builtins.__import__
 
     def blocking_import(name, *args, **kwargs):
@@ -349,9 +372,35 @@ def test_static_lint_environment_unavailable_fails_closed(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", blocking_import)
-    error_class, message = runner.static_lint("x = 1")
-    assert error_class == "environment_unavailable"
-    assert "unavailable" in message
+    code = (
+        "from craftax.craftax.constants import BlockType\n"
+        "from craftax.craftax.craftax_state import Inventory\n"
+        "import jax.numpy as jnp\n"
+        "x = BlockType.COAL\n"
+        "inv = Inventory(wood=1)\n"
+    )
+    error_class, message = runner.static_lint(code)
+    assert error_class == "" and message == ""
+    bad = (
+        "from craftax.craftax.constants import BlockType\n"
+        "x = BlockType.NONEXISTENT\n"
+    )
+    error_class, message = runner.static_lint(bad)
+    assert error_class == "api_enum_error"
+
+
+def test_frozen_craftax_maps_match_extraction():
+    # Maps extracted from craftax 1.4.5 (remote venv skill_preflight_e0e1);
+    # the recorded source-file sha256 pins the extraction artifact.
+    assert runner.CRAFTAX_MAP_SOURCE_SHA256 == (
+        "b37c1b654483b4139b2643f609cec21afc57f8570baa164bccf31aaccdabf994"
+    )
+    assert len(runner.CRAFTAX_BLOCK_TYPES) == 37
+    assert len(runner.CRAFTAX_ACHIEVEMENTS) == 67
+    assert len(runner.CRAFTAX_INVENTORY_FIELDS) == 16
+    assert "STONE" in runner.CRAFTAX_BLOCK_TYPES
+    assert "WAKE_UP" in runner.CRAFTAX_ACHIEVEMENTS
+    assert "wood" in runner.CRAFTAX_INVENTORY_FIELDS
 
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -103,6 +104,7 @@ class LauncherError(RuntimeError):
 
     def __init__(self, reason: str):
         self.reason = reason if reason in self.ALLOWED else "remote_command_failed"
+        self.detail: Any | None = None
         super().__init__(self.reason)
 
 
@@ -120,6 +122,16 @@ class CommandInvocation:
 
 
 CommandRunner = Callable[[CommandInvocation], CommandResult]
+
+
+def _command_failure(argv: Sequence[str], result: CommandResult) -> dict[str, Any]:
+    """Sanitized snapshot of a failed remote command (never secret-bearing)."""
+    return {
+        "command": list(argv),
+        "returncode": result.returncode,
+        "stdout_tail": (result.stdout or "")[-4000:],
+        "stderr_tail": (result.stderr or "")[-4000:],
+    }
 
 
 def _default_runner(invocation: CommandInvocation) -> CommandResult:
@@ -205,7 +217,9 @@ def _run_command(
         _strip_ssh_informational(result.stderr),
     )
     if result.returncode not in allowed_returncodes:
-        raise LauncherError("remote_command_failed")
+        exc = LauncherError("remote_command_failed")
+        exc.detail = _command_failure(argv, result)
+        raise exc
     return result
 
 
@@ -303,18 +317,26 @@ _REMOTE_SCRIPT_OLLAMA_TAGS = (
 
 def _expect_exact(result: CommandResult, expected: str) -> None:
     if result.stderr or result.stdout.strip() != expected:
-        raise LauncherError("unexpected_remote_output")
+        exc = LauncherError("unexpected_remote_output")
+        exc.detail = _command_failure((), result)
+        raise exc
 
 
 def _parse_json_object(result: CommandResult) -> dict[str, Any]:
     if result.stderr:
-        raise LauncherError("unexpected_remote_output")
+        exc = LauncherError("unexpected_remote_output")
+        exc.detail = _command_failure((), result)
+        raise exc
     try:
         decoded = json.loads(result.stdout)
     except json.JSONDecodeError:
-        raise LauncherError("unexpected_remote_output") from None
+        exc = LauncherError("unexpected_remote_output")
+        exc.detail = _command_failure((), result)
+        raise exc from None
     if not isinstance(decoded, dict):
-        raise LauncherError("unexpected_remote_output")
+        exc = LauncherError("unexpected_remote_output")
+        exc.detail = _command_failure((), result)
+        raise exc
     return decoded
 
 # ---------------------------------------------------------------------------
@@ -653,15 +675,42 @@ def _collect_slot_dir(
     slot_id: str,
     local_slots_dir: Path,
 ) -> None:
+    # Windows OpenSSH scp cannot handle the POSIX ``dir/.`` source form, so
+    # the slot directory is archived remotely with tar, fetched as one file,
+    # and extracted locally.
+    local_slots_dir.mkdir(parents=True, exist_ok=True)
     local_slot_dir = local_slots_dir / slot_id
-    local_slot_dir.mkdir(parents=True, exist_ok=False)
-    collected = _run_command(
+    tar_name = f"{slot_id}.tgz"
+    tar_remote = f"{exec_root}/{tar_name}"
+    archive = _run_command(
         runner,
-        _scp_base(ssh_key)
-        + ["-r", f"{ssh_target}:{exec_root}/slots/{slot_id}/.", str(local_slot_dir)],
+        _ssh_argv(
+            ssh_target, ssh_key,
+            ["tar", "-C", f"{exec_root}/slots", "-czf", tar_remote, slot_id],
+        ),
     )
-    if collected.stdout or collected.stderr:
+    if archive.stdout or archive.stderr:
         raise LauncherError("unexpected_remote_output")
+    local_tar = local_slots_dir / tar_name
+    try:
+        downloaded = _run_command(
+            runner,
+            _scp_base(ssh_key) + [f"{ssh_target}:{tar_remote}", str(local_tar)],
+        )
+        if downloaded.stdout or downloaded.stderr:
+            raise LauncherError("unexpected_remote_output")
+        with tarfile.open(local_tar, "r:gz") as handle:
+            try:
+                handle.extractall(local_slots_dir, filter="data")
+            except TypeError:
+                handle.extractall(local_slots_dir)
+    finally:
+        try:
+            local_tar.unlink()
+        except OSError:
+            pass
+    if not local_slot_dir.is_dir():
+        raise LauncherError("artifact_tamper")
 
 
 def _load_slot_result(local_slot_dir: Path, slot_id: str) -> dict[str, Any]:
@@ -1050,6 +1099,16 @@ def run_launcher(
         failure = exc
         result["status"] = "BLOCKED"
         result["reason"] = exc.reason
+        if getattr(exc, "detail", None) is not None:
+            result["remote_failure"] = exc.detail
+    except Exception as exc:  # unexpected local fault: still fail closed
+        failure = LauncherError("remote_command_failed")
+        result["status"] = "BLOCKED"
+        result["reason"] = failure.reason
+        result["remote_failure"] = {
+            "error_type": type(exc).__name__,
+            "error_str": str(exc)[-2000:],
+        }
 
     # Always attempt cleanup and preserve evidence.
     if root_created:
