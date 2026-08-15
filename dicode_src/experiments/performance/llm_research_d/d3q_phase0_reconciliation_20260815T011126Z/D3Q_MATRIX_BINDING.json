@@ -2,29 +2,30 @@
   "arm_order": [
     [
       "small",
-      "r0"
-    ],
-    [
-      "large",
-      "r0"
+      "r1"
     ],
     [
       "large",
       "r1"
     ],
     [
-      "small",
-      "r1"
+      "large",
+      "r2"
     ],
     [
       "small",
       "r2"
+    ],
+    [
+      "small",
+      "r3"
     ],
     [
       "large",
-      "r2"
+      "r3"
     ]
   ],
+  "repeat_label_mapping": "任务书中的 repeat 0/1/2 对应冻结契约 d3_runner.py ARM_ORDER 的 r1/r2/r3（repeat k = r(k+1)）；模型顺序（small/large 交替）从未变化。",
   "artifact_rule": "Each artifact is published to a fresh (previously absent) directory with a canonical internal hash, raw file SHA-256, SHA256SUMS listing, closed schema, and atomic publication; old evidence and frozen manifests must remain byte-identical.",
   "budget": {
     "per_provider_post_max": 108,
@@ -164,7 +165,7 @@
         "slot": "task_554"
       }
     ],
-    "slot_id_scheme": "slot_r{0,1,2}_{small|large}_p{00..11}",
+    "slot_id_scheme": "slot_r{1,2,3}_{small|large}_p{00..11}",
     "total": 72
   }
 }

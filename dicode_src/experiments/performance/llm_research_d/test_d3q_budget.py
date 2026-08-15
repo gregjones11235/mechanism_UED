@@ -14,7 +14,7 @@ from d3q_budget import BudgetExceededError, D3QLedger, ProviderBudget, SlotBudge
 def _event(**overrides):
     base = {
         "ts_utc": "2026-08-15T01:00:00Z",
-        "slot_id": "slot_r0_small_p00",
+        "slot_id": "slot_r1_small_p00",
         "model": "qwen2.5-coder:14b",
         "provider": "ollama",
         "kind": "initial",
@@ -25,7 +25,7 @@ def _event(**overrides):
 
 
 def test_slot_fourth_post_rejected_even_if_provider_has_budget():
-    slot = SlotBudget("slot_r0_small_p00")
+    slot = SlotBudget("slot_r1_small_p00")
     provider = ProviderBudget("ollama")  # plenty of provider budget left
     assert slot.reserve("initial") == 1
     assert slot.reserve("transport_retry") == 2
@@ -33,7 +33,7 @@ def test_slot_fourth_post_rejected_even_if_provider_has_budget():
     assert provider.post_count == 0
     with pytest.raises(BudgetExceededError) as exc:
         slot.reserve("initial")
-    assert exc.value.slot_id == "slot_r0_small_p00"
+    assert exc.value.slot_id == "slot_r1_small_p00"
     assert "slot=" in str(exc.value)
     assert slot.post_count == 3
 
@@ -51,7 +51,7 @@ def test_provider_109th_post_rejected():
 
 
 def test_kind_mixing_consumes_same_slot_budget():
-    slot = SlotBudget("slot_r1_large_p05")
+    slot = SlotBudget("slot_r2_large_p05")
     for kind in ("initial", "transport_retry", "semantic_repair"):
         slot.reserve(kind)
     assert slot.post_count == 3
@@ -62,7 +62,7 @@ def test_kind_mixing_consumes_same_slot_budget():
 
 
 def test_invalid_kind_rejected_and_not_recorded():
-    slot = SlotBudget("slot_r0_small_p00")
+    slot = SlotBudget("slot_r1_small_p00")
     with pytest.raises(ValueError):
         slot.reserve("bogus")
     assert slot.post_count == 0
@@ -101,17 +101,17 @@ def test_ledger_resume_rebuilds_budget_state():
         for i, kind in enumerate(("initial", "transport_retry", "semantic_repair")):
             ledger.reserve(**_event(kind=kind, attempt_index=i + 1))
         ledger.reserve(
-            **_event(slot_id="slot_r2_small_p11", provider="deepseek_official")
+            **_event(slot_id="slot_r3_small_p11", provider="deepseek_official")
         )
         resumed = D3QLedger(path)
-        assert resumed.slot_post_count("slot_r0_small_p00") == 3
-        assert resumed.slot_post_count("slot_r2_small_p11") == 1
+        assert resumed.slot_post_count("slot_r1_small_p00") == 3
+        assert resumed.slot_post_count("slot_r3_small_p11") == 1
         assert resumed.provider_post_count("ollama") == 3
         assert resumed.provider_post_count("deepseek_official") == 1
         # The exhausted slot is still rejected after resume.
         with pytest.raises(BudgetExceededError) as exc:
             resumed.reserve(**_event())
-        assert exc.value.slot_id == "slot_r0_small_p00"
+        assert exc.value.slot_id == "slot_r1_small_p00"
 
 
 def test_ledger_provider_109th_rejected_without_record():

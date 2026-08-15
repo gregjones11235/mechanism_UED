@@ -37,6 +37,8 @@
 - **唯一异常（已澄清，非篡改）**：任务说明中“launcher result 的 `artifact_sha256` == 对 gate artifact 去 `artifact_sha256` 字段后的 canonical sha256”字面不成立。核对 `d3_deepseek_gate_launcher.py`（`_seal_result` / `verify_launcher_result`，初始 result 模板不含 `artifact_sha256` 键）后确认：launcher 结果的 `artifact_sha256` 是 **launcher 结果自身**的 canonical self-seal；gate artifact 的 canonical 内部哈希记录在 `artifact_internal_sha256`。两者独立验证均通过，pre/post_execution_sha256 与 manifest_sha256 一致，不存在完整性破坏。EVIDENCE_INTEGRITY.json 中按任务字面要求记录 verified=false 并附解释，同时记录正确的 self-seal 语义为 verified=true。
 - 受保护文件（含两个旧 artifact 目录）哈希与字节数均已记录，未改动任何既有文件字节。
 
+- **独立审核修复（REJECT → 方案 A）**：独立审核发现 `D3Q_MATRIX_BINDING.json` 的 `arm_order` 使用 0-based repeat 标签（r0/r1/r2），与冻结工具 `d3_runner.py` 的 `ARM_ORDER` 常量（1-based r1/r2/r3）不一致。冻结的 `d3_runner.py` 是 tool-bound 权威契约，禁止修改；按方案 A 将 binding 对齐 runner：`arm_order` 逐项改为 `[["small","r1"],["large","r1"],["large","r2"],["small","r2"],["small","r3"],["large","r3"]]`，`slot_id_scheme` 同步改为 `slot_r{1,2,3}_{small|large}_p{00..11}`，并新增 `repeat_label_mapping`（任务书 repeat 0/1/2 = 冻结契约 r1/r2/r3，repeat k = r(k+1)）。模型顺序（small/large 交替）从未变化。受影响文件：`D3Q_MATRIX_BINDING.json`、`REPORT.md`、`test_d3q_budget.py`（纯标签替换，不改测试逻辑）、`SHA256SUMS`（重算被改文件条目）。
+
 ## 测试摘要
 命令（工作目录 = D 目录）：`python -m pytest test_d3q_budget.py -p no:cacheprovider -v`
 环境: Python 3.12.4 / pytest 9.1.1
