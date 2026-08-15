@@ -222,6 +222,45 @@ if _SP_SHUFFLE:
     _shuffle_direct_prereqs(int(_SP_SHUFFLE))
 
 
+# --- reachability repair (env-gated; no-op unless SP_REPAIR_PREREQ is set) ---------------
+# Built offline 2026-08-07. Mode 3 = variant F: repair ONLY the three floor-2 mob gates,
+# whose true gate enter_gnomish_mines never exceeded .2021 max-ever mastery. Everything
+# else keeps its true edges (91/94). Deliberately does NOT touch floor 3+: the shuffled arm
+# made enter_sewers a legal target all season and it still reached only 0.117%.
+_SP_REPAIR_MAPS: dict[int, dict[str, tuple[str, ...]]] = {
+    3: {
+        "defeat_gnome_archer": ("enter_dungeon",),
+        "defeat_gnome_warrior": ("enter_dungeon",),
+        "eat_bat": ("enter_dungeon",),
+    },
+}
+
+
+def _graph_fingerprint() -> str:
+    import hashlib as _h, json as _j
+    payload = _j.dumps({k: sorted(v) for k, v in sorted(DIRECT_PREREQS.items())}, sort_keys=True)
+    return _h.md5(payload.encode()).hexdigest()[:12]
+
+
+_SP_REPAIR = _os.environ.get("SP_REPAIR_PREREQ", "").strip()
+if _SP_REPAIR:
+    if _SP_SHUFFLE:
+        raise RuntimeError("SP_SHUFFLE_PREREQ and SP_REPAIR_PREREQ are mutually exclusive")
+    _rep = _SP_REPAIR_MAPS.get(int(_SP_REPAIR))
+    if _rep is None:
+        raise ValueError("SP_REPAIR_PREREQ: only mode 3 (floor2-only) is installed")
+    _unknown = {p for ps in _rep.values() for p in ps} - set(DIRECT_PREREQS)
+    if _unknown:
+        raise AssertionError("repair map names unknown achievements: %s" % sorted(_unknown))
+    DIRECT_PREREQS.update({a: frozenset(ps) for a, ps in _rep.items()})
+    print("[PREREQ-REPAIR] mode=%s(floor2-only) nodes=%d edges=%d skills_touched=%d"
+          % (_SP_REPAIR, len(DIRECT_PREREQS),
+             sum(len(v) for v in DIRECT_PREREQS.values()), len(_rep)), flush=True)
+
+if _SP_REPAIR or _SP_SHUFFLE or _os.environ.get("SP_GRAPH_FINGERPRINT", "").strip():
+    print("[PREREQ-GRAPH] fingerprint=%s" % _graph_fingerprint(), flush=True)
+
+
 _ALTERNATIVE_PATHS: dict[str, str] = {
     "collect_sapphire": "also minable with a diamond pickaxe (pickaxe>=4)",
     "collect_ruby": "also minable with a diamond pickaxe (pickaxe>=4)",

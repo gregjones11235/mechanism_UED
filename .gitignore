@@ -3,7 +3,6 @@
 env.sh
 *.key
 *_secret*
-
 # --- run artifacts ---
 outputs/
 outputs_*/
@@ -12,7 +11,10 @@ wandb/
 *.log
 runtime_analysis/
 dicode_src/*_report.json
-
+# --- patch backups / test scratch ---
+*.pre_r3floor
+*.pre_repair
+_*_battery.py
 # --- large binaries / archives ---
 *.tgz
 *.tar.gz
@@ -22,12 +24,10 @@ dicode_src/*_report.json
 *.graphml
 *.sif
 blob
-
 # --- eval / analysis scratch ---
 eval_*_seed*.json
 salvage/
 evac/
-
 # --- python ---
 __pycache__/
 *.py[oc]

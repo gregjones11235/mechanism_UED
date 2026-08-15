@@ -111,6 +111,7 @@ def check_code(
     *,
     mastered_cut: float = MASTERED_SR_CUT,
     mastered_prereq_exemption: bool = False,
+    r3_floor_clause: bool = True,
 ) -> GateVerdict:
     """Run the R1-R3 fidelity rules against one generated task's code.
 
@@ -128,6 +129,12 @@ def check_code(
             legitimate use of scaffolding and removes the "replay the mastered descent
             every episode" sampling tax that the 2e9 gap decomposition attributed the
             iron/gnomish consolidation deficit to. Default False -> v1 byte-identical.
+        r3_floor_clause: [surgical ablation, 2026-08-10] when False, a starting floor
+            is NOT counted as scaffolding-away a prerequisite in R3 (the premark and
+            inventory channels of R3, and R1/R2, are unchanged). Motivated by the
+            matched-seed archive audit: the gate's LLM repair rewrote 24/27 trained
+            mob levels from floor 2 to floor 0, starving the floor-2 cluster.
+            Default True -> byte-identical to the shipped gate.
 
     Returns:
         GateVerdict. ``ok=True`` also for unparseable code — a syntax failure is the
@@ -167,7 +174,7 @@ def check_code(
 
     # R3: scaffolding away the immediate prerequisite of an unmastered focus skill
     focus = sorted(a for a in relevant if sr[a] < mastered_cut)
-    scaffolded = premarked | inv_grants | flr_grants
+    scaffolded = premarked | inv_grants | (flr_grants if r3_floor_clause else frozenset())
     r3_pairs = []
     for f in focus:
         hit = sorted(
@@ -186,7 +193,7 @@ def check_code(
                     src.append("pre-marked")
                 if h in inv_grants:
                     src.append("granted via set_player_inventory")
-                if h in flr_grants:
+                if r3_floor_clause and h in flr_grants:
                     src.append("skipped via set_starting_floor")
                 how.append(f"{h} ({'; '.join(src)})")
             lines.append(

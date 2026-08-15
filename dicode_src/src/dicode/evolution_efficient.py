@@ -263,13 +263,14 @@ def evolve_and_validate_tasks(
             _snapshot = snapshot_from_metrics(metrics)
             _max_repairs = int(_sp_cfg.get("scaffold_gate_retries", 2))
             _r3_exempt = bool(_sp_cfg.get("r3_mastered_exemption", False))
+            _r3_floor = bool(_sp_cfg.get("r3_floor_clause", True))
             _n_checked = _n_violated = _n_repaired = _n_dropped = 0
             for res in generation_results:
                 code = res.get("code_string")
                 if not res.get("compiled") or not code:
                     continue
                 _n_checked += 1
-                verdict = check_code(code, _snapshot, mastered_prereq_exemption=_r3_exempt)
+                verdict = check_code(code, _snapshot, mastered_prereq_exemption=_r3_exempt, r3_floor_clause=_r3_floor)
                 if verdict.ok:
                     continue
                 _n_violated += 1
@@ -291,7 +292,7 @@ def evolve_and_validate_tasks(
                             f"compile: {compile_err})"
                         )
                         continue
-                    re_verdict = check_code(new_code, _snapshot, mastered_prereq_exemption=_r3_exempt)
+                    re_verdict = check_code(new_code, _snapshot, mastered_prereq_exemption=_r3_exempt, r3_floor_clause=_r3_floor)
                     code = new_code  # compiled: adopt as the new best attempt either way
                     if re_verdict.ok:
                         fixed = True
@@ -305,9 +306,10 @@ def evolve_and_validate_tasks(
                     res["compiled"] = False
                     res["error"] = "scaffold_gate: " + ",".join(verdict.violations)
                     _n_dropped += 1
+            _suffix = "" if _r3_floor else "  [R3-floor OFF]"
             print(
                 f"    WORKER: [ScaffoldGate] checked {_n_checked}, violations "
-                f"{_n_violated}, repaired {_n_repaired}, dropped {_n_dropped}."
+                f"{_n_violated}, repaired {_n_repaired}, dropped {_n_dropped}.{_suffix}"
             )
         except Exception as e:
             print(f"    WORKER: [ScaffoldGate] ERROR (gate inactive, all kept): {e}")
