@@ -1,0 +1,313 @@
+{
+  "classification": "D3Q_PHASE0_RECONCILIATION",
+  "cross_checks": {
+    "frozen_manifest_raw_sha256": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "load_manifest": "PASS",
+    "manifest_request_order": [
+      {
+        "index": 0,
+        "kind": "code",
+        "slot": "task_1"
+      },
+      {
+        "index": 1,
+        "kind": "code",
+        "slot": "task_2"
+      },
+      {
+        "index": 2,
+        "kind": "code",
+        "slot": "task_3"
+      },
+      {
+        "index": 3,
+        "kind": "code",
+        "slot": "task_4"
+      },
+      {
+        "index": 4,
+        "kind": "code",
+        "slot": "task_276"
+      },
+      {
+        "index": 5,
+        "kind": "code",
+        "slot": "task_277"
+      },
+      {
+        "index": 6,
+        "kind": "code",
+        "slot": "task_278"
+      },
+      {
+        "index": 7,
+        "kind": "code",
+        "slot": "task_279"
+      },
+      {
+        "index": 8,
+        "kind": "code",
+        "slot": "task_551"
+      },
+      {
+        "index": 9,
+        "kind": "code",
+        "slot": "task_552"
+      },
+      {
+        "index": 10,
+        "kind": "code",
+        "slot": "task_553"
+      },
+      {
+        "index": 11,
+        "kind": "code",
+        "slot": "task_554"
+      }
+    ],
+    "manifest_sha256_field": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+    "manifest_sha256_match": true,
+    "manifest_sha256_recomputed": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+    "manifest_source_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+    "manifest_system_prompt_sha256": "5cdc991c2a3aced259548a69043be70b87ff083bd969f09f98e6a44fe85772b5",
+    "manifest_tool_sha256": "7176e0d503a93c3f7b7d92503a025078be194875cd5b4b055c74095c7a0a14c9",
+    "manifest_user_prompt_sha256s_count": 12,
+    "old_launcher_raw_sha256": "840fbb5facb846e0b36c9ac2b594c94586b0f27feb25891a0612fd8c36c72ebc",
+    "old_launcher_self_seal": {
+      "artifact_sha256": "c6e2501917cd215a316c24ad7aa62ed423f3320748e5d1d8a31ede0529d06c8b",
+      "verified": true
+    },
+    "old_sha256sums_match": {
+      "expected": {
+        "REPORT.md": "2d0df3785f5c7abc275cdb592c21ed1e41a209be6fd35e4909e3812be8a9c004",
+        "deepseek_gate_launcher_result.json": "840fbb5facb846e0b36c9ac2b594c94586b0f27feb25891a0612fd8c36c72ebc"
+      },
+      "verified": true
+    },
+    "rerun_artifact_raw_sha256": "e16f44e03f295cf90876f6c78e6cd8b6f3a0d67e9859df713f13c8a24c7bb125",
+    "rerun_check_artifact_internal": {
+      "artifact_internal_sha256": "390f9f3b0f1f55ebe1d6ff019abf02962987c7522249752b3eafe5c8cf1ed13f",
+      "verified": true
+    },
+    "rerun_check_artifact_internal_self_field": {
+      "verified": true
+    },
+    "rerun_check_launcher_artifact_sha256_eq_artifact_canonical": {
+      "computed_canonical": "390f9f3b0f1f55ebe1d6ff019abf02962987c7522249752b3eafe5c8cf1ed13f",
+      "note": "literal check per task spec: false; launcher artifact_sha256 is the launcher result self-seal, not the gate artifact canonical hash; see rerun_check_launcher_self_seal and rerun_check_artifact_internal",
+      "verified": false
+    },
+    "rerun_check_launcher_self_seal": {
+      "computed_self_seal": "652e59623e8070a95a4af1c4eab936c89b6ef573c9930839854e6be435bb1713",
+      "verified": true
+    },
+    "rerun_check_local_artifact_raw": {
+      "local_artifact_sha256": "e16f44e03f295cf90876f6c78e6cd8b6f3a0d67e9859df713f13c8a24c7bb125",
+      "verified": true
+    },
+    "rerun_check_manifest_provider_sha256": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328",
+    "rerun_check_manifest_tool_sha256": "80ac2d92fb8e04a653058c50de06853973a8e67eae9fea1f633e7af0f9d96031",
+    "rerun_check_post_execution_sha256_eq_manifest": {
+      "verified": true
+    },
+    "rerun_check_pre_execution_sha256_eq_manifest": {
+      "verified": true
+    },
+    "rerun_check_provenance_match": {
+      "verified": true
+    },
+    "rerun_launcher_artifact_sha256_field": "652e59623e8070a95a4af1c4eab936c89b6ef573c9930839854e6be435bb1713",
+    "rerun_launcher_raw_sha256": "37dd88409d41f9cf0b3510d4b9924b12d4462653c36ebf10d5118341f458b05b"
+  },
+  "git": {
+    "base": "62b7d115b6de6506cb955733beaf1f5b8e79d521",
+    "base_is_ancestor": true,
+    "branch": "perf/llm-small-large-quality-cost-d3",
+    "head": "88adf4c3b9ef4135897697a6d7c455c80861a221",
+    "status_note": "porcelain captured at 2026-08-15T01:11Z; the only untracked entry is the phase0 reconciliation directory itself being created by this task; no pre-existing or foreign modifications present",
+    "status_porcelain": "?? dicode_src/experiments/performance/llm_research_d/d3q_phase0_reconciliation_20260815T011126Z/"
+  },
+  "protected_files": [
+    {
+      "bytes": 13163,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1_ALL_RESULTS.json",
+      "sha256": "7f579ae690ae4e7ce5143491809f2588b65db06aeb2f4c0042dcfc8071638076"
+    },
+    {
+      "bytes": 4102,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1_AUDIT_ADDENDUM.json",
+      "sha256": "483442d4b28b80dd209e226829eb624afc098e54389a4ec5a620cdfa021a05c2"
+    },
+    {
+      "bytes": 3632,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1_AUDIT_ADDENDUM.md",
+      "sha256": "b5f30b8e47a9e9cb5cbbaaf6830431558b7f8bf84a4a04a6a09c29df0966354e"
+    },
+    {
+      "bytes": 4248,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1_FINAL_AUDIT_REPORT.md",
+      "sha256": "f5acf1e8d4b13478365d8ef39403b662bcb3ce132b1c2785b7748ac1a2ff4be8"
+    },
+    {
+      "bytes": 10919,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1B_ALL_RESULTS.json",
+      "sha256": "b743ef6490b24cfa6713e421e29389c730945815859f6921dc46db4cb5be5b3c"
+    },
+    {
+      "bytes": 2616,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1B_BATCH_RESULTS.json",
+      "sha256": "f3d0df3d48168b612deacd20060a711c12952f1918ade0039de0171f30dd324a"
+    },
+    {
+      "bytes": 6226,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1B_FINAL_REPORT.md",
+      "sha256": "45584507a0398d9410a47f827789ffabcb803145c31bf6f79d5b034cc49bb770"
+    },
+    {
+      "bytes": 1351,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1B_GPU0_CONTINUOUS.csv",
+      "sha256": "f2e9df64af01f48fad6ca87256eeb35eac2a2a77aed949a5b01a683b0fbd87d5"
+    },
+    {
+      "bytes": 42071,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1C_ALL_RESULTS.json",
+      "sha256": "bf4146aca928fe9e152fca99b0d98f9507259cbdd8658eee20f341047fdea09e"
+    },
+    {
+      "bytes": 4708,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1C_FINAL_REPORT.md",
+      "sha256": "d502083d759272030699112f420e7d86ffd47d9eaf5fb6dbefe9db8258a94dd2"
+    },
+    {
+      "bytes": 8338,
+      "path": "dicode_src/experiments/performance/llm_research_d/d1c_harness.py",
+      "sha256": "682069123a1370b6839cdf20580c09ead4b1fec4159817d1b956fb77ac42b317"
+    },
+    {
+      "bytes": 3714,
+      "path": "dicode_src/experiments/performance/llm_research_d/D1C_ROOT_CAUSE_HYPOTHESES.md",
+      "sha256": "060b761c2eea77b6d089abd8dc201f7a832c8df1c2730dc8aca22371cc7ea20a"
+    },
+    {
+      "bytes": 5343,
+      "path": "dicode_src/experiments/performance/llm_research_d/D2_AUDIT_REPAIR.md",
+      "sha256": "0b9bc480ed6f0378a12b780ac75943eebea5d02b1c169804532efb1115da9159"
+    },
+    {
+      "bytes": 2058,
+      "path": "dicode_src/experiments/performance/llm_research_d/D2_EVIDENCE_FINAL.json",
+      "sha256": "a13e0c4b91de2ed81af3e2c65b8b161531abb44b40de71091732bb6f52124df1"
+    },
+    {
+      "bytes": 2457,
+      "path": "dicode_src/experiments/performance/llm_research_d/D2_PROVIDER_PROBE.json",
+      "sha256": "21d9864115b5cf021a3afd3eb2fe15eccfd5460147ae9466bdca8af6bde7ffc4"
+    },
+    {
+      "bytes": 14857,
+      "path": "dicode_src/experiments/performance/llm_research_d/d2_provider_probe.py",
+      "sha256": "fc67624bb1906aa593ba481a34238da5d121a489359061b53568ee18b8d0f1d3"
+    },
+    {
+      "bytes": 1466,
+      "path": "dicode_src/experiments/performance/llm_research_d/D2_RESULT.json",
+      "sha256": "3fc32bdc228a522cc602f13d3638d669296360260652fa2b8e691438eebb0cc5"
+    },
+    {
+      "bytes": 11328,
+      "path": "dicode_src/experiments/performance/llm_research_d/CHAT_UNBOUNDED_RESULTS.json",
+      "sha256": "026ed738f69816517847cf91880edf4b15733af8f5b431583c9884e3c7770a52"
+    },
+    {
+      "bytes": 5013,
+      "path": "dicode_src/experiments/performance/llm_research_d/CHAT_UNBOUNDED_RESULTS_AUDITED.json",
+      "sha256": "08b6a15301cc58fc8a19abbcdd9c45c99c5ccf07e4c76125ee7fff04118331c4"
+    },
+    {
+      "bytes": 4158,
+      "path": "dicode_src/experiments/performance/llm_research_d/D_PHASE_FINAL_REPORT.md",
+      "sha256": "9911bad3405cae3147d16ec0b84b4bbb74a94146f09c83d77782bcf9964a4e3e"
+    },
+    {
+      "bytes": 5013,
+      "path": "dicode_src/experiments/performance/llm_research_d/D_PHASE_FINAL_RESULT.json",
+      "sha256": "fe60ed28196ea997157ab0597785a5e256876c7e49d053f4ce39658b22d0bfe5"
+    },
+    {
+      "bytes": 1032,
+      "path": "dicode_src/experiments/performance/llm_research_d/FREEZE_EVIDENCE.json",
+      "sha256": "ac7072499b2174534c8c97e364d7fcef91286c4a3a029c1682368f40d053b326"
+    },
+    {
+      "bytes": 276038,
+      "path": "dicode_src/experiments/performance/llm_research_d/FROZEN_MANIFEST.json",
+      "sha256": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e"
+    },
+    {
+      "bytes": 33777,
+      "path": "dicode_src/experiments/performance/llm_research_d/FROZEN_EMBEDDING_MANIFEST.json",
+      "sha256": "3dedd76e461bece158e5a81559aff906c2cf07cd03ab4d9072e6ca2222fd8a7a"
+    },
+    {
+      "bytes": 25177,
+      "path": "dicode_src/experiments/performance/llm_research_d/FROZEN_PRODUCTION_EMBEDDING_MANIFEST.json",
+      "sha256": "32b98de712e7a4e1ff4376e8b81d5369e43030902d380fe6f3ccfd055cd757d7"
+    },
+    {
+      "bytes": 9125,
+      "path": "dicode_src/experiments/performance/llm_research_d/MASON_LLM_BASELINE_AUDIT.json",
+      "sha256": "f1ff56f47a217bab03205bf35eaeed6a9f09b3e3e4fb336a1a66c009d05426d8"
+    },
+    {
+      "bytes": 5885,
+      "path": "dicode_src/experiments/performance/llm_research_d/MASON_LLM_BASELINE_AUDIT.md",
+      "sha256": "232de6a860c56baef3dd17fe92e30fd641fe15b4b23092ce9efab79d9815d559"
+    },
+    {
+      "bytes": 6967,
+      "path": "dicode_src/experiments/performance/llm_research_d/LLM_REPLAY_REPORT.md",
+      "sha256": "e99f95d9dcd6d552c1675225b80fe1db80819c19a3deb0b13375f93381768e81"
+    },
+    {
+      "bytes": 7255,
+      "path": "dicode_src/experiments/performance/llm_research_d/ROOT_CAUSE_AND_DESIGN.md",
+      "sha256": "a0300b5bf41d757fdf95e2e6c48e1261ccb17fc04a23e590e27182141987d6d5"
+    },
+    {
+      "bytes": 2366,
+      "path": "dicode_src/experiments/performance/llm_research_d/D3Q_HANDOFF_GOAL.md",
+      "sha256": "4213a4239f2146a74d2d229170e72c0b90f37761516cdffd32f1f51a183cb109"
+    },
+    {
+      "bytes": 7489,
+      "path": "dicode_src/experiments/performance/llm_research_d/D3Q_HANDOFF_PROMPT.md",
+      "sha256": "98c32db157c1e2a610bc14712120ab2e6beeb694b461b91e0fcb7bcad6cc6ae3"
+    },
+    {
+      "bytes": 1898,
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_artifacts/deepseek_flash_metadata_gate_20260814T052903Z/deepseek_gate_launcher_result.json",
+      "sha256": "840fbb5facb846e0b36c9ac2b594c94586b0f27feb25891a0612fd8c36c72ebc"
+    },
+    {
+      "bytes": 1863,
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_artifacts/deepseek_flash_metadata_gate_20260814T052903Z/REPORT.md",
+      "sha256": "2d0df3785f5c7abc275cdb592c21ed1e41a209be6fd35e4909e3812be8a9c004"
+    },
+    {
+      "bytes": 177,
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_artifacts/deepseek_flash_metadata_gate_20260814T052903Z/SHA256SUMS",
+      "sha256": "61f58d9d4b722a883bf3c40599de703b1df843d6a45104d2a3787f2c6f349373"
+    },
+    {
+      "bytes": 2342,
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_artifacts/deepseek_flash_metadata_gate_rerun_20260814T230252Z/deepseek_gate_launcher_result.json",
+      "sha256": "37dd88409d41f9cf0b3510d4b9924b12d4462653c36ebf10d5118341f458b05b"
+    },
+    {
+      "bytes": 2953,
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_artifacts/deepseek_flash_metadata_gate_rerun_20260814T230252Z/deepseek_metadata_gate_artifact.json",
+      "sha256": "e16f44e03f295cf90876f6c78e6cd8b6f3a0d67e9859df713f13c8a24c7bb125"
+    }
+  ],
+  "recorded_utc": "2026-08-15T01:11:26Z"
+}
