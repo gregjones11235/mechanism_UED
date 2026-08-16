@@ -61,4 +61,9 @@ decided_by: codex-primary (direct execution authorized by user goal)
 - 指令：用户在 phase-2 恢复时要求"注意使用代理端口连接服务器"，故按冻结 Probe 顺序复测代理映射。
 - Probe A 复测：Test-NetConnection 117.50.183.232:39467 -> TcpTestSucceeded=False；117.50.183.232:23 -> TcpTestSucceeded=False。两条代理映射仍在 TCP 层不可达（未建立 SSH，无远端副作用）。
 - 处置：按冻结 Probe 纪律与 2026-08-16T03:52:59Z 记录的用户授权降级，继续使用直连路由 oseasy@172.25.14.221:22；若用户提供新的代理端口，将按序重新 probe 并切换。
-- 直连复核（只读 marker）：hostname i-00000226；WORKTREE_OK；Python 3.10.20；ENV_OK；GPU0 15573 MiB（Ollama，保持不动）、GPU1 1 MiB、GPU2 1 MiB（UUID GPU-8df11537-ab79-722d-606f-411966196c4c，与冻结契约一致，无外部 compute 进程）、GPU3 1 MiB。
+
+## Re-probe 2026-08-16T06:27:35Z（preflight 启动前；用户再次指示使用代理端口）
+
+- Probe A 复测：117.50.183.232:23 TCP ERROR（connection refused）；117.50.183.232:39467 TCP TIMEOUT。两条代理映射仍在 TCP 层不可达（SSH 未建立，无远端副作用）。
+- 处置：按冻结 Probe 纪律与 2026-08-16T03:52:59Z 记录的用户授权降级，继续使用直连路由 oseasy@172.25.14.221:22 执行 preflight orchestrator；若用户提供新代理端口，将按序重新 probe 并切换。
+- 直连 preflight 前置只读核查（2026-08-16T06:27:35Z）：GPU2 1 MiB / 0%（UUID GPU-8df11537-ab79-722d-606f-411966196c4c 与冻结契约一致，无外部 compute 进程）；GPU3 34606 MiB / 100%（perf48_async_pipeline_harness 组件 B，另一工作线，不触碰）；GPU0 Ollama llama-server x2（qwen2.5-coder:14b loaded，digest 9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849，保持不动）；WORKTREE_OK；frozen 输入六项齐全（archive_snapshot/candidate_codes/checkpoint/conditioning.npy/config.yaml/rng.npy）。
