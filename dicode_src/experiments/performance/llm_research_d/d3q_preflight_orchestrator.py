@@ -410,20 +410,24 @@ def _arm_execute_metrics(arm_dir: Path) -> tuple[float, int]:
 
 
 def _interference_check(arms_root: Path, arm_ids: Sequence[str]) -> Dict[str, Any]:
-    """Fail closed unless every arm's per-candidate GPU execute time is within
-    RECOVERY_EXECUTE_RATIO_LIMIT of the median of the other arms. A co-resident
-    GPU context that stole compute would inflate the overlapped arm(s)."""
+    """Fail closed unless every arm's GPU execute time is within
+    RECOVERY_EXECUTE_RATIO_LIMIT of the MEDIAN ABSOLUTE execute of the other
+    arms. A co-resident GPU context that stole compute would inflate the
+    overlapped arm(s). Absolute comparison is used because execute has a large
+    fixed cost (~190s for the 40-update rollout): incident-05 data showed
+    6-candidate arms taking the same absolute execute as 12-candidate arms,
+    which invalidates per-candidate normalization."""
     metrics = {a: _arm_execute_metrics(arms_root / a) for a in arm_ids}
     checks: Dict[str, Any] = {}
     for arm in arm_ids:
         dur, n = metrics[arm]
-        others = sorted(metrics[b][0] / metrics[b][1] for b in arm_ids if b != arm)
+        others = sorted(metrics[b][0] for b in arm_ids if b != arm)
         median = others[len(others) // 2]
-        norm = dur / n
-        ratio = norm / median if median > 0 else float("inf")
+        ratio = dur / median if median > 0 else float("inf")
         checks[arm] = {
-            "execute_s": dur, "candidates": n, "norm_execute_per_cand": norm,
-            "median_others_norm": median, "ratio": ratio, "ok": ratio <= RECOVERY_EXECUTE_RATIO_LIMIT,
+            "execute_s": dur, "candidates": n,
+            "median_others_execute_s": median, "ratio_vs_median": ratio,
+            "ok": ratio <= RECOVERY_EXECUTE_RATIO_LIMIT,
         }
     if not all(c["ok"] for c in checks.values()):
         raise OrchestratorError("recovery_interference_check_failed", checks)

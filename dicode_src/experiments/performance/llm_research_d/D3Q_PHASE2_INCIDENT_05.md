@@ -45,6 +45,14 @@ context stealing compute would have inflated them. A 262 MiB context on a
 48 GiB card poses no memory pressure. Acceptance numerics are computed under
 `--xla_gpu_deterministic_ops=true` and are unaffected by scheduling.
 
+Additional structural finding from all 6 arms: `preflight_eval_execute` has a
+large FIXED cost (~190s, the 40-update rollout at 1024x128) that dominates the
+per-candidate cost — small_r1 (6 candidates) executed in 192.6s, essentially
+equal to the 12-candidate large arms (192-195s). Per-candidate normalization
+is therefore invalid; the recovery interference check compares each arm's
+absolute execute against the median absolute execute of the other arms
+(limit 1.25x).
+
 ## Recovery (implemented, tested)
 
 Following the incident-02 precedent (`recover-completed-chunk`, allowed reason
