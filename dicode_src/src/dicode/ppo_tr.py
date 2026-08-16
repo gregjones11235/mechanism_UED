@@ -91,6 +91,7 @@ def make_train(
 	task_embeddings=None,
 	task_distribution_proportions=None,
 	initial_global_update_step=0,
+	host_callback_free=False,
 ):
 	"""Sets up the environment, network, and returns the JIT-compiled train function."""
 	# --- Environment Setup (IDENTICAL TO OLD CODE) ---
@@ -694,7 +695,8 @@ def make_train(
 			metrics_to_log = (*losses_mean, gn_mean, gn_max)
 
 			current_step = _resolve_global_step(initial_global_update_step, dynamic_global_update_step, update_step)
-			jax.debug.callback(_log_callback, metrics_to_log, current_step)
+			if not host_callback_free:
+				jax.debug.callback(_log_callback, metrics_to_log, current_step)
 			
 
 			# D. PREPARE FOR NEXT STEP
@@ -714,12 +716,21 @@ def make_train(
 				rng,
 			)
 
+			if host_callback_free:
+				return next_runner_state, (scoring_data, metrics_to_log)
 			return next_runner_state, scoring_data
 
 		# --- Run fixed-iteration training loop ---
-		(final_runner_state, scan_scoring_data) = jax.lax.scan(
-			_update_step, initial_runner_state, None, length=NUM_UPDATES
-		)
+		if host_callback_free:
+			(final_runner_state, scan_outputs) = jax.lax.scan(
+				_update_step, initial_runner_state, None, length=NUM_UPDATES
+			)
+			scan_scoring_data, scan_train_metrics = scan_outputs
+		else:
+			(final_runner_state, scan_scoring_data) = jax.lax.scan(
+				_update_step, initial_runner_state, None, length=NUM_UPDATES
+			)
+			scan_train_metrics = None
 
 		final_train_state = final_runner_state[0]
 
@@ -743,6 +754,7 @@ def make_train(
 			"train_state": final_train_state,
 			"metrics": {
 				"scoring_window_data": final_scoring_window_data,
+				"train_metrics": scan_train_metrics,
 				"num_updates_done": NUM_UPDATES,
 				"num_env_steps_done": num_env_steps_done,
 			},
@@ -1292,13 +1304,44 @@ def run_training_session(
 	task_signature=None,
 ):
 	config_t = config.training
+	host_callback_free = bool((config.get("runtime", {}) if hasattr(config, "get") else {}).get("host_callback_free", False))
+
+	def _emit_callback_free_metrics(results):
+		if not host_callback_free:
+			return
+		# Keep the baseline log schema and update ordering, but emit after the
+		# compiled scan has completed so no Python callback runs inside the JIT.
+		metric_arrays = jax.device_get(results["metrics"].get("train_metrics"))
+		if metric_arrays is None:
+			raise RuntimeError("callback-free training returned no train_metrics")
+		# ``lax.scan`` preserves the tuple structure and stacks each metric
+		# independently, so device_get returns six arrays shaped [updates], not
+		# an [updates, 6] matrix.  Reconstruct rows without changing ordering.
+		if isinstance(metric_arrays, tuple):
+			metrics_rows = zip(*metric_arrays)
+		else:
+			metrics_rows = metric_arrays
+		for update_offset, row in enumerate(metrics_rows):
+			t_loss, v_loss, a_loss, ent, g_norm_mean, g_norm_max = row
+			wandb.log(
+				{
+					"train/total_loss": t_loss,
+					"train/value_loss": v_loss,
+					"train/actor_loss": a_loss,
+					"train/entropy": ent,
+					"train/grad_norm_mean": g_norm_mean,
+					"train/grad_norm_max": g_norm_max,
+					"global_step": global_update_step + update_offset,
+				}
+			)
+		
 	profiling = bool((config.get("runtime_profiling", {}) if hasattr(config, "get") else {}).get("enabled", False))
 	perf = config.get("performance", {}) if hasattr(config, "get") else {}
 	cache_on = bool(perf.get("train_compile_cache", False))
 	if profiling and not cache_on:
 		with tracker.span("train_build"):
 			train_fn = make_train(config_t, task_classes, num_training_updates, task_embeddings,
-							 task_distribution_proportions, global_update_step)
+								 task_distribution_proportions, global_update_step, host_callback_free=host_callback_free)
 		train_jit = jax.jit(train_fn)
 		with tracker.span("train_lower_compile"):
 			compiled = train_jit.lower(rng, train_state, current_original_return).compile()
@@ -1307,15 +1350,16 @@ def run_training_session(
 			for leaf in jax.tree_util.tree_leaves(results):
 				if hasattr(leaf, "block_until_ready"):
 					leaf.block_until_ready()
+		_emit_callback_free_metrics(results)
 		print("JIT compiling and running training session (Transformer)...")
 		return results
 	key = train_compile_cache_key(config_t, task_signature, num_training_updates, task_embeddings,
-						 task_distribution_proportions, train_state, rng, current_original_return, global_update_step) if cache_on else None
+								 task_distribution_proportions, train_state, rng, current_original_return, global_update_step) if cache_on else None
 	if cache_on and key is not None:
 		def _builder():
 			with tracker.span("train_build"):
 				return jax.jit(make_train(config_t, task_classes, num_training_updates, task_embeddings,
-							 task_distribution_proportions, global_update_step))
+								 task_distribution_proportions, global_update_step, host_callback_free=host_callback_free))
 		compiled, cache_hit = _get_or_compile_train(key, _builder,
 			(rng, train_state, current_original_return, jnp.asarray(global_update_step)), True,
 			perf.get("compiled_cache_max_entries", 8))
@@ -1326,13 +1370,15 @@ def run_training_session(
 			if tracker.enabled:
 				for leaf in jax.tree_util.tree_leaves(results):
 					if hasattr(leaf, "block_until_ready"): leaf.block_until_ready()
+		_emit_callback_free_metrics(results)
 		return results
 	train_fn = make_train(config_t, task_classes, num_training_updates, task_embeddings,
-						 task_distribution_proportions, global_update_step)
+								 task_distribution_proportions, global_update_step, host_callback_free=host_callback_free)
 	train_jit = jax.jit(train_fn)
 	print("JIT compiling and running training session (Transformer)...")
 	start_time = time.time()
 	results = train_jit(rng, train_state, current_original_return)
+	_emit_callback_free_metrics(results)
 	print(f"Session finished in {time.time() - start_time:.2f} seconds.")
 	return results
 

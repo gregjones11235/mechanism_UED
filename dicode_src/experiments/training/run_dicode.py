@@ -10,6 +10,7 @@ This script orchestrates the DiCode training loop, which interleaves:
 import concurrent.futures
 import gc
 import os
+import pickle
 import random
 import time
 
@@ -34,6 +35,7 @@ from dicode.skill_preflight.contract import (
 from dicode.ppo_tr import clear_train_compile_cache
 from dicode.craftax_evaluation import clear_compiled_evaluator_cache
 from dicode.selection import sample_tasks_for_training
+from dicode.session_boundary import BoundaryStore, sha256_bytes, sha256_path
 from dicode.setup import run_initial_seed_training, setup_experiment
 from dicode.training import run_session_training
 
@@ -103,6 +105,40 @@ def main(config: DictConfig):
     rl_ckpt_path = os.path.join(os.getcwd(), config.checkpoint_dir)
     last_known_original_return = 0.0
 
+    runtime_cfg = config.get("runtime", {})
+    boundary_mode = bool(runtime_cfg.get("session_isolated", False))
+    max_sessions_per_process = runtime_cfg.get("max_sessions_per_process")
+    if max_sessions_per_process is not None:
+        max_sessions_per_process = int(max_sessions_per_process)
+        if max_sessions_per_process <= 0:
+            raise ValueError("runtime.max_sessions_per_process must be positive")
+    boundary_store = BoundaryStore(
+        runtime_cfg.get("boundary_dir", os.path.join(os.getcwd(), "session_boundaries"))
+    )
+    restored_pending_worker_results = None
+    restored_sessions_since_evolution = None
+    restored_boundary = boundary_store.latest() if boundary_mode else None
+    if restored_boundary is not None:
+        boundary_manifest, boundary_state = restored_boundary
+        if latest_step is None or boundary_manifest.global_update_step != int(latest_step):
+            raise RuntimeError(
+                "SESSION_BOUNDARY_CHECKPOINT_MISMATCH: boundary and TrainState steps differ"
+            )
+        rng = boundary_state["rng"]
+        global_update_step = int(boundary_state["global_update_step"])
+        global_env_steps = int(boundary_state["global_env_steps"])
+        last_known_original_return = float(boundary_state["last_known_original_return"])
+        cumulative_compiled = int(boundary_state["cumulative_compiled"])
+        cumulative_activated = int(boundary_state["cumulative_activated"])
+        restored_pending_worker_results = boundary_state.get("pending_worker_results")
+        restored_sessions_since_evolution = int(
+            boundary_state.get("sessions_since_evolution", 1)
+        )
+        print(
+            f"[Boundary] restored session={boundary_manifest.session_idx} "
+            f"global_update_step={global_update_step} global_env_steps={global_env_steps}"
+        )
+
     # =========================================================================
     # Phase 1.5: Initial Seed Training (only if starting from scratch)
     # =========================================================================
@@ -152,6 +188,9 @@ def main(config: DictConfig):
     # If k=2: Train -> Hold -> Sync & Train with new tasks
     evolution_interval = config.dicode_manager.get("evolution_interval", 2)
     sessions_since_evolution = evolution_interval  # Start with sync on first loop
+    if restored_sessions_since_evolution is not None:
+        sessions_since_evolution = restored_sessions_since_evolution
+    sessions_completed_in_process = 0
 
     # Research-only delayed preflight scheduling.  The import and manager
     # construction are deliberately absent from the default-off path so that it
@@ -206,7 +245,16 @@ def main(config: DictConfig):
         current_worker_wait_time = 0.0
         current_worker_total_time = 0.0
 
-        should_sync = sessions_since_evolution >= evolution_interval
+        if restored_pending_worker_results is not None:
+            print("  [Boundary] Applying pending evolution results from prior process.")
+            new_task_ids, compiled_count = _process_worker_results(
+                restored_pending_worker_results, gen_manager, config
+            )
+            restored_pending_worker_results = None
+            sessions_since_evolution = 1
+            should_sync = False
+        else:
+            should_sync = sessions_since_evolution >= evolution_interval
 
         if should_sync:
             print(f"  [Sync] Iteration {evolution_interval} reached. Waiting for worker...")
@@ -522,6 +570,7 @@ def main(config: DictConfig):
             num_updates_in_session,
             categorized_tasks,
             evaluation_metrics,
+            session_context,
         ) = run_session_training(
             config,
             rng,
@@ -635,6 +684,58 @@ def main(config: DictConfig):
             raise
         else:
             tracker.record("task_graph_save", _graph_start, session=current_session_idx)
+
+        sessions_completed_in_process += 1
+        if boundary_mode and (
+            max_sessions_per_process is None
+            or sessions_completed_in_process >= max_sessions_per_process
+        ):
+            pending_worker_results = None
+            if evolve_future is not None:
+                if not evolve_future.done():
+                    raise RuntimeError(
+                        "SESSION_BOUNDARY_BLOCKED_IN_FLIGHT_EVOLUTION: "
+                        "cannot publish a process boundary while the generation worker is active"
+                    )
+                pending_worker_results = evolve_future.result()
+                evolve_future = None
+            graph_path = os.path.join(os.getcwd(), "task_graph.graphml")
+            checkpoint_path = os.path.join(rl_ckpt_path, str(global_update_step))
+            references = {
+                "train_state": sha256_path(checkpoint_path),
+                "task_graph": sha256_path(graph_path),
+                "sampled_task_ids": sha256_bytes(
+                    pickle.dumps(sampled_task_ids, protocol=pickle.HIGHEST_PROTOCOL)
+                ),
+                "session_context": sha256_bytes(
+                    pickle.dumps(session_context, protocol=pickle.HIGHEST_PROTOCOL)
+                ),
+            }
+            boundary_store.write(
+                session_idx=current_session_idx,
+                global_update_step=global_update_step,
+                global_env_steps=global_env_steps,
+                state={
+                    "rng": rng,
+                    "global_update_step": global_update_step,
+                    "global_env_steps": global_env_steps,
+                    "last_known_original_return": last_known_original_return,
+                    "cumulative_compiled": cumulative_compiled,
+                    "cumulative_activated": cumulative_activated,
+                    "sessions_since_evolution": sessions_since_evolution,
+                    "sampled_task_ids": sampled_task_ids,
+                    "session_context": session_context,
+                    "pending_worker_results": pending_worker_results,
+                    "python_random_state": random.getstate(),
+                },
+                references=references,
+                provenance={
+                    "git_head": os.environ.get("DICODE_GIT_HEAD", "UNDECLARED"),
+                    "gpu_uuid": os.environ.get("DICODE_GPU_UUID", "UNDECLARED"),
+                },
+            )
+            print("[Boundary] committed atomically; stopping process for fresh restore.")
+            break
 
         # --- Step 7: Logging ---
         _summary_start = time.monotonic_ns()
