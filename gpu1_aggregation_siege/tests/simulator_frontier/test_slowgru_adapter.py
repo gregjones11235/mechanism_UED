@@ -14,6 +14,8 @@ real 98304 pkl (that is the object-check-only script's job).  Tests cover:
 from __future__ import annotations
 
 import pickle
+import sys
+import types
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -371,3 +373,109 @@ class TestTrainingSurfacePending:
             adapter.save_full_state("x.pkl", {}, {})
         with pytest.raises(NotImplementedError):
             adapter.restore_full_state("/fake/ckpt.pkl")
+
+
+class TestSlowGRUCallerParamsBinding:
+    """Regression: E3 continuation forwards must never use stale mount params."""
+
+    @staticmethod
+    def _loaded_adapter(initial_params):
+        profile = _slowgru_profile_for("a" * 64, "b" * 64)
+        adapter = SlowGRUStudentAdapter(
+            profile, slowgru_runtime_path="/fake",
+            checkpoint_contract_path="/fake/contract.json",
+            expected_network_src_sha256="c" * 64,
+            expected_trainer_src_sha256="d" * 64)
+        adapter._handle = {"params": initial_params, "sentinel": "mounted"}
+        adapter._loaded = {"params_sha256": "a" * 64}
+        return adapter
+
+    @staticmethod
+    def _fake_jax():
+        class _Tree:
+            @staticmethod
+            def tree_leaves(value):
+                if isinstance(value, dict):
+                    return [value[key] for key in sorted(value)]
+                return [value]
+
+            @staticmethod
+            def tree_structure(value):
+                if isinstance(value, dict):
+                    return ("dict", tuple(sorted(value)))
+                return type(value).__name__
+
+        return types.SimpleNamespace(tree_util=_Tree(),
+                                     device_get=lambda value: value)
+
+    @staticmethod
+    def _memory(batch=2):
+        return {
+            "memories": np.zeros((batch, 128, 2, 256), np.float32),
+            "memories_mask": np.zeros((batch, 8, 1, 129), np.bool_),
+            "memories_mask_idx": np.full((batch,), 129, np.int32),
+            "longstate.h": np.zeros((batch, 256), np.float32),
+            "longstate.buf": np.zeros((batch, 32, 256), np.float32),
+            "longstate.count": np.zeros((batch,), np.int32),
+        }
+
+    def test_runtime_receives_caller_params_without_mutating_mount(self,
+                                                                  monkeypatch):
+        initial = {"w": np.zeros((2, 2), np.float32)}
+        updated = {"w": np.ones((2, 2), np.float32)}
+        adapter = self._loaded_adapter(initial)
+        seen = {}
+
+        def policy_step(handle, observation, memory, done_mask, true_done=None):
+            seen["handle"] = handle
+            seen["done_mask"] = np.asarray(done_mask)
+            seen["true_done"] = np.asarray(true_done)
+            batch = observation.shape[0]
+            return (np.zeros(batch, np.int32), memory,
+                    {"logits": np.zeros((batch, 43), np.float32),
+                     "value": np.zeros(batch, np.float32)})
+
+        monkeypatch.setitem(sys.modules, "slowgru_runtime",
+                            types.SimpleNamespace(policy_step=policy_step))
+        monkeypatch.setitem(sys.modules, "jax", self._fake_jax())
+        adapter.policy_step(updated, np.zeros((2, 8335), np.float32),
+                            self._memory(), None, None, None, True)
+        assert seen["handle"]["params"] is updated
+        assert seen["handle"] is not adapter._handle
+        assert adapter._handle["params"] is initial
+        assert not seen["done_mask"].any()
+        assert not seen["true_done"].any()
+
+    def test_runtime_params_are_revalidated_for_new_tree(self, monkeypatch):
+        initial = {"w": np.zeros((2, 2), np.float32)}
+        updated = {"w": np.ones((2, 2), np.float32)}
+        adapter = self._loaded_adapter(initial)
+
+        def policy_step(handle, observation, memory, done_mask, true_done=None):
+            batch = observation.shape[0]
+            return (np.zeros(batch, np.int32), memory,
+                    {"logits": np.zeros((batch, 43), np.float32),
+                     "value": np.zeros(batch, np.float32)})
+
+        monkeypatch.setitem(sys.modules, "slowgru_runtime",
+                            types.SimpleNamespace(policy_step=policy_step))
+        monkeypatch.setitem(sys.modules, "jax", self._fake_jax())
+        adapter.policy_step(updated, np.zeros((2, 8335), np.float32),
+                            self._memory(), None, None, None, True)
+        updated = {"w": np.array([[np.nan, 1], [1, 1]], np.float32)}
+        with pytest.raises(SlowGRUMountError, match="NaN/Inf"):
+            adapter.policy_step(updated, np.zeros((2, 8335), np.float32),
+                                self._memory(), None, None, None, True)
+
+    @pytest.mark.parametrize("bad", [None, {"w": np.zeros((3, 2), np.float32)},
+                                      {"w": np.array([[np.nan, 0], [0, 0]],
+                                                     np.float32)}])
+    def test_bad_runtime_params_fail_closed(self, bad):
+        initial = {"w": np.zeros((2, 2), np.float32)}
+        adapter = self._loaded_adapter(initial)
+        runtime = types.SimpleNamespace(policy_step=lambda *args, **kwargs: None)
+        with mock.patch.dict(sys.modules, {"jax": self._fake_jax(),
+                                           "slowgru_runtime": runtime}):
+            with pytest.raises(SlowGRUMountError):
+                adapter.policy_step(bad, np.zeros((2, 8335), np.float32),
+                                    self._memory(), None, None, None, True)

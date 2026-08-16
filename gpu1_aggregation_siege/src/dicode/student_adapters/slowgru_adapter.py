@@ -21,6 +21,7 @@ importing it at module level never crashes a jax-less interpreter.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
@@ -78,6 +79,52 @@ def _stable_softmax(x: np.ndarray) -> np.ndarray:
     x = x - np.max(x, axis=-1, keepdims=True)
     e = np.exp(x)
     return e / np.sum(e, axis=-1, keepdims=True)
+
+
+def _validate_runtime_params(params: Any, reference: Any, cache: set[tuple] | None = None) -> None:
+    """Fail closed before binding caller-owned params to a runtime forward.
+
+    The SlowGRU source checkpoint is used only to construct and authenticate the
+    network runtime.  Resumed E3 RunState parameters are allowed to differ in
+    value, but never in pytree structure, leaf shape/dtype, or finiteness.
+    """
+    _require(params is not None, "policy_step params must not be None")
+    try:
+        import jax
+        leaves = jax.tree_util.tree_leaves(params)
+        ref_leaves = jax.tree_util.tree_leaves(reference)
+        _require(
+            jax.tree_util.tree_structure(params)
+            == jax.tree_util.tree_structure(reference),
+            "policy_step params pytree structure differs from mounted SlowGRU params",
+        )
+    except SlowGRUMountError:
+        raise
+    except Exception as exc:
+        raise SlowGRUMountError(
+            f"cannot inspect policy_step params pytree: {type(exc).__name__}: {exc}"
+        ) from exc
+    token = (id(params), tuple((id(x), getattr(x, "shape", None), str(getattr(x, "dtype", ""))) for x in leaves))
+    if cache is not None and token in cache:
+        return
+    _require(len(leaves) == len(ref_leaves),
+             "policy_step params leaf count differs from mounted SlowGRU params")
+    for index, (leaf, ref_leaf) in enumerate(zip(leaves, ref_leaves)):
+        try:
+            arr = np.asarray(jax.device_get(leaf))
+            ref_arr = np.asarray(jax.device_get(ref_leaf))
+        except Exception as exc:
+            raise SlowGRUMountError(
+                f"cannot materialize policy_step params leaf #{index}: {exc}"
+            ) from exc
+        _require(arr.shape == ref_arr.shape and arr.dtype == ref_arr.dtype,
+                 f"policy_step params leaf #{index} shape/dtype "
+                 f"{arr.shape}/{arr.dtype} != mounted {ref_arr.shape}/{ref_arr.dtype}")
+        _require(not np.issubdtype(arr.dtype, np.number)
+                 or bool(np.isfinite(arr).all()),
+                 f"policy_step params leaf #{index} contains NaN/Inf")
+    if cache is not None:
+        cache.add(token)
 
 
 def _pad_memory_batch(memory_nested: dict, target_batch: int) -> dict:
@@ -508,6 +555,22 @@ class SlowGRUStudentAdapter:
         self._require_loaded()
         import slowgru_runtime as sr
 
+        # The production runtime stores the authenticated source-checkpoint
+        # params in its handle and policy_step reads handle["params"].  E3
+        # continuation, however, supplies newer params restored from its
+        # canonical RunState.  Bind those caller-owned params to an ephemeral
+        # shallow handle: no mutation of self._handle, no fallback to stale
+        # source params, and no network reimplementation.
+        # Validate on every call.  Callers may mutate a pytree in place, so
+        # object-identity caching cannot safely prove structure/finiteness.
+        cache = getattr(self, "_validated_param_tokens", None)
+        if cache is None:
+            cache = set()
+            self._validated_param_tokens = cache
+        _validate_runtime_params(params, self._handle.get("params"), cache)
+        runtime_handle = copy.copy(self._handle)
+        runtime_handle["params"] = params
+
         obs = np.asarray(observation, dtype=np.float32)
         single = obs.ndim == 1
         if single:
@@ -539,7 +602,7 @@ class SlowGRUStudentAdapter:
 
         try:
             action, ms_new, extras = sr.policy_step(
-                self._handle, obs, memory_nested, done_mask, true_done=None)
+                runtime_handle, obs, memory_nested, done_mask, true_done=None)
         except Exception as exc:
             raise SlowGRUMountError(
                 f"slowgru_runtime.policy_step failed: {type(exc).__name__}: {exc}") from exc
