@@ -1,0 +1,18 @@
+{
+  "boss_area_reached": false,
+  "corridor_exit_reached": true,
+  "defeat_kobold": false,
+  "episode_id": "r0",
+  "front_floor_transition_reached": true,
+  "graph_distance_progress": 1.0,
+  "kobold_engaged": false,
+  "max_timesteps": 4096,
+  "player_died": false,
+  "scenario": "front_l2",
+  "start_predicate": "valid_front_scaffold_start",
+  "start_state_payload_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "terminal_label": "FRONT_FLOOR_TRANSITION_REACHED",
+  "timed_out": false,
+  "timesteps": 500,
+  "valid_start": true
+}

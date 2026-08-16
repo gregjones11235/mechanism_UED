@@ -1,0 +1,46 @@
+# CC4 Tier3 decomposed evaluation — TIER3_FRONT_HALF_SCAFFOLDED_L2 contract (frozen V1).
+# Diagnostic scaffold: removes upstream resource prep + dungeon entry (floors 0-1);
+# keeps the floor-2 DARK corridor navigation, multi-mob survival, and exit search.
+# 语义收口 (fast-track): primary event = FRONT_FLOOR_TRANSITION_REACHED (player level
+# 2 -> 3); CORRIDOR_EXIT_REACHED is PENDING_EQUIVALENCE_ALIAS only — it does NOT define
+# success until the real map proves the floor transition must pass the target corridor.
+# STATUS: real state bank materialized on the JAX host (craftax==1.4.5); evidence
+# (hashes / two-process agreement) lands in Commit 2.
+schema: mechanism_UED.tier3_scenario_config/v1
+scenario: front_l2
+identity_class: TIER3_FRONT_DIAGNOSTIC_SCAFFOLD
+scaffolded: true
+state_bank: TIER3_FRONT_SCAFFOLD_STATE_BANK
+# State bank hash scope is the scaffold bank, NEVER the canonical GLOBAL_WORLD_SET_HASH.
+state_bank_hash_label: FRONT_SCAFFOLD_STATE_BANK_HASH
+state_bank_hash_status: MATERIALIZED_PENDING_COMMIT2_EVIDENCE
+# Boundary (source-grounded in canonical s4 task 45fdd17c).
+start_floor: 2
+exit_floor: 3
+front_half_start_predicate: valid_front_scaffold_start
+front_half_primary_event: FRONT_FLOOR_TRANSITION_REACHED
+front_half_success: player_level_2_to_3
+front_half_exit_predicate: corridor_exit_reached
+corridor_exit_reached_status: PENDING_EQUIVALENCE_ALIAS
+# Metrics (frozen). Primary is conditional on a valid scaffold start.
+primary_metric: P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START
+dense_metric: GRAPH_DISTANCE_PROGRESS
+front_progress_method: GRAPH_DISTANCE
+progress_range: [0, 1]
+progress_monotonicity_guaranteed: false
+# Scaffold legality (all MUST hold; enforced by builder + negative tests).
+no_privileged_information: true
+no_extra_observation_channel: true
+no_hidden_boss_direction: true
+no_shortest_path_hint: true
+no_future_monster_action: true
+no_arm_specific_state: true
+same_action_space: true
+same_observation_schema: true
+# Shared by EVERY arm (Base/Replay/Persistent/Reset128/future D052). One bank only.
+common_state_bank_for_all_arms: true
+# Frozen eval contract (identical across arms/scenarios).
+action_mode: greedy_argmax
+max_timesteps: 4096
+episode_budget: NOT_EXECUTED_THIS_ROUND
+scaffolded_results_can_replace_full_task: false

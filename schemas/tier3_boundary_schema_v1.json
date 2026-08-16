@@ -1,0 +1,262 @@
+{
+  "all_events_visible_to_student_false": true,
+  "boundary_floors": {
+    "BACK_FLOOR": 3,
+    "CORRIDOR_EXIT_FLOOR": 3,
+    "FRONT_FLOOR": 2
+  },
+  "events": [
+    {
+      "event_name": "VALID_FULL_START",
+      "fail_closed_conditions": [
+        "missing required field",
+        "player_health<=0",
+        "timestep!=0",
+        "DEFEAT_KOBOLD already achieved"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": false,
+      "semantic_definition": "A well-formed canonical Stage4 DEFEAT_KOBOLD initial state: floor 2 entry (player_level==2), alive (player_health>0), timestep==0, DEFEAT_KOBOLD not yet achieved. Mirrors canonical s4_task_code generate_world output (set_starting_floor(2), monsters_killed[2]=8, winner-median kit, floor-2 up-ladder removed).",
+      "source_fields": [
+        "player_level",
+        "player_health",
+        "timestep",
+        "achievements",
+        "monsters_killed",
+        "inventory",
+        "item_map",
+        "up_ladders"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "VALID_FRONT_SCAFFOLD_START",
+      "fail_closed_conditions": [
+        "player_level!=2 (NEG: front start beyond exit => player_level>=3)",
+        "player_health<=0",
+        "timestep!=0",
+        "DEFEAT_KOBOLD already achieved"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": false,
+      "semantic_definition": "A valid FRONT_L2 diagnostic start: on the dark corridor floor (player_level==2), alive, timestep==0, NOT already past the corridor exit (player_level < 3), DEFEAT_KOBOLD not achieved. Upstream resource prep and dungeon entry (floors 0-1) are removed by construction.",
+      "source_fields": [
+        "player_level",
+        "player_health",
+        "timestep",
+        "achievements"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "VALID_BACK_SCAFFOLD_START",
+      "fail_closed_conditions": [
+        "player_level!=3",
+        "player_health<=0",
+        "timestep!=0",
+        "DEFEAT_KOBOLD already achieved at t0 (NEG15)",
+        "no live Kobold on floor 3 (NEG16)"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": true,
+      "semantic_definition": "A valid BACK_L2 diagnostic start: on the kobold floor (player_level==3), alive, timestep==0, a LIVE kobold present on floor 3 (RANGED-category mob with the craftax Kobold type_id — resolved binding: ranged type_id 3, canonical max health 8.0; mask=True, health>0), and DEFEAT_KOBOLD false at t0. The floor-2 corridor bottleneck is removed by construction.",
+      "source_fields": [
+        "player_level",
+        "player_health",
+        "timestep",
+        "achievements",
+        "ranged_mobs(position/health/mask/type_id)"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "FRONT_HALF_ENTERED",
+      "fail_closed_conditions": [
+        "missing player_level"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": false,
+      "semantic_definition": "The player is on the floor-2 dark corridor (player_level==2).",
+      "source_fields": [
+        "player_level"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "FRONT_HALF_PROGRESS",
+      "fail_closed_conditions": [
+        "NEG17 progress outside [0,1]",
+        "NEG18 exit unreachable from start without blocked label",
+        "invalid_position (off-grid / non-walkable)"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": true,
+      "semantic_definition": "Dense GRAPH_DISTANCE_PROGRESS in [0,1] computed by GRAPH_DISTANCE: BFS shortest-path distance over an evaluator-only traversability mask derived from map[player_level]; progress = clip(1 - d(current,exit)/max(d(start,exit),1),0,1). exit = floor-2 down_ladder position. The traversability mask / map topology is evaluator-only and never enters the Student observation. Monotonicity NOT guaranteed (dead-end => 0).",
+      "source_fields": [
+        "player_position",
+        "map",
+        "down_ladders"
+      ],
+      "source_file_role": "world_builder",
+      "source_file_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "CORRIDOR_EXIT_REACHED",
+      "fail_closed_conditions": [
+        "missing player_level",
+        "episode transition True but corridor_exit_reached alias never True (contradiction -> FailClosed)"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": false,
+      "semantic_definition": "Per-state predicate: player_level >= 3 (the kobold floor). 收口 status = PENDING_EQUIVALENCE_ALIAS: the FRONT_L2 PRIMARY event is the episode-level FRONT_FLOOR_TRANSITION_REACHED (player level transitions 2 -> 3). This per-state predicate is reported as 'corridor_exit_reached' but is NOT the primary success metric until real-map evidence proves the floor transition necessarily passes through the target corridor. REJECTED_ALTERNATIVE: 'standing on the floor-2 down_ladder tile' (more granular, but the actual game event is the floor transition recorded by player_level).",
+      "source_fields": [
+        "player_level"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "BACK_HALF_ENTERED",
+      "fail_closed_conditions": [
+        "missing player_level"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": false,
+      "semantic_definition": "The player is on the kobold/target floor (player_level==3).",
+      "source_fields": [
+        "player_level"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "BOSS_AREA_REACHED",
+      "fail_closed_conditions": [
+        "missing player_level"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": true,
+      "semantic_definition": "Per-state predicate (vocabulary completeness only): player on the kobold/target floor (player_level==3); the kobold IS the DEFEAT_KOBOLD target and lives on floor 3. 收口: N/A for BACK_L2 — BACK_L2 identity is BOSS_COMBAT_SCAFFOLDED (primary metric P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START); the BACK start is already on floor 3 next to a live Kobold, so boss-area SEARCH is out of scope and the metrics boss_area_reached / time_to_boss_area / BACK_BOSS_NOT_FOUND are reported N/A, never as evidence. REJECTED_ALTERNATIVE: boss_progress>0 — REJECTED because boss_progress drives the Necromancer boss-spawn mechanic (a different system), per the audited achievement list and CANONICAL_TASK_FACTS.",
+      "source_fields": [
+        "player_level",
+        "boss_progress(rejected)"
+      ],
+      "source_file_role": "canonical_s4_task",
+      "source_file_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "KOBOLD_ENGAGED",
+      "fail_closed_conditions": [
+        "missing ranged_mobs",
+        "kobold type_id unbound (needs craftax host)"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": true,
+      "semantic_definition": "Frozen V1 per-state engagement proxy: a kobold (RANGED category, ranged type_id 3) on the player's floor has an active attack_cooldown OR (via evaluator episode history) has taken damage / dealt damage. Precise combat-contact is refined by the kobold_damage_dealt / damage_received_after_engagement episode metrics.",
+      "source_fields": [
+        "ranged_mobs(type_id/attack_cooldown/health)",
+        "player_level"
+      ],
+      "source_file_role": "game_mechanics",
+      "source_file_sha256": "1bb9a4a64fde852c970b32dc3e049d472856490eaf68d67f64dd241319d3a65a",
+      "visible_to_student": false
+    },
+    {
+      "event_name": "DEFEAT_KOBOLD",
+      "fail_closed_conditions": [
+        "achievements array missing / wrong length",
+        "Achievement.DEFEAT_KOBOLD index unbound (needs craftax host)"
+      ],
+      "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+      "predicate_version": "tier3_predicates/v1",
+      "requires_hidden_evaluator_state": false,
+      "semantic_definition": "The DEFEAT_KOBOLD achievement is set: achievements[Achievement.DEFEAT_KOBOLD.value] is true. The achievement NAME is resolved symbolically (the integer index is bound from craftax.craftax.constants on a craftax==1.4.5 host; resolved value 41). This is the FULL task primary metric and the BACK_L2 primary metric (P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START) target.",
+      "source_fields": [
+        "achievements"
+      ],
+      "source_file_role": "craftax_env",
+      "source_file_sha256": "be90ee9c9cb4977f07ba52b58676166dea3446f9f40e87a26ef552fbec54104a",
+      "visible_to_student": false
+    }
+  ],
+  "frozen_v1_definitions": {
+    "BACK_HALF_START_PREDICATE": "valid_back_scaffold_start: player_level==3 AND player_health>0 AND timestep==0 AND live_kobold_present(floor3, RANGED category, ranged type_id 3) AND DEFEAT_KOBOLD false at t0",
+    "BACK_IDENTITY": "BOSS_COMBAT_SCAFFOLDED — BACK_L2 evaluates combat against a live Kobold on floor 3, NOT boss-area search",
+    "BACK_NA_METRICS": [
+      "boss_area_reached",
+      "time_to_boss_area",
+      "BACK_BOSS_NOT_FOUND"
+    ],
+    "BACK_PRIMARY_METRIC": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+    "BOSS_AREA_PREDICATE": "boss_area_reached: player_level == 3 (N/A for BACK_L2; vocabulary only)",
+    "CORRIDOR_EXIT_REACHED_STATUS": "PENDING_EQUIVALENCE_ALIAS — per-state predicate (player_level >= 3) reported as 'corridor_exit_reached' but NOT the FRONT_L2 primary metric until real-map evidence proves the floor transition necessarily passes through the target corridor",
+    "DEFEAT_KOBOLD_PREDICATE": "defeat_kobold: achievements[Achievement.DEFEAT_KOBOLD.value] == True (resolved index 41 on craftax==1.4.5)",
+    "FRONT_DENSE_METRIC": "GRAPH_DISTANCE_PROGRESS",
+    "FRONT_HALF_EXIT_PREDICATE": "corridor_exit_reached: player_level >= 3",
+    "FRONT_HALF_START_PREDICATE": "valid_front_scaffold_start: player_level==2 AND player_health>0 AND timestep==0 AND NOT corridor_exit_reached AND DEFEAT_KOBOLD not achieved",
+    "FRONT_PRIMARY_EVENT": "FRONT_FLOOR_TRANSITION_REACHED: episode-level success event — player level transitions from FRONT_FLOOR (2) to CORRIDOR_EXIT_FLOOR (3)",
+    "FRONT_PRIMARY_METRIC": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+    "FRONT_PROGRESS_METHOD": "GRAPH_DISTANCE (BFS over evaluator-only traversability from map[player_level])",
+    "KOBOLD_BINDING": "RANGED category, ranged type_id 3, canonical max health 8.0 (resolved from craftax==1.4.5 MOB_ACHIEVEMENT_MAP / MOB_TYPE_HEALTH_MAPPING)",
+    "invalid_position_policy": "FAIL_CLOSED if current position off-grid or non-walkable",
+    "progress_monotonicity_expected": false,
+    "progress_monotonicity_not_guaranteed_reason": "player may enter dead-ends / oscillate; d_t can increase",
+    "progress_range": [
+      0,
+      1
+    ],
+    "unreachable_state_policy": "FAIL_CLOSED (NEG18) if exit unreachable from start without explicit blocked label"
+  },
+  "predicate_code_sha256": "a4fba86b054d20412fc1df2c79e7000d66b0525decb1801fa474ee7fb0d25b4c",
+  "predicate_version": "tier3_predicates/v1",
+  "rejected_alternatives": [
+    {
+      "boundary": "CORRIDOR_EXIT_REACHED",
+      "reason": "the recorded game event is the floor transition (player_level); tile-precise definition adds fragility without changing the diagnosed capability",
+      "rejected": "standing on floor-2 down_ladder tile"
+    },
+    {
+      "boundary": "BOSS_AREA_REACHED",
+      "reason": "boss_progress drives the Necromancer boss-spawn mechanic, not the DEFEAT_KOBOLD target",
+      "rejected": "boss_progress > 0"
+    },
+    {
+      "boundary": "DEFEAT_KOBOLD detection",
+      "reason": "must resolve Achievement.DEFEAT_KOBOLD symbolically from craftax constants",
+      "rejected": "hard-coded achievement integer index"
+    },
+    {
+      "boundary": "FRONT progress",
+      "reason": "not source-grounded; ignores walls/doors; can over-credit off-corridor positions",
+      "rejected": "raw Manhattan distance / screen pixels / tile color"
+    },
+    {
+      "boundary": "BACK_L2 scope",
+      "reason": "the BACK scaffold starts ALREADY on floor 3 next to a live Kobold; boss-area search is not exercised by this start, so those metrics are N/A and BACK_L2 identity is BOSS_COMBAT_SCAFFOLDED only",
+      "rejected": "BACK_L2 also evaluates boss-area search (boss_area_reached / time_to_boss_area / BACK_BOSS_NOT_FOUND)"
+    }
+  ],
+  "schema": "mechanism_UED.tier3_boundary_schema/v1",
+  "source_audit_schema": "mechanism_UED.tier3_source_audit/v1"
+}

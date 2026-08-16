@@ -1,0 +1,191 @@
+{
+  "canonical_task_sha256": "45fdd17c5b34b9f32a7f85b8030437f74d63d16bed2d6f2c683d80454e4d824d",
+  "forbidden_result_blindness_keys": [
+    "arm",
+    "arm_id",
+    "arm_name",
+    "base",
+    "checkpoint",
+    "checkpoint_id",
+    "checkpoint_sha",
+    "d052",
+    "params",
+    "params_sha",
+    "performance",
+    "persistent",
+    "replay",
+    "reset128",
+    "result",
+    "results",
+    "return",
+    "returns",
+    "reward",
+    "score",
+    "selected_by",
+    "selection",
+    "student",
+    "student_id"
+  ],
+  "legal_builder_api": [
+    "WorldBuilder(rng, static_params, params)",
+    "set_starting_floor(level)",
+    "set_player_stats(dexterity, strength, intelligence)  # clamped [1,5]",
+    "set_player_inventory(dict)  # via inventory.replace(**dict)",
+    "set_weapon_enchantments(sword, bow)  # clipped [0,2]",
+    "set_armour_enchantments(helmet, chestplate, leggings, boots)  # clipped [0,2]",
+    "set_learned_spells(fireball, iceball)",
+    "set_monsters_killed(level, count)  # clamp >=0; unlocks ladders",
+    "place_block(level, block_type, position)",
+    "fill_area(level, block_type, top_left, bottom_right)",
+    "add_mob(level, mob_name, type_id, position, health=-1.0)  # mob_name in {melee,ranged,passive}",
+    "add_mobs_randomly_near(rng, level, mob_name, type_id, n, target_pos, min_dist, max_dist, on_blocks)",
+    "place_randomly / place_randomly_near / place_adjacent_to_existing",
+    "build(rng) -> EnvState  # health=9.0 food/drink/energy/mana=9 achievements=zeros boss_progress=0 timestep=0"
+  ],
+  "legality_flags": [
+    "no_privileged_information",
+    "no_extra_observation_channel",
+    "no_hidden_boss_direction",
+    "no_shortest_path_hint",
+    "no_future_monster_action",
+    "no_arm_specific_state",
+    "same_action_space",
+    "same_observation_schema",
+    "common_state_bank_for_all_arms"
+  ],
+  "materialization_status": "BLOCKED_ENVIRONMENT",
+  "scaffolded_results_can_replace_full_task": false,
+  "scenarios": {
+    "back_l2": {
+      "action_space": "canonical_craftax_action_set (UNCHANGED)",
+      "boss_floor": 3,
+      "boundary_predicates": {
+        "boss_area": "boss_area_reached (N/A for BACK_L2 ¡ª vocabulary only; see na_metrics)",
+        "defeat": "defeat_kobold",
+        "engaged": "kobold_engaged",
+        "start": "valid_back_scaffold_start"
+      },
+      "builder": {
+        "calls": [
+          "r, _r = jax.random.split(world_rng); WorldBuilder(_r, static_params, params)  # canonical rng sequence",
+          "set_starting_floor(3)",
+          "set_player_inventory(<canonical starting kit>)",
+          "mob_rng = jax.random.fold_in(r, 0xBAC)",
+          "add_mobs_randomly_near(mob_rng, 3, 'ranged', KOBOLD_TYPE_ID, 1, target_pos=player_position, min_dist=2, max_dist=5)  # LIVE Kobold near the player",
+          "state = build(r)"
+        ],
+        "mechanism": "WorldBuilder (minicraftax.world_builder; repo-native scaffolding)",
+        "starting_inventory": {
+          "arrows": 7,
+          "bow": 1,
+          "coal": 3,
+          "iron": 3,
+          "pickaxe": 3,
+          "sapling": 1,
+          "stone": 27,
+          "sword": 3,
+          "torches": 10,
+          "wood": 7
+        },
+        "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+      },
+      "dense_metric": "none",
+      "forbid_defeat_kobold_at_start": true,
+      "identity_class": "BOSS_COMBAT_SCAFFOLDED",
+      "keeps": "kobold engagement, combat, survival, DEFEAT_KOBOLD",
+      "kobold_type_id_binding": "RESOLVED (craftax==1.4.5): RANGED category, ranged type_id 3, canonical max health 8.0 (MOB_ACHIEVEMENT_MAP[MobType.RANGED, 3] == DEFEAT_KOBOLD; MOB_TYPE_HEALTH_MAPPING[3, MobType.RANGED])",
+      "legality": {
+        "common_state_bank_for_all_arms": true,
+        "no_arm_specific_state": true,
+        "no_extra_observation_channel": true,
+        "no_future_monster_action": true,
+        "no_hidden_boss_direction": true,
+        "no_privileged_information": true,
+        "no_shortest_path_hint": true,
+        "same_action_space": true,
+        "same_observation_schema": true
+      },
+      "na_metrics": [
+        "boss_area_reached",
+        "time_to_boss_area",
+        "BACK_BOSS_NOT_FOUND"
+      ],
+      "na_reason": "the BACK start is ALREADY on floor 3 next to a live Kobold; boss-area search is not exercised, so BACK_L2 must not claim to evaluate it",
+      "observation_schema": "canonical_craftax_symbolic (UNCHANGED)",
+      "primary_metric": "P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START",
+      "purpose": "MECHANISM_DIAGNOSIS_ONLY",
+      "removes": "the floor-2 dark corridor bottleneck and boss-area search (start is already on floor 3)",
+      "require_live_kobold_at_start": true,
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "back_l2",
+      "schema": "mechanism_UED.tier3_scaffold_spec/v1",
+      "spec_version": "tier3_scaffold_spec/v1",
+      "start_floor": 3
+    },
+    "front_l2": {
+      "action_space": "canonical_craftax_action_set (UNCHANGED)",
+      "boundary_predicates": {
+        "exit_alias": "corridor_exit_reached (PENDING_EQUIVALENCE_ALIAS: reported but NOT the primary metric until real-map evidence proves the floor transition necessarily passes through the target corridor)",
+        "primary_event": "front_floor_transition_reached (episode-level: player level 2 -> 3)",
+        "start": "valid_front_scaffold_start"
+      },
+      "builder": {
+        "calls": [
+          "r, _r = jax.random.split(world_rng); WorldBuilder(_r, static_params, params)  # canonical rng sequence",
+          "set_starting_floor(2)",
+          "set_monsters_killed(2, 8)",
+          "set_player_inventory(<canonical starting kit>)",
+          "state = build(r)",
+          "state.replace(item_map=state.item_map.at[2, up_ladder].set(ItemType.NONE.value))  # canonical floor-2 up-ladder removal"
+        ],
+        "floor2_up_ladder_removed": true,
+        "mechanism": "WorldBuilder (minicraftax.world_builder; repo-native scaffolding)",
+        "monsters_killed": {
+          "2": 8
+        },
+        "starting_inventory": {
+          "arrows": 7,
+          "bow": 1,
+          "coal": 3,
+          "iron": 3,
+          "pickaxe": 3,
+          "sapling": 1,
+          "stone": 27,
+          "sword": 3,
+          "torches": 10,
+          "wood": 7
+        },
+        "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+      },
+      "dense_metric": "GRAPH_DISTANCE_PROGRESS",
+      "exit_floor": 3,
+      "identity_class": "TIER3_FRONT_DIAGNOSTIC_SCAFFOLD",
+      "keeps": "floor-2 DARK corridor navigation, multi-mob survival, floor transition to floor 3",
+      "legality": {
+        "common_state_bank_for_all_arms": true,
+        "no_arm_specific_state": true,
+        "no_extra_observation_channel": true,
+        "no_future_monster_action": true,
+        "no_hidden_boss_direction": true,
+        "no_privileged_information": true,
+        "no_shortest_path_hint": true,
+        "same_action_space": true,
+        "same_observation_schema": true
+      },
+      "observation_schema": "canonical_craftax_symbolic (UNCHANGED)",
+      "primary_event": "FRONT_FLOOR_TRANSITION_REACHED (player level 2 -> 3)",
+      "primary_metric": "P_FRONT_FLOOR_TRANSITION_REACHED_GIVEN_VALID_START",
+      "purpose": "MECHANISM_DIAGNOSIS_ONLY",
+      "removes": "upstream resource preparation and dungeon entry (floors 0-1)",
+      "scaffolded_results_can_replace_full_task": false,
+      "scenario": "front_l2",
+      "schema": "mechanism_UED.tier3_scaffold_spec/v1",
+      "spec_version": "tier3_scaffold_spec/v1",
+      "start_floor": 2
+    }
+  },
+  "schema": "mechanism_UED.tier3_scaffold_spec/v1",
+  "source_audit_schema": "mechanism_UED.tier3_source_audit/v1",
+  "spec_version": "tier3_scaffold_spec/v1",
+  "world_builder_sha256": "96536bbf955376b75c44208d80f452e1907d976cd49685a0e97e3a752679b50d"
+}

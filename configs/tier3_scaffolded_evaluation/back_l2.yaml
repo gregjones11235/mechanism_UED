@@ -1,0 +1,55 @@
+# CC4 Tier3 decomposed evaluation — TIER3_BACK_HALF_SCAFFOLDED_L2 contract (frozen V1).
+# 语义收口 (fast-track): identity = BOSS_COMBAT_SCAFFOLDED. This scaffold evaluates ONLY
+# kobold combat: start on floor 3 with a live Kobold nearby, engage, defeat it. It does
+# NOT evaluate boss-area search — the canonical FULL reset has zero natural floor-3 mobs,
+# so the scaffold must add one explicitly; boss_area_reached / time_to_boss_area /
+# BACK_BOSS_NOT_FOUND are therefore N/A and must never be reported as metrics.
+# Kobold binding (resolved from craftax==1.4.5): category=ranged, mob_type_value=2,
+# type_id=3, canonical max health 8.0.
+# STATUS: real state bank materialized on the JAX host; evidence (hashes / two-process
+# agreement) lands in Commit 2.
+schema: mechanism_UED.tier3_scenario_config/v1
+scenario: back_l2
+identity_class: BOSS_COMBAT_SCAFFOLDED
+scaffolded: true
+state_bank: TIER3_BACK_SCAFFOLD_STATE_BANK
+state_bank_hash_label: BACK_SCAFFOLD_STATE_BANK_HASH
+state_bank_hash_status: MATERIALIZED_PENDING_COMMIT2_EVIDENCE
+# Boundary (source-grounded in canonical s4 task 45fdd17c; kobold is on floor 3).
+start_floor: 3
+boss_floor: 3
+back_half_start_predicate: valid_back_scaffold_start
+defeat_kobold_predicate: defeat_kobold
+# boss_area_reached stays in the frozen event vocabulary but is N/A for this scenario.
+boss_area_predicate: boss_area_reached
+boss_area_status: NA_FOR_BOSS_COMBAT_SCAFFOLDED
+na_metrics:
+  - boss_area_reached
+  - time_to_boss_area
+  - BACK_BOSS_NOT_FOUND
+# A live Kobold MUST be present in every back start (else invalid scaffold, NEG16);
+# DEFEAT_KOBOLD must NOT already be set at t0 (NEG15).
+require_live_kobold_at_start: true
+forbid_defeat_kobold_at_start: true
+kobold_binding:
+  category: ranged
+  mob_type_value: 2
+  type_id: 3
+  canonical_max_health: 8.0
+# Metrics (frozen).
+primary_metric: P_DEFEAT_KOBOLD_GIVEN_VALID_BACK_START
+dense_metric: none
+# Scaffold legality (all MUST hold; enforced by builder + negative tests).
+no_privileged_information: true
+no_extra_observation_channel: true
+no_hidden_boss_direction: true
+no_shortest_path_hint: true
+no_future_monster_action: true
+no_arm_specific_state: true
+same_action_space: true
+same_observation_schema: true
+common_state_bank_for_all_arms: true
+action_mode: greedy_argmax
+max_timesteps: 4096
+episode_budget: NOT_EXECUTED_THIS_ROUND
+scaffolded_results_can_replace_full_task: false
