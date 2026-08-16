@@ -42,6 +42,10 @@ EXPECTED_SEED_COUNTS = {"ollama": 1, "deepseek_official": 1}
 EXPECTED_REMAINING_AFTER_SEED = 70
 REPEATS = ("r1", "r2", "r3")
 RECONCILIATION_FILENAME = "D3Q_BUDGET_RECONCILIATION.json"
+RECOVERY_FILENAME = "D3Q_CHUNK_RECOVERY.json"
+ALLOWED_RECOVERY_REASONS = frozenset(
+    {"gpu2_external_app", "ollama_pid_changed", "ollama_digest_changed"}
+)
 
 EVENT_FIELDS = (
     "ts_utc",
@@ -539,6 +543,127 @@ def cmd_status(ledger_path: Path) -> Dict[str, Any]:
     }
 
 
+def _verify_chunk_sha256sums(chunk_dir: Path) -> int:
+    sums_path = chunk_dir / "SHA256SUMS"
+    if not sums_path.is_file():
+        raise Phase2Error("chunk_sha256sums_missing", str(sums_path))
+    entries: Dict[str, str] = {}
+    for lineno, raw in enumerate(sums_path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw.rstrip()
+        if not line:
+            continue
+        parts = line.split("  ", 1)
+        if len(parts) != 2 or not runner_mod.is_sha256(parts[0].strip()):
+            raise Phase2Error("chunk_sha256sums_malformed", f"line {lineno}")
+        rel = parts[1].strip().lstrip("*").replace("\\", "/")
+        if rel in entries:
+            raise Phase2Error("chunk_sha256sums_duplicate_entry", rel)
+        entries[rel] = parts[0].strip()
+    if not entries:
+        raise Phase2Error("chunk_sha256sums_empty", str(sums_path))
+    actual = {
+        path.relative_to(chunk_dir).as_posix()
+        for path in chunk_dir.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    if actual != set(entries):
+        raise Phase2Error(
+            "chunk_sha256sums_set_mismatch",
+            {
+                "missing_from_sums": sorted(actual - set(entries)),
+                "listed_but_absent": sorted(set(entries) - actual),
+            },
+        )
+    for rel, expected in sorted(entries.items()):
+        got = runner_mod.sha256_file(chunk_dir / rel)
+        if got != expected:
+            raise Phase2Error("chunk_sha256sums_hash_mismatch", rel)
+    return len(entries)
+
+
+def cmd_recover_completed_chunk(
+    run_id: str,
+    incident_id: str,
+    ledger_path: Path = DEFAULT_LEDGER_PATH,
+    artifacts_dir: Path = ARTIFACTS_DIR,
+) -> Dict[str, Any]:
+    """Merge a chunk that completed all slots but was blocked only by a
+    post-run environment gate (incident 02 semantics).  Fail closed unless
+    every integrity condition holds."""
+    if not incident_id.strip():
+        raise Phase2Error("incident_id_missing")
+    ledger_path = Path(ledger_path)
+    artifacts_dir = Path(artifacts_dir)
+    if not ledger_path.is_file():
+        raise Phase2Error("ledger_missing", str(ledger_path))
+    chunk_dir = artifacts_dir / run_id
+    result_path = chunk_dir / "D3Q_SLOT_LAUNCHER_RESULT.json"
+    if not result_path.is_file():
+        raise Phase2Error("chunk_result_missing", str(result_path))
+    launcher_result = json.loads(result_path.read_text(encoding="utf-8"))
+    if launcher_result.get("classification") != "D3Q_SLOT_LAUNCHER":
+        raise Phase2Error("chunk_result_classification", str(result_path))
+    if launcher_result.get("status") != "BLOCKED":
+        raise Phase2Error("recovery_not_blocked", launcher_result.get("status"))
+    reason = launcher_result.get("reason")
+    if reason not in ALLOWED_RECOVERY_REASONS:
+        raise Phase2Error("recovery_reason_not_allowed", reason)
+    slots = launcher_result.get("slots")
+    if not isinstance(slots, list) or not slots or not all(isinstance(s, str) for s in slots):
+        raise Phase2Error("recovery_slots_shape", str(result_path))
+    ledger = D3QLedger(ledger_path)
+    reconciliation = _load_reconciliation(artifacts_dir)
+    order_index = {slot: index for index, slot in enumerate(all_slots_ordered())}
+    for slot_id in slots:
+        if slot_id not in order_index:
+            raise Phase2Error("unknown_slot", slot_id)
+        if slot_id in reconciliation["slot_consumed"]:
+            raise Phase2Error("slot_exhausted_reconciled", slot_id)
+        if ledger.slot_post_count(slot_id) != 0:
+            raise Phase2Error("slot_already_in_ledger", slot_id)
+    if [order_index[s] for s in slots] != sorted(order_index[s] for s in slots):
+        raise Phase2Error("slots_out_of_frozen_order", slots)
+    files_checked = _verify_chunk_sha256sums(chunk_dir)
+    merged = merge_chunk_events(ledger, chunk_dir, slots)
+    reloaded = D3QLedger(ledger_path)
+    for slot_id in slots:
+        if reloaded.slot_post_count(slot_id) != ledger.slot_post_count(slot_id):
+            raise Phase2Error("ledger_reload_inconsistent", slot_id)
+    _fail_on_secret_text(ledger_path)
+    recovery = {
+        "classification": "D3Q_CHUNK_RECOVERY",
+        "schema_version": 1,
+        "run_id": run_id,
+        "incident_id": incident_id.strip(),
+        "blocked_reason": reason,
+        "launcher_result_sha256": runner_mod.sha256_file(result_path),
+        "chunk_sha256sums_files_checked": files_checked,
+        "slots": slots,
+        "merged": merged,
+        "provider_counts_after": {
+            provider: ledger.provider_post_count(provider)
+            for provider in (runner_mod.SMALL_PROVIDER, runner_mod.LARGE_PROVIDER)
+        },
+        "remaining_slots_after": len(
+            remaining_slots_effective(ledger, reconciliation["slot_consumed"])
+        ),
+    }
+    recovery_path = artifacts_dir / RECOVERY_FILENAME
+    existing = []
+    if recovery_path.is_file():
+        loaded = json.loads(recovery_path.read_text(encoding="utf-8"))
+        existing = loaded.get("recoveries", []) if isinstance(loaded, dict) else []
+        if any(item.get("run_id") == run_id for item in existing):
+            raise Phase2Error("recovery_already_recorded", run_id)
+    document = {
+        "classification": "D3Q_CHUNK_RECOVERY",
+        "schema_version": 1,
+        "recoveries": existing + [recovery],
+    }
+    recovery_path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return {"status": "PASS", "recovery": recovery}
+
+
 # ---------------------------------------------------------------------------
 # CLI.
 # ---------------------------------------------------------------------------
@@ -564,12 +689,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     chunk_parser.add_argument("--ledger", default=str(DEFAULT_LEDGER_PATH))
     chunk_parser.add_argument("--artifacts-dir", default=str(ARTIFACTS_DIR))
 
+    recover_parser = subparsers.add_parser(
+        "recover-completed-chunk",
+        help="merge a completed chunk blocked only by a post-run environment gate",
+    )
+    recover_parser.add_argument("--run-id", required=True)
+    recover_parser.add_argument("--incident-id", required=True)
+    recover_parser.add_argument("--ledger", default=str(DEFAULT_LEDGER_PATH))
+    recover_parser.add_argument("--artifacts-dir", default=str(ARTIFACTS_DIR))
+
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
         if args.command == "seed":
             result = cmd_seed(Path(args.ledger), Path(args.seed_dir), force=args.force)
         elif args.command == "status":
             result = cmd_status(Path(args.ledger))
+        elif args.command == "recover-completed-chunk":
+            result = cmd_recover_completed_chunk(
+                args.run_id,
+                args.incident_id,
+                ledger_path=Path(args.ledger),
+                artifacts_dir=Path(args.artifacts_dir),
+            )
         else:
             ledger_path = Path(args.ledger)
             artifacts_dir = Path(args.artifacts_dir)

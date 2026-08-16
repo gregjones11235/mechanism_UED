@@ -460,3 +460,118 @@ def test_status_includes_reconciliation(seeded, tmp_path):
     assert len(status["reconciled_slots"]) == 5
     assert status["remaining_count"] == 72 - 2 - 5
     assert status["remaining_next"][0] == "slot_r1_small_p06"
+
+
+# ---------------------------------------------------------------------------
+# Completed-chunk recovery (incident D3Q_PHASE2_INCIDENT_02 semantics).
+# ---------------------------------------------------------------------------
+
+
+def _write_sha256sums(chunk_dir):
+    chunk_dir = Path(chunk_dir)
+    lines = []
+    for path in sorted(chunk_dir.rglob("*")):
+        if path.is_file() and path.name != "SHA256SUMS":
+            rel = path.relative_to(chunk_dir).as_posix()
+            lines.append(f"{runner.sha256_file(path)}  {rel}")
+    (chunk_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _fake_blocked_chunk(artifacts_dir, run_id, spec, reason="gpu2_external_app"):
+    chunk_dir = _fake_chunk_artifact(artifacts_dir, run_id, spec, status="PASS")
+    result = {
+        "classification": "D3Q_SLOT_LAUNCHER",
+        "schema_version": 1,
+        "run_id": run_id,
+        "status": "BLOCKED",
+        "reason": reason,
+        "slots": [slot_id for slot_id, _kinds in spec],
+        "cleanup_verified": True,
+    }
+    (chunk_dir / "D3Q_SLOT_LAUNCHER_RESULT.json").write_text(
+        json.dumps(result, indent=2), encoding="utf-8"
+    )
+    _write_sha256sums(chunk_dir)
+    return chunk_dir
+
+
+def test_recover_completed_chunk_success(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    _fake_blocked_chunk(
+        artifacts_dir, "d3q_fake_blocked", [("slot_r1_small_p06", ["initial"])]
+    )
+    result = drv.cmd_recover_completed_chunk(
+        "d3q_fake_blocked", "TEST_INCIDENT", ledger_path=ledger_path, artifacts_dir=artifacts_dir
+    )
+    assert result["status"] == "PASS"
+    assert result["recovery"]["merged"][0]["slot_id"] == "slot_r1_small_p06"
+    ledger = D3QLedger(ledger_path)
+    assert ledger.slot_post_count("slot_r1_small_p06") == 1
+    assert ledger.provider_post_count("ollama") == 2
+    doc = json.loads((artifacts_dir / drv.RECOVERY_FILENAME).read_text(encoding="utf-8"))
+    assert doc["recoveries"][0]["incident_id"] == "TEST_INCIDENT"
+
+
+def test_recover_rejects_disallowed_reason(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    _fake_blocked_chunk(
+        artifacts_dir, "d3q_fake_blocked2", [("slot_r1_small_p06", ["initial"])],
+        reason="budget_exceeded",
+    )
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv.cmd_recover_completed_chunk(
+            "d3q_fake_blocked2", "TEST_INCIDENT", ledger_path=ledger_path, artifacts_dir=artifacts_dir
+        )
+    assert exc.value.reason == "recovery_reason_not_allowed"
+
+
+def test_recover_rejects_hash_tamper(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    chunk_dir = _fake_blocked_chunk(
+        artifacts_dir, "d3q_fake_blocked3", [("slot_r1_small_p06", ["initial"])]
+    )
+    target = chunk_dir / "slots" / "slot_r1_small_p06" / "slot_r1_small_p06.result.json"
+    target.write_text(target.read_text(encoding="utf-8") + " ", encoding="utf-8")
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv.cmd_recover_completed_chunk(
+            "d3q_fake_blocked3", "TEST_INCIDENT", ledger_path=ledger_path, artifacts_dir=artifacts_dir
+        )
+    assert exc.value.reason == "chunk_sha256sums_hash_mismatch"
+
+
+def test_recover_rejects_not_blocked(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    chunk_dir = _fake_chunk_artifact(
+        artifacts_dir, "d3q_fake_pass_chunk", [("slot_r1_small_p06", ["initial"])]
+    )
+    result_file = chunk_dir / "D3Q_SLOT_LAUNCHER_RESULT.json"
+    result = json.loads(result_file.read_text(encoding="utf-8"))
+    result["classification"] = "D3Q_SLOT_LAUNCHER"
+    result["slots"] = ["slot_r1_small_p06"]
+    result_file.write_text(json.dumps(result), encoding="utf-8")
+    _write_sha256sums(chunk_dir)
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv.cmd_recover_completed_chunk(
+            "d3q_fake_pass_chunk", "TEST_INCIDENT", ledger_path=ledger_path, artifacts_dir=artifacts_dir
+        )
+    assert exc.value.reason == "recovery_not_blocked"
+
+
+def test_recover_rejects_double_recovery(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    _fake_blocked_chunk(
+        artifacts_dir, "d3q_fake_blocked4", [("slot_r1_small_p06", ["initial"])]
+    )
+    drv.cmd_recover_completed_chunk(
+        "d3q_fake_blocked4", "TEST_INCIDENT", ledger_path=ledger_path, artifacts_dir=artifacts_dir
+    )
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv.cmd_recover_completed_chunk(
+            "d3q_fake_blocked4", "TEST_INCIDENT", ledger_path=ledger_path, artifacts_dir=artifacts_dir
+        )
+    assert exc.value.reason in ("recovery_already_recorded", "slot_already_in_ledger")
