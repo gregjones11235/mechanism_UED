@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -51,6 +52,21 @@ def _projection():
     ]
 
 
+def _rng_triple(harness):
+    return tuple(
+        harness.rng_receipt(np.asarray(values, dtype=np.uint32))
+        for values in ((7, 8), (8, 9), (9, 10))
+    )
+
+
+def _import_gate_state():
+    return {"jax_loaded": False, "jaxlib_loaded": False, "gen_manager_loaded": False}
+
+
+def _controller_gate(checkpoints=("before_runtime", "after_runtime", "after_prepare")):
+    return {name: _import_gate_state() for name in checkpoints}
+
+
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -80,6 +96,7 @@ def _reference_source_evidence():
 def _async_result(**changes):
     harness = load("perf48_async_pipeline_harness")
     projection = _projection()
+    input_receipt, main_receipt, pf_receipt = _rng_triple(harness)
     result = {
         "classification": harness.CLASSIFICATION,
         "not_semantic_mainline": True,
@@ -95,9 +112,12 @@ def _async_result(**changes):
         "validation_replay_reference": "6f0625d_external_not_timed",
         "task_ids": ["one"],
         "task_code_rows": [{"task_id": "one", "code_sha256": "code"}],
-        "input_rng_sha256": "input",
-        "main_rng_after_split_sha256": "main",
-        "preflight_rng_sha256": "pf",
+        "input_rng": input_receipt,
+        "main_rng_after_split": main_receipt,
+        "preflight_rng": pf_receipt,
+        "input_rng_sha256": input_receipt["sha256"],
+        "main_rng_after_split_sha256": main_receipt["sha256"],
+        "preflight_rng_sha256": pf_receipt["sha256"],
         "checkpoint_input_path": "/checkpoint/1",
         "checkpoint_input_sha256": "checkpoint",
         "graph_input_path": "/graph",
@@ -131,7 +151,12 @@ def _async_result(**changes):
         },
         "worker_jax_backend": "gpu",
         "worker_jax_device_count": 1,
-        "controller_backend": "cpu",
+        "controller_backend": "pure_python_no_jax",
+        "controller_forbidden_imports": _controller_gate(
+            ("before_runtime", "after_runtime", "after_prepare", "after_result")
+        ),
+        "async_input_sha256": "a" * 64,
+        "reference_result_sha256": "b" * 64,
         "worker_route_calls": 0,
         "main_route_calls": 1,
         "receipt_sha256": {name: name.lower() for name in ("JOB", "RUNNING", "RESULT", "APPLYING", "APPLIED")},
@@ -149,6 +174,7 @@ def _async_result(**changes):
 def _reference_result(**changes):
     harness = load("perf48_async_pipeline_harness")
     projection = _projection()
+    input_receipt, main_receipt, pf_receipt = _rng_triple(harness)
     result = {
         "classification": harness.CLASSIFICATION,
         "not_semantic_mainline": True,
@@ -163,8 +189,12 @@ def _reference_result(**changes):
         "validation_cache_speedup_included": False,
         "task_ids": ["one"],
         "task_code_rows": [{"task_id": "one", "code_sha256": "code"}],
-        "input_rng_sha256": "input",
-        "preflight_rng_sha256": "pf",
+        "input_rng": input_receipt,
+        "main_rng_after_split": main_receipt,
+        "preflight_rng": pf_receipt,
+        "input_rng_sha256": input_receipt["sha256"],
+        "main_rng_after_split_sha256": main_receipt["sha256"],
+        "preflight_rng_sha256": pf_receipt["sha256"],
         "checkpoint_input_path": "/checkpoint/1",
         "checkpoint_input_sha256": "checkpoint",
         "graph_input_path": "/graph",
@@ -360,16 +390,15 @@ def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path, monkeypatch)
     runtime = {
         "reconstruct_archive": lambda path: archive,
         "archive_hash": lambda value: "after" if value.mutated else "before",
-        "array_rng": lambda value: np.asarray(value, dtype=np.uint32),
-        "split_rng": lambda value: (value + 1, value + 2),
-        "rng_hash": harness.fingerprint,
+        "rng_hash": harness.numpy_rng_hash,
         "plan_async_session": plan_async_session,
         "AsyncPreflightManager": Manager,
         "load_async_receipt": harness.load_hashed_json,
         "route": object(),
         "preflight_route": apply,
         "source_evidence": {"verified": True},
-        "controller_backend": "cpu",
+        "controller_backend": "pure_python_no_jax",
+        "controller_import_gate": _controller_gate(),
     }
     out = tmp_path / "out"
     out.mkdir()
@@ -382,12 +411,52 @@ def test_fake_controller_executes_N_N1_receipts_and_route(tmp_path, monkeypatch)
         result_timeout_s=1,
         barrier_receipt={"enabled": False, "mode": "control_direct"},
     )
-    monkeypatch.setenv("JAX_PLATFORMS", "cpu")
-    result = harness.run_async_controller(
-        manifest, config, {"path": "config", "sha256": "config"}, runtime, out, args
-    )
-    assert os.environ["JAX_PLATFORMS"] == "cpu"
-    assert result["controller_backend"] == "cpu"
+    input_rng = np.asarray([7, 8], dtype=np.uint32)
+    prepared = {
+        "stage": stage,
+        "archive": archive,
+        "rows": [{"task_id": "one", "code_sha256": code_sha}],
+        "task_ids": ["one"],
+        "archive_before": "before",
+        "input_rng": input_rng,
+        "main_rng": input_rng + 1,
+        "pf_rng": input_rng + 2,
+        "input_rng_receipt": harness.rng_receipt(input_rng),
+        "main_rng_receipt": harness.rng_receipt(input_rng + 1),
+        "pf_rng_receipt": harness.rng_receipt(input_rng + 2),
+        "plan_n": {"training_new_ids": [], "launch_ids": ["one"]},
+        "manager": Manager(harness._async_config(config, out, "GPU-test")),
+        "async_input": {
+            "result_sha256": "a" * 64,
+            "reference_result_sha256": "b" * 64,
+        },
+    }
+    platforms_before = os.environ.get("JAX_PLATFORMS")
+    blocked_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "jax"
+        or name.startswith("jax.")
+        or name == "jaxlib"
+        or name.startswith("jaxlib.")
+        or name == "dicode.dreaming.gen_manager"
+    }
+    for name in blocked_modules:
+        del sys.modules[name]
+    try:
+        result = harness.run_async_controller(
+            manifest, config, {"path": "config", "sha256": "config"}, runtime, out, args,
+            prepared=prepared,
+        )
+    finally:
+        sys.modules.update(blocked_modules)
+    assert os.environ.get("JAX_PLATFORMS") == platforms_before
+    assert result["controller_backend"] == "pure_python_no_jax"
+    assert result["async_input_sha256"] == "a" * 64
+    assert result["reference_result_sha256"] == "b" * 64
+    assert set(result["controller_forbidden_imports"]) == {
+        "before_runtime", "after_runtime", "after_prepare", "after_result",
+    }
     assert result["session_N"]["training_new_ids"] == []
     assert result["session_N1"]["training_new_ids"] == ["one"]
     assert result["route_calls"] == 1 and result["double_apply_rejected"]
@@ -536,9 +605,15 @@ def test_concurrent_command_carries_tool_owned_barrier(tmp_path):
             "go_path": tmp_path / "GO", "barrier_id": "id", "timeout_s": 5,
         },
     )
+    args.async_input = tmp_path / "ASYNC_INPUT.json"
     command = benchmark.command(args, "ASYNC", tmp_path / "out")
     assert command[command.index("--barrier-id") + 1] == "id"
     assert command[command.index("--ready-path") + 1].endswith("READY_ASYNC")
+    assert command[command.index("--async-input") + 1] == str(tmp_path / "ASYNC_INPUT.json")
+    args.async_input = None
+    with pytest.raises(RuntimeError, match="async input receipt not prepared"):
+        benchmark.command(args, "ASYNC", tmp_path / "out")
+    args.async_input = tmp_path / "ASYNC_INPUT.json"
     args.active_barrier = None
     assert "--barrier-id" not in benchmark.command(args, "B", tmp_path / "out-b")
 
@@ -624,7 +699,7 @@ def test_component_env_exact_gpu_and_independent_caches(tmp_path):
     env_r = benchmark.component_env(args, "REFERENCE", outs[1])
     env_b = benchmark.component_env(args, "B", outs[2])
     assert env_a["CUDA_VISIBLE_DEVICES"] == ""
-    assert env_a["JAX_PLATFORMS"] == "cpu"
+    assert "JAX_PLATFORMS" not in env_a
     assert env_r["CUDA_VISIBLE_DEVICES"] == benchmark.GPU2[1]
     assert "JAX_PLATFORMS" not in env_r
     assert env_b["CUDA_VISIBLE_DEVICES"] == benchmark.GPU3[1]
@@ -694,9 +769,13 @@ def test_harness_ready_go_success_and_control(tmp_path):
 
     thread = threading.Thread(target=release)
     thread.start()
-    receipt = harness.wait_for_async_go(args, "ASYNC", source)
+    receipt = harness.wait_for_async_go(
+        args, "ASYNC", source, controller_import_gate=_controller_gate()
+    )
     thread.join(timeout=1)
     assert not thread.is_alive()
+    ready_document = harness.load_hashed_json(Path(args.ready_path))
+    assert ready_document["controller_forbidden_imports"] == _controller_gate()
     assert receipt["enabled"] and receipt["mode"] == "ready_go"
     assert receipt["runtime_source_evidence_sha256"] == harness.fingerprint(source)
     assert receipt["go_observed_monotonic_ns"] >= receipt["go_monotonic_ns"]
@@ -710,6 +789,7 @@ def test_harness_go_tamper_and_timeout_fail_closed(tmp_path):
     harness = load("perf48_async_pipeline_harness")
     args = _barrier_args(tmp_path / "tamper")
     Path(args.ready_path).parent.mkdir()
+    gate = _controller_gate()
 
     def bad_release():
         while not Path(args.ready_path).exists():
@@ -729,41 +809,46 @@ def test_harness_go_tamper_and_timeout_fail_closed(tmp_path):
     thread = threading.Thread(target=bad_release)
     thread.start()
     with pytest.raises(RuntimeError, match="GO barrier receipt invalid"):
-        harness.wait_for_async_go(args, "ASYNC", {"source": "evidence"})
+        harness.wait_for_async_go(
+            args, "ASYNC", {"source": "evidence"}, controller_import_gate=gate
+        )
     thread.join(timeout=1)
     timeout_root = tmp_path / "timeout"
     timeout_root.mkdir()
     with pytest.raises(TimeoutError, match="GO barrier timeout"):
         harness.wait_for_async_go(
-            _barrier_args(timeout_root, timeout=0.01), "ASYNC", {"source": "evidence"}
+            _barrier_args(timeout_root, timeout=0.01), "ASYNC", {"source": "evidence"},
+            controller_import_gate=gate,
         )
 
 
 def _parent_barrier(harness, source, component="ASYNC"):
     source_sha = harness.fingerprint(source)
-    ready = harness._dual._hashed_document(
-        {
-            "classification": harness.CLASSIFICATION,
-            "barrier_id": "barrier-id",
-            "component": component,
-            "pid": 101,
-            "ready_monotonic_ns": 10,
-            "runtime_source_evidence_sha256": source_sha,
-            "llm_api_calls": 0,
-        }
-    )
+    ready_doc = {
+        "classification": harness.CLASSIFICATION,
+        "barrier_id": "barrier-id",
+        "component": component,
+        "pid": 101,
+        "ready_monotonic_ns": 10,
+        "runtime_source_evidence_sha256": source_sha,
+        "llm_api_calls": 0,
+    }
+    if component == "ASYNC":
+        ready_doc["controller_forbidden_imports"] = _controller_gate()
+    ready = harness._dual._hashed_document(ready_doc)
     other = "B" if component == "ASYNC" else "ASYNC"
-    other_ready = harness._dual._hashed_document(
-        {
-            "classification": harness.CLASSIFICATION,
-            "barrier_id": "barrier-id",
-            "component": other,
-            "pid": 102,
-            "ready_monotonic_ns": 11,
-            "runtime_source_evidence_sha256": "b" * 64,
-            "llm_api_calls": 0,
-        }
-    )
+    other_doc = {
+        "classification": harness.CLASSIFICATION,
+        "barrier_id": "barrier-id",
+        "component": other,
+        "pid": 102,
+        "ready_monotonic_ns": 11,
+        "runtime_source_evidence_sha256": "b" * 64,
+        "llm_api_calls": 0,
+    }
+    if other == "ASYNC":
+        other_doc["controller_forbidden_imports"] = _controller_gate()
+    other_ready = harness._dual._hashed_document(other_doc)
     ready_map = {component: ready, other: other_ready}
     go = harness._dual._hashed_document(
         {
@@ -787,6 +872,9 @@ def test_parent_child_barrier_link_and_workload_after_go():
     go = parent["go"]
     result = {
         "runtime_source_evidence": source,
+        "controller_forbidden_imports": _controller_gate(
+            ("before_runtime", "after_runtime", "after_prepare", "after_result")
+        ),
         "component_started_monotonic_ns": 31,
         "barrier": {
             "enabled": True,
@@ -842,18 +930,18 @@ def test_parent_ready_validation_pid_source_tamper_and_early_exit(tmp_path, monk
     monkeypatch.setattr(benchmark._pair, "arm_gpu_metrics", lambda path: (0, 5000))
 
     def write_ready(component, pid, source_sha="a" * 64):
-        harness.atomic_json(
-            barrier["ready_paths"][component],
-            {
-                "classification": harness.CLASSIFICATION,
-                "barrier_id": barrier["barrier_id"],
-                "component": component,
-                "pid": pid,
-                "ready_monotonic_ns": time.monotonic_ns(),
-                "runtime_source_evidence_sha256": source_sha,
-                "llm_api_calls": 0,
-            },
-        )
+        document = {
+            "classification": harness.CLASSIFICATION,
+            "barrier_id": barrier["barrier_id"],
+            "component": component,
+            "pid": pid,
+            "ready_monotonic_ns": time.monotonic_ns(),
+            "runtime_source_evidence_sha256": source_sha,
+            "llm_api_calls": 0,
+        }
+        if component == "ASYNC":
+            document["controller_forbidden_imports"] = _controller_gate()
+        harness.atomic_json(barrier["ready_paths"][component], document)
 
     write_ready("ASYNC", 101)
     write_ready("B", 102)

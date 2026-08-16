@@ -40,7 +40,11 @@ XLA_MODE = "deterministic_gate_not_production_timing"
 ASYNC_REFERENCE_FIELDS = (
     "task_ids",
     "task_code_rows",
+    "input_rng",
+    "main_rng_after_split",
+    "preflight_rng",
     "input_rng_sha256",
+    "main_rng_after_split_sha256",
     "preflight_rng_sha256",
     "checkpoint_input_path",
     "checkpoint_input_sha256",
@@ -57,6 +61,7 @@ ASYNC_RUNTIME_SOURCES = {
     "AsyncPreflightManager": "src/dicode/skill_preflight/async_preflight.py",
     "plan_async_session": "src/dicode/skill_preflight/async_preflight.py",
     "preflight_route": "src/dicode/skill_preflight/preflight_route.py",
+    "PureNetworkXArchive": "experiments/performance/perf48_async_pipeline_harness.py",
 }
 REFERENCE_RUNTIME_SOURCES = {
     "TaskArchive",
@@ -130,7 +135,7 @@ def validate_async_result(document: Mapping[str, Any], args: Any) -> dict[str, A
         "main_route_calls": 1,
         "worker_jax_backend": "gpu",
         "worker_jax_device_count": 1,
-        "controller_backend": "cpu",
+        "controller_backend": "pure_python_no_jax",
     }
     for key, value in expected.items():
         if document.get(key) != value:
@@ -164,6 +169,24 @@ def validate_async_result(document: Mapping[str, Any], args: Any) -> dict[str, A
         raise RuntimeError("async worker GPU preflight invalid")
     if any(bool(document.get(marker)) for marker in _harness.RUNTIME_MARKERS):
         raise RuntimeError("async runtime marker present")
+    import_gate = document.get("controller_forbidden_imports")
+    if (
+        not isinstance(import_gate, Mapping)
+        or set(import_gate) != {
+            "before_runtime", "after_runtime", "after_prepare", "after_result"
+        }
+        or any(
+            not isinstance(state, Mapping)
+            or set(state) != {"jax_loaded", "jaxlib_loaded", "gen_manager_loaded"}
+            or any(bool(value) for value in state.values())
+            for state in import_gate.values()
+        )
+    ):
+        raise RuntimeError("async controller import gate invalid")
+    if not isinstance(document.get("async_input_sha256"), str) or not isinstance(
+        document.get("reference_result_sha256"), str
+    ):
+        raise RuntimeError("async input/reference binding missing")
     validate_runtime_source_evidence(
         document.get("runtime_source_evidence"), args.source, async_component=True
     )
@@ -195,6 +218,8 @@ def validate_reference_result(document: Mapping[str, Any], args: Any) -> dict[st
         raise RuntimeError("reference result self-hash mismatch")
     if any(bool(document.get(marker)) for marker in _harness.RUNTIME_MARKERS):
         raise RuntimeError("reference runtime marker present")
+    for name in ("input_rng", "main_rng_after_split", "preflight_rng"):
+        _harness.validate_rng_receipt(document.get(name))
     validate_runtime_source_evidence(
         document.get("runtime_source_evidence"), args.source, async_component=False
     )
@@ -354,10 +379,7 @@ def component_env(args: Any, component: str, out: Path) -> dict[str, str]:
         WANDB_DIR=str(out / "wandb"),
         JAX_COMPILATION_CACHE_DIR=str(out / "jax_compilation"),
     )
-    if component == "ASYNC":
-        env["JAX_PLATFORMS"] = "cpu"
-    else:
-        env.pop("JAX_PLATFORMS", None)
+    env.pop("JAX_PLATFORMS", None)
     env["XLA_FLAGS"] = _pair.append_xla_flag(env.get("XLA_FLAGS"))
     return env
 
@@ -379,6 +401,11 @@ def command(args: Any, component: str, out: Path) -> list[str]:
         "--result-timeout-s", str(args.result_timeout_s),
     ]
     barrier = getattr(args, "active_barrier", None)
+    if component == "ASYNC":
+        async_input = getattr(args, "async_input", None)
+        if not async_input:
+            raise RuntimeError("async input receipt not prepared")
+        result.extend(["--async-input", str(async_input)])
     if barrier is not None:
         result.extend(
             [
@@ -389,6 +416,56 @@ def command(args: Any, component: str, out: Path) -> list[str]:
             ]
         )
     return result
+
+
+def make_async_input(
+    args: Any,
+    root: Path,
+    reference_run: Mapping[str, Any],
+    config_evidence: Mapping[str, str],
+) -> dict[str, Any]:
+    path = root / "ASYNC_INPUT.json"
+    if path.exists():
+        raise FileExistsError("async input receipt already exists")
+    reference = reference_run.get("result")
+    reference_path = Path(reference_run.get("out", "")) / "RESULT.json"
+    if not isinstance(reference, Mapping) or not reference_path.is_file():
+        raise RuntimeError("reference result unavailable for async input")
+    loaded = _harness.load_hashed_json(reference_path)
+    if loaded != reference:
+        raise RuntimeError("reference in-memory/file result mismatch")
+    contract = {
+        "task_ids": reference.get("task_ids"),
+        "task_code_rows": reference.get("task_code_rows"),
+        "input_rng": reference.get("input_rng"),
+        "main_rng_after_split": reference.get("main_rng_after_split"),
+        "preflight_rng": reference.get("preflight_rng"),
+        "checkpoint_input_path": reference.get("checkpoint_input_path"),
+        "checkpoint_input_sha256": reference.get("checkpoint_input_sha256"),
+        "graph_input_path": reference.get("graph_input_path"),
+        "graph_input_sha256": reference.get("graph_input_sha256"),
+        "archive_before_sha256": reference.get("archive_before_sha256"),
+    }
+    document = _harness.atomic_json(
+        path,
+        {
+            "classification": CLASSIFICATION,
+            "manifest_sha256": args.manifest_sha256,
+            "source_commit": args.source_commit,
+            "source_root": str(Path(args.source).resolve()),
+            "stage": args.stage,
+            "repeat": args.repeat,
+            "config_evidence": dict(config_evidence),
+            "reference_result_path": str(reference_path.resolve()),
+            "reference_result_sha256": reference["result_sha256"],
+            "reference_result_file_sha256": _harness.file_sha256(reference_path),
+            "reference_contract": contract,
+            "reference_contract_sha256": _harness.fingerprint(contract),
+            "llm_api_calls": 0,
+        },
+    )
+    args.async_input = str(path.resolve())
+    return document
 
 
 def make_async_barrier(args: Any, root: Path, label: str) -> dict[str, Any]:
@@ -461,6 +538,21 @@ def release_async_barrier(
                 or document.get("llm_api_calls") != 0
             ):
                 raise RuntimeError(f"component {component} READY receipt invalid")
+            if component == "ASYNC":
+                import_gate = document.get("controller_forbidden_imports")
+                if (
+                    not isinstance(import_gate, Mapping)
+                    or set(import_gate)
+                    != {"before_runtime", "after_runtime", "after_prepare"}
+                    or any(
+                        not isinstance(state, Mapping)
+                        or set(state)
+                        != {"jax_loaded", "jaxlib_loaded", "gen_manager_loaded"}
+                        or any(bool(value) for value in state.values())
+                        for state in import_gate.values()
+                    )
+                ):
+                    raise RuntimeError("component ASYNC READY import gate invalid")
             ready[component] = document
         time.sleep(0.05)
     go_path = Path(barrier["go_path"])
@@ -495,6 +587,14 @@ def verify_async_barrier_link(
     child = result.get("barrier")
     ready = parent.get("ready", {}).get(component, {})
     go = parent.get("go", {})
+    import_gate_ok = True
+    if component == "ASYNC":
+        result_gate = result.get("controller_forbidden_imports", {})
+        ready_gate = ready.get("controller_forbidden_imports")
+        import_gate_ok = isinstance(ready_gate, Mapping) and ready_gate == {
+            key: result_gate.get(key)
+            for key in ("before_runtime", "after_runtime", "after_prepare")
+        }
     if (
         not isinstance(child, Mapping)
         or child.get("enabled") is not True
@@ -510,6 +610,7 @@ def verify_async_barrier_link(
         or go.get("ready_sha256", {}).get(component) != ready.get("result_sha256")
         or int(result.get("component_started_monotonic_ns", -1))
         < int(child.get("go_observed_monotonic_ns", 0))
+        or not import_gate_ok
     ):
         raise RuntimeError(f"component {component} parent/child async barrier mismatch")
 
@@ -624,14 +725,23 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
         raise FileExistsError(f"cell root exists: {root}")
     root.mkdir(parents=True)
     static = static_gate(args)
-    order = ["B_CONTROL", "CONCURRENT", "REFERENCE"] if args.repeat == 0 else ["REFERENCE", "B_CONTROL", "CONCURRENT"]
+    order = (
+        ["REFERENCE", "B_CONTROL", "CONCURRENT"]
+        if args.repeat == 0
+        else ["B_CONTROL", "REFERENCE", "CONCURRENT"]
+    )
+    args.async_input = None
     runs: dict[str, Any] = {}
+    async_input: dict[str, Any] | None = None
     for label in order:
         if label == "B_CONTROL":
             runs[label] = _run_group(args, root, "b_control", ("B",))["B"]
         elif label == "REFERENCE":
             runs[label] = _run_group(args, root, "sync_reference", ("REFERENCE",))["REFERENCE"]
         else:
+            async_input = make_async_input(
+                args, root, runs["REFERENCE"], static["config_evidence"]
+            )
             runs[label] = _run_group(
                 args, root, "session_N_concurrent", concurrent_launch_order(args.repeat)
             )
@@ -639,6 +749,14 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
     concurrent_b = runs["CONCURRENT"]["B"]
     control_b = runs["B_CONTROL"]
     reference = runs["REFERENCE"]
+    if (
+        async_input is None
+        or async_run["result"].get("async_input_sha256")
+        != async_input["result_sha256"]
+        or async_run["result"].get("reference_result_sha256")
+        != reference["result"]["result_sha256"]
+    ):
+        raise RuntimeError("async parent input/result receipt chain mismatch")
     semantic = compare_async_reference(async_run["result"], reference["result"])
     b_semantic = _dual_benchmark.compare_component_semantics(control_b["result"], concurrent_b["result"], "B")
     timing = calculate_timing(async_run, concurrent_b, reference, control_b)
@@ -667,6 +785,7 @@ def run_cell(args: Any, root: Path) -> dict[str, Any]:
         "xla_mode": XLA_MODE,
         "concurrent_launch_order": list(concurrent_launch_order(args.repeat)),
         "parent_barrier": async_run["parent_barrier"],
+        "async_input": async_input,
         "static_evidence": static,
         "semantic": {"async_vs_sync": semantic, "B_control_vs_concurrent": b_semantic},
         "schedule": {"ok": schedule_ok, "checks": schedule_checks, "session_N": async_run["result"]["session_N"], "session_N1": async_run["result"]["session_N1"], "double_apply_rejected": async_run["result"]["double_apply_rejected"], "thresholds": {"component_start_skew_max_s": START_SKEW_LIMIT_S, "hidden_wall_min_s": HIDDEN_WALL_MIN_S, "async_slowdown_max": SLOWDOWN_LIMIT, "B_slowdown_max": SLOWDOWN_LIMIT}},
