@@ -62,18 +62,31 @@ def _calculate_scores_from_snapshot_impl(
 	# Pull from scoring_window_data_np
 	traj_batch = scoring_window_data_np.get("traj_batch")
 
-	# Pull from scoring_window_data_np (no np.asarray needed)
-	advantages = scoring_window_data_np.get("advantages")
-
 	# Extract info from traj_batch
 	info = traj_batch.info
 	task_ids = info["task_id"]
 	returned_episode = info["returned_episode"]
 	is_success = info["is_success"]
-	rewards = traj_batch.reward
-	values = traj_batch.value
 	episode_lengths = info["returned_episode_lengths"]
 	episode_returns = info["returned_episode_returns"]
+
+	# Pull only the leaves required by the configured score function.  Compact
+	# payloads intentionally omit all other leaves; using ``getattr`` here
+	# keeps the consumer compatible with both compact and historical payloads.
+	score_function = config.dicode_manager.score_function
+	if score_function == "learnability":
+		dones = advantages = rewards = values = None
+	elif score_function == "pvl":
+		dones = returned_episode
+		advantages = scoring_window_data_np.get("advantages")
+		rewards = values = None
+	elif score_function == "max_mc":
+		dones = returned_episode
+		advantages = None
+		rewards = traj_batch.reward
+		values = traj_batch.value
+	else:
+		raise ValueError(f"Unknown score_function: {score_function}")
 
 	# 2. Always calculate base metrics for logging and categorization
 	print(f"  - [Scoring] Calculating base metrics (SR, AchSR) for {num_tasks} tasks...")
@@ -100,10 +113,10 @@ def _calculate_scores_from_snapshot_impl(
 	# 3. Calculate the priority score based on the config
 	print(f"  - [Scoring] Calculating priority scores using '{config.dicode_manager.score_function}'...")
 	priority_scores = _calculate_priority_scores(
-		config.dicode_manager.score_function,
+		score_function,
 		base_metrics,
 		task_ids,
-		returned_episode,
+		dones,
 		advantages,
 		rewards,
 		values,
