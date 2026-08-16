@@ -24,3 +24,40 @@ seed: 42
 ablation: false
 
 checkpoint_dir: "rl_checkpoints/"
+
+# Optional runtime instrumentation and evaluator compilation cache.
+# Both are deliberately disabled by default to preserve historical behavior.
+runtime_profiling:
+  enabled: false
+  output_jsonl: runtime_analysis/events.jsonl
+
+performance:
+  eval_compile_cache: false
+  train_compile_cache: false
+  compiled_cache_max_entries: 8
+  embedding_cache: false
+  validation_cache: false
+  embedding_cache_max_entries: 2048
+  validation_cache_max_entries: 512
+  validation_static_lint: false
+  # [B2] reuse run_dicode's first load_tasks_from_env_codes result in
+  # evaluate_new_tasks (skip the second exec of candidate code). Default off ->
+  # historical path byte-identical.
+  preflight_reuse_loaded_tasks: false
+  # [B3] trim the preflight scoring_window_data to the fields the configured
+  # score function reads (smaller GPU->CPU transfer). Default off -> historical
+  # path byte-identical (single outer scan kept).
+  compact_preflight_payload: false
+  # [BC fast path] For learnability-only preflight, aggregate per-task
+  # finished/success counts inside the JAX scan instead of returning a full
+  # trajectory and calculating GAE. Default off preserves the historical
+  # pvl/max_mc/learnability rollout and scoring path.
+  learnability_fused_preflight_summary: false
+  # Research-only scheduling prototype: evaluate fresh candidates on a second
+  # GPU and apply their route receipt at a later session. Default off preserves
+  # the synchronous historical schedule and RNG stream.
+  async_preflight_pipeline: false
+  async_preflight_gpu_uuid: null
+  async_preflight_root: "async_preflight"
+  async_preflight_result_timeout_s: 0
+  async_preflight_shutdown_timeout_s: 120

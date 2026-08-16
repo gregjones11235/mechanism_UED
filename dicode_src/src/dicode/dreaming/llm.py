@@ -1,8 +1,28 @@
 import asyncio
+import copy
+import hashlib
 import os
+import threading
+import uuid
+import time
+from collections import OrderedDict
 from typing import Any, Literal
 
 from openai import AsyncOpenAI
+from dicode.runtime_analysis import tracker
+
+
+def _request_status(exc):
+	"""Map provider exceptions to stable profiling categories."""
+	name = type(exc).__name__.lower()
+	code = getattr(exc, "status_code", None)
+	if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or "timeout" in name:
+		return "timeout"
+	if "connection" in name or "connect" in name or "network" in name:
+		return "connection_error"
+	if isinstance(code, int) and 500 <= code < 600:
+		return "server_error"
+	return "error"
 
 class LLM:
 	def __init__(
@@ -16,12 +36,17 @@ class LLM:
 		top_p: float = None,
 		think: bool = False,
 		embedding_size: int = 1024,
+		performance=None,
 	):
 		self.provider = provider
 		self.base_url = base_url
 		self.model = model
 		self.llm_type = llm_type
 		self.embedding_size = embedding_size
+		self._embedding_cache_enabled = bool((performance or {}).get("embedding_cache", False))
+		self._embedding_cache_max_entries = int((performance or {}).get("embedding_cache_max_entries", 2048))
+		self._embedding_cache = OrderedDict()
+		self._embedding_cache_lock = threading.RLock()
 
 		# parameters for generation
 		if self.llm_type == "generation":
@@ -119,6 +144,9 @@ class LLM:
 		]
 		extra_body = self._thinking_on_extra_body() if self.think else self._thinking_off_extra_body()
 
+		request_id = uuid.uuid4().hex
+		start_ns = time.monotonic_ns()
+		status = "error"
 		try:
 			chat_completion = await self.client.chat.completions.create(
 				model=self.model,
@@ -129,6 +157,8 @@ class LLM:
 				extra_body=extra_body,
 			)
 
+			content = chat_completion.choices[0].message.content
+			status = "ok" if content is not None and str(content).strip() else "empty"
 			return {
 				"system_prompt": system_prompt,
 				"user_prompt": user_prompt,
@@ -137,6 +167,7 @@ class LLM:
 				"error": None,
 			}
 		except Exception as e:
+			status = _request_status(e)
 			return {
 				"system_prompt": system_prompt,
 				"user_prompt": user_prompt,
@@ -144,6 +175,10 @@ class LLM:
 				"reasoning_content": None,
 				"error": e,
 			}
+		finally:
+			if tracker.enabled:
+				tracker.record("chat_request", start_ns, request_id=request_id,
+							  status=status, task_signature=f"provider={self.provider};model={self.model}")
 
 	async def _query_with_retries(self, api_call_coroutine, max_retries=3, initial_delay=2):
 		"""A wrapper to add exponential backoff retries to an API call."""
@@ -200,6 +235,9 @@ class LLM:
 
 		if not formatted_input_list:
 			return []
+		request_id = uuid.uuid4().hex
+		start_ns = time.monotonic_ns()
+		status = "error"
 		try:
 			response = await self.client.embeddings.create(
 				model=self.model,
@@ -216,8 +254,10 @@ class LLM:
 						"error": None,
 					}
 				)
+			status = "ok" if results and all(item.get("error") is None for item in results) else "empty"
 			return results
 		except Exception as e:
+			status = _request_status(e)
 			return [
 				{
 					"input_text": text,
@@ -227,6 +267,10 @@ class LLM:
 				}
 				for text in input_list
 			]
+		finally:
+			if tracker.enabled:
+				tracker.record("embedding_request", start_ns, request_id=request_id,
+							  status=status, task_signature=f"provider={self.provider};model={self.model};count={len(input_list)}")
 
 	async def _query_gemini(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
 		messages = [
@@ -234,6 +278,9 @@ class LLM:
 			{"role": "user", "content": user_prompt},
 		]
 
+		request_id = uuid.uuid4().hex
+		start_ns = time.monotonic_ns()
+		status = "error"
 		try:
 			chat_completion = await self.client.chat.completions.create(
 				model=self.model,
@@ -241,6 +288,8 @@ class LLM:
 				reasoning_effort="high",
 			)
 
+			content = chat_completion.choices[0].message.content
+			status = "ok" if content is not None and str(content).strip() else "empty"
 			return {
 				"system_prompt": system_prompt,
 				"user_prompt": user_prompt,
@@ -248,12 +297,17 @@ class LLM:
 				"error": None,
 			}
 		except Exception as e:
+			status = _request_status(e)
 			return {
 				"system_prompt": system_prompt,
 				"user_prompt": user_prompt,
 				"content": None,
 				"error": e,
 			}
+		finally:
+			if tracker.enabled:
+				tracker.record("chat_request", start_ns, request_id=request_id,
+							  status=status, task_signature=f"provider={self.provider};model={self.model}")
 
 	async def _query_batch_local_gen(
 		self, system_prompt: str, user_prompts: list[str]
@@ -281,9 +335,55 @@ class LLM:
 	def get_embedding(
 		self, text_to_embed: str | list[str] | tuple[str, ...], instruction: str = None
 	) -> dict[str, Any]:
+		if self.provider == "gemini":
+			raise NotImplementedError("Gemini embeddings not yet implemented")
+		if self.provider not in ("local", "openai", "openrouter", "together", "deepinfra"):
+			raise ValueError(f"Provider {self.provider} not supported")
+		if self._embedding_cache_enabled:
+			return self._get_embedding_cached(text_to_embed, instruction)
 		if self.provider in ("local", "openai", "openrouter", "together", "deepinfra"):
 			return asyncio.run(self._query_local_embed(text_to_embed, instruction))
-		elif self.provider == "gemini":
-			raise NotImplementedError("Gemini embeddings not yet implemented")
+		raise ValueError(f"Provider {self.provider} not supported")
+
+	def _embedding_key(self, text, instruction):
+		return (self.provider, self.base_url, self.model, instruction, text, self.embedding_size)
+
+	def _get_embedding_cached(self, text_to_embed, instruction):
+		if isinstance(text_to_embed, str):
+			inputs, single = [text_to_embed], True
+		elif isinstance(text_to_embed, (list, tuple)):
+			inputs, single = list(text_to_embed), False
 		else:
-			raise ValueError(f"Provider {self.provider} not supported")
+			raise ValueError(f"Invalid input type: {type(text_to_embed)}")
+		results = [None] * len(inputs)
+		misses, miss_indices = [], {}
+		hit_count = 0
+		with self._embedding_cache_lock:
+			for idx, text in enumerate(inputs):
+				key = self._embedding_key(text, instruction)
+				if key in self._embedding_cache:
+					value = self._embedding_cache.pop(key)
+					self._embedding_cache[key] = value
+					results[idx] = copy.deepcopy(value)
+					hit_count += 1
+				else:
+					if key not in miss_indices:
+						miss_indices[key] = len(misses)
+						misses.append(text)
+		if misses:
+			fetched = asyncio.run(self._query_local_embed(misses, instruction))
+			for text, item in zip(misses, fetched):
+				key = self._embedding_key(text, instruction)
+				if item.get("error") is None and item.get("embedding") is not None:
+					with self._embedding_cache_lock:
+						self._embedding_cache[key] = copy.deepcopy(item)
+						while len(self._embedding_cache) > max(1, self._embedding_cache_max_entries):
+							self._embedding_cache.popitem(last=False)
+			for idx, text in enumerate(inputs):
+				if results[idx] is None:
+					item = fetched[miss_indices[self._embedding_key(text, instruction)]]
+					results[idx] = copy.deepcopy(item)
+		h = hashlib.sha256(repr(tuple(self._embedding_key(t, instruction) for t in inputs)).encode()).hexdigest()
+		if tracker.enabled and not misses:
+			tracker.record("embedding_request", task_signature=f"hash={h};hits={hit_count};misses={len(misses)}", request_id=uuid.uuid4().hex)
+		return results

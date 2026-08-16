@@ -54,3 +54,26 @@ secrets.json
 *.key
 id_rsa
 id_ed25519
+# --- perf-line additions (union from perf/validation-cache-learnability-summary-bc) ---
+env.sh
+*_secret*
+outputs_*/
+rl_checkpoints/
+runtime_analysis/
+dicode_src/*_report.json
+*.tgz
+*.tar.gz
+*.zip
+*.rar
+*.npz
+*.graphml
+*.sif
+blob
+eval_*_seed*.json
+salvage/
+evac/
+build/
+dist/
+wheels/
+*.egg-info
+.ipynb_checkpoints/

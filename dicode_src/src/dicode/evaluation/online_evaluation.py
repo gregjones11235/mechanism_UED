@@ -1,5 +1,6 @@
 # --- Third-Party ---
 import hydra
+import time
 import jax
 import jax.numpy as jnp
 import wandb
@@ -22,6 +23,7 @@ from minicraftax.envs.craftax import CraftaxAugObsTrain
 # from multitask_evaluation import make_multitask_evaluate
 from dicode.dreaming.gen_manager import GenManager, TaskArchive
 from dicode.dreaming.llm import LLM
+from dicode.runtime_analysis import tracker
 
 
 def run_session_evaluation(
@@ -31,6 +33,7 @@ def run_session_evaluation(
 	gen_manager: GenManager,
 	current_session_idx: int,
 	global_env_steps: int,
+	detail: bool = False,
 ) -> tuple[jax.Array, dict]:
 	"""Runs the standard Craftax evaluation against the current agent state."""
 	print("--- [Main Thread] Running evaluation on Craftax... ---")
@@ -71,7 +74,8 @@ def run_session_evaluation(
 
 	rng, eval_rng = jax.random.split(rng)
 	evaluation_metrics = evaluate(
-		config, eval_rng, train_state=rl_train_state, eval_embedding=eval_embedding_replicated
+		config, eval_rng, train_state=rl_train_state, eval_embedding=eval_embedding_replicated,
+		detail=detail,
 	)
 	# evaluation_metrics = process_evaluation_metrics(eval_metrics_raw)
 	print(f"  - Evaluation Metrics: {evaluation_metrics}")
@@ -80,7 +84,17 @@ def run_session_evaluation(
 		eval_log_data = {"session": current_session_idx, "global_env_steps": global_env_steps}
 		for key, value in evaluation_metrics.items():
 			eval_log_data[f"evaluation/{key}"] = value
-		wandb.log(eval_log_data)
+		if tracker.enabled:
+			_start = time.monotonic_ns()
+			try:
+				wandb.log(eval_log_data)
+			except Exception:
+				tracker.record("wandb_log_heldout", _start, session=current_session_idx, status="error")
+				raise
+			else:
+				tracker.record("wandb_log_heldout", _start, session=current_session_idx)
+		else:
+			wandb.log(eval_log_data)
 
 	return rng, evaluation_metrics
 
@@ -133,17 +147,50 @@ def evaluate_new_tasks(
 	new_task_ids: list[str],
 	archive: TaskArchive,
 	embedding_model: LLM,
+	preloaded_task_classes: list = None,
+	preloaded_task_ids: list[str] = None,
 ) -> dict:
 	"""Evaluates a list of newly generated tasks using the current agent state
 	by running rollouts and collecting raw trajectory data for scoring.
+
+	[B2] ``preloaded_task_classes`` / ``preloaded_task_ids``: when
+	``performance.preflight_reuse_loaded_tasks`` is enabled, run_dicode.py's
+	first ``load_tasks_from_env_codes`` result is reused here instead of a
+	second load (same source, same semantics). The two must be given together
+	(all-or-nothing); id order/count are validated against ``new_task_ids`` and
+	any mismatch raises (no silent fallback). We deliberately do NOT reuse the
+	validation-path Env class (``Task(temp_file)``): it differs in module name /
+	lifecycle / JIT static signature. See skill_preflight.reuse_loaded_tasks.
 	"""
 	if not new_task_ids:
 		return {}
+	_perf = config.get("performance", {}) if hasattr(config, "get") else {}
+	_fused_learnability = bool(
+		_perf.get("learnability_fused_preflight_summary", False)
+	)
+	if _fused_learnability:
+		from dicode.skill_preflight.learnability_summary import (
+			require_learnability_fused_contract,
+		)
+		require_learnability_fused_contract(config.dicode_manager.score_function)
 
 	print(f"  - Evaluating {len(new_task_ids)} newly generated tasks...")
 
-	# 1. Load Task Classes from Archive Code
-	task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
+	# 1. Load Task Classes from Archive Code (or reuse run_dicode's first load)
+	# [B1] preflight_task_reload: the second load of the candidate Env classes
+	# (the first happens in run_dicode.py's preflight block). span is a near
+	# no-op when profiling is disabled. [B2] when the reuse flag is on, the
+	# first load is passed in and no second load happens.
+	from dicode.skill_preflight.reuse_loaded_tasks import resolve_preloaded_tasks
+	preloaded, _use_preload = resolve_preloaded_tasks(
+		config, new_task_ids, preloaded_task_classes, preloaded_task_ids)
+	if _use_preload:
+		task_classes = preloaded
+	elif tracker.enabled:
+		with tracker.span("preflight_task_reload"):
+			task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
+	else:
+		task_classes, _ = load_tasks_from_env_codes(archive, new_task_ids)
 	num_new_tasks = len(task_classes)
 	if num_new_tasks == 0:
 		print("  - Warning: Could not load any task classes for evaluation.")
@@ -152,19 +199,34 @@ def evaluate_new_tasks(
 	# 2. Get Embeddings if needed
 	task_embeddings = _get_new_task_embeddings(config, task_classes, embedding_model)
 
-	# 3. Create Achievement Mask (needed for the Smart Calculator)
-	num_total_achievements = len(Achievement)
-	task_achievement_mask = jnp.zeros((num_new_tasks, num_total_achievements), dtype=jnp.bool)
-	task_completed_mask = jnp.zeros((num_new_tasks, num_total_achievements), dtype=jnp.bool)
-	for i, task_cls in enumerate(task_classes):
-		# Instantiate with dummy params to access attributes
-		temp_task = task_cls(StaticEnvParams(), EnvParams())
-		if temp_task.relevant_achievements:
-			achievement_indices = jnp.array([ach.value for ach in temp_task.relevant_achievements])
-			task_achievement_mask = task_achievement_mask.at[i, achievement_indices].set(True)
-		if temp_task.completed_achievements:
-			completed_indices = jnp.array([ach.value for ach in temp_task.completed_achievements])
-			task_completed_mask = task_completed_mask.at[i, completed_indices].set(True)
+	# 3. Create Achievement Mask (needed only by the historical Smart
+	# Calculator path). The fused learnability reducer never consumes
+	# achievements, so it avoids both masks and the extra task instantiations.
+	if not _fused_learnability:
+		num_total_achievements = len(Achievement)
+		task_achievement_mask = jnp.zeros(
+			(num_new_tasks, num_total_achievements), dtype=jnp.bool
+		)
+		task_completed_mask = jnp.zeros(
+			(num_new_tasks, num_total_achievements), dtype=jnp.bool
+		)
+		for i, task_cls in enumerate(task_classes):
+			# Instantiate with dummy params to access attributes
+			temp_task = task_cls(StaticEnvParams(), EnvParams())
+			if temp_task.relevant_achievements:
+				achievement_indices = jnp.array(
+					[ach.value for ach in temp_task.relevant_achievements]
+				)
+				task_achievement_mask = task_achievement_mask.at[
+					i, achievement_indices
+				].set(True)
+			if temp_task.completed_achievements:
+				completed_indices = jnp.array(
+					[ach.value for ach in temp_task.completed_achievements]
+				)
+				task_completed_mask = task_completed_mask.at[
+					i, completed_indices
+				].set(True)
 
 	# 4. Call our new "heavyweight" rollout collector
 	# --- START OF REPLACED BLOCK ---
@@ -182,6 +244,14 @@ def evaluate_new_tasks(
 		task_embeddings=task_embeddings,
 	)
 	print("  - Evaluation run finished.")
+	if _fused_learnability:
+		from dicode.skill_preflight.contract import PreflightOptimizationContractError
+		summary = session_results.get("metrics", {}).get("learnability_summary")
+		if summary is None:
+			raise PreflightOptimizationContractError(
+				"fused learnability rollout produced no learnability_summary"
+			)
+		return {"learnability_summary": summary}
 
 	# 5. Extract the raw data needed for the calculator
 	scoring_window_data = session_results.get("metrics", {}).get("scoring_window_data")

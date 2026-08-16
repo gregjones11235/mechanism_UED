@@ -11,6 +11,8 @@ This module implements the core curriculum learning loop for DiCode, including:
 
 # --- Standard Library ---
 import copy
+import ast
+import hashlib
 import importlib.util
 import json
 import os
@@ -19,6 +21,9 @@ import sys
 import tempfile
 import threading
 import traceback
+import subprocess
+import time
+from collections import OrderedDict
 from textwrap import dedent
 
 # --- Third-Party ---
@@ -30,14 +35,96 @@ from craftax.craftax.craftax_state import EnvParams, StaticEnvParams
 
 # --- Local Modules ---
 from dicode.dreaming.llm import LLM
+from dicode.runtime_analysis import tracker
 from dicode.dreaming.prompts.dicode.constants import context as CONSTANTS
 from dicode.dreaming.prompts.dicode.minicraftax_api import context as API_DOCS
+
+import os as _os_api
+
+# --- auto-generated API reference (flag: DICODE_API_REF=1) -------------------
+# minicraftax_api omits Inventory entirely and never lists BlockType /
+# Achievement members, so the FM invents names (67 such failures measured).
+# Introspected from the real classes, so it cannot drift from source.
+def _dicode_api_ref():
+    import dataclasses as _dc, importlib as _il
+    out = []
+    try:
+        from craftax.craftax.constants import BlockType as _BT, Achievement as _AC
+        out.append("BlockType members -- use exactly these names:\n"
+                   + ", ".join(b.name for b in _BT))
+        out.append("Achievement members -- use exactly these names:\n"
+                   + ", ".join(a.name for a in _AC))
+    except Exception as _e:
+        out.append("(enum introspection failed: %r)" % (_e,))
+    specs = (
+        ("craftax.craftax.craftax_state", "Inventory",
+         "IMPORTANT: pickaxe, sword and armour are integer TIER LEVELS "
+         "(1=wood, 2=stone, 3=iron, 4=diamond). There is no iron_pickaxe or "
+         "stone_pickaxe field -- set pickaxe=3 for an iron pickaxe."),
+        ("minicraftax.craftax_state", "TaskParams", ""),
+        ("minicraftax.craftax_state", "EnvState", ""),
+    )
+    for _mod, _cls, _note in specs:
+        try:
+            _c = getattr(_il.import_module(_mod), _cls)
+            _txt = _cls + " fields (" + _mod + "):\n" + ", ".join(
+                x.name for x in _dc.fields(_c))
+            if _note:
+                _txt += "\n" + _note
+            out.append(_txt)
+        except Exception as _e:
+            out.append("(" + _cls + " introspection failed: %r)" % (_e,))
+    return "\n\n".join(out)
+
+if _os_api.environ.get("DICODE_API_REF", "") == "1":
+    _ref = _dicode_api_ref()
+    API_DOCS = (API_DOCS
+                + "\n\n=== EXACT API REFERENCE (auto-generated from source) ===\n"
+                + _ref)
+    print("[api-ref] ON: appended %d chars to API_DOCS" % len(_ref))
+# ----------------------------------------------------------------------------
 from dicode.dreaming.prompts.dicode.mobs import context as MOBS
 from dicode.dreaming.prompts.dicode.mobs_code import context as MOBS_CODE
 from dicode.dreaming.prompts.dicode.step_fn_nl import context as GAME_MECHANICS
 from dicode.dreaming.prompts.dicode.world_gen_nl import context as WORLD_GEN
+
+import os as _os
+
+# --- floor-guide reveal (experiment flag: DICODE_TUTORIAL_REVEAL=1) ----------
+# Appends the tutorial paragraphs for floors the agent has ALREADY demonstrably
+# reached to the natural-language mechanics block. Floors it has never reached
+# are withheld, so no depth structure is revealed that the student has not
+# itself discovered. Off unless the env var is set.
+_DICODE_GUIDE_SECTIONS = ("Basic Mechanics", "Floor 0", "Floor 1", "Floor 2")
+
+def _dicode_floor_guide(sections=_DICODE_GUIDE_SECTIONS):
+    import re as _re
+    from dicode.dreaming.prompts.cl_.knowledge_base_designer import (
+        knowledge_base_designer as _kb_raw,
+    )
+    _kb = _kb_raw.replace("\r\n", "\n")
+    _out = []
+    for _m in _re.finditer(r"(?m)^## (.+)$", _kb):
+        _name = _m.group(1).strip()
+        if not any(_name.startswith(_s) for _s in sections):
+            continue
+        _nxt = _kb.find("\n## ", _m.end())
+        _out.append("## " + _name + _kb[_m.end(): _nxt if _nxt > 0 else len(_kb)])
+    return "\n".join(_out)
+
+if _os.environ.get("DICODE_TUTORIAL_REVEAL", "") == "1":
+    _guide = _dicode_floor_guide()
+    GAME_MECHANICS = (
+        GAME_MECHANICS
+        + "\n\n=== FLOOR GUIDE (floors the agent has demonstrably reached) ===\n"
+        + _guide
+    )
+    print(f"[tutorial-reveal] ON: appended {len(_guide)} chars to GAME_MECHANICS")
+# ----------------------------------------------------------------------------
 from dicode.dreaming.utils import distances_from_embeddings, smart_absolute_path
 from minicraftax.envs.base import MiniCraftaxTrain
+
+VALIDATOR_CACHE_VERSION = "v1"
 
 # Instruction for the embedding model to generate task embeddings.
 EMBEDDING_INSTRUCTION = (
@@ -656,6 +743,7 @@ class TaskGenerator:
 		self._profile_log = None  # auction.student_profile_log.StudentProfileLog, lazily constructed
 		# Rotating turn order for the cooperative sequential-fill method (advances once per session).
 		self._coop_turn_offset = 0
+		self.current_skill_target = None  # [A] skill-graph target injected per session
 		if config.mode != "reward":
 			self.evolve_mastered_prompt = importlib.import_module(
 				self.config.prompts.evolve_mastered
@@ -784,6 +872,9 @@ class TaskGenerator:
 		example_sets = []
 
 		global_profile_str = self._format_global_agent_profile(global_agent_profile)
+		_skill_hint = getattr(self, "current_skill_target", None)  # [A-2]
+		if _skill_hint:
+			global_profile_str = global_profile_str + "\n\n[Curriculum focus]\n" + _skill_hint
 
 		for mastered_task in mastered_tasks:
 			task_examples = self.selector.select_similar_desc_tasks(
@@ -1348,6 +1439,9 @@ class TaskGenerator:
 		parent_sets: list[list[str]] = []
 		example_sets: list[list[str]] = []
 		global_profile_str = self._format_global_agent_profile(global_agent_profile)
+		_skill_hint = getattr(self, "current_skill_target", None)  # [A-2]
+		if _skill_hint:
+			global_profile_str = global_profile_str + "\n\n[Curriculum focus]\n" + _skill_hint
 		# NOTE (v3, 2026-07-02): the prompt-side ability gate is GONE. Persona templates no longer
 		# carry an {ABILITY_GATE} placeholder — over-reach control is bid-side only (ambition.py's
 		# reachable_ceiling discount), matching baseline's plain evolve prompt (no tier constraint).
@@ -1757,7 +1851,7 @@ class EnvGenerator:
 	task description, including a reflection loop to fix compilation errors.
 	"""
 
-	def __init__(self, env_generator_llm: LLM, archive: TaskArchive, config):
+	def __init__(self, env_generator_llm: LLM, archive: TaskArchive, config, performance=None):
 		"""Initializes the EnvGenerator.
 
 		Args:
@@ -1769,6 +1863,17 @@ class EnvGenerator:
 		self.llm = env_generator_llm
 		self.archive = archive
 		self.config = config
+		self.performance = performance or {}
+		self._validation_cache = OrderedDict()
+		self._validation_cache_lock = threading.RLock()
+		self._validation_inflight = {}
+		self._validation_source_sha = os.getenv("DICODE_SOURCE_SHA")
+		if not self._validation_source_sha:
+			try:
+				self._validation_source_sha = subprocess.check_output(
+					["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True).strip()
+			except Exception:
+				self._validation_source_sha = "unknown"
 		self.gen_env_prompt = importlib.import_module(self.config.prompts.env_generation)
 		self.craftax_mechanics = importlib.import_module(self.config.prompts.craftax_code).context
 
@@ -1937,16 +2042,20 @@ class EnvGenerator:
 		print(f"    WORKER (Thread): Generating code for {len(tasks_to_generate)} tasks...")
 
 		# 1. Prepare a batch of prompts
+		# [C2lite §2] one-step scaffold rules for the coder stage. Set per-session by
+		# evolve_tasks (flag-gated); None -> baseline prompt, byte-identical to old runs.
+		_scaffold_rules = getattr(self, "scaffold_rules_block", None)
 		user_prompts = []
 		code_example_strs = []
 		for task_info in tasks_to_generate:
 			example_str = self._format_code_examples(task_info["examples"])
 			code_example_strs.append(example_str)
-			user_prompts.append(
-				self.gen_env_prompt.user_prompt.format(
-					CODE_EXAMPLES=example_str, TASK_DESCRIPTION=task_info["description"]
-				)
+			_up = self.gen_env_prompt.user_prompt.format(
+				CODE_EXAMPLES=example_str, TASK_DESCRIPTION=task_info["description"]
 			)
+			if _scaffold_rules:
+				_up = _up + _scaffold_rules
+			user_prompts.append(_up)
 
 		system_prompt = self.gen_env_prompt.system_prompt.format(
 			CRAFTAX_CODE=self.craftax_mechanics, MINICRAFTAX_CODE=self.wrapper_mechanics, MOBS=MOBS_CODE,
@@ -1965,6 +2074,30 @@ class EnvGenerator:
 
 		print("    WORKER (Thread): Code generation complete.")
 		return results
+
+	def repair_scaffold_violations(
+		self, task_desc: str, prior_code: str, evidence: str
+	) -> str | None:
+		"""[C2lite §3] One targeted regeneration for a scaffold-gate violator.
+
+		Reuses the existing non-compilation reflection template with the gate's evidence as
+		the ERROR block, plus the current session's scaffold rules if set. Returns the newly
+		extracted code, or None if extraction failed. Caller owns recompile/regate/retry-cap.
+		"""
+		prompt = self._build_reflection_prompt(
+			failed_response_content=prior_code,
+			error_msg=evidence,
+			code_examples_str="",
+			task_desc=task_desc,
+		)
+		_scaffold_rules = getattr(self, "scaffold_rules_block", None)
+		if _scaffold_rules:
+			prompt = prompt + _scaffold_rules
+		system_prompt = self.gen_env_prompt.system_prompt.format(
+			CRAFTAX_CODE=self.craftax_mechanics, MINICRAFTAX_CODE=self.wrapper_mechanics, MOBS=MOBS_CODE,
+		)
+		responses = self.llm.query(system_prompt, [prompt])
+		return self._extract_file(responses[0].get("content")) if responses else None
 
 	def _build_reflection_prompt(
 		self, failed_response_content: str, error_msg: str, code_examples_str: str, task_desc: str
@@ -1990,7 +2123,7 @@ class EnvGenerator:
 		codes = self.archive.get_task_codes(example_paths)
 		return "\n".join([f"<example>\n{code}\n</example>\n" for code in codes.values()])
 
-	def check_compilation(self, code: str) -> tuple[bool, str]:
+	def _check_compilation_uncached(self, code: str) -> tuple[bool, str]:
 		"""Validates code by loading and running a full environment step on CPU.
 
 		This ensures generated code is syntactically correct and produces valid
@@ -2042,8 +2175,22 @@ class EnvGenerator:
 							)
 					return reward
 
-				_validate_on_cpu = jax.jit(_validate_on_cpu_impl, backend="cpu")
-				_ = _validate_on_cpu(key)
+				if tracker.enabled:
+					# [B1] split the fused jit-construct + call into build/compile/
+					# execute so the preflight cost attribution is precise. The
+					# explicit lower()+compile() forces the compile to happen inside
+					# its own span (jax.jit alone defers compilation to first call).
+					with tracker.span("candidate_cpu_validation_build"):
+						_validate_on_cpu = jax.jit(_validate_on_cpu_impl, backend="cpu")
+					with tracker.span("candidate_cpu_validation_compile"):
+						_validate_on_cpu = _validate_on_cpu.lower(key).compile()
+					with tracker.span("candidate_cpu_validation_execute"):
+						_ = _validate_on_cpu(key)
+						_.block_until_ready()
+				else:
+					# Historical path (byte-identical behaviour when profiling off).
+					_validate_on_cpu = jax.jit(_validate_on_cpu_impl, backend="cpu")
+					_ = _validate_on_cpu(key)
 
 			return True, ""
 
@@ -2056,6 +2203,109 @@ class EnvGenerator:
 				os.unlink(temp_file)
 			if module_name and module_name in sys.modules:
 				del sys.modules[module_name]
+
+	def _validation_key(self, code):
+		normalized = code.replace("\r\n", "\n").replace("\r", "\n")
+		return (hashlib.sha256(normalized.encode()).hexdigest(), VALIDATOR_CACHE_VERSION, getattr(jax, "__version__", "unknown"), getattr(self, "_validation_source_sha", "unknown"))
+
+	def _static_lint(self, code):
+		try:
+			tree = ast.parse(code)
+			from craftax.craftax.constants import BlockType, Achievement
+			enum_members = {"BlockType": set(BlockType.__members__), "Achievement": set(Achievement.__members__)}
+			aliases = {}
+			inventory_aliases = set()
+			try:
+				from craftax.craftax.craftax_state import Inventory
+				try:
+					from dataclasses import fields
+					inventory_fields = {field.name for field in fields(Inventory)}
+				except Exception:
+					inventory_fields = set(getattr(Inventory, "__annotations__", {}))
+			except Exception:
+				inventory_fields = set()
+			for node in ast.walk(tree):
+				if isinstance(node, ast.ImportFrom) and node.module:
+					for name in node.names:
+						if node.module.endswith("constants") and name.name in enum_members:
+							aliases[name.asname or name.name] = name.name
+						if node.module.endswith("craftax_state") and name.name == "Inventory":
+							inventory_aliases.add(name.asname or name.name)
+				if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in aliases:
+					if node.attr not in enum_members[aliases[node.value.id]]:
+						return False, f"Compilation error: invalid {aliases[node.value.id]} member {node.attr}"
+				if inventory_fields and isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in inventory_aliases:
+					for keyword in node.keywords:
+						if keyword.arg and keyword.arg not in inventory_fields:
+							return False, f"Compilation error: invalid Inventory kwarg {keyword.arg}"
+			return True, ""
+		except SyntaxError as exc:
+			return False, f"Compilation error: {exc}"
+
+	def check_compilation(self, code: str) -> tuple[bool, str]:
+		started_ns = time.monotonic_ns()
+		key_signature = self._validation_key(code)[0]
+		def _validation_event(phase="candidate_validation", cache_hit=False, status="ok", start=started_ns):
+			if tracker.enabled:
+				tracker.record(phase, start_monotonic_ns=start, end_monotonic_ns=time.monotonic_ns(),
+				              task_signature=key_signature, cache_hit=cache_hit, status=status)
+		if self.performance.get("validation_static_lint", False):
+			lint_started = time.monotonic_ns()
+			try:
+				ok, msg = self._static_lint(code)
+			except Exception:
+				_validation_event(phase="candidate_validation_static_lint", start=lint_started, status="error")
+				raise
+			if not ok:
+				_validation_event(phase="candidate_validation_static_lint", start=lint_started, status="error")
+				return ok, msg
+			_validation_event(phase="candidate_validation_static_lint", start=lint_started)
+		if not self.performance.get("validation_cache", False):
+			uncached_started = time.monotonic_ns()
+			try:
+				value = self._check_compilation_uncached(code)
+			except Exception:
+				_validation_event(start=uncached_started, status="error")
+				raise
+			_validation_event(start=uncached_started, status="ok" if value[0] else "error")
+			return value
+		key = self._validation_key(code)
+		with self._validation_cache_lock:
+			if not hasattr(self, "_validation_inflight"):
+				self._validation_inflight = {}
+			if key in self._validation_cache:
+				value = self._validation_cache.pop(key)
+				self._validation_cache[key] = value
+				_validation_event(cache_hit=True, status="ok" if value[0] else "error")
+				return value
+			waiter = self._validation_inflight.get(key)
+			if waiter is None:
+				waiter = threading.Event()
+				self._validation_inflight[key] = waiter
+				owner = True
+			else:
+				owner = False
+		if not owner:
+			wait_started = time.monotonic_ns()
+			waiter.wait()
+			_validation_event(phase="candidate_validation_wait", start=wait_started)
+			return self.check_compilation(code)
+		try:
+			try:
+				value = self._check_compilation_uncached(code)
+			except Exception:
+				_validation_event(cache_hit=False, status="error")
+				raise
+			with self._validation_cache_lock:
+				self._validation_cache[key] = value
+				while len(self._validation_cache) > max(1, int(self.performance.get("validation_cache_max_entries", 512))):
+					self._validation_cache.popitem(last=False)
+		finally:
+			with self._validation_cache_lock:
+				self._validation_inflight.pop(key, None)
+				waiter.set()
+		_validation_event(cache_hit=False, status="ok" if value[0] else "error")
+		return value
 
 	def _extract_file(self, content: str) -> str | None:
 		"""Extracts Python code from an LLM response wrapped in <code> tags.
@@ -2070,8 +2320,25 @@ class EnvGenerator:
 			return None
 		code_match = re.search(r"<code>\s*(.*?)\s*</code>", content, re.DOTALL)
 		if code_match:
-			return code_match.group(1).strip()
-		return content
+			extracted = code_match.group(1).strip()
+		else:
+			extracted = content
+		return self._strip_code_fences(extracted)
+
+	def _strip_code_fences(self, code: str | None) -> str | None:
+		"""Removes leaked Markdown code fences (e.g. ```python ... ```) that
+		small models often emit inside <code> tags. Without this the fence
+		line reaches the compiler as line 1 and raises SyntaxError.
+		"""
+		if code is None:
+			return None
+		text = code.strip()
+		fence = re.search(r"```[a-zA-Z]*\s*(.*?)```", text, re.DOTALL)
+		if fence is not None:
+			text = fence.group(1)
+		text = re.sub(r"^\s*```[a-zA-Z]*[ \t]*\r?\n?", "", text)
+		text = re.sub(r"(?m)^[ \t]*```[ \t]*\r?$", "", text)
+		return text.strip()
 
 
 class GenManager:
@@ -2089,6 +2356,7 @@ class GenManager:
 		"""
 		self.config_ = config
 		self.config = config.gen_manager
+		performance = config.get("performance", {}) if hasattr(config, "get") else {}
 
 		task_designer = LLM(
 			provider=self.config.task_generator.provider,
@@ -2099,6 +2367,7 @@ class GenManager:
 			temperature=self.config.task_generator.temperature,
 			top_p=self.config.task_generator.top_p,
 			think=self.config.task_generator.think,
+			performance=performance,
 		)
 		env_coder = LLM(
 			provider=self.config.env_generator.provider,
@@ -2109,6 +2378,7 @@ class GenManager:
 			temperature=self.config.env_generator.temperature,
 			top_p=self.config.env_generator.top_p,
 			think=self.config.env_generator.think,
+			performance=performance,
 		)
 
 		embedding_model = LLM(
@@ -2117,6 +2387,7 @@ class GenManager:
 			model=self.config.embedding_model.model,
 			llm_type=self.config.embedding_model.llm_type,
 			embedding_size=self.config.embedding_model.embedding_size,
+			performance=performance,
 		)
 		# Optional N heterogeneous Proposer LLMs for the auction method (config.gen_manager.proposers).
 		# Absent -> proposer_llms stays None -> TaskGenerator falls back to the single-FM baseline.
@@ -2133,6 +2404,7 @@ class GenManager:
 					temperature=pc.temperature,
 					top_p=pc.top_p,
 					think=pc.think,
+					performance=performance,
 				)
 				for pc in proposers_cfg
 			]
@@ -2151,6 +2423,7 @@ class GenManager:
 				temperature=modeler_cfg.temperature,
 				top_p=modeler_cfg.top_p,
 				think=modeler_cfg.get("think", False),
+				performance=performance,
 			)
 			print(f"[modeler] Built MODELER LLM ({modeler_cfg.model}).")
 
@@ -2164,7 +2437,7 @@ class GenManager:
 			proposer_llms=proposer_llms,
 			modeler_llm=modeler_llm,
 		)
-		self.env_generator = EnvGenerator(env_coder, self.archive, self.config)
+		self.env_generator = EnvGenerator(env_coder, self.archive, self.config, performance=performance)
 
 		self.session_idx = self.archive.get_max_session_idx() + 1
 

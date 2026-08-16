@@ -1,4 +1,7 @@
 import time
+import hashlib
+import threading
+from collections import OrderedDict
 
 import distrax
 import flax.linen as nn
@@ -13,6 +16,55 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 
 from dicode.network import ActorCriticTransformer, Transition
+from dicode.runtime_analysis import tracker
+
+_TRAIN_COMPILE_CACHE = OrderedDict()
+_TRAIN_COMPILE_CACHE_LOCK = threading.RLock()
+
+def clear_train_compile_cache():
+	with _TRAIN_COMPILE_CACHE_LOCK:
+		_TRAIN_COMPILE_CACHE.clear()
+
+def train_compile_cache_key(config, task_signature, num_training_updates, task_embeddings,
+						task_distribution_proportions, train_state, rng, current_original_return=None, global_update_step=0):
+	if not task_signature:
+		return None
+	try:
+		from omegaconf import OmegaConf
+		config_fp = OmegaConf.to_container(config, resolve=True)
+	except Exception:
+		config_fp = repr(config)
+	def sig(x):
+		leaves, treedef = jax.tree_util.tree_flatten(x)
+		abstract = jax.eval_shape(lambda y: y, x)
+		abs_leaves = jax.tree_util.tree_leaves(abstract)
+		return (str(treedef), tuple((tuple(getattr(v, "shape", ())), str(getattr(v, "dtype", type(v))), bool(getattr(v, "weak_type", False))) for v in abs_leaves))
+	def digest(x):
+		arr = np.asarray(x); return (arr.shape, str(arr.dtype), hashlib.sha256(arr.tobytes()).hexdigest())
+	return (tuple(task_signature), repr(config_fp), int(num_training_updates),
+			digest(task_embeddings) if task_embeddings is not None else None,
+			digest(task_distribution_proportions) if task_distribution_proportions is not None else None,
+			sig(train_state), sig(rng), sig(current_original_return), sig(global_update_step))
+
+def _resolve_global_step(captured, dynamic, update_step):
+	return (captured if dynamic is None else dynamic) + update_step
+
+def _get_or_compile_train(key, build_jit_callable, args, enabled, max_entries=8):
+	if not enabled or key is None:
+		return build_jit_callable(), False
+	with _TRAIN_COMPILE_CACHE_LOCK:
+		cached = _TRAIN_COMPILE_CACHE.pop(key, None)
+		if cached is not None:
+			_TRAIN_COMPILE_CACHE[key] = cached
+			return cached, True
+	jit_fn = build_jit_callable()
+	with tracker.span("train_lower_compile"):
+		compiled = jit_fn.lower(*args).compile()
+	with _TRAIN_COMPILE_CACHE_LOCK:
+		_TRAIN_COMPILE_CACHE[key] = compiled
+		while len(_TRAIN_COMPILE_CACHE) > max(1, int(max_entries)):
+			_TRAIN_COMPILE_CACHE.popitem(last=False)
+	return compiled, False
 
 from minicraftax.envs.multitask import MultiTaskMiniCraftaxEnv, MultiTaskMiniCraftaxEnvR
 from dicode.wrappers_cl import (
@@ -21,7 +73,6 @@ from dicode.wrappers_cl import (
 )
 
 
-# --- 2. Transformer Network Class ---
 # --- 2. Transformer Network Class ---
 # Imported from dicode.network
 
@@ -103,6 +154,37 @@ def make_train(
 		# Default to uniform distribution if not provided
 		task_distribution_proportions = jnp.ones(num_tasks) / num_tasks
 
+	# [Phase-2 / plan-A] depth-potential shaping, training env only (+training.depth_potential_c)
+	_dp_c = float(config.get("depth_potential_c", 0.0) or 0.0)
+	if _dp_c > 0:
+		from dicode.wrappers import DepthPotentialWrapper
+		base_env = DepthPotentialWrapper(base_env, c=_dp_c, gamma=config.gamma)
+		print(f"  [DepthPotential] ACTIVE c={_dp_c} gamma={config.gamma} (training env only)")
+
+	# [Phase-2 / shot-2] deep-combat achievement bounty, training env only (+training.combat_bounty)
+	_cb = float(config.get("combat_bounty", 0.0) or 0.0)
+	if _cb > 0:
+		from dicode.wrappers import CombatBountyWrapper
+		base_env = CombatBountyWrapper(base_env, bounty=_cb)
+		print(f"  [CombatBounty] ACTIVE bounty={_cb} (deep DEFEAT_* first-kills, training env only)")
+
+	# [Phase-2 / placebo] rarity bounty on NON-combat rare achievements (+training.rarity_bounty)
+	# Mechanism discriminator for the combat-bounty effect: same wrapper, same magnitude,
+	# disjoint index set. placebo ~= A-arm -> combat-specific; placebo ~= bounty-arm ->
+	# generic rarity re-weighting (and the 2e9 proposal switches configuration).
+	_rb = float(config.get("rarity_bounty", 0.0) or 0.0)
+	if _rb > 0:
+		assert _cb == 0, "single-variable discipline: combat_bounty and rarity_bounty are mutually exclusive"
+		from craftax.craftax.constants import Achievement
+		_names = {"COLLECT_DIAMOND", "COLLECT_SAPPHIRE", "COLLECT_RUBY",
+			"MAKE_DIAMOND_PICKAXE", "MAKE_DIAMOND_SWORD", "MAKE_DIAMOND_ARMOUR",
+			"ENCHANT_SWORD", "ENCHANT_ARMOUR"}
+		_found = [a for a in Achievement if a.name in _names]
+		assert len(_found) == len(_names), f"placebo set mismatch: {sorted(a.name for a in _found)}"
+		from dicode.wrappers import CombatBountyWrapper
+		base_env = CombatBountyWrapper(base_env, bounty=_rb, indices=[a.value for a in _found])
+		print(f"  [RarityBounty/PLACEBO] ACTIVE bounty={_rb} on {len(_found)} non-combat rare achievements (training env only)")
+
 	env = DistributedMultiTaskOptimisticLogWrapper(
 		base_env,
 		jax.random.PRNGKey(0),  # We need a key for the permutation in the wrapper
@@ -141,8 +223,18 @@ def make_train(
 	) * config.max_updates_per_session
 
 	def linear_schedule(count):
-		frac = (
-			1.0 - (count // (config.num_minibatches * config.update_epochs)) / TOTAL_GLOBAL_UPDATES
+		# [ROOT-CAUSE FIX] Unclamped anneal: past the schedule horizon frac goes
+		# NEGATIVE -> lr drops below min_lr and then below ZERO -> Adam performs
+		# gradient ASCENT: value_loss is actively maximised (1.5e10), the
+		# -ent_coef*entropy term drives entropy to zero on purpose, policy
+		# collapses to -0.90 flatline. Deterministic in update count => the
+		# 7x same-position (~total 15300-15500 = horizon ~15258) crash across
+		# every run regardless of weights/shaping. In-horizon behaviour is
+		# bit-identical (max is identity for frac>=0); past-horizon trains on
+		# at min_lr instead of exploding.
+		frac = jnp.maximum(
+			0.0,
+			1.0 - (count // (config.num_minibatches * config.update_epochs)) / TOTAL_GLOBAL_UPDATES,
 		)
 		return config.min_lr + (config.lr - config.min_lr) * frac
 
@@ -157,7 +249,7 @@ def make_train(
 			optax.adam(config.lr, eps=1e-5),
 		)
 
-	def train(rng, train_state=None, current_original_return=0.0):
+	def train(rng, train_state=None, current_original_return=0.0, dynamic_global_update_step=None):
 		"""The core JIT-compiled function."""
 		obs_dim = env.observation_space(env_params).shape[0]
 
@@ -503,8 +595,18 @@ def make_train(
 						value_pred_clipped = traj_batch_r.value + (value - traj_batch_r.value).clip(
 							-config.clip_eps, config.clip_eps
 						)
-						value_losses = jnp.square(value - targets_r)
-						value_losses_clipped = jnp.square(value_pred_clipped - targets_r)
+						# [Crash-fix arm S] batch-adaptive value-loss normalization (PopArt-lite):
+						# squared errors divided by stop-gradient batch std of targets, bounding
+						# loss/gradient scale when value targets explode at schedule end.
+						# Honest naming: adaptive scaling, NOT full PopArt (no output-layer
+						# re-preservation). Flag +training.adaptive_value_scale (absent = v1).
+						_vscale = 1.0
+						if bool(config.get("adaptive_value_scale", False)):
+							_vscale = jax.lax.stop_gradient(
+								jnp.maximum(jnp.std(targets_r), 1.0)
+							)
+						value_losses = jnp.square((value - targets_r) / _vscale)
+						value_losses_clipped = jnp.square((value_pred_clipped - targets_r) / _vscale)
 						value_loss = 0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
 
 						# Actor Loss
@@ -591,7 +693,7 @@ def make_train(
 			# Structure: (t_loss, v_loss, a_loss, ent, g_norm_mean, g_norm_max)
 			metrics_to_log = (*losses_mean, gn_mean, gn_max)
 
-			current_step = initial_global_update_step + update_step
+			current_step = _resolve_global_step(initial_global_update_step, dynamic_global_update_step, update_step)
 			jax.debug.callback(_log_callback, metrics_to_log, current_step)
 			
 
@@ -653,6 +755,14 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 	"""Identical to make_train, but deletes the Policy/Value update step.
 	It runs rollouts and GAE (for scoring) but returns the train_state UNCHANGED.
 	"""
+	_perf = config.get("performance", {}) if hasattr(config, "get") else {}
+	_fused_learnability = bool(_perf.get("learnability_fused_preflight_summary", False))
+	if _fused_learnability:
+		from dicode.skill_preflight.learnability_summary import (
+			require_learnability_fused_contract,
+		)
+		require_learnability_fused_contract(config.dicode_manager.score_function)
+
 	# --- 1. Environment Setup (Same as Train) ---
 	NUM_UPDATES = num_training_updates
 	num_tasks = len(task_classes)
@@ -800,6 +910,155 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 			0,
 			_rng,
 		)
+
+		# [BC fast path] Learnability routing only needs per-task episode and
+		# success counts. Keep the historical environment, action sampling,
+		# transformer-memory and RNG transitions, but carry two O(num_tasks)
+		# int32 accumulators through the scans. No Transition, log_prob, tail
+		# critic call, GAE, advantages, or trajectory output is constructed.
+		if _fused_learnability:
+			from dicode.skill_preflight.learnability_summary import (
+				accumulate_learnability_counts,
+			)
+
+			def _fused_update_step(summary_carry, unused):
+				runner_state, finished_counts, success_counts = summary_carry
+
+				def _fused_env_step(step_carry, _):
+					(
+						train_state,
+						env_state,
+						memories,
+						memories_mask,
+						memories_mask_idx,
+						last_obs,
+						done,
+						step_env_currentloop,
+						rng,
+						finished_counts,
+						success_counts,
+					) = step_carry
+
+					memories_mask_idx = jnp.where(
+						done,
+						config.training.window_mem,
+						jnp.clip(memories_mask_idx - 1, 0, config.training.window_mem),
+					)
+					memories_mask = jnp.where(
+						done[:, None, None, None],
+						jnp.zeros(
+							(
+								config.validation.num_envs,
+								config.training.num_heads,
+								1,
+								config.training.window_mem + 1,
+							),
+							dtype=jnp.bool_,
+						),
+						memories_mask,
+					)
+					memories_mask_idx_ohot = jax.nn.one_hot(
+						memories_mask_idx, config.training.window_mem + 1
+					)
+					memories_mask_idx_ohot = memories_mask_idx_ohot[:, None, None, :].repeat(
+						config.training.num_heads, 1
+					)
+					memories_mask = jnp.logical_or(memories_mask, memories_mask_idx_ohot)
+
+					rng, _rng = jax.random.split(rng)
+					pi, _value, memories_out = network.apply(
+						train_state.params,
+						memories,
+						last_obs,
+						memories_mask,
+						method=network.model_forward_eval,
+					)
+					action = pi.sample(seed=_rng)
+					memories = jnp.roll(memories, -1, axis=1).at[:, -1].set(memories_out)
+
+					rng, _rng = jax.random.split(rng)
+					obsv, env_state, _reward, done, info = env.step(
+						_rng, env_state, action, env_params
+					)
+					finished_counts, success_counts = accumulate_learnability_counts(
+						finished_counts,
+						success_counts,
+						info["task_id"],
+						info["returned_episode"],
+						info["is_success"],
+					)
+
+					return (
+						train_state,
+						env_state,
+						memories,
+						memories_mask,
+						memories_mask_idx,
+						obsv,
+						done,
+						step_env_currentloop + 1,
+						rng,
+						finished_counts,
+						success_counts,
+					), None
+
+				initial_step_carry = runner_state + (finished_counts, success_counts)
+				final_step_carry, _ = jax.lax.scan(
+					_fused_env_step,
+					initial_step_carry,
+					None,
+					config.validation.num_steps,
+				)
+				(
+					train_state,
+					final_env_state,
+					final_memories,
+					final_mask,
+					final_mask_idx,
+					final_obs,
+					done,
+					_final_step_loop,
+					rng,
+					finished_counts,
+					success_counts,
+				) = final_step_carry
+
+				next_runner_state = (
+					train_state,
+					final_env_state,
+					final_memories,
+					final_mask,
+					final_mask_idx,
+					final_obs,
+					done,
+					0,
+					rng,
+				)
+				return (next_runner_state, finished_counts, success_counts), None
+
+			initial_summary_carry = (
+				init_runner_state,
+				jnp.zeros((num_tasks,), dtype=jnp.int32),
+				jnp.zeros((num_tasks,), dtype=jnp.int32),
+			)
+			(final_runner_state, finished_counts, success_counts), _ = jax.lax.scan(
+				_fused_update_step,
+				initial_summary_carry,
+				None,
+				length=NUM_UPDATES,
+			)
+			num_env_steps_done = NUM_UPDATES * config.validation.num_envs * config.validation.num_steps
+			return {
+				"train_state": final_runner_state[0],
+				"metrics": {
+					"learnability_summary": {
+						"finished_counts": finished_counts,
+						"success_counts": success_counts,
+					},
+					"num_updates_done": NUM_UPDATES,
+					"num_env_steps_done": num_env_steps_done,
+				},
+			}
 
 		# --------------------------
 		# The Evaluation Step (NO UPDATE)
@@ -992,6 +1251,15 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 
 		final_scoring_window_data = {"traj_batch": flat_traj, "advantages": flat_advantages}
 
+		# [B3] performance.compact_preflight_payload (default off): trim the
+		# scoring payload to what config.dicode_manager.score_function reads, so
+		# the GPU->CPU transfer is smaller. Runs after the single outer scan.
+		# Flag off -> final_scoring_window_data is untouched (historical path).
+		_perf_b3 = config.get("performance", {}) if hasattr(config, "get") else {}
+		if _perf_b3.get("compact_preflight_payload", False):
+			final_scoring_window_data = _compact_eval_scoring_data(
+				final_scoring_window_data, config.dicode_manager.score_function)
+
 		num_env_steps_done = NUM_UPDATES * config.validation.num_envs * config.validation.num_steps
 
 		return {
@@ -1021,16 +1289,46 @@ def run_training_session(
 	task_distribution_proportions=None,
 	global_update_step=0,
 	current_original_return=0.0,
+	task_signature=None,
 ):
 	config_t = config.training
-	train_fn = make_train(
-		config_t,
-		task_classes,
-		num_training_updates,
-		task_embeddings,
-		task_distribution_proportions,
-		global_update_step,
-	)
+	profiling = bool((config.get("runtime_profiling", {}) if hasattr(config, "get") else {}).get("enabled", False))
+	perf = config.get("performance", {}) if hasattr(config, "get") else {}
+	cache_on = bool(perf.get("train_compile_cache", False))
+	if profiling and not cache_on:
+		with tracker.span("train_build"):
+			train_fn = make_train(config_t, task_classes, num_training_updates, task_embeddings,
+							 task_distribution_proportions, global_update_step)
+		train_jit = jax.jit(train_fn)
+		with tracker.span("train_lower_compile"):
+			compiled = train_jit.lower(rng, train_state, current_original_return).compile()
+		with tracker.span("train_execute"):
+			results = compiled(rng, train_state, current_original_return)
+			for leaf in jax.tree_util.tree_leaves(results):
+				if hasattr(leaf, "block_until_ready"):
+					leaf.block_until_ready()
+		print("JIT compiling and running training session (Transformer)...")
+		return results
+	key = train_compile_cache_key(config_t, task_signature, num_training_updates, task_embeddings,
+						 task_distribution_proportions, train_state, rng, current_original_return, global_update_step) if cache_on else None
+	if cache_on and key is not None:
+		def _builder():
+			with tracker.span("train_build"):
+				return jax.jit(make_train(config_t, task_classes, num_training_updates, task_embeddings,
+							 task_distribution_proportions, global_update_step))
+		compiled, cache_hit = _get_or_compile_train(key, _builder,
+			(rng, train_state, current_original_return, jnp.asarray(global_update_step)), True,
+			perf.get("compiled_cache_max_entries", 8))
+		if tracker.enabled:
+			tracker.record("train_cache_lookup", cache_hit=cache_hit, task_signature=hashlib.sha256(repr(key).encode()).hexdigest())
+		with tracker.span("train_execute", cache_hit=cache_hit, task_signature=hashlib.sha256(repr(key).encode()).hexdigest()):
+			results = compiled(rng, train_state, current_original_return, jnp.asarray(global_update_step))
+			if tracker.enabled:
+				for leaf in jax.tree_util.tree_leaves(results):
+					if hasattr(leaf, "block_until_ready"): leaf.block_until_ready()
+		return results
+	train_fn = make_train(config_t, task_classes, num_training_updates, task_embeddings,
+						 task_distribution_proportions, global_update_step)
 	train_jit = jax.jit(train_fn)
 	print("JIT compiling and running training session (Transformer)...")
 	start_time = time.time()
@@ -1039,11 +1337,60 @@ def run_training_session(
 	return results
 
 
+def _compact_eval_scoring_data(scoring_window_data, score_function):
+	"""[B3] Trim the preflight scoring payload to the fields the score function
+	reads (flag performance.compact_preflight_payload). Runs at the make_eval
+	return site, after the single outer scan. Flag-off callers never reach it.
+
+	Field decisions come from skill_preflight.scoring_contract (audited against
+	scoring.py's _calculate_scores_from_snapshot_impl / _calculate_priority_scores):
+	- learnability keeps only info (incl. Achievements/*), drops reward/value/done
+	  and advantages;
+	- pvl keeps advantages and info, drops reward/value/done;
+	- max_mc keeps reward/value and info, drops done and advantages.
+	Unknown score functions raise (no silent fallback).
+	"""
+	from dicode.skill_preflight.scoring_contract import (
+		compact_field_decisions, scoring_info_keep_keys)
+	decisions = compact_field_decisions(score_function)
+	traj = scoring_window_data["traj_batch"]
+	if decisions["trim_info"]:
+		info = traj.info
+		keep = scoring_info_keep_keys(info.keys())
+		traj = traj.replace(info={k: info[k] for k in keep})
+	if not decisions["keep_reward"]:
+		traj = traj.replace(reward=None)
+	if not decisions["keep_value"]:
+		traj = traj.replace(value=None)
+	if not decisions["keep_done"]:
+		traj = traj.replace(done=None)
+	return {
+		"traj_batch": traj,
+		"advantages": scoring_window_data["advantages"] if decisions["keep_advantages"] else None,
+	}
+
+
 def run_evaluation_rollouts(
 	config, rng, task_classes, num_training_updates, task_embeddings=None, train_state=None
 ):
 	if train_state is None:
 		raise ValueError("run_evaluation_rollouts requires a valid train_state.")
+	if tracker.enabled:
+		# [B1] precise preflight profiling: split the fused make+jit+call into
+		# build / lower_compile / execute, mirroring run_training_session. Each
+		# result leaf is block_until_ready() so execute measures true device time.
+		with tracker.span("preflight_eval_build"):
+			eval_fn = make_eval(config, task_classes, num_training_updates, task_embeddings)
+		eval_jit = jax.jit(eval_fn)
+		with tracker.span("preflight_eval_lower_compile"):
+			compiled = eval_jit.lower(rng, train_state).compile()
+		with tracker.span("preflight_eval_execute"):
+			results = compiled(rng, train_state)
+			for leaf in jax.tree_util.tree_leaves(results):
+				if hasattr(leaf, "block_until_ready"):
+					leaf.block_until_ready()
+		print("JIT compiling and running evaluation rollouts (Transformer)...")
+		return results
 	eval_fn = make_eval(config, task_classes, num_training_updates, task_embeddings)
 	eval_jit = jax.jit(eval_fn)
 	print("JIT compiling and running evaluation rollouts (Transformer)...")

@@ -51,6 +51,104 @@ class GymnaxWrapper:
 		return getattr(self._env, name)
 
 
+class DepthPotentialWrapper(GymnaxWrapper):
+	"""[Phase-2 / plan-A] Potential-based depth shaping: r' = r + gamma*phi(s')*(1-done) - phi(s),
+	phi(s) = c * player_level  (Ng et al. 1999 -> optimal policy invariant).
+
+	Targets the learned-retreat pathology from the deep-failure autopsy (151/168 gnomish
+	entrants die retreating upward): descending yields immediate positive signal, retreating
+	is auto-penalised, terminal transitions claw back the accumulated potential.
+
+	TRAINING ENV ONLY: wrapped between the base multi-task env and the Optimistic wrapper
+	in ppo_tr.make_train, flag-gated by +training.depth_potential_c (0/absent = wrapper not
+	constructed = v1 byte-identical). The official evaluation path (craftax_evaluation /
+	online_evaluation) and the preflight admission path (AllTasks wrapper) NEVER see this
+	wrapper -- eval protocol and learnability measurement stay canonical.
+	"""
+
+	def __init__(self, env, c: float, gamma: float):
+		super().__init__(env)
+		self.c = float(c)
+		self.gamma = float(gamma)
+
+	@staticmethod
+	def _level(state):
+		st = state
+		for _ in range(4):
+			if hasattr(st, "player_level"):
+				return st.player_level
+			st = getattr(st, "env_state")
+		raise AttributeError("player_level not reachable from training env state")
+
+	def step(self, rng, state, action, params=None):
+		phi_s = self.c * self._level(state).astype(jnp.float32)
+		obs, next_state, reward, done, info = self._env.step(rng, state, action, params)
+		phi_sp = self.c * self._level(next_state).astype(jnp.float32)
+		shaped = reward + self.gamma * phi_sp * (1.0 - done.astype(jnp.float32)) - phi_s
+		return obs, next_state, shaped, done, info
+
+	def step_env(self, key, state, action, params=None, task_embeddings=None):
+		# THE live path: DistributedMultiTaskOptimisticLogWrapper vmaps _env.step_env
+		# (5-arg). Overriding only step() gets silently bypassed via __getattr__ --
+		# the bug that inertized three shaping runs. Shape here.
+		phi_s = self.c * self._level(state).astype(jnp.float32)
+		obs, next_state, reward, done, info = self._env.step_env(key, state, action, params, task_embeddings)
+		phi_sp = self.c * self._level(next_state).astype(jnp.float32)
+		shaped = reward + self.gamma * phi_sp * (1.0 - done.astype(jnp.float32)) - phi_s
+		return obs, next_state, shaped, done, info
+
+
+class CombatBountyWrapper(GymnaxWrapper):
+	"""[Phase-2 / shot-2] Deep-combat achievement bounty: +bounty whenever a DEFEAT_* achievement
+	bit (excluding surface ZOMBIE/SKELETON) flips 0->1 during a step.
+
+	Deliberately NON-potential: the phi verdict showed Ng-safe shaping provably cannot flip a
+	(near-)optimal retreat; this wrapper changes the optimal policy ON PURPOSE, overweighting
+	deep-combat first-kills (~3x at bounty=2.0) to buy combat-capability acquisition.
+	Honest scope note: achievement bits latch, so this is FIRST-KILL-PER-TYPE reweighting,
+	not true per-kill density (per-kill needs mob-array diffing -- escalation candidate).
+	Farming-proof by construction (a bit flips once per episode).
+
+	TRAINING ENV ONLY, flag +training.combat_bounty (absent/0 = not constructed = v1 identical).
+	"""
+
+	def __init__(self, env, bounty: float, indices=None):
+		super().__init__(env)
+		self.bounty = float(bounty)
+		if indices is None:
+			from craftax.craftax.constants import Achievement
+			indices = [a.value for a in Achievement
+					if a.name.startswith("DEFEAT_")
+					and a.name not in ("DEFEAT_ZOMBIE", "DEFEAT_SKELETON")]
+		self._idx = jnp.array(sorted(int(i) for i in indices))
+
+	@staticmethod
+	def _ach(state):
+		st = state
+		for _ in range(4):
+			if hasattr(st, "achievements"):
+				return st.achievements
+			st = getattr(st, "env_state")
+		raise AttributeError("achievements not reachable from training env state")
+
+	def step(self, rng, state, action, params=None):
+		ach_s = self._ach(state)[..., self._idx].astype(jnp.bool_)
+		obs, next_state, reward, done, info = self._env.step(rng, state, action, params)
+		ach_sp = self._ach(next_state)[..., self._idx].astype(jnp.bool_)
+		new_kills = jnp.logical_and(ach_sp, jnp.logical_not(ach_s))
+		shaped = reward + self.bounty * new_kills.sum(axis=-1).astype(jnp.float32)
+		return obs, next_state, shaped, done, info
+
+	def step_env(self, key, state, action, params=None, task_embeddings=None):
+		# THE live path (see DepthPotentialWrapper.step_env note).
+		ach_s = self._ach(state)[..., self._idx].astype(jnp.bool_)
+		obs, next_state, reward, done, info = self._env.step_env(key, state, action, params, task_embeddings)
+		ach_sp = self._ach(next_state)[..., self._idx].astype(jnp.bool_)
+		new_kills = jnp.logical_and(ach_sp, jnp.logical_not(ach_s))
+		shaped = reward + self.bounty * new_kills.sum(axis=-1).astype(jnp.float32)
+		return obs, next_state, shaped, done, info
+
+
 class BatchEnvWrapper(GymnaxWrapper):
 	"""Batches reset and step functions"""
 

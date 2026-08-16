@@ -8,6 +8,8 @@ This module provides functions for:
 
 # --- Third-Party ---
 import jax
+import hashlib
+import inspect
 import jax.numpy as jnp
 import numpy as np
 import optax
@@ -34,6 +36,27 @@ EMBEDDING_INSTRUCTION = (
     "Generate an embedding for this list of achievements capturing "
     "the conceptual skills the agent learns if it achieves these achievements."
 )
+
+def _build_task_signature(archive, ids):
+    import hashlib
+    codes = archive.get_task_codes(ids)
+    return tuple((task_id, hashlib.sha256(codes.get(task_id, "").replace("\r\n", "\n").replace("\r", "\n").encode()).hexdigest()) for task_id in ids)
+
+def _maybe_build_task_signature(config, archive, ids, original_cls):
+    if not config.get("performance", {}).get("train_compile_cache", False):
+        return None
+    codes = archive.get_task_codes(ids)
+    if any(task_id not in codes for task_id in ids):
+        return None
+    out = [(task_id, hashlib.sha256(codes[task_id].replace("\r\n", "\n").replace("\r", "\n").encode()).hexdigest()) for task_id in ids]
+    path = inspect.getsourcefile(original_cls) or ""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            digest = hashlib.sha256(handle.read().replace("\r\n", "\n").replace("\r", "\n").encode()).hexdigest()
+    except Exception:
+        return None
+    out.append(("original_craftax", digest))
+    return tuple(out)
 
 
 def run_session_training(
@@ -86,6 +109,7 @@ def run_session_training(
     # Add original task for evaluation
     all_task_classes = sampled_task_classes + [OriginalTask]
     all_task_ids = successful_sampled_ids + ["original_craftax"]
+    _task_signature = _maybe_build_task_signature(config, gen_manager.archive, successful_sampled_ids, OriginalTask)
     num_tasks_in_session = len(all_task_classes)
 
     # Create achievement masks
@@ -120,6 +144,7 @@ def run_session_training(
         task_distribution_proportions=task_distribution_proportions,
         global_update_step=global_update_step,
         current_original_return=original_return_prev_session,
+        task_signature=_task_signature,
     )
     print("  Training run finished.")
 
@@ -128,6 +153,12 @@ def run_session_training(
 
     if config.dicode_manager.reset_opt_state:
         rl_train_state = _reset_optimizer_state(config, rl_train_state)
+
+    # [SIL v1] session-level BC phase on the golden buffer (flag-gated,
+    # +training.sil_coef>0 enables; absent/0 = this block is a no-op).
+    if float(config.training.get("sil_coef", 0.0) or 0.0) > 0.0:
+        from dicode.sil_bc import run_sil_phase
+        rl_train_state = run_sil_phase(config, rl_train_state)
 
     # Update global counters
     num_updates_in_session = int(session_results["metrics"]["num_updates_done"])
@@ -292,10 +323,12 @@ def _create_achievement_masks(
     for i, task_cls in enumerate(task_classes):
         temp_task = task_cls(StaticEnvParams(), EnvParams())
         if temp_task.relevant_achievements:
-            indices = jnp.array([ach.value for ach in temp_task.relevant_achievements])
+            indices = jnp.array([a if isinstance(a, int) else a.value
+                                 for a in temp_task.relevant_achievements])
             task_achievement_mask = task_achievement_mask.at[i, indices].set(True)
         if temp_task.completed_achievements:
-            indices = jnp.array([ach.value for ach in temp_task.completed_achievements])
+            indices = jnp.array([a if isinstance(a, int) else a.value
+                                 for a in temp_task.completed_achievements])
             task_completed_mask = task_completed_mask.at[i, indices].set(True)
 
     return task_achievement_mask, task_completed_mask

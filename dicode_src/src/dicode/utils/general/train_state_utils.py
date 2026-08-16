@@ -184,7 +184,15 @@ def load_weights_only(checkpoint_path, env, env_params, config, load_opt_state=F
         ) * config.max_updates_per_session
         
         def linear_schedule(count):
-            frac = 1.0 - (count // (config.num_minibatches * config.update_epochs)) / TOTAL_GLOBAL_UPDATES
+            # [CRASH FIX v2] Clamp anneal. Past horizon (TOTAL=15300 global updates for 2e9)
+            # frac goes negative -> lr crosses zero at TOTAL*(1+min_lr/(lr-min_lr)) -> Adam does
+            # gradient ascent (idx 15454 @2e-4, 17000 @2e-5; matches all 7 crash sites).
+            # ff6b956 clamped ppo_tr.py only, which is UNREACHABLE on resume: the restored
+            # TrainState keeps THIS tx. Mirror the clamp here (bit-identical in-horizon).
+            frac = jnp.maximum(
+                0.0,
+                1.0 - (count // (config.num_minibatches * config.update_epochs)) / TOTAL_GLOBAL_UPDATES,
+            )
             return config.min_lr + (config.lr - config.min_lr) * frac
             
         tx = optax.chain(

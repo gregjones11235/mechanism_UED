@@ -7,6 +7,7 @@ from craftax.craftax.constants import Achievement
 
 # --- Local Modules ---
 from dicode.dreaming.gen_manager import TaskArchive
+from dicode.runtime_analysis import tracker
 
 # 2. Pre-calculate vector size for efficiency
 # We find the highest ID in the Enum and add 1 to handle the 0-index.
@@ -55,6 +56,17 @@ def load_tasks_from_env_codes(archive: TaskArchive, tasks: list[str]) -> tuple[l
 	# 1. Get all code strings from the archive in one batch
 	code_strings_dict = archive.get_task_codes(tasks)
 
+	if tracker.enabled:
+		# [B1] precise preflight profiling: time the dynamic Env-class load loop.
+		# Only entered when profiling is enabled; the disabled path is the exact
+		# historical loop with zero instrumentation.
+		with tracker.span("candidate_code_load"):
+			return _load_tasks_from_env_codes_impl(code_strings_dict, task_classes, successful_task_ids)
+	return _load_tasks_from_env_codes_impl(code_strings_dict, task_classes, successful_task_ids)
+
+
+def _load_tasks_from_env_codes_impl(code_strings_dict, task_classes, successful_task_ids):
+	"""Historical dynamic-Env-load loop (no instrumentation)."""
 	for task, code_string in code_strings_dict.items():
 		if not code_string:
 			print(f"Warning: No code found for task {task}. Skipping.")
