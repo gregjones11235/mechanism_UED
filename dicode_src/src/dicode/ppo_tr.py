@@ -22,7 +22,6 @@ from dicode.wrappers_cl import (
 
 
 # --- 2. Transformer Network Class ---
-# --- 2. Transformer Network Class ---
 # Imported from dicode.network
 
 
@@ -31,6 +30,76 @@ indices_select = lambda x, y: x[y]
 batch_indices_select = jax.vmap(indices_select)
 roll_vmap = jax.vmap(jnp.roll, in_axes=(-2, 0, None), out_axes=-2)
 batchify = lambda x: jnp.reshape(x, (x.shape[0] * x.shape[1],) + x.shape[2:])
+
+
+_COMPACT_INFO_KEYS = frozenset(
+	{
+		"task_id",
+		"returned_episode",
+		"is_success",
+		"returned_episode_lengths",
+		"returned_episode_returns",
+	}
+)
+
+
+def _compact_scoring_fields(score_function):
+	"""Return the scoring leaves required by a compact payload.
+
+	The score function is a static configuration value.  Rejecting an unknown
+	value here keeps a compact payload from silently dropping a future metric's
+	inputs.  The full payload path remains unchanged for backwards
+	compatibility.
+	"""
+	if score_function == "learnability":
+		return frozenset()
+	if score_function == "pvl":
+		return frozenset({"advantages"})
+	if score_function == "max_mc":
+		return frozenset({"reward", "value"})
+	raise ValueError(f"Unknown score_function for compact scoring payload: {score_function}")
+
+
+def _compact_scoring_info(info):
+	"""Keep only base-metric fields and achievement fields in ``info``."""
+	return {
+		key: value
+		for key, value in info.items()
+		if key in _COMPACT_INFO_KEYS or str(key).startswith("Achievements/")
+	}
+
+
+def _build_scoring_data(traj_batch, advantages, score_function, compact=False):
+	"""Build the calculator payload without changing PPO or scan state.
+
+	When ``compact`` is false this deliberately mirrors the historical payload.
+	When enabled, only fields required by ``score_function`` are retained; all
+	other Transition leaves stay ``None`` so the pytree structure is static.
+	"""
+	scoring_traj = traj_batch.replace(
+		obs=None, action=None, log_prob=None, memories_mask=None, memories_indices=None
+	)
+	if not compact:
+		return {"traj_batch": scoring_traj, "advantages": advantages}
+
+	needed = _compact_scoring_fields(score_function)
+	scoring_traj = scoring_traj.replace(
+		done=None,
+		value=traj_batch.value if "value" in needed else None,
+		reward=traj_batch.reward if "reward" in needed else None,
+		info=_compact_scoring_info(traj_batch.info),
+	)
+	scoring_data = {"traj_batch": scoring_traj}
+	if "advantages" in needed:
+		scoring_data["advantages"] = advantages
+	return scoring_data
+
+
+def _flatten_scoring_leaf(leaf, leading_shape=2):
+	"""Flatten scan and rollout axes while preserving ``None`` leaves."""
+	if leaf is None:
+		return None
+	return leaf.reshape(-1, *leaf.shape[leading_shape:])
 
 
 def make_train(
@@ -45,6 +114,11 @@ def make_train(
 	# --- Environment Setup (IDENTICAL TO OLD CODE) ---
 	NUM_UPDATES = num_training_updates
 	num_tasks = len(task_classes)
+	compact_scoring_payload = bool(config.get("compact_scoring_payload", False))
+	compact_score_function = None
+	if compact_scoring_payload:
+		compact_score_function = config.score_function
+		_compact_scoring_fields(compact_score_function)
 
 	static_env_params = StaticEnvParams()
 	env_params = EnvParams(max_timesteps=4096)
@@ -435,16 +509,12 @@ def make_train(
 
 			advantages, targets = _calculate_gae(traj_batch, last_val)
 
-			# Prepare scoring data (standard PPO interface for your calculator)
-			# We strip out transformer specifics here because scoring doesn't need them
-			scoring_traj = traj_batch.replace(
-				obs=None, action=None, log_prob=None, memories_mask=None, memories_indices=None
+			scoring_data = _build_scoring_data(
+				traj_batch,
+				advantages,
+				compact_score_function,
+				compact=compact_scoring_payload,
 			)
-			# Explicitly set fields to None if the NamedTuple structure allows, or just reconstruct
-			# Actually, Transition has new fields. The calculator expects `info` etc.
-			# It should be fine as long as `scoring.py` accesses attributes by name.
-
-			scoring_data = {"traj_batch": scoring_traj, "advantages": advantages}
 
 			# NEW: Metric Logging for Original Task (Last Task ID)
 			# The original task is always appended to the end, so its ID is num_tasks - 1
@@ -678,13 +748,13 @@ def make_train(
 
 		# Flatten k and num_steps
 		flat_traj = jax.tree.map(
-			lambda x: x.reshape(-1, *x.shape[2:]), scoring_window_data["traj_batch"]
+			lambda x: _flatten_scoring_leaf(x, 2), scoring_window_data["traj_batch"]
 		)
-		flat_advantages = scoring_window_data["advantages"].reshape(
-			-1, *scoring_window_data["advantages"].shape[2:]
-		)
-
-		final_scoring_window_data = {"traj_batch": flat_traj, "advantages": flat_advantages}
+		final_scoring_window_data = {"traj_batch": flat_traj}
+		if "advantages" in scoring_window_data:
+			final_scoring_window_data["advantages"] = _flatten_scoring_leaf(
+				scoring_window_data["advantages"], 2
+			)
 
 		num_env_steps_done = NUM_UPDATES * config.num_envs * config.num_steps
 
@@ -707,6 +777,11 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 	# --- 1. Environment Setup (Same as Train) ---
 	NUM_UPDATES = num_training_updates
 	num_tasks = len(task_classes)
+	compact_scoring_payload = bool(config.training.get("compact_scoring_payload", False))
+	compact_score_function = None
+	if compact_scoring_payload:
+		compact_score_function = config.dicode_manager.score_function
+		_compact_scoring_fields(compact_score_function)
 	static_env_params = StaticEnvParams()
 	env_params = EnvParams(max_timesteps=4096)
 	# env_params = EnvParams()
@@ -997,11 +1072,12 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 			advantages = _calculate_gae(traj_batch, last_val)
 
 			# 3. Prepare Data for Output
-			scoring_traj = traj_batch.replace(
-				obs=None, action=None, log_prob=None, memories_mask=None, memories_indices=None
+			scoring_data = _build_scoring_data(
+				traj_batch,
+				advantages,
+				compact_score_function,
+				compact=compact_scoring_payload,
 			)
-
-			scoring_data = {"traj_batch": scoring_traj, "advantages": advantages}
 
 			# 4. CRITICAL DIFFERENCE: NO UPDATE STEP
 			# We do not run _update_epoch. We do not calculate gradients.
@@ -1035,13 +1111,13 @@ def make_eval(config, task_classes, num_training_updates, task_embeddings=None):
 		scoring_window_data = scan_scoring_data
 
 		flat_traj = jax.tree.map(
-			lambda x: x.reshape(-1, *x.shape[2:]), scoring_window_data["traj_batch"]
+			lambda x: _flatten_scoring_leaf(x, 2), scoring_window_data["traj_batch"]
 		)
-		flat_advantages = scoring_window_data["advantages"].reshape(
-			-1, *scoring_window_data["advantages"].shape[2:]
-		)
-
-		final_scoring_window_data = {"traj_batch": flat_traj, "advantages": flat_advantages}
+		final_scoring_window_data = {"traj_batch": flat_traj}
+		if "advantages" in scoring_window_data:
+			final_scoring_window_data["advantages"] = _flatten_scoring_leaf(
+				scoring_window_data["advantages"], 2
+			)
 
 		num_env_steps_done = NUM_UPDATES * config.validation.num_envs * config.validation.num_steps
 

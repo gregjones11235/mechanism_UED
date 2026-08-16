@@ -60,6 +60,10 @@ conditioning_type: "one_hot"  # or "embedding"
 use_optimistic_resets: true
 
 scoring_window_updates: 40
+# Keep the historical full scoring payload by default.  When enabled, only
+# fields required by the configured score function are returned.
+compact_scoring_payload: false
+score_function: ${dicode_manager.score_function}
 mode: ${dicode_manager.mode}
 bonus_type: ${dicode_manager.bonus_type}
 dynamic_bonus_k: ${dicode_manager.dynamic_bonus_k}
