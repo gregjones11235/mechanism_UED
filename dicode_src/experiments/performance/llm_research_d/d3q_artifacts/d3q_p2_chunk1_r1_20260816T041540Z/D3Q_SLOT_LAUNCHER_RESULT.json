@@ -1,0 +1,164 @@
+{
+  "artifact_dir": "d3q_artifacts/d3q_p2_chunk1_r1_20260816T041540Z",
+  "artifact_internal_sha256": "6afcdb0c578ef6d147c5e7b7fc6b02197ad1123e0d2bcfda52be25eea744de9e",
+  "classification": "D3Q_SLOT_LAUNCHER",
+  "cleanup_verified": true,
+  "credential_variable": "EXP_DEEPSEEK_API_KEY",
+  "deploy_check_only": false,
+  "deployed_hashes_post_verified": false,
+  "deployed_hashes_pre": {
+    "D3Q_FROZEN_REPAIR_TEMPLATE.json": "92be14e6a0a42708afd84c5c5f5cacbe7d4635caf5d8112b03ae6a764ea1eb65",
+    "FROZEN_MANIFEST.json": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "d3q_budget.py": "5364cd3a601b187433bf2c17907e629281e1427b671c51e59791d425e4735b07",
+    "d3q_cpu_validate_remote.py": "a839e8b4a2e3e2b31690bc6c897fcd46c9db91e234448dd338b790b5c1cda227",
+    "d3q_slot_runner.py": "898e3620ee9f1a9f071f1c7d5e0e13e8d80b466aeb509b1906de549489855bc0"
+  },
+  "deployed_hashes_verified": true,
+  "exec_root": "/tmp/d3q_exec_20260816T041540Z",
+  "exec_root_absent_post": true,
+  "exec_root_absent_pre": true,
+  "git_head": {
+    "branch": "perf/llm-small-large-quality-cost-d3",
+    "commit": "6095e5ac624816f64baa8fb851ca9f6549cf6269"
+  },
+  "gpu_post": null,
+  "gpu_pre": {
+    "apps_by_uuid": {
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6": [
+        {
+          "pid": 3154045,
+          "process_name": "/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server"
+        },
+        {
+          "pid": 3156249,
+          "process_name": "/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server"
+        }
+      ]
+    },
+    "gpu2": {
+      "external_compute_pids": [],
+      "external_compute_processes": [],
+      "gpu_index": 2,
+      "memory_free_mib": 45619,
+      "memory_used_mib": 1,
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    },
+    "gpus": [
+      {
+        "index": 0,
+        "memory_free_mib": 30046,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 15573,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+      },
+      {
+        "index": 1,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f"
+      },
+      {
+        "index": 2,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      },
+      {
+        "index": 3,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      }
+    ]
+  },
+  "ledger_post": {
+    "exists": true,
+    "provider_counts": {
+      "ollama": 7
+    },
+    "slot_counts": {
+      "slot_r1_small_p01": 1,
+      "slot_r1_small_p02": 1,
+      "slot_r1_small_p03": 1,
+      "slot_r1_small_p04": 1,
+      "slot_r1_small_p05": 3
+    }
+  },
+  "ledger_pre": {
+    "exists": false,
+    "provider_counts": {},
+    "slot_counts": {}
+  },
+  "local_hash_binding": {
+    "budget": "5364cd3a601b187433bf2c17907e629281e1427b671c51e59791d425e4735b07",
+    "cpu_validate": "a839e8b4a2e3e2b31690bc6c897fcd46c9db91e234448dd338b790b5c1cda227",
+    "launcher": "a2c4f04fde1023c3747118ee9a55407db22d800d4270cbd27082753fe22a6986",
+    "manifest": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "repair_template": "92be14e6a0a42708afd84c5c5f5cacbe7d4635caf5d8112b03ae6a764ea1eb65",
+    "runner": "898e3620ee9f1a9f071f1c7d5e0e13e8d80b466aeb509b1906de549489855bc0"
+  },
+  "mason_src": "/home/oseasy/git_work/wt_d3q_mason_91a75e5/dicode_src/src",
+  "mason_worktree": "/home/oseasy/git_work/wt_d3q_mason_91a75e5",
+  "mason_worktree_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+  "no_secret_scan": {
+    "files_scanned": 2,
+    "passed": true,
+    "violations": []
+  },
+  "observed_utc": "2026-08-16T04:15:40Z",
+  "ollama_post": null,
+  "ollama_pre": {
+    "models": {
+      "nomic-embed-text:latest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+      "qwen2.5-coder:14b": "9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849"
+    },
+    "pids": [
+      "3122021",
+      "3154045",
+      "3156249"
+    ]
+  },
+  "reason": "budget_exceeded",
+  "remote_env_file": "/home/oseasy/.config/dicode/experiment_llm.env",
+  "remote_python": "/home/oseasy/venvs/skill_preflight_e0e1/bin/python",
+  "run_id": "d3q_p2_chunk1_r1_20260816T041540Z",
+  "schema_version": 1,
+  "slot_results": {},
+  "slot_summaries": {},
+  "slots": [
+    "slot_r1_small_p01",
+    "slot_r1_small_p02",
+    "slot_r1_small_p03",
+    "slot_r1_small_p04",
+    "slot_r1_small_p05",
+    "slot_r1_small_p06",
+    "slot_r1_small_p07",
+    "slot_r1_small_p08",
+    "slot_r1_small_p09",
+    "slot_r1_small_p10",
+    "slot_r1_small_p11",
+    "slot_r1_large_p01",
+    "slot_r1_large_p02",
+    "slot_r1_large_p03",
+    "slot_r1_large_p04",
+    "slot_r1_large_p05",
+    "slot_r1_large_p06",
+    "slot_r1_large_p07",
+    "slot_r1_large_p08",
+    "slot_r1_large_p09",
+    "slot_r1_large_p10",
+    "slot_r1_large_p11"
+  ],
+  "status": "BLOCKED"
+}

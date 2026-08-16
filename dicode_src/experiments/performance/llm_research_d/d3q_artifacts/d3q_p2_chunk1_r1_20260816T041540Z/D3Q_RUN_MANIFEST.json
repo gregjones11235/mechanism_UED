@@ -1,0 +1,67 @@
+{
+  "classification": "D3Q_RUN_MANIFEST",
+  "credential_variable": "EXP_DEEPSEEK_API_KEY",
+  "frozen_manifest": {
+    "file": "FROZEN_MANIFEST.json",
+    "manifest_sha256": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+    "raw_sha256": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e"
+  },
+  "git_head": {
+    "branch": "perf/llm-small-large-quality-cost-d3",
+    "commit": "6095e5ac624816f64baa8fb851ca9f6549cf6269"
+  },
+  "hash_binding": {
+    "budget": "5364cd3a601b187433bf2c17907e629281e1427b671c51e59791d425e4735b07",
+    "cpu_validate": "a839e8b4a2e3e2b31690bc6c897fcd46c9db91e234448dd338b790b5c1cda227",
+    "launcher": "a2c4f04fde1023c3747118ee9a55407db22d800d4270cbd27082753fe22a6986",
+    "manifest": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "repair_template": "92be14e6a0a42708afd84c5c5f5cacbe7d4635caf5d8112b03ae6a764ea1eb65",
+    "runner": "898e3620ee9f1a9f071f1c7d5e0e13e8d80b466aeb509b1906de549489855bc0"
+  },
+  "mason_worktree": {
+    "commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+    "path": "/home/oseasy/git_work/wt_d3q_mason_91a75e5"
+  },
+  "max_repairs_per_slot": 2,
+  "observed_utc": "2026-08-16T04:15:40Z",
+  "post_limits": {
+    "per_provider": 108,
+    "per_slot": 3
+  },
+  "remote_env_file": "/home/oseasy/.config/dicode/experiment_llm.env",
+  "remote_python": "/home/oseasy/venvs/skill_preflight_e0e1/bin/python",
+  "repair_template": {
+    "file": "D3Q_FROZEN_REPAIR_TEMPLATE.json",
+    "template_sha256": "beff6ea4307bd0ec19c14caf3034231b35e0e204aa84bafaaa68189389007c43"
+  },
+  "run_id": "d3q_p2_chunk1_r1_20260816T041540Z",
+  "schema_version": 1,
+  "slots": [
+    "slot_r1_small_p01",
+    "slot_r1_small_p02",
+    "slot_r1_small_p03",
+    "slot_r1_small_p04",
+    "slot_r1_small_p05",
+    "slot_r1_small_p06",
+    "slot_r1_small_p07",
+    "slot_r1_small_p08",
+    "slot_r1_small_p09",
+    "slot_r1_small_p10",
+    "slot_r1_small_p11",
+    "slot_r1_large_p01",
+    "slot_r1_large_p02",
+    "slot_r1_large_p03",
+    "slot_r1_large_p04",
+    "slot_r1_large_p05",
+    "slot_r1_large_p06",
+    "slot_r1_large_p07",
+    "slot_r1_large_p08",
+    "slot_r1_large_p09",
+    "slot_r1_large_p10",
+    "slot_r1_large_p11"
+  ],
+  "timeouts_frozen": {
+    "connect_s": 30.0,
+    "read_s": 600.0
+  }
+}
