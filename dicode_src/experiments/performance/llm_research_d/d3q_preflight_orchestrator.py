@@ -250,8 +250,11 @@ def cmd_run(staging_dir: Path, ssh_target: str, ssh_key: str, local_artifacts_di
             f"--exec-root {exec_root} --mason-src {MASON_SRC} --replay-script {exec_root}/preflight_replay.py",
         ]), timeout=6 * 3600)
         remote_rc = proc.returncode
-        # collect everything back
         local_artifacts_dir.mkdir(parents=True, exist_ok=False)
+        (local_artifacts_dir / "remote_run_stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
+        (local_artifacts_dir / "remote_run_stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+        (local_artifacts_dir / "remote_run_rc.txt").write_text(str(remote_rc) + "\n", encoding="utf-8")
+        # collect everything back
         tar_out = subprocess.Popen(_ssh_argv(ssh_target, ssh_key, [f"tar czf - -C {exec_root} ."]), stdout=subprocess.PIPE)
         untar = subprocess.Popen(["tar", "xzf", "-", "-C", str(local_artifacts_dir)], stdin=tar_out.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         tar_out.stdout.close()

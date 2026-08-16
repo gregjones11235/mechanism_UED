@@ -114,11 +114,32 @@ def test_remote_inject_candidates_roundtrip(tmp_path):
     code_text = "class Env:\n    X = 42\n"
     code_file.write_text(code_text, encoding="utf-8")
     out_dir = tmp_path / "archive_copy"
-    remote.inject_candidates(src, out_dir, [{"id": "slot_r1_small_p00", "path": str(code_file)}])
+    remote.inject_candidates(src, out_dir, [{"id": "slot_r1_small_p00", "path": str(code_file)}], tmp_path)
     loaded = nx.read_graphml(out_dir / "task_graph.graphml")
     assert loaded.nodes["slot_r1_small_p00"]["code"] == code_text
     assert loaded.nodes["slot_r1_small_p00"]["is_active"] == "false"
     assert loaded.nodes["task_1"]["status"] == "seed"
+
+
+def test_remote_inject_candidates_relative_path(tmp_path):
+    nx = pytest.importorskip("networkx")
+    graph = nx.DiGraph()
+    graph.add_node("task_1", code="class Env:\n    pass\n", status="seed")
+    src = tmp_path / "src" / "task_graph.graphml"
+    src.parent.mkdir()
+    nx.write_graphml(graph, src)
+    arm_dir = tmp_path / "arm"
+    (arm_dir / "candidates").mkdir(parents=True)
+    code_text = "class Env:\n    Y = 7\n"
+    (arm_dir / "candidates" / "slot_r1_small_p00.py").write_text(code_text, encoding="utf-8")
+    out_dir = arm_dir / "archive_copy"
+    remote.inject_candidates(
+        src, out_dir,
+        [{"id": "slot_r1_small_p00", "path": "candidates/slot_r1_small_p00.py"}],
+        arm_dir,
+    )
+    loaded = nx.read_graphml(out_dir / "task_graph.graphml")
+    assert loaded.nodes["slot_r1_small_p00"]["code"] == code_text
 
 
 def test_remote_conditioning_shape(tmp_path):

@@ -85,12 +85,15 @@ def gpu_gate() -> dict:
     return {"gpu2": gpu2, "external_pids": external}
 
 
-def inject_candidates(graphml_src: Path, archive_copy_dir: Path, candidates: list) -> None:
+def inject_candidates(graphml_src: Path, archive_copy_dir: Path, candidates: list, arm_dir: Path) -> None:
     import networkx as nx
 
     graph = nx.read_graphml(graphml_src)
     for cand in candidates:
-        code = (Path(cand["path"])).read_text(encoding="utf-8")
+        cand_path = Path(cand["path"])
+        if not cand_path.is_absolute():
+            cand_path = Path(arm_dir) / cand_path
+        code = cand_path.read_text(encoding="utf-8")
         graph.add_node(
             cand["id"],
             status="desc_generated",
@@ -126,7 +129,7 @@ def run_arm(arm_dir: Path, mason_src: str, replay_script: Path) -> dict:
     archive_copy = arm_dir / "archive_snapshot"
     if archive_copy.exists():
         raise PreflightDriverError("arm_dir_not_fresh")
-    inject_candidates(Path(_find_graphml(FROZEN_ARCHIVE)), archive_copy, candidates)
+    inject_candidates(Path(_find_graphml(FROZEN_ARCHIVE)), archive_copy, candidates, arm_dir)
     cond_path = write_conditioning(arm_dir, len(candidates))
     spec = {
         "classification": "PREFLIGHT_CANDIDATE_REPLAY",
