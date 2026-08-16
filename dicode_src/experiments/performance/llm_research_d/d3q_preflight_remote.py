@@ -28,7 +28,10 @@ import sys
 from pathlib import Path
 
 GPU2_UUID = "GPU-8df11537-ab79-722d-606f-411966196c4c"
-SOURCE_COMMIT = "91a75e5a1d3bfca5114caf776a710a0339f692d8"
+# B1 fix commit that produced the frozen checkpoint/snapshot and was used by
+# the original B1 replay (spec.json source_commit); matches the frozen
+# dicode_src snapshot the orchestrator points MASON_SRC at.
+SOURCE_COMMIT = "4d1f54fd32223ec0d51b38a64a3e6902d334c3c3"
 CONDITIONING_DIM = 67
 NUM_ENVS = 1024
 NUM_STEPS = 128

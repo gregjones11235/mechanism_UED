@@ -39,7 +39,12 @@ from d3q_phase2_driver import (  # noqa: E402
 SSH_TARGET_DEFAULT = "oseasy@172.25.14.221"
 SSH_KEY_DEFAULT = r"D:\Projects\dicode-codex-director\orchestration\control\ssh_oseasy_172_25_14_221_ed25519"
 REMOTE_PYTHON = "/home/oseasy/miniconda3/envs/dicode310/bin/python"
-MASON_SRC = "/home/oseasy/git_work/wt_d3q_mason_91a75e5/dicode_src/src"
+# Source tree for preflight replay provenance + runtime imports: the FROZEN
+# dicode_src snapshot captured with the B1 reference run (source_commit
+# 4d1f54f; replay script sha256 7e431e8c...d53 identical to this repo's copy).
+# The baseline worktree wt_d3q_mason_91a75e5 lacks
+# skill_preflight/preflight_route.py -> all arms FAILED at 20260816T063130Z.
+MASON_SRC = "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src"
 GPU2_UUID = "GPU-8df11537-ab79-722d-606f-411966196c4c"
 OLLAMA_QWEN_DIGEST_PREFIX = "9ec8897f747e"
 EXEC_ROOT_RE = re.compile(r"^/tmp/d3q_preflight_\d{8}T\d{6}Z$")

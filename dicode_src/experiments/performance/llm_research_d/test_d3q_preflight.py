@@ -149,3 +149,20 @@ def test_remote_conditioning_shape(tmp_path):
     assert table.shape == (5, remote.CONDITIONING_DIM)
     assert table.dtype == np.float32
     assert (table == 0).all()
+
+
+def test_provenance_constants_match_frozen_b1_snapshot():
+    # Regression guard for the 20260816T063130Z failure: replay must run
+    # against the frozen B1 dicode_src snapshot (source_commit 4d1f54f),
+    # not the baseline 91a75e5 worktree (which lacks preflight_route.py).
+    import d3q_preflight_orchestrator as orch
+
+    frozen_src = "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src"
+    assert orch.MASON_SRC == frozen_src
+    assert remote.SOURCE_COMMIT == "4d1f54fd32223ec0d51b38a64a3e6902d334c3c3"
+    labels = dict(remote.SOURCE_FILES)
+    assert labels["preflight_route.py"] == "skill_preflight/preflight_route.py"
+    mapping = {name: f"{orch.MASON_SRC}/dicode/{rel}" for name, rel in remote.SOURCE_FILES}
+    assert mapping["preflight_route.py"].endswith(
+        "perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/skill_preflight/preflight_route.py"
+    )
