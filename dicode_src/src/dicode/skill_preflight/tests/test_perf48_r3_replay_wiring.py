@@ -45,7 +45,7 @@ def _rng_artifact(tmp_path):
     return p
 
 
-def _spec(tmp_path, source_files):
+def _spec(tmp_path, source_files, shadow_sources=False):
     tmp_path.mkdir(parents=True, exist_ok=True)
     ckpt = tmp_path / "checkpoint" / "2100"
     ckpt.mkdir(parents=True, exist_ok=True)
@@ -65,7 +65,15 @@ def _spec(tmp_path, source_files):
     cfg = tmp_path / "config.yaml"
     cfg.write_text("validation:\n  rollout_updates: 40\n  num_envs: 1024\n  num_steps: 128\n"
                    "dicode_manager:\n  score_function: learnability\n")
-    sm = {label: str(path) for label, path in source_files.items()}
+    sm = {}
+    for label, path in source_files.items():
+        target = Path(path)
+        if shadow_sources:
+            # Tamper-reject cases mutate mapped files in place; bind a throwaway
+            # tmp copy so the tests never rewrite real working-tree files.
+            target = tmp_path / ("_src_shadow_" + label)
+            target.write_bytes(Path(path).read_bytes())
+        sm[label] = str(target)
     return {
         "base_dir": str(tmp_path), "checkpoint": str(ckpt),
         "conditioning_path": str(cond), "archive_snapshot": str(archive_dir),
@@ -143,7 +151,7 @@ def test_load_frozen_rng_rebuilds_exact_key(tmp_path):
 ])
 def test_manifest_write_reload_tamper_reject(tmp_path, field, mutate):
     replay = _replay()
-    spec = _spec(tmp_path, {"fake_src.py": Path(__file__)})
+    spec = _spec(tmp_path, {"fake_src.py": Path(__file__)}, shadow_sources=True)
     out = tmp_path / "manifest.json"
     replay.write_manifest(replay.build_replay_manifest(spec), out)
     mutate(spec, tmp_path)
