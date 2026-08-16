@@ -78,6 +78,12 @@ class E3Loop:
         self.initial_params_hash = hash_pytree(params)
 
     # ------------------------------------------------------------------
+    def _arch_family(self) -> str:
+        """Backend architecture family for recurrent-state validation."""
+        return str(getattr(self.backend, "architecture_family",
+                           "slice")).lower()
+
+    # ------------------------------------------------------------------
     def _capture_frontier_capsule(self, frontier, params, rng):
         tier = self.registry.get(frontier.tier)
         env = tier.make_env()
@@ -89,7 +95,8 @@ class E3Loop:
             env=env, env_params=self.env_params, backend=self.backend,
             params=params, start_states=[state0], start_memories=[mem],
             horizon=tier.horizon, rng=rng, deterministic=True,
-            collect_trace=True, collect_memory_trace=True)
+            collect_trace=True, collect_memory_trace=True,
+            architecture_family=self._arch_family())
         t_cap = min(len(batch.trace) - 1, tier.horizon // 2)
         state_c = batch.trace[t_cap]
         mem_c = batch.memory_trace[t_cap]
@@ -157,7 +164,8 @@ class E3Loop:
                     params=self.train_state.params,
                     success_fn=self.registry.predicate(frontier0.tier),
                     seeds=2, horizon=cfg.rollout_horizon,
-                    rng_seed=cfg.rng_seed + it)
+                    rng_seed=cfg.rng_seed + it,
+                    architecture_family=self._arch_family())
                 self.accounting.record(
                     "diagnosis", (len(evidence.records) + 1) * 1 *
                     cfg.rollout_horizon * 2)
@@ -168,7 +176,8 @@ class E3Loop:
                                     backend=self.backend,
                                     params=self.train_state.params,
                                     n_frozen=2, prefix_steps=(2, 4),
-                                    rng_seed=cfg.rng_seed + it)
+                                    rng_seed=cfg.rng_seed + it,
+                                    architecture_family=self._arch_family())
             for entry in bank.entries[:2]:
                 bank.validate_entry(entry, env=frontier_env,
                                     env_params=self.env_params,
@@ -185,7 +194,8 @@ class E3Loop:
                                                      forgetting=lp["forgetting"])
             engine = LightweightSimulatorDataEngine(
                 registry=self.registry, bank=bank, bank_env=frontier_env,
-                bank_env_params=self.env_params, backend=self.backend)
+                bank_env_params=self.env_params, backend=self.backend,
+                architecture_family=self._arch_family())
             gen = engine.generate_batch(
                 params=self.train_state.params,
                 student_version=f"slice@{hash_pytree(self.train_state.params)[:8]}",
