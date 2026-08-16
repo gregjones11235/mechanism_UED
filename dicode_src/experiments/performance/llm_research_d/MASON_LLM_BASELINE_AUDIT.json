@@ -1,0 +1,172 @@
+{
+  "classification": "LLM_RESEARCH_BASELINE_AUDIT",
+  "not_end_to_end_ued": true,
+  "audit_generated_utc": "2026-08-13",
+  "source_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+  "source_tree_sha": "78c9b0e845e24a0bf13832e5e20acd1fa55a960d",
+  "mason_root": "/home/oseasy/e2_data_disk2/skill_preflight_runs/mason_full_budget_gpu3_91a75e5_20260810T1805/attempt_06",
+  "evidence": {
+    "run_dicode_log": "run/run_dicode.log (4158 lines, Python logging w/ timestamps)",
+    "trainer_stdout": "logs/trainer.stdout (9000 lines, print() statements, no timestamps)",
+    "timings_csv": "run/runtime_analysis/timings.csv (per-session component durations)",
+    "overrides_yaml": "run/.hydra/overrides.yaml (actual Hydra overrides)",
+    "launch_manifest": "launch_manifest.json",
+    "process_manifest": "process_manifest.json",
+    "handoff_report": "preservation/engineering_handoff_20260811T092352Z/ENGINEERING_HANDOFF_REPORT.md",
+    "gpu_memory_csv": "gpu_memory_5s.csv (GPU3 sampler, 15156 rows)"
+  },
+  "wall_clock": {
+    "started_utc": "2026-08-10T12:13:41.739+00:00",
+    "stopped_utc": "2026-08-11T09:26:32.230+00:00",
+    "stop_reason": "STOPPED_FOR_ENGINEERING_OPTIMIZATION (intentional SIGTERM, trainer_returncode -15, not a training failure)",
+    "duration_s_approx": 76400
+  },
+  "provider_config": {
+    "task_generator": {
+      "provider": "local",
+      "model": "qwen2.5-coder:14b",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "max_tokens": 8192,
+      "llm_type": "generation"
+    },
+    "env_generator": {
+      "provider": "local",
+      "model": "qwen2.5-coder:14b",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "max_tokens": 8192,
+      "llm_type": "generation"
+    },
+    "embedding_model": {
+      "provider": "local",
+      "model": "nomic-embed-text",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "embedding_size": 1024,
+      "llm_type": "embedding"
+    }
+  },
+  "ollama_server_config": {
+    "qwen_llama_server": {
+      "pid": 3154045,
+      "argv_highlights": "-c 32768 -np 1 --chat-template chatml --flash-attn auto -b 1024 -ub 1024",
+      "parallel_slots": 1,
+      "note": "-np 1 => single generation slot; concurrent client requests serialize at the server"
+    },
+    "nomic_llama_server": {
+      "pid": 3156249,
+      "argv_highlights": "-c 2048 -np 1 --embedding -b 2048 -ub 2048",
+      "parallel_slots": 1,
+      "note": "embedding endpoint"
+    },
+    "model_digests": {
+      "qwen2.5-coder:14b": "9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849",
+      "nomic-embed-text:latest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f"
+    }
+  },
+  "request_volume": {
+    "chat_completions": 1626,
+    "embeddings": 575,
+    "total_http_200_ok": 2201,
+    "non_200_http": 0,
+    "retry_events": 863,
+    "retry_by_endpoint": {
+      "chat_completions": 289,
+      "embeddings": 574
+    },
+    "retry_rate": {
+      "chat": "~17.8% (289/1626)",
+      "embedding": "~99.8% (574/575) — essentially every embedding request retried",
+      "overall": "~39.2% (863/2201)"
+    },
+    "retry_nature": "All retries are transport-level (openai._base_client 'Retrying request to ... in ~0.40-0.49s'); every request eventually returned HTTP 200 OK. No HTTP 4xx/5xx, no rate-limit, no server-error status observed."
+  },
+  "failure_classification": {
+    "parse_failures": 0,
+    "empty_responses": 0,
+    "compilation_failures": 0,
+    "requeue_events": 0,
+    "reflection_events": 0,
+    "api_repair_events": 0,
+    "note": "Zero parse/empty/compile failures in logs; all generated candidates compiled on first attempt in this run (no reflection, no re-queue)."
+  },
+  "phase_timing": {
+    "evolution_cycles": 22,
+    "evolution_total_s": 32729.41,
+    "evolution_avg_s": 1488.0,
+    "evolution_min_s": 1181.08,
+    "evolution_max_s": 1747.34,
+    "evolution_last_vs_first_growth_pct": "~30% slower in final quarter vs first quarter",
+    "compilation_cycles": 22,
+    "compilation_total_s": 3669.25,
+    "compilation_avg_s": 166.8,
+    "training_sessions": 44,
+    "training_total_s": 59767.62,
+    "training_avg_s": 1358.4,
+    "note": "Evolution and Compilation run in a background thread (ThreadPoolExecutor) overlapping Training on GPU3; component seconds therefore exceed wall clock."
+  },
+  "evolution_per_session_s": [
+    {"session": 1, "evolution_s": 1194.96, "compilation_s": 160.18},
+    {"session": 3, "evolution_s": 1181.08, "compilation_s": 102.75},
+    {"session": 5, "evolution_s": 1259.06, "compilation_s": 170.50},
+    {"session": 7, "evolution_s": 1312.26, "compilation_s": 164.93},
+    {"session": 9, "evolution_s": 1448.94, "compilation_s": 125.00},
+    {"session": 11, "evolution_s": 1366.47, "compilation_s": 134.24},
+    {"session": 13, "evolution_s": 1444.53, "compilation_s": 153.45},
+    {"session": 15, "evolution_s": 1411.49, "compilation_s": 178.47},
+    {"session": 17, "evolution_s": 1409.73, "compilation_s": 157.79},
+    {"session": 19, "evolution_s": 1496.41, "compilation_s": 167.40},
+    {"session": 21, "evolution_s": 1408.11, "compilation_s": 142.97},
+    {"session": 23, "evolution_s": 1615.21, "compilation_s": 192.09},
+    {"session": 25, "evolution_s": 1547.95, "compilation_s": 178.25},
+    {"session": 27, "evolution_s": 1606.87, "compilation_s": 182.32},
+    {"session": 29, "evolution_s": 1552.79, "compilation_s": 165.72},
+    {"session": 31, "evolution_s": 1606.28, "compilation_s": 175.82},
+    {"session": 33, "evolution_s": 1569.06, "compilation_s": 157.76},
+    {"session": 35, "evolution_s": 1646.60, "compilation_s": 192.12},
+    {"session": 37, "evolution_s": 1535.73, "compilation_s": 193.55},
+    {"session": 39, "evolution_s": 1651.40, "compilation_s": 194.93},
+    {"session": 41, "evolution_s": 1717.15, "compilation_s": 194.90},
+    {"session": 43, "evolution_s": 1747.34, "compilation_s": 184.12}
+  ],
+  "evolution_workload_composition": {
+    "description_chat_requests_per_cycle": 25,
+    "code_chat_requests_per_cycle": 25,
+    "embedding_batch_size_series": [5, 5, 5, 10, 12, 12, 10, 13, 16, 10, 14, 16, 10, 15, 16, 4, 16, 16, 8, 15, 16, 10, 16, 16, 10, 14, 16, 9, 16, 16, 10, 15, 16, 10, 15, 16, 10, 16, 16, 10, 15, 16, 10, 16, 16, 10, 15, 16, 10, 15, 16, 10, 15, 16, 10, 14, 16, 10, 14, 16, 10, 14, 16, 10, 15, 16, 10, 16],
+    "embedding_batch_growth": "grows from ~5 tasks (early) to steady-state ~15-16 tasks (late) as the archive grows",
+    "archive_node_count_at_stop": 554,
+    "note": "Each embedding batch is a single batched /embeddings request (list input), not N separate requests."
+  },
+  "gpu_evidence": {
+    "gpu0_uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6",
+    "gpu0_occupant": "Ollama llama-server x2 (qwen 14906 MiB + nomic 656 MiB), util 0% at observation",
+    "gpu3_uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd",
+    "gpu3_training": "sampled util 0% in early samples; memory 1->850 MiB over warm-up; long low-utilization consistent with small 40-update rollouts vs LLM-bound wall clock",
+    "gpu2_note": "GPU-8df11537... currently hosts a dicode310 python process (~34.5 GiB) at audit time; not part of Mason attempt_06"
+  },
+  "direct_evidence_vs_inference": {
+    "direct": [
+      "provider/model/base_url/temperature/max_tokens from overrides.yaml + launch_manifest",
+      "request counts, retry counts, HTTP status histogram from run_dicode.log httpx/openai logs",
+      "zero parse/compile/empty/requeue from trainer.stdout marker grep",
+      "per-session Evolution/Compilation/Training durations from timings.csv",
+      "Ollama -np 1 single-slot server config from process_manifest argv",
+      "embedding batch-size growth series from trainer.stdout",
+      "554 task_graph nodes from task_graph.graphml node count"
+    ],
+    "inference": [
+      "retries are connection/transport-level (all requests eventually 200 OK; backoff ~0.40-0.49s) — exact trigger (connection reset vs pool contention vs server-side close) is not captured in these logs",
+      "the ~30% Evolution slowdown is driven by growing embedding batch + archive context; this is a correlation, not a proven causal attribution",
+      "returned response text length and prompt content are NOT logged in these files — cannot be extracted; only inferable from response-consumption in code",
+      "prompt SHA256 / message hashes are not recorded in this run (profiling disabled, no manifest existed)",
+      "per-request first-token latency is not observable from these logs"
+    ]
+  },
+  "key_limitations": [
+    "runtime_profiling.enabled was OFF for this run: no events.jsonl / critical_path.json; only timings.csv (start_timer/stop_timer) was captured",
+    "prompt/message text and response text are not logged; no prompt hashes available to freeze directly",
+    "no API key / authorization material was present or extracted (local provider uses api_key='token-')"
+  ]
+}

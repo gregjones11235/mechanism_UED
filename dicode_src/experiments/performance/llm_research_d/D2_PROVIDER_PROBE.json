@@ -1,0 +1,62 @@
+{
+  "artifact_sha256": "58bdb6e90ae5cd05c46d0562744278943b1e5afb76292cae8df5a3d5e7bcbfb6",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "PROBE_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "base_url": "https://api.deepinfra.com/v1/openai",
+  "budget_authorization": "NOT_OBSERVED",
+  "classification": "D2_PROVIDER_AVAILABILITY_PROBE",
+  "conclusion": "D2_BLOCKED_EXTERNAL_PROVIDER",
+  "config_evidence": [
+    {
+      "base_url": "https://api.deepinfra.com/v1/openai",
+      "model": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/mason_full_budget_gpu3_91a75e5_20260810T1805/source/dicode_src/conf/gen_manager/llm/deepinfra.yaml",
+      "provider": "deepinfra",
+      "sha256": "8cc13e661cd7e41b000126753d62cb64c8813384fdae3d107cbffdc73128a544"
+    },
+    {
+      "base_url": "${oc.env:GENERATION_SERVER_URL,http://localhost:5000/v1}",
+      "model": "Qwen/Qwen3-235B-A22B-Thinking-2507-FP8",
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/mason_full_budget_gpu3_91a75e5_20260810T1805/source/dicode_src/conf/gen_manager/llm/local_gen.yaml",
+      "provider": "local",
+      "sha256": "4b27d0373b10640819b9e2bbe825dfce5fb3e335c077a1286702395e5b0d7ef0"
+    }
+  ],
+  "credential_env_name": "DEEPINFRA_API_KEY",
+  "credential_present": false,
+  "credential_value_serialized": false,
+  "decision_inputs": {
+    "budget_authorization": "NOT_OBSERVED",
+    "credential_present": false,
+    "local_model_available": false
+  },
+  "external_provider_request_performed": false,
+  "gpu_used": false,
+  "llm_api_calls": 0,
+  "local_endpoint_probe": {
+    "error_class": "unknown_error",
+    "http_status": null,
+    "local_model_available": false,
+    "model_ids": [],
+    "reachable": false
+  },
+  "model": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+  "model_id_explicit": true,
+  "ollama_models": {
+    "error_class": null,
+    "http_status": 200,
+    "model_names": [
+      "nomic-embed-text:latest",
+      "qwen2.5-coder:14b"
+    ],
+    "reachable": true
+  },
+  "probe_tool_sha256": "7e155a1d4cc1c876a2985b82b5a4e86c633f42770499b895f959790dbf63c400",
+  "probe_utc": "2026-08-13T10:46:53Z",
+  "provider": "deepinfra",
+  "repair_probe": true,
+  "schema_version": 1,
+  "source_branch": "perf/llm-production-shape-d1c",
+  "source_commit": "b56bd99",
+  "source_head": "b56bd99fc7eae1d5b8667714f4097fab36fdb743"
+}

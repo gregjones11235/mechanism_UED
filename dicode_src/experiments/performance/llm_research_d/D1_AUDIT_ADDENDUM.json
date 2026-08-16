@@ -1,0 +1,67 @@
+{
+  "classification": "D1_AUDIT_ADDENDUM",
+  "not_end_to_end_ued": true,
+  "audit_source": "Sol 独立审计",
+  "audit_result": "PASS_WITH_CONCERNS",
+  "branch": "perf/llm-replay-research-d",
+  "base": "453dc356d29dce783dfb7c6e915f5195dc272fe1",
+  "head_at_audit": "8747aba7bbe2216c331deabcb4690ecdd14ac592",
+  "original_conclusion": "LLM_RESEARCH_NO_IMPROVEMENT",
+  "revised_conclusion": "D1_CHAT_ONLY_SINGLE_SLOT_NO_SIGNIFICANT_SPEEDUP",
+  "stage_d_overall_status": "LLM_RESEARCH_PASS_WITH_CONCERNS",
+  "data_still_valid": [
+    "六组汇总数字真实存在且可复算（result_sha256 六组均验证通过）",
+    "wall_clock_s / llm_union_s / llm_sum_s / retry_count / empty_response_count / valid_task_rate 等汇总字段",
+    "Mason 原始日志统计（HTTP 200=2201, chat=1626, embedding=575, retry=863）",
+    "GPU0 Ollama 服务 UUID 与 PID 证据",
+    "本地测试结果（17 passed / py_compile PASS / git diff --check PASS）",
+    "manifest SHA 与 system_prompt SHA",
+    "12 个合成重建 code-generation prompts 的并发调度比较（合成输入仍可用于受控调度比较）"
+  ],
+  "causal_claims_withdrawn": [
+    "有界并发消除了 Mason 的 863 次 retry",
+    "避免了连接风暴",
+    "queue 从客户端搬到服务端",
+    "GPU0 全程显存恒定",
+    "最低剩余显存精确为 2510 MiB",
+    "Mason 固定 prompt replay（实际为合成重建）",
+    "阶段 D 已全部完成"
+  ],
+  "evidence_gaps": [
+    "冻结输入是 RECONSTRUCTED_FROM_SOURCE_AND_ARCHIVE，非 Mason 原始 prompt 字节",
+    "每个候选的 CODE_EXAMPLES 统一用 collecting.py seed code，未复刻生产 selector 的候选特定 example set",
+    "D1 未执行 embedding replay，却引申到 Mason embedding retry（574/863）",
+    "D1 无生产式无界/25 并发对照，不能建立 retry=0 与 Mason 863 retry 的因果",
+    "六次运行的原始 events.jsonl/events.csv/critical_path.json/RESULT.json 随 /tmp 沙箱删除，无法请求级独立复核",
+    "queue_wait_sum_s 是客户端 semaphore wait 累加，非关键路径/服务端排队时间",
+    "GPU0 仅每组前后快照，无连续采样，不能宣称全程恒定或精确峰值"
+  ],
+  "deleted_events_fact": "六次运行原始事件文件已随 /tmp 沙箱删除，未持久保存，无法恢复，不得补造",
+  "irrecoverable_evidence": [
+    "六次运行的 events.jsonl（请求级时序）",
+    "六次运行的 events.csv / critical_path.json",
+    "六次运行的 RESULT.json 原始文件（仅保留汇总字段，result_sha256 可复算但原始文件已删）",
+    "GPU0 连续采样数据（从未采集）"
+  ],
+  "retained_metric_semantics": {
+    "queue_wait_sum_s": "客户端 coroutine 在 asyncio semaphore 上逐请求等待的累加值；legacy_alias=true；不是服务端排队时间",
+    "new_metrics": ["client_semaphore_wait_sum_s", "client_semaphore_wait_union_s", "client_semaphore_wait_critical_s"]
+  },
+  "workload_label": "SYNTHETIC_RECONSTRUCTED_CODEGEN_WORKLOAD",
+  "d1b_definition": {
+    "goal": "判断 Mason 的 embedding retry 是否与客户端并发相关",
+    "freeze": "Mason attempt06 archive/task graph 中实际存在的任务描述文本，同一 manifest 用于所有并发配置",
+    "batch_scale": "至少 16 文本批次（与真实后期规模相当）",
+    "matrix": ["max_in_flight=1", "max_in_flight=2", "max_in_flight=4", "production_like_unbounded=25"],
+    "repeats_per_level": 2,
+    "order": "1→2→4→unbounded 与 unbounded→4→2→1 交替",
+    "safety_gates": ["OOM", "GPU0 剩余显存过低", "Ollama 异常退出", "持续 timeout", "大量 connection reset", "队列无法恢复"]
+  },
+  "chat_unbounded_definition": {
+    "label": "PRODUCTION_STYLE_CLIENT_UNBOUNDED_FOR_12_REQUESTS",
+    "max_in_flight": 12,
+    "repeats": 2,
+    "order": "1→12→12→1",
+    "scope": "仅判断 12 请求 workload 下无界并发是否增加 retry / 影响 union wall / 影响有效率；不等于 Mason 25 候选或 embedding workload"
+  }
+}

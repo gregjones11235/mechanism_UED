@@ -1,0 +1,6 @@
+timestamp,gpu_index,gpu_uuid,utilization_gpu,memory_used_mib,memory_free_mib,temperature,compute_pid,process_name
+2026-08-13T07:47:17,0,GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6,0 %,15573,30495,39,"3154045,3156249",/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server;/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server
+2026-08-13T07:47:19,0,GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6,1 %,15573,30495,40,"3154045,3156249",/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server;/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server
+2026-08-13T07:47:21,0,GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6,13 %,15573,30495,41,"3154045,3156249",/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server;/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server
+2026-08-13T07:47:24,0,GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6,0 %,15573,30495,42,"3154045,3156249",/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server;/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server
+2026-08-13T07:47:26,0,GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6,8 %,15573,30495,42,"3154045,3156249",/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server;/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server
