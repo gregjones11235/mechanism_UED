@@ -338,3 +338,125 @@ def test_cli_seed_tamper_rc2(seed_copy, tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "BLOCKED"
     assert payload["reason"] == "seed_hash_mismatch"
+
+
+# ---------------------------------------------------------------------------
+# Budget reconciliation (incident D3Q_PHASE2_INCIDENT_01 semantics).
+# ---------------------------------------------------------------------------
+
+
+def _write_reconciliation(artifacts_dir, slot_consumed=None, provider_consumed=None):
+    artifacts_dir = Path(artifacts_dir)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    if slot_consumed is None:
+        slot_consumed = {
+            "slot_r1_small_p01": 1,
+            "slot_r1_small_p02": 1,
+            "slot_r1_small_p03": 1,
+            "slot_r1_small_p04": 1,
+            "slot_r1_small_p05": 3,
+        }
+    if provider_consumed is None:
+        provider_consumed = {"ollama": sum(slot_consumed.values())}
+    incident_dir = artifacts_dir.parent / "fake_incident"
+    incident_dir.mkdir(parents=True, exist_ok=True)
+    incident_result = incident_dir / "D3Q_SLOT_LAUNCHER_RESULT.json"
+    incident_result.write_text(
+        json.dumps({"status": "BLOCKED", "reason": "budget_exceeded"}), encoding="utf-8"
+    )
+    record = {
+        "classification": "D3Q_BUDGET_RECONCILIATION",
+        "schema_version": 1,
+        "recorded_utc": "2026-08-16T04:40:00Z",
+        "incident_id": "FAKE_INCIDENT",
+        "incident_run_id": "d3q_fake",
+        "incident_artifact": "fake_incident",
+        "incident_result_sha256": runner.sha256_file(incident_result),
+        "disposition": "attrition_no_rerun",
+        "provider_consumed": provider_consumed,
+        "slot_consumed": slot_consumed,
+    }
+    (artifacts_dir / drv.RECONCILIATION_FILENAME).write_text(
+        json.dumps(record, indent=2), encoding="utf-8"
+    )
+
+
+def test_reconciliation_blocks_reconciled_slot(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    _write_reconciliation(artifacts_dir)
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv.cmd_run_chunk(
+            "d3q_p2_fake_recon",
+            ["slot_r1_small_p05"],
+            ledger_path=ledger_path,
+            artifacts_dir=artifacts_dir,
+            launcher=_make_fake_launcher([]),
+        )
+    assert exc.value.reason == "slot_exhausted_reconciled"
+    ledger = D3QLedger(ledger_path)
+    excluded = sorted(drv._load_reconciliation(artifacts_dir)["slot_consumed"])
+    r1 = drv.chunk_slots_for_repeat("r1", ledger, excluded=excluded)
+    assert len(r1) == 17
+    assert "slot_r1_small_p05" not in r1
+    assert r1[0] == "slot_r1_small_p06"
+
+
+def test_reconciliation_counts_against_provider_budget(seeded, tmp_path, monkeypatch):
+    ledger_path, _seed = seeded
+    artifacts_dir = tmp_path / "artifacts"
+    _write_reconciliation(artifacts_dir)
+    monkeypatch.setattr(drv.runner_mod, "MAX_PROVIDER_POSTS", 10)
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv.cmd_run_chunk(
+            "d3q_p2_fake_recon_budget",
+            ["slot_r1_small_p06"],
+            ledger_path=ledger_path,
+            artifacts_dir=artifacts_dir,
+            launcher=_make_fake_launcher([]),
+        )
+    assert exc.value.reason == "provider_budget_exhausted"
+    assert exc.value.detail["reconciled"] == 7
+    # Control: identical chunk without reconciliation fits under the same limit.
+    control_dir = tmp_path / "artifacts_control"
+    control_dir.mkdir()
+    result = drv.cmd_run_chunk(
+        "d3q_p2_fake_control",
+        ["slot_r1_small_p06"],
+        ledger_path=ledger_path,
+        artifacts_dir=control_dir,
+        launcher=_make_fake_launcher([]),
+    )
+    assert result["status"] == "PASS"
+
+
+def test_reconciliation_evidence_mismatch(tmp_path):
+    artifacts_dir = tmp_path / "artifacts"
+    _write_reconciliation(artifacts_dir)
+    incident_result = tmp_path / "fake_incident" / "D3Q_SLOT_LAUNCHER_RESULT.json"
+    incident_result.write_text("tampered", encoding="utf-8")
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv._load_reconciliation(artifacts_dir)
+    assert exc.value.reason == "reconciliation_evidence_mismatch"
+
+
+def test_reconciliation_provider_mismatch(tmp_path):
+    artifacts_dir = tmp_path / "artifacts"
+    _write_reconciliation(artifacts_dir, provider_consumed={"ollama": 99})
+    with pytest.raises(drv.Phase2Error) as exc:
+        drv._load_reconciliation(artifacts_dir)
+    assert exc.value.reason == "reconciliation_provider_mismatch"
+
+
+def test_status_includes_reconciliation(seeded, tmp_path):
+    ledger_path, _seed = seeded
+    art = tmp_path / "art"
+    art.mkdir()
+    shutil.copy(ledger_path, art / "ledger.jsonl")
+    _write_reconciliation(art)
+    status = drv.cmd_status(art / "ledger.jsonl")
+    assert status["provider_counts"]["ollama"] == 8
+    assert status["provider_counts_ledger_only"]["ollama"] == 1
+    assert len(status["reconciled_slots"]) == 5
+    assert status["remaining_count"] == 72 - 2 - 5
+    assert status["remaining_next"][0] == "slot_r1_small_p06"

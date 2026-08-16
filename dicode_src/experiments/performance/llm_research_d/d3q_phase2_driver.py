@@ -41,6 +41,7 @@ SEED_SLOTS = ("slot_r1_small_p00", "slot_r1_large_p00")
 EXPECTED_SEED_COUNTS = {"ollama": 1, "deepseek_official": 1}
 EXPECTED_REMAINING_AFTER_SEED = 70
 REPEATS = ("r1", "r2", "r3")
+RECONCILIATION_FILENAME = "D3Q_BUDGET_RECONCILIATION.json"
 
 EVENT_FIELDS = (
     "ts_utc",
@@ -82,15 +83,32 @@ def remaining_slots(ledger: D3QLedger) -> List[str]:
     return [slot for slot in all_slots_ordered() if ledger.slot_post_count(slot) == 0]
 
 
-def chunk_slots_for_repeat(repeat: str, ledger: D3QLedger) -> List[str]:
-    """Untouched slots of one repeat, in frozen order."""
-    if repeat not in REPEATS:
-        raise Phase2Error("invalid_repeat", repeat)
-    prefix = f"slot_{repeat}_"
+def remaining_slots_effective(
+    ledger: D3QLedger, excluded: Sequence[str] = ()
+) -> List[str]:
+    """Slots with zero ledger POSTs and not excluded, in frozen order."""
+    excluded_set = set(excluded)
     return [
         slot
         for slot in all_slots_ordered()
-        if slot.startswith(prefix) and ledger.slot_post_count(slot) == 0
+        if ledger.slot_post_count(slot) == 0 and slot not in excluded_set
+    ]
+
+
+def chunk_slots_for_repeat(
+    repeat: str, ledger: D3QLedger, excluded: Sequence[str] = ()
+) -> List[str]:
+    """Untouched, non-excluded slots of one repeat, in frozen order."""
+    if repeat not in REPEATS:
+        raise Phase2Error("invalid_repeat", repeat)
+    prefix = f"slot_{repeat}_"
+    excluded_set = set(excluded)
+    return [
+        slot
+        for slot in all_slots_ordered()
+        if slot.startswith(prefix)
+        and ledger.slot_post_count(slot) == 0
+        and slot not in excluded_set
     ]
 
 
@@ -227,6 +245,72 @@ def _fail_on_secret_text(path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Budget reconciliation (incident D3Q_PHASE2_INCIDENT_01).
+# ---------------------------------------------------------------------------
+
+
+def _load_reconciliation(artifacts_dir: Path) -> Dict[str, Any]:
+    """Load and fail-closed-validate the budget reconciliation record.
+
+    Reconciliation accounts for POSTs that really reached a provider but whose
+    per-POST metadata was lost to a tool failure.  Such slots are permanently
+    barred from re-dispatch (their consumed budget counts against the frozen
+    provider limits).
+    """
+    artifacts_dir = Path(artifacts_dir)
+    path = artifacts_dir / RECONCILIATION_FILENAME
+    if not path.is_file():
+        return {"provider_consumed": {}, "slot_consumed": {}, "path": None}
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise Phase2Error("reconciliation_malformed", str(exc))
+    if not isinstance(record, dict):
+        raise Phase2Error("reconciliation_shape", str(path))
+    if record.get("classification") != "D3Q_BUDGET_RECONCILIATION":
+        raise Phase2Error("reconciliation_classification", str(path))
+    if record.get("schema_version") != 1:
+        raise Phase2Error("reconciliation_schema_version", str(path))
+    slot_consumed = record.get("slot_consumed")
+    provider_consumed = record.get("provider_consumed")
+    if not isinstance(slot_consumed, dict) or not isinstance(provider_consumed, dict):
+        raise Phase2Error("reconciliation_shape", str(path))
+    derived: Dict[str, int] = {}
+    for slot_id, count in slot_consumed.items():
+        if not isinstance(count, int) or not 1 <= count <= runner_mod.MAX_POSTS_PER_SLOT:
+            raise Phase2Error("reconciliation_slot_count", slot_id)
+        try:
+            _repeat, arm, _prompt = runner_mod.parse_slot_id(slot_id)
+        except ValueError:
+            raise Phase2Error("reconciliation_slot_id", slot_id)
+        provider, _model, _url = runner_mod.arm_to_provider_model(arm)
+        derived[provider] = derived.get(provider, 0) + count
+    if derived != dict(provider_consumed):
+        raise Phase2Error(
+            "reconciliation_provider_mismatch",
+            {"derived": derived, "recorded": dict(provider_consumed)},
+        )
+    incident_sha = record.get("incident_result_sha256")
+    incident_rel = record.get("incident_artifact")
+    if incident_sha or incident_rel:
+        incident_result = (
+            artifacts_dir.parent / str(incident_rel) / "D3Q_SLOT_LAUNCHER_RESULT.json"
+        )
+        if (
+            not isinstance(incident_sha, str)
+            or not incident_result.is_file()
+            or runner_mod.sha256_file(incident_result) != incident_sha
+        ):
+            raise Phase2Error("reconciliation_evidence_mismatch", str(incident_rel))
+    _fail_on_secret_text(path)
+    return {
+        "provider_consumed": dict(provider_consumed),
+        "slot_consumed": dict(slot_consumed),
+        "path": str(path),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Commands.
 # ---------------------------------------------------------------------------
 
@@ -252,7 +336,7 @@ def cmd_seed(
     }
     if provider_counts != EXPECTED_SEED_COUNTS:
         raise Phase2Error("seed_provider_counts_unexpected", provider_counts)
-    remaining = remaining_slots(ledger)
+    remaining = remaining_slots_effective(ledger)
     if len(remaining) != EXPECTED_REMAINING_AFTER_SEED:
         raise Phase2Error("seed_remaining_unexpected", len(remaining))
     _fail_on_secret_text(ledger_path)
@@ -355,6 +439,7 @@ def cmd_run_chunk(
     if not ledger_path.is_file():
         raise Phase2Error("ledger_missing", str(ledger_path))
     ledger = D3QLedger(ledger_path)
+    reconciliation = _load_reconciliation(artifacts_dir)
     order_index = {slot: index for index, slot in enumerate(all_slots_ordered())}
     for slot_id in slots:
         if slot_id not in order_index:
@@ -362,6 +447,8 @@ def cmd_run_chunk(
     if [order_index[slot] for slot in slots] != sorted(order_index[slot] for slot in slots):
         raise Phase2Error("slots_out_of_frozen_order", slots)
     for slot_id in slots:
+        if slot_id in reconciliation["slot_consumed"]:
+            raise Phase2Error("slot_exhausted_reconciled", slot_id)
         if ledger.slot_post_count(slot_id) != 0:
             raise Phase2Error("slot_already_in_ledger", slot_id)
     provider_need: Dict[str, int] = {}
@@ -371,13 +458,17 @@ def cmd_run_chunk(
         provider_need[provider] = provider_need.get(provider, 0) + runner_mod.MAX_POSTS_PER_SLOT
     for provider in sorted(provider_need):
         need = provider_need[provider]
-        if ledger.provider_post_count(provider) + need > runner_mod.MAX_PROVIDER_POSTS:
+        ledger_used = ledger.provider_post_count(provider)
+        reconciled = int(reconciliation["provider_consumed"].get(provider, 0))
+        if ledger_used + reconciled + need > runner_mod.MAX_PROVIDER_POSTS:
             raise Phase2Error(
                 "provider_budget_exhausted",
                 {
                     "provider": provider,
                     "need": need,
-                    "used": ledger.provider_post_count(provider),
+                    "used": ledger_used + reconciled,
+                    "ledger_used": ledger_used,
+                    "reconciled": reconciled,
                     "limit": runner_mod.MAX_PROVIDER_POSTS,
                 },
             )
@@ -412,7 +503,9 @@ def cmd_run_chunk(
             provider: ledger.provider_post_count(provider)
             for provider in (runner_mod.SMALL_PROVIDER, runner_mod.LARGE_PROVIDER)
         },
-        "remaining_slots": len(remaining_slots(ledger)),
+        "remaining_slots": len(
+            remaining_slots_effective(ledger, reconciliation["slot_consumed"])
+        ),
     }
 
 
@@ -421,14 +514,24 @@ def cmd_status(ledger_path: Path) -> Dict[str, Any]:
     if not ledger_path.is_file():
         raise Phase2Error("ledger_missing", str(ledger_path))
     ledger = D3QLedger(ledger_path)
-    remaining = remaining_slots(ledger)
+    reconciliation = _load_reconciliation(ledger_path.parent)
+    excluded = sorted(reconciliation["slot_consumed"])
+    remaining = remaining_slots_effective(ledger, excluded)
     providers = (runner_mod.SMALL_PROVIDER, runner_mod.LARGE_PROVIDER)
     return {
         "status": "PASS",
         "ledger": str(ledger_path),
         "slot_limit": ledger.slot_limit,
         "provider_limits": {provider: ledger.provider_limit for provider in providers},
-        "provider_counts": {provider: ledger.provider_post_count(provider) for provider in providers},
+        "provider_counts": {
+            provider: ledger.provider_post_count(provider)
+            + int(reconciliation["provider_consumed"].get(provider, 0))
+            for provider in providers
+        },
+        "provider_counts_ledger_only": {
+            provider: ledger.provider_post_count(provider) for provider in providers
+        },
+        "reconciled_slots": excluded,
         "touched_slots": [slot for slot in all_slots_ordered() if ledger.slot_post_count(slot) > 0],
         "remaining_count": len(remaining),
         "remaining_next": remaining[:6],
@@ -469,6 +572,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = cmd_status(Path(args.ledger))
         else:
             ledger_path = Path(args.ledger)
+            artifacts_dir = Path(args.artifacts_dir)
             if args.slots is not None:
                 slots = [item.strip() for item in args.slots.split(",") if item.strip()]
             else:
@@ -476,12 +580,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     raise Phase2Error("invalid_repeat", args.repeat)
                 if not ledger_path.is_file():
                     raise Phase2Error("ledger_missing", str(ledger_path))
-                slots = chunk_slots_for_repeat(args.repeat, D3QLedger(ledger_path))
+                reconciliation = _load_reconciliation(artifacts_dir)
+                slots = chunk_slots_for_repeat(
+                    args.repeat,
+                    D3QLedger(ledger_path),
+                    excluded=sorted(reconciliation["slot_consumed"]),
+                )
             result = cmd_run_chunk(
                 args.run_id,
                 slots,
                 ledger_path=ledger_path,
-                artifacts_dir=Path(args.artifacts_dir),
+                artifacts_dir=artifacts_dir,
             )
     except Phase2Error as exc:
         print(

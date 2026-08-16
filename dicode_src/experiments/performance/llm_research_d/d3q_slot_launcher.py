@@ -1006,6 +1006,7 @@ def run_launcher(
         result["deployed_hashes_verified"] = True
 
         if not deploy_check_only:
+            local_slots_dir = artifacts / f".slots_{run_id}"
             for spec in slot_specs:
                 summary = _remote_ledger_summary(
                     command_runner, target, ssh_key, python_path, exec_root
@@ -1013,7 +1014,7 @@ def run_launcher(
                 if spec == slot_specs[0]:
                     result["ledger_pre"] = summary
                 _enforce_budget_before_slot(summary, spec["slot_id"], spec["provider"])
-                dispatched = _dispatch_slot(
+                _dispatch_slot(
                     command_runner, target, ssh_key,
                     remote_python=python_path,
                     remote_env_file=env_path,
@@ -1026,41 +1027,39 @@ def run_launcher(
                     command_runner, target, ssh_key, python_path, exec_root
                 )
                 result["ledger_post"] = after
-                provider_posts_after = (after.get("provider_counts") or {}).get(
-                    spec["provider"], 0
-                )
                 _enforce_budget_after_slot(
                     after, spec["slot_id"], spec["provider"],
                     expected_slot_posts=(after.get("slot_counts") or {}).get(
                         spec["slot_id"], 0
                     ),
                 )
-                _enforce_budget_before_slot(after, spec["slot_id"], spec["provider"])
+                # Collect this slot's evidence immediately after completion so
+                # a later mid-run failure cannot lose already-finished slot
+                # artifacts (incident D3Q_PHASE2_INCIDENT_01).
+                _collect_slot_dir(
+                    command_runner, target, ssh_key, exec_root,
+                    spec["slot_id"], local_slots_dir,
+                )
+                slot_result = _load_slot_result(
+                    local_slots_dir / spec["slot_id"], spec["slot_id"]
+                )
+                collected_slots.append(
+                    {"slot_id": spec["slot_id"], "result": slot_result}
+                )
+                # NOTE: deliberately no post-slot _enforce_budget_before_slot()
+                # here.  A slot that legally exhausts its 3-POST budget is a
+                # valid experimental outcome, not a violation; real overshoot
+                # (> limit) is already caught by _enforce_budget_after_slot,
+                # and the next iteration re-reads a fresh ledger summary for
+                # the next slot's pre-check.
 
-        # verify deployed hashes are unchanged post-run, then collect
+        # verify deployed hashes are unchanged post-run
         deployed_post = _verify_remote_hashes(
             command_runner, target, ssh_key, python_path, exec_root, local_files
         )
         if deployed_post != deployed_pre:
             raise LauncherError("artifact_tamper")
         result["deployed_hashes_post_verified"] = True
-
-        if not deploy_check_only:
-            local_slots_dir = artifacts / f".slots_{run_id}"
-            try:
-                for spec in slot_specs:
-                    _collect_slot_dir(
-                        command_runner, target, ssh_key, exec_root,
-                        spec["slot_id"], local_slots_dir,
-                    )
-                    slot_result = _load_slot_result(
-                        local_slots_dir / spec["slot_id"], spec["slot_id"]
-                    )
-                    collected_slots.append(
-                        {"slot_id": spec["slot_id"], "result": slot_result}
-                    )
-            except LauncherError:
-                raise
 
         # GPU + ollama unchanged
         gpu_post = _gpu_snapshot(command_runner, target, ssh_key)

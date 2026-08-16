@@ -640,3 +640,147 @@ def test_launcher_no_secret_scan_directory(tmp_path):
     scan = launcher._no_secret_scan_directory(tmp_path)
     assert scan["passed"]
     assert scan["files_scanned"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Incident D3Q_PHASE2_INCIDENT_01 regressions:
+# a slot legally exhausting its 3-POST budget must PASS the run, and a
+# mid-run failure must preserve already-collected slot evidence.
+# ---------------------------------------------------------------------------
+
+
+def test_launcher_budget_after_slot_exact_three_is_legal():
+    summary = {"slot_counts": {"slot_r1_small_p02": 3}, "provider_counts": {"ollama": 7}}
+    launcher._enforce_budget_after_slot(
+        summary, "slot_r1_small_p02", "ollama", expected_slot_posts=3
+    )
+    summary = {"slot_counts": {"slot_r1_small_p02": 4}, "provider_counts": {"ollama": 8}}
+    with pytest.raises(launcher.LauncherError):
+        launcher._enforce_budget_after_slot(
+            summary, "slot_r1_small_p02", "ollama", expected_slot_posts=4
+        )
+
+
+def _fake_gpu_snapshot(command_runner, target, ssh_key):
+    return {
+        "gpu2": {"uuid": launcher.EXPECTED_GPU2_UUID, "external_compute_pids": []},
+        "gpus": [],
+    }
+
+
+def _fake_ollama_snapshot(command_runner, target, ssh_key, python_path):
+    return {
+        "models": {runner.SMALL_MODEL: launcher.EXPECTED_OLLAMA_QWEN_DIGEST_PREFIX + "ffff"},
+        "pids": ["1"],
+    }
+
+
+def _patch_launcher_remotes(monkeypatch, summary_fn, dispatch_fn, collect_log, result_fn):
+    monkeypatch.setattr(launcher, "_gpu_snapshot", _fake_gpu_snapshot)
+    monkeypatch.setattr(launcher, "_ollama_snapshot", _fake_ollama_snapshot)
+    monkeypatch.setattr(launcher, "_remote_exec_root", lambda *a, **k: None)
+    monkeypatch.setattr(launcher, "_deploy", lambda *a, **k: None)
+    monkeypatch.setattr(launcher, "_verify_remote_hashes", lambda *a, **k: {"binding": "x"})
+    monkeypatch.setattr(launcher, "_cleanup_exec_root", lambda *a, **k: None)
+    monkeypatch.setattr(launcher, "_remote_ledger_summary", summary_fn)
+    monkeypatch.setattr(launcher, "_dispatch_slot", dispatch_fn)
+
+    def fake_collect(command_runner, target, ssh_key, exec_root, slot_id, local_slots_dir):
+        slot_dir = Path(local_slots_dir) / slot_id
+        slot_dir.mkdir(parents=True, exist_ok=True)
+        collect_log.append(slot_id)
+
+    monkeypatch.setattr(launcher, "_collect_slot_dir", fake_collect)
+    monkeypatch.setattr(launcher, "_load_slot_result", result_fn)
+
+
+def _run_launcher_kwargs(tmp_path, slots):
+    return dict(
+        slots=slots,
+        ssh_target="oseasy@172.25.14.221",
+        ssh_key=str(tmp_path / "fake_key"),
+        remote_python="/home/x/bin/python",
+        remote_env_file="/home/x/env.env",
+        mason_worktree="/home/x/wt",
+        mason_src="/home/x/wt/src",
+        artifacts_dir=tmp_path / "artifacts",
+        runner=lambda invocation: launcher.CommandResult(0),
+    )
+
+
+def test_launcher_exact_budget_slot_passes_end_to_end(tmp_path, monkeypatch):
+    counts = {"slot_r1_small_p01": 0, "slot_r1_small_p02": 0}
+    provider = {"ollama": 0}
+
+    def summary_fn(command_runner, target, ssh_key, python_path, exec_root):
+        return {"slot_counts": dict(counts), "provider_counts": dict(provider)}
+
+    def dispatch_fn(command_runner, target, ssh_key, **kwargs):
+        slot_id = kwargs["slot_id"]
+        posts = 3 if slot_id == "slot_r1_small_p02" else 1
+        counts[slot_id] = posts
+        provider["ollama"] += posts
+        return {"slot_id": slot_id}
+
+    collect_log = []
+
+    def result_fn(slot_dir, slot_id):
+        return {
+            "slot_id": slot_id,
+            "initial_valid": True,
+            "final_valid": True,
+            "attempts": 1,
+            "repair_requests": 0,
+        }
+
+    _patch_launcher_remotes(monkeypatch, summary_fn, dispatch_fn, collect_log, result_fn)
+    result = launcher.run_launcher(
+        run_id="d3q_fake_exact_budget",
+        **_run_launcher_kwargs(tmp_path, ["slot_r1_small_p01", "slot_r1_small_p02"]),
+    )
+    assert result["status"] == "PASS", result.get("reason")
+    assert collect_log == ["slot_r1_small_p01", "slot_r1_small_p02"]
+    assert result["ledger_post"]["slot_counts"]["slot_r1_small_p02"] == 3
+
+
+def test_launcher_midrun_failure_preserves_collected_evidence(tmp_path, monkeypatch):
+    counts = {"slot_r1_small_p01": 0, "slot_r1_small_p02": 0}
+    provider = {"ollama": 0}
+
+    def summary_fn(command_runner, target, ssh_key, python_path, exec_root):
+        return {"slot_counts": dict(counts), "provider_counts": dict(provider)}
+
+    def dispatch_fn(command_runner, target, ssh_key, **kwargs):
+        slot_id = kwargs["slot_id"]
+        if slot_id == "slot_r1_small_p02":
+            raise launcher.LauncherError("remote_command_failed")
+        counts[slot_id] = 1
+        provider["ollama"] += 1
+        return {"slot_id": slot_id}
+
+    collect_log = []
+
+    def result_fn(slot_dir, slot_id):
+        return {
+            "slot_id": slot_id,
+            "initial_valid": True,
+            "final_valid": True,
+            "attempts": 1,
+            "repair_requests": 0,
+        }
+
+    _patch_launcher_remotes(monkeypatch, summary_fn, dispatch_fn, collect_log, result_fn)
+    result = launcher.run_launcher(
+        run_id="d3q_fake_midrun_failure",
+        **_run_launcher_kwargs(tmp_path, ["slot_r1_small_p01", "slot_r1_small_p02"]),
+    )
+    assert result["status"] == "BLOCKED"
+    assert result["reason"] == "remote_command_failed"
+    assert collect_log == ["slot_r1_small_p01"]
+    published = tmp_path / "artifacts" / "d3q_fake_midrun_failure"
+    assert (published / "slots" / "slot_r1_small_p01").is_dir()
+    assert not (published / "slots" / "slot_r1_small_p02").exists()
+    published_result = json.loads(
+        (published / "D3Q_SLOT_LAUNCHER_RESULT.json").read_text(encoding="utf-8")
+    )
+    assert "slot_r1_small_p01" in published_result["slot_results"]

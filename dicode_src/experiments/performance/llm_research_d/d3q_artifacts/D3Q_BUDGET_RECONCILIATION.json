@@ -1,0 +1,22 @@
+{
+  "classification": "D3Q_BUDGET_RECONCILIATION",
+  "schema_version": 1,
+  "recorded_utc": "2026-08-16T04:40:00Z",
+  "incident_id": "D3Q_PHASE2_INCIDENT_01",
+  "incident_run_id": "d3q_p2_chunk1_r1_20260816T041540Z",
+  "incident_artifact": "d3q_artifacts/d3q_p2_chunk1_r1_20260816T041540Z",
+  "incident_result_sha256": "bf65fca0291735a47193318f9353467459b6dc5e228078cfc3175115ac3b2d2b",
+  "evidence_source": "D3Q_SLOT_LAUNCHER_RESULT.json ledger_post",
+  "disposition": "attrition_no_rerun",
+  "disposition_reason": "Frozen runner cannot be limited to remaining per-slot budget on re-dispatch; re-running these slots risks breaching the frozen experiment-global 3-POST slot budget. Consumed POSTs are real and counted; slots are permanently barred.",
+  "provider_consumed": {
+    "ollama": 7
+  },
+  "slot_consumed": {
+    "slot_r1_small_p01": 1,
+    "slot_r1_small_p02": 1,
+    "slot_r1_small_p03": 1,
+    "slot_r1_small_p04": 1,
+    "slot_r1_small_p05": 3
+  }
+}
