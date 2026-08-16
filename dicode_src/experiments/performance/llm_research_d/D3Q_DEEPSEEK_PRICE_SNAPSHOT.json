@@ -1,0 +1,20 @@
+{
+  "classification": "D3Q_DEEPSEEK_PRICE_SNAPSHOT",
+  "schema_version": 1,
+  "model": "deepseek-v4-flash",
+  "model_version": "DeepSeek-V4-Flash-0731",
+  "currency": "USD",
+  "input_price_per_mtok": 0.14,
+  "output_price_per_mtok": 0.28,
+  "cache_hit_price_per_mtok": 0.0028,
+  "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
+  "retrieved_utc": "2026-08-16T06:42:00Z",
+  "applicable_window": "All D3Q phase-2 generation slots ran 2026-08-16 04:15-05:41 UTC, before the 2026-08-16T16:00Z pricing transition; flat rates above apply.",
+  "future_rates_from_2026-08-16T16:00Z": {
+    "note": "Peak/off-peak billing takes effect; off-peak = half of peak. Peak hours 01:00-04:00 and 06:00-10:00 UTC.",
+    "deepseek-v4-flash": {
+      "off_peak": {"cache_hit_per_mtok": 0.007, "cache_miss_per_mtok": 0.22, "output_per_mtok": 0.66},
+      "peak": {"cache_hit_per_mtok": 0.014, "cache_miss_per_mtok": 0.44, "output_per_mtok": 1.32}
+    }
+  }
+}
