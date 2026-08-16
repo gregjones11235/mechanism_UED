@@ -1,0 +1,1 @@
+{"compile_s": null, "error_class": "cpu_jax_error", "execute_s": null, "load_s": null, "message": "Compilation error: Indexer must have integer or boolean type, got indexer with type float32 at position 0, indexer value Traced<float32[0]>with<DynamicJaxprTrace>", "total_s": 10.957286, "valid": false}
