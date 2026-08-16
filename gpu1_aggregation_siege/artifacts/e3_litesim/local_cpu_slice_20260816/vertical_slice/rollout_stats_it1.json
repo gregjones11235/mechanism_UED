@@ -1,0 +1,32 @@
+{
+  "expansion": {
+    "frontier_family": "expansion",
+    "horizon": 12,
+    "num_transitions": 12,
+    "policy_hash": "36249e7cc84d6c1a474c128daf9818720290bee28cff070f8e913a56ae3f6e36",
+    "rollout_length": 12,
+    "start_state_ids": [
+      "st_000002"
+    ],
+    "student_version": "slice@36249e7c",
+    "terminal_reason": [
+      "horizon"
+    ]
+  },
+  "repair": {
+    "frontier_family": "repair",
+    "horizon": 12,
+    "num_transitions": 24,
+    "policy_hash": "36249e7cc84d6c1a474c128daf9818720290bee28cff070f8e913a56ae3f6e36",
+    "rollout_length": 12,
+    "start_state_ids": [
+      "st_000000",
+      "st_000001"
+    ],
+    "student_version": "slice@36249e7c",
+    "terminal_reason": [
+      "horizon",
+      "horizon"
+    ]
+  }
+}

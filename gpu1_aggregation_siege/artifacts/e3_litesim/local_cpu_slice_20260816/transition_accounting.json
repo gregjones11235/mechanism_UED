@@ -1,0 +1,15 @@
+{
+  "accounting_hash": "d997dde0d9da30c33d67b23ae3240c4e91e912029128ba82508bb7200aed7536",
+  "anchor": 0,
+  "diagnosis": 192,
+  "env_steps_per_sec": 2.626883852206988,
+  "llm_calls": 0,
+  "llm_tokens": 0,
+  "original": 0,
+  "ppo_updates": 8,
+  "probe": 416,
+  "student_version": "slice_student",
+  "total_simulator_transitions": 680,
+  "training": 72,
+  "wall_clock_sec": 258.862
+}

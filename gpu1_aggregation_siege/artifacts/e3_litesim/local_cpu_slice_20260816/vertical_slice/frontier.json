@@ -1,0 +1,17 @@
+{
+  "allowed_variations": [
+    "frozen",
+    "prefix_variant"
+  ],
+  "failing_here": "tier3_front",
+  "mastered_before": "tier2_combat",
+  "priority": 1,
+  "probe_id": "tier3_front#7c928fc3",
+  "progress_metric": "success_rate",
+  "rollout_horizon": 24,
+  "skill_family": "DARK_NAVIGATION",
+  "spec_hash": "1ae1ccbd7424e739a3028dff2c2c5ed6c5dea8a516235432b318ebc50c9941de",
+  "status": "FAILED",
+  "success_predicate": "reached_floor2",
+  "tier": "tier3_front"
+}

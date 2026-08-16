@@ -1,0 +1,11 @@
+{
+  "G1_STUDENT_BINDING": true,
+  "G2_STATE_RESTORE": true,
+  "G3_RECURRENT_STATE": true,
+  "G4_READ_ONLY_PROBE": true,
+  "G5_ON_POLICY": true,
+  "G6_PPO_BRIDGE": true,
+  "G7_TRANSITION_ACCOUNTING": true,
+  "G8_THROUGHPUT": true,
+  "G9_VERTICAL_SLICE": true
+}

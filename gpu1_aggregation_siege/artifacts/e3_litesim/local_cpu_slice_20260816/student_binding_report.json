@@ -1,0 +1,12 @@
+{
+  "binding_verified": true,
+  "checkpoint_params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+  "global_step": 208,
+  "payload_hash": "2c4e691fc3110f77231e27c92bb61009efdc543612a6220c5c7714d018aa09cd",
+  "ppo_params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+  "probe_params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+  "runstate_params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+  "schema": "e3_litesim.student_binding/v1",
+  "session_idx": 0,
+  "student_version": "slice@7c928fc3"
+}

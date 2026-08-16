@@ -1,0 +1,81 @@
+{
+  "checkpoint_step": 0,
+  "params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+  "probe_wall_s": 77.49479222297668,
+  "read_only_verified": true,
+  "student_id": "slice_student",
+  "tier_results": [
+    {
+      "ci_high": 1.0,
+      "ci_low": 1.0,
+      "horizon": 24,
+      "metrics_aggregate": {
+        "floor_reached": 0.0,
+        "health_delta": 0.0,
+        "max_no_progress_steps": 24.0,
+        "oscillation_rate": 0.0,
+        "progress_final": 0.0,
+        "return_sum": 0.0,
+        "stall_rate": 1.0,
+        "success": 1.0,
+        "threat_damage_events": 0.0,
+        "torch_pickup_latency": null
+      },
+      "n_episodes": 2,
+      "params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+      "probe_id": "tier1_survive#7c928fc3",
+      "skill_family": "BASIC_SURVIVAL",
+      "status": "MASTERED",
+      "success_rate": 1.0,
+      "tier_id": "tier1_survive"
+    },
+    {
+      "ci_high": 1.0,
+      "ci_low": 1.0,
+      "horizon": 32,
+      "metrics_aggregate": {
+        "floor_reached": 0.0,
+        "health_delta": -5.0,
+        "max_no_progress_steps": 31.5,
+        "oscillation_rate": 0.0,
+        "progress_final": 1.0,
+        "return_sum": -0.500000074505806,
+        "stall_rate": 0.71875,
+        "success": 1.0,
+        "threat_damage_events": 4.5,
+        "torch_pickup_latency": null
+      },
+      "n_episodes": 2,
+      "params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+      "probe_id": "tier2_combat#7c928fc3",
+      "skill_family": "THREAT_MANAGEMENT",
+      "status": "MASTERED",
+      "success_rate": 1.0,
+      "tier_id": "tier2_combat"
+    },
+    {
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "horizon": 48,
+      "metrics_aggregate": {
+        "floor_reached": 0.0,
+        "health_delta": 0.0,
+        "max_no_progress_steps": 48.0,
+        "oscillation_rate": 0.0,
+        "progress_final": 0.0,
+        "return_sum": 0.0,
+        "stall_rate": 1.0,
+        "success": 0.0,
+        "threat_damage_events": 0.0,
+        "torch_pickup_latency": null
+      },
+      "n_episodes": 2,
+      "params_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+      "probe_id": "tier3_front#7c928fc3",
+      "skill_family": "DARK_NAVIGATION",
+      "status": "FAILED",
+      "success_rate": 0.0,
+      "tier_id": "tier3_front"
+    }
+  ]
+}

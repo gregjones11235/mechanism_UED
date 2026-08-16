@@ -1,0 +1,271 @@
+{
+  "accounting": {
+    "accounting_hash": "d997dde0d9da30c33d67b23ae3240c4e91e912029128ba82508bb7200aed7536",
+    "anchor": 0,
+    "diagnosis": 192,
+    "env_steps_per_sec": 2.626883852206988,
+    "llm_calls": 0,
+    "llm_tokens": 0,
+    "original": 0,
+    "ppo_updates": 8,
+    "probe": 416,
+    "student_version": "slice_student",
+    "total_simulator_transitions": 680,
+    "training": 72,
+    "wall_clock_sec": 258.862
+  },
+  "artifacts_dir": "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\mechanism_UED_Henry_worktree\\gpu1_aggregation_siege\\tools\\..\\artifacts\\e3_litesim\\local_cpu_slice_20260816",
+  "frontier_initial": {
+    "allowed_variations": [
+      "frozen",
+      "prefix_variant"
+    ],
+    "failing_here": "tier3_front",
+    "mastered_before": "tier2_combat",
+    "priority": 1,
+    "probe_id": "tier3_front#7c928fc3",
+    "progress_metric": "success_rate",
+    "rollout_horizon": 24,
+    "skill_family": "DARK_NAVIGATION",
+    "spec_hash": "1ae1ccbd7424e739a3028dff2c2c5ed6c5dea8a516235432b318ebc50c9941de",
+    "status": "FAILED",
+    "success_predicate": "reached_floor2",
+    "tier": "tier3_front"
+  },
+  "gates": {
+    "G1_STUDENT_BINDING": true,
+    "G2_STATE_RESTORE": true,
+    "G3_RECURRENT_STATE": true,
+    "G4_READ_ONLY_PROBE": true,
+    "G5_ON_POLICY": true,
+    "G6_PPO_BRIDGE": true,
+    "G7_TRANSITION_ACCOUNTING": true,
+    "G9_VERTICAL_SLICE": true
+  },
+  "iterations": [
+    {
+      "binding_verified": true,
+      "causal_evidence": {
+        "cause": "UNKNOWN",
+        "confidence": 0.0,
+        "confounders": [],
+        "evidence_hash": "1832e3ca5838b39bac421fcf80fce8fb52068b68d9897c8085564fe56c01d699",
+        "records": [
+          {
+            "cause_family": "PERCEPTION",
+            "delta_progress": 0.0,
+            "delta_success": 0.0,
+            "name": "visibility_plus",
+            "support": {
+              "baseline_success": 0.0,
+              "branch_success": 0.0
+            }
+          },
+          {
+            "cause_family": "THREAT_MANAGEMENT",
+            "delta_progress": 0.0,
+            "delta_success": 0.0,
+            "name": "enemy_removed",
+            "support": {
+              "baseline_success": 0.0,
+              "branch_success": 0.0
+            }
+          },
+          {
+            "cause_family": "SURVIVABILITY",
+            "delta_progress": 0.0,
+            "delta_success": 0.0,
+            "name": "health_boost",
+            "support": {
+              "baseline_success": 0.0,
+              "branch_success": 0.0
+            }
+          }
+        ],
+        "unknown": true
+      },
+      "distribution": {
+        "scheduler_hash": "7e4cf23063b46981320f62adb017884f043274a58d04ba3653bc5ac37853d525",
+        "weights": {
+          "anchors": 0.1,
+          "expansion": 0.2,
+          "high_lp": 0.1,
+          "original": 0.1,
+          "repair": 0.5
+        }
+      },
+      "frontier": {
+        "allowed_variations": [
+          "frozen",
+          "prefix_variant"
+        ],
+        "failing_here": "tier3_front",
+        "mastered_before": "tier2_combat",
+        "priority": 1,
+        "probe_id": "tier3_front#7c928fc3",
+        "progress_metric": "success_rate",
+        "rollout_horizon": 24,
+        "skill_family": "DARK_NAVIGATION",
+        "spec_hash": "1ae1ccbd7424e739a3028dff2c2c5ed6c5dea8a516235432b318ebc50c9941de",
+        "status": "FAILED",
+        "success_predicate": "reached_floor2",
+        "tier": "tier3_front"
+      },
+      "iteration": 0,
+      "llm_reason": "no_history",
+      "llm_trigger": false,
+      "ppo_metrics": {
+        "entropy": 3.7423923015594482,
+        "grad_norm": 1.2600148916244507,
+        "p_loss": -0.028131496161222458,
+        "ppo_updates": 4.0,
+        "v_loss": 5.105495802126825e-06
+      },
+      "replay_ok": true,
+      "rollout_stats": {
+        "expansion": {
+          "frontier_family": "expansion",
+          "horizon": 12,
+          "num_transitions": 12,
+          "policy_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+          "rollout_length": 12,
+          "start_state_ids": [
+            "st_000003"
+          ],
+          "student_version": "slice@7c928fc3",
+          "terminal_reason": [
+            "horizon"
+          ]
+        },
+        "repair": {
+          "frontier_family": "repair",
+          "horizon": 12,
+          "num_transitions": 24,
+          "policy_hash": "7c928fc38704b705c145fcb8953d5e47f85d7a41e76bb02b78c4321903944836",
+          "rollout_length": 12,
+          "start_state_ids": [
+            "st_000001",
+            "st_000000"
+          ],
+          "student_version": "slice@7c928fc3",
+          "terminal_reason": [
+            "horizon",
+            "horizon"
+          ]
+        }
+      }
+    },
+    {
+      "binding_verified": true,
+      "causal_evidence": {
+        "cause": "UNKNOWN",
+        "confidence": 0.0,
+        "confounders": [],
+        "evidence_hash": "1832e3ca5838b39bac421fcf80fce8fb52068b68d9897c8085564fe56c01d699",
+        "records": [
+          {
+            "cause_family": "PERCEPTION",
+            "delta_progress": 0.0,
+            "delta_success": 0.0,
+            "name": "visibility_plus",
+            "support": {
+              "baseline_success": 0.0,
+              "branch_success": 0.0
+            }
+          },
+          {
+            "cause_family": "THREAT_MANAGEMENT",
+            "delta_progress": 0.0,
+            "delta_success": 0.0,
+            "name": "enemy_removed",
+            "support": {
+              "baseline_success": 0.0,
+              "branch_success": 0.0
+            }
+          },
+          {
+            "cause_family": "SURVIVABILITY",
+            "delta_progress": 0.0,
+            "delta_success": 0.0,
+            "name": "health_boost",
+            "support": {
+              "baseline_success": 0.0,
+              "branch_success": 0.0
+            }
+          }
+        ],
+        "unknown": true
+      },
+      "distribution": {
+        "scheduler_hash": "7e4cf23063b46981320f62adb017884f043274a58d04ba3653bc5ac37853d525",
+        "weights": {
+          "anchors": 0.1,
+          "expansion": 0.2,
+          "high_lp": 0.1,
+          "original": 0.1,
+          "repair": 0.5
+        }
+      },
+      "frontier": {
+        "allowed_variations": [
+          "frozen",
+          "prefix_variant"
+        ],
+        "failing_here": "tier3_front",
+        "mastered_before": "tier2_combat",
+        "priority": 1,
+        "probe_id": "tier3_front#7c928fc3",
+        "progress_metric": "success_rate",
+        "rollout_horizon": 24,
+        "skill_family": "DARK_NAVIGATION",
+        "spec_hash": "1ae1ccbd7424e739a3028dff2c2c5ed6c5dea8a516235432b318ebc50c9941de",
+        "status": "FAILED",
+        "success_predicate": "reached_floor2",
+        "tier": "tier3_front"
+      },
+      "iteration": 1,
+      "llm_reason": "routine",
+      "llm_trigger": false,
+      "ppo_metrics": {
+        "entropy": 3.7350425720214844,
+        "grad_norm": 1.8331551551818848,
+        "p_loss": -0.04346828907728195,
+        "ppo_updates": 4.0,
+        "v_loss": 0.0032835081219673157
+      },
+      "replay_ok": true,
+      "rollout_stats": {
+        "expansion": {
+          "frontier_family": "expansion",
+          "horizon": 12,
+          "num_transitions": 12,
+          "policy_hash": "36249e7cc84d6c1a474c128daf9818720290bee28cff070f8e913a56ae3f6e36",
+          "rollout_length": 12,
+          "start_state_ids": [
+            "st_000002"
+          ],
+          "student_version": "slice@36249e7c",
+          "terminal_reason": [
+            "horizon"
+          ]
+        },
+        "repair": {
+          "frontier_family": "repair",
+          "horizon": 12,
+          "num_transitions": 24,
+          "policy_hash": "36249e7cc84d6c1a474c128daf9818720290bee28cff070f8e913a56ae3f6e36",
+          "rollout_length": 12,
+          "start_state_ids": [
+            "st_000000",
+            "st_000001"
+          ],
+          "student_version": "slice@36249e7c",
+          "terminal_reason": [
+            "horizon",
+            "horizon"
+          ]
+        }
+      }
+    }
+  ]
+}
