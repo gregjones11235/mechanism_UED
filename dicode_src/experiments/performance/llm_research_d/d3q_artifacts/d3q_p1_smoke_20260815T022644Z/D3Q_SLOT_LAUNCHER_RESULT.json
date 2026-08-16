@@ -1,0 +1,397 @@
+{
+  "artifact_dir": "d3q_artifacts/d3q_p1_smoke_20260815T022644Z",
+  "artifact_internal_sha256": "fb2867f739fd77917ffe14cca5094c24603ee30bfa5a25cc71eaa73aea3a27e8",
+  "classification": "D3Q_SLOT_LAUNCHER",
+  "cleanup_verified": true,
+  "credential_variable": "EXP_DEEPSEEK_API_KEY",
+  "deploy_check_only": false,
+  "deployed_hashes_post_verified": true,
+  "deployed_hashes_pre": {
+    "D3Q_FROZEN_REPAIR_TEMPLATE.json": "92be14e6a0a42708afd84c5c5f5cacbe7d4635caf5d8112b03ae6a764ea1eb65",
+    "FROZEN_MANIFEST.json": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "d3q_budget.py": "5364cd3a601b187433bf2c17907e629281e1427b671c51e59791d425e4735b07",
+    "d3q_cpu_validate_remote.py": "a839e8b4a2e3e2b31690bc6c897fcd46c9db91e234448dd338b790b5c1cda227",
+    "d3q_slot_runner.py": "898e3620ee9f1a9f071f1c7d5e0e13e8d80b466aeb509b1906de549489855bc0"
+  },
+  "deployed_hashes_verified": true,
+  "exec_root": "/tmp/d3q_exec_20260815T022644Z",
+  "exec_root_absent_post": true,
+  "exec_root_absent_pre": true,
+  "git_head": {
+    "branch": "perf/llm-small-large-quality-cost-d3",
+    "commit": "caf5979ef96c89c30928cf1454439919d3655787"
+  },
+  "gpu_post": {
+    "apps_by_uuid": {
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6": [
+        {
+          "pid": 3154045,
+          "process_name": "/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server"
+        },
+        {
+          "pid": 3156249,
+          "process_name": "/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server"
+        }
+      ]
+    },
+    "gpu2": {
+      "external_compute_pids": [],
+      "external_compute_processes": [],
+      "gpu_index": 2,
+      "memory_free_mib": 45619,
+      "memory_used_mib": 1,
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    },
+    "gpus": [
+      {
+        "index": 0,
+        "memory_free_mib": 30046,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 15573,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+      },
+      {
+        "index": 1,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f"
+      },
+      {
+        "index": 2,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      },
+      {
+        "index": 3,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      }
+    ]
+  },
+  "gpu_pre": {
+    "apps_by_uuid": {
+      "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6": [
+        {
+          "pid": 3154045,
+          "process_name": "/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server"
+        },
+        {
+          "pid": 3156249,
+          "process_name": "/media/数据磁盘2/skill_preflight_ollama/root/lib/ollama/llama-server"
+        }
+      ]
+    },
+    "gpu2": {
+      "external_compute_pids": [],
+      "external_compute_processes": [],
+      "gpu_index": 2,
+      "memory_free_mib": 45619,
+      "memory_used_mib": 1,
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    },
+    "gpus": [
+      {
+        "index": 0,
+        "memory_free_mib": 30046,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 15573,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+      },
+      {
+        "index": 1,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f"
+      },
+      {
+        "index": 2,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+      },
+      {
+        "index": 3,
+        "memory_free_mib": 45619,
+        "memory_total_mib": 46068,
+        "memory_used_mib": 1,
+        "name": "NVIDIA RTX A6000",
+        "utilization_gpu_pct": 0,
+        "uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+      }
+    ]
+  },
+  "ledger_post": {
+    "exists": true,
+    "provider_counts": {
+      "deepseek_official": 1,
+      "ollama": 1
+    },
+    "slot_counts": {
+      "slot_r1_large_p00": 1,
+      "slot_r1_small_p00": 1
+    }
+  },
+  "ledger_pre": {
+    "exists": false,
+    "provider_counts": {},
+    "slot_counts": {}
+  },
+  "local_hash_binding": {
+    "budget": "5364cd3a601b187433bf2c17907e629281e1427b671c51e59791d425e4735b07",
+    "cpu_validate": "a839e8b4a2e3e2b31690bc6c897fcd46c9db91e234448dd338b790b5c1cda227",
+    "launcher": "e43169e8e06c28b586fb87fc7532fe389d8079c4fa79f3271e4072ac575a15ee",
+    "manifest": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "repair_template": "92be14e6a0a42708afd84c5c5f5cacbe7d4635caf5d8112b03ae6a764ea1eb65",
+    "runner": "898e3620ee9f1a9f071f1c7d5e0e13e8d80b466aeb509b1906de549489855bc0"
+  },
+  "mason_src": "/home/oseasy/git_work/wt_d3q_mason_91a75e5/dicode_src/src",
+  "mason_worktree": "/home/oseasy/git_work/wt_d3q_mason_91a75e5",
+  "mason_worktree_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+  "no_secret_scan": {
+    "files_scanned": 14,
+    "passed": true,
+    "violations": []
+  },
+  "observed_utc": "2026-08-15T02:26:44Z",
+  "ollama_post": {
+    "models": {
+      "nomic-embed-text:latest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+      "qwen2.5-coder:14b": "9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849"
+    },
+    "pids": [
+      "3122021",
+      "3154045",
+      "3156249"
+    ]
+  },
+  "ollama_pre": {
+    "models": {
+      "nomic-embed-text:latest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+      "qwen2.5-coder:14b": "9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849"
+    },
+    "pids": [
+      "3122021",
+      "3154045",
+      "3156249"
+    ]
+  },
+  "reason": null,
+  "remote_env_file": "/home/oseasy/.config/dicode/experiment_llm.env",
+  "remote_python": "/home/oseasy/venvs/skill_preflight_e0e1/bin/python",
+  "run_id": "d3q_p1_smoke_20260815T022644Z",
+  "schema_version": 1,
+  "slot_results": {
+    "slot_r1_large_p00": {
+      "api_enum_error": 0,
+      "arm": "large",
+      "attempts": 1,
+      "attempts_detail": [
+        {
+          "api_enum_error": 0,
+          "attempt_index": 1,
+          "cached_tokens": 59904,
+          "code_sha256": null,
+          "completion_tokens": 1974,
+          "connection_error": 0,
+          "cpu_jax_error": 0,
+          "cpu_validation_wall_s": 25.639694314,
+          "dangerous_capability": 0,
+          "dangerous_import": 0,
+          "duplicate_code": 0,
+          "empty_response": 0,
+          "error_class": null,
+          "extract_error": 0,
+          "finish_reason": "stop",
+          "generation_wall_s": 11.346157487,
+          "http_4xx": 0,
+          "http_5xx": 0,
+          "http_status": 200,
+          "invalid_json": 0,
+          "inventory_error": 0,
+          "kind": "initial",
+          "model_field": "deepseek-v4-flash",
+          "model_field_exact": true,
+          "payload_sha256": "b177f418688f6ade14af27b78f95573c9e79ad9059d16305f90501d0db315b72",
+          "prompt_tokens": 59953,
+          "request_id": null,
+          "syntax_error": 0,
+          "timeout": 0,
+          "validation_message": "",
+          "validation_valid": true
+        }
+      ],
+      "cached_tokens": 59904,
+      "classification": "D3Q_SLOT_RESULT",
+      "completion_tokens": 1974,
+      "connection_error": 0,
+      "cpu_jax_error": 0,
+      "cpu_validation_wall_s": 25.639694,
+      "dangerous_capability": 0,
+      "dangerous_import": 0,
+      "duplicate_code": 0,
+      "empty_response": 0,
+      "extract_error": 0,
+      "fatal_api_blocked": false,
+      "final_code_file": "final_code.py",
+      "final_code_sha256": "524af2bc795d1cc40fb9b0fe4e81aebf4ce8788dc9f004fe9b4aeabf3068c2bb",
+      "final_valid": true,
+      "generation_wall_s": 11.346157,
+      "http_4xx": 0,
+      "http_5xx": 0,
+      "initial_valid": true,
+      "invalid_json": 0,
+      "inventory_error": 0,
+      "ledger_counts": {
+        "provider": 1,
+        "slot": 1
+      },
+      "manifest_sha256": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+      "max_posts_per_slot": 3,
+      "max_repairs_per_slot": 2,
+      "model": "deepseek-v4-flash",
+      "prompt_index": 0,
+      "prompt_slot": "task_1",
+      "prompt_tokens": 59953,
+      "provider": "deepseek_official",
+      "repair_requests": 0,
+      "repair_success": 0,
+      "repair_wall_s": 0.0,
+      "repeat": "1",
+      "run_id": "d3q_p1_smoke_20260815T022644Z",
+      "schema_version": 1,
+      "slot_id": "slot_r1_large_p00",
+      "syntax_error": 0,
+      "timeout": 0,
+      "timeouts_frozen": {
+        "connect_s": 30.0,
+        "read_s": 600.0
+      }
+    },
+    "slot_r1_small_p00": {
+      "api_enum_error": 0,
+      "arm": "small",
+      "attempts": 1,
+      "attempts_detail": [
+        {
+          "api_enum_error": 0,
+          "attempt_index": 1,
+          "cached_tokens": 0,
+          "code_sha256": null,
+          "completion_tokens": 819,
+          "connection_error": 0,
+          "cpu_jax_error": 0,
+          "cpu_validation_wall_s": 25.922186401,
+          "dangerous_capability": 0,
+          "dangerous_import": 0,
+          "duplicate_code": 0,
+          "empty_response": 0,
+          "error_class": null,
+          "extract_error": 0,
+          "finish_reason": "stop",
+          "generation_wall_s": 20.574660608,
+          "http_4xx": 0,
+          "http_5xx": 0,
+          "http_status": 200,
+          "invalid_json": 0,
+          "inventory_error": 0,
+          "kind": "initial",
+          "model_field": "qwen2.5-coder:14b",
+          "model_field_exact": true,
+          "payload_sha256": "ccbb24b661ff31974f543e01aeec3ddabfbab4292e981a421e163753bf3455f9",
+          "prompt_tokens": 16386,
+          "request_id": null,
+          "syntax_error": 0,
+          "timeout": 0,
+          "validation_message": "",
+          "validation_valid": true
+        }
+      ],
+      "cached_tokens": 0,
+      "classification": "D3Q_SLOT_RESULT",
+      "completion_tokens": 819,
+      "connection_error": 0,
+      "cpu_jax_error": 0,
+      "cpu_validation_wall_s": 25.922186,
+      "dangerous_capability": 0,
+      "dangerous_import": 0,
+      "duplicate_code": 0,
+      "empty_response": 0,
+      "extract_error": 0,
+      "fatal_api_blocked": false,
+      "final_code_file": "final_code.py",
+      "final_code_sha256": "cec074a94e338b9c817ff4263a18dd952c3c8ef093dd141007f098b9a02b4031",
+      "final_valid": true,
+      "generation_wall_s": 20.574661,
+      "http_4xx": 0,
+      "http_5xx": 0,
+      "initial_valid": true,
+      "invalid_json": 0,
+      "inventory_error": 0,
+      "ledger_counts": {
+        "provider": 1,
+        "slot": 1
+      },
+      "manifest_sha256": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+      "max_posts_per_slot": 3,
+      "max_repairs_per_slot": 2,
+      "model": "qwen2.5-coder:14b",
+      "prompt_index": 0,
+      "prompt_slot": "task_1",
+      "prompt_tokens": 16386,
+      "provider": "ollama",
+      "repair_requests": 0,
+      "repair_success": 0,
+      "repair_wall_s": 0.0,
+      "repeat": "1",
+      "run_id": "d3q_p1_smoke_20260815T022644Z",
+      "schema_version": 1,
+      "slot_id": "slot_r1_small_p00",
+      "syntax_error": 0,
+      "timeout": 0,
+      "timeouts_frozen": {
+        "connect_s": 30.0,
+        "read_s": 600.0
+      }
+    }
+  },
+  "slot_summaries": {
+    "slot_r1_large_p00": {
+      "attempts": 1,
+      "final_valid": true,
+      "initial_valid": true,
+      "repair_requests": 0
+    },
+    "slot_r1_small_p00": {
+      "attempts": 1,
+      "final_valid": true,
+      "initial_valid": true,
+      "repair_requests": 0
+    }
+  },
+  "slots": [
+    "slot_r1_small_p00",
+    "slot_r1_large_p00"
+  ],
+  "status": "PASS"
+}

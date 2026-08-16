@@ -1,0 +1,108 @@
+{
+  "classification": "REMOTE_PRECHECK_EVIDENCE",
+  "director_observation_date": "2026-08-15",
+  "env_variable_names_only": [
+    "EXP_DEEPSEEK_API_KEY",
+    "EXP_DEEPSEEK_BASE_URL",
+    "EXP_DEEPSEEK_MODEL",
+    "EXP_DEEPSEEK_PROVIDER",
+    "EXP_GENERATOR_MODEL_ID",
+    "EXP_GENERATOR_PROVIDER",
+    "EXP_GLM_API_KEY",
+    "EXP_GLM_BASE_URL",
+    "EXP_QWEN_API_KEY",
+    "EXP_QWEN_BASE_URL"
+  ],
+  "gpu": [
+    {
+      "free_mib": "30046MiB",
+      "index": 0,
+      "used_mib": "15573MiB",
+      "util": "0%",
+      "uuid": "GPU-e8c08612-c22a-c8a4-6df5-affb2dd1f9a6"
+    },
+    {
+      "index": 1,
+      "state": "idle",
+      "uuid": "GPU-3c7a2864-755b-7045-b293-6f80e748283f"
+    },
+    {
+      "compute_apps": "none",
+      "free_mib": "45619MiB",
+      "index": 2,
+      "used_mib": "1MiB",
+      "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+    },
+    {
+      "index": 3,
+      "state": "idle",
+      "uuid": "GPU-f56a59b4-99f3-f2e5-11c6-d01685de8abd"
+    }
+  ],
+  "mason_checkpoint": {
+    "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/mason_full_budget_gpu3_91a75e5_20260810T1805/attempt_06/run/rl_checkpoints/2100",
+    "sibling_step_dirs": "300..4600 etc."
+  },
+  "method": "read-only ssh",
+  "note": "transcribed verbatim from the director's read-only observation; no values from experiment_llm.env are recorded, only variable names",
+  "ollama": {
+    "api_ps_and_tags": [
+      {
+        "digest": "9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849",
+        "loading": "full VRAM",
+        "model": "qwen2.5-coder:14b",
+        "quant": "Q4_K_M",
+        "size_label": "14.8B",
+        "vram_bytes": 15286560357
+      },
+      {
+        "digest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+        "model": "nomic-embed-text"
+      }
+    ],
+    "llama_server": [
+      {
+        "blob": "sha256-ac9bc7a69dab...",
+        "context": 32768,
+        "model": "qwen2.5-coder:14b",
+        "pid": 3154045,
+        "role": "chat"
+      },
+      {
+        "blob": "sha256-970aa74c...",
+        "context": 2048,
+        "model": "nomic-embed-text",
+        "pid": 3156249,
+        "role": "embedding"
+      }
+    ],
+    "serve_pid": 3122021
+  },
+  "preflight_candidate_replay_reference": {
+    "files": [
+      "spec.json",
+      "manifest.json"
+    ],
+    "frozen": [
+      "checkpoint/2100",
+      "conditioning.npy",
+      "archive_snapshot",
+      "config.yaml",
+      "rng.npy",
+      "candidate_codes"
+    ],
+    "global_step": 2100,
+    "gpu_uuid": "GPU-8df11537-...",
+    "rollout_updates": 40,
+    "root": "/home/oseasy/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z",
+    "score_function": "learnability"
+  },
+  "recorded_utc": "2026-08-15T01:11:26Z",
+  "remote_python": {
+    "path": "/home/oseasy/venvs/skill_preflight_e0e1/bin/python",
+    "version": "3.10.20"
+  },
+  "tmp_residue": {
+    "d3_deepseek_flash_gate_pattern": "none present"
+  }
+}

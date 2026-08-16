@@ -1,0 +1,171 @@
+{
+  "arm_order": [
+    [
+      "small",
+      "r1"
+    ],
+    [
+      "large",
+      "r1"
+    ],
+    [
+      "large",
+      "r2"
+    ],
+    [
+      "small",
+      "r2"
+    ],
+    [
+      "small",
+      "r3"
+    ],
+    [
+      "large",
+      "r3"
+    ]
+  ],
+  "repeat_label_mapping": "任务书中的 repeat 0/1/2 对应冻结契约 d3_runner.py ARM_ORDER 的 r1/r2/r3（repeat k = r(k+1)）；模型顺序（small/large 交替）从未变化。",
+  "artifact_rule": "Each artifact is published to a fresh (previously absent) directory with a canonical internal hash, raw file SHA-256, SHA256SUMS listing, closed schema, and atomic publication; old evidence and frozen manifests must remain byte-identical.",
+  "budget": {
+    "per_provider_post_max": 108,
+    "per_slot_post_max": 3,
+    "providers": [
+      "ollama",
+      "deepseek_official"
+    ],
+    "sdk_retry": "disabled",
+    "shared_across_kinds": [
+      "initial",
+      "transport_retry",
+      "semantic_repair"
+    ]
+  },
+  "classification": "D3Q_MATRIX_BINDING",
+  "manifest_binding": {
+    "file": "dicode_src/experiments/performance/llm_research_d/FROZEN_MANIFEST.json",
+    "manifest_sha256": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+    "raw_sha256": "6369c48540236d49f816f9ef98e82ac9adf6a0d9fc954539b31f32547ebe659e",
+    "source_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+    "system_prompt_sha256": "5cdc991c2a3aced259548a69043be70b87ff083bd969f09f98e6a44fe85772b5",
+    "tool_sha256": "7176e0d503a93c3f7b7d92503a025078be194875cd5b4b055c74095c7a0a14c9",
+    "user_prompt_sha256s": [
+      "e0bd10c2af4e3b237119cefc2921261efbe6b4e3fe754e139eefe6f520f5ef45",
+      "ccf95e39ddb00aaca0888747e08e8a7386987c8f71431505925590006dcfa7de",
+      "0783f4defc0fc615d6f5c5f6adcc0b8389fc45f25e534690740f01a70197d30a",
+      "fcff2e4cc94db3bec0865a556f72e3ce345112a13dcd89572c9d060cae3b4f39",
+      "33b598f0ec8fae108aa726383be5eee90d68514ef51c3fb41a5ca959cae80af7",
+      "068ab61539034c1f14c6991b3c8609ed0bcfb5b854f95fdbc8ce22b5cf352db2",
+      "428676d08029ca5229a1226837e5e9e802ff8387ee44a49ce0643c059585af48",
+      "1337e17a800cfe9df7c129da3e71de2ba058ac9e46de635a43f4731c36bd1086",
+      "f803d4ccc62b07f0cb21269f7fa8cd09e93075a92cb8c616720c1e5f8fcb854f",
+      "06dd97871094d914931a91896f2398769aa5760aab60ebe50412e7e7cf089060",
+      "c7ad9652cd8e634966648b8e7e0c69bbf3f7636b7c3b3bff4e1f5633e9b91b3a",
+      "31b6cd536fcc5c9d22cacf3c60ee44fe50d4f4c7ef7d73f70a884f679810f8ed"
+    ]
+  },
+  "models": {
+    "large": {
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-v4-flash",
+      "serving": "DeepSeek official API",
+      "thinking": {
+        "type": "enabled"
+      }
+    },
+    "small": {
+      "base_url": "http://127.0.0.1:11434/v1",
+      "model": "qwen2.5-coder:14b",
+      "serving": "Ollama OpenAI-compatible",
+      "thinking": "disabled"
+    }
+  },
+  "no_secret_rule": "No API key, token, Authorization header, private-key material, cross-provider identifier, or any value from experiment_llm.env may be written into any artifact; only environment variable names may be referenced.",
+  "preflight": {
+    "checkpoint": "Mason attempt06 step2100",
+    "gpu_index": 2,
+    "num_envs": 1024,
+    "num_steps": 128,
+    "updates": 40,
+    "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+  },
+  "primary_metric": {
+    "accepted_zero_rule": "accepted=0 -> Infinity and verdict FAIL",
+    "name": "seconds_per_preflight_accepted_task"
+  },
+  "recorded_utc": "2026-08-15T01:11:26Z",
+  "sampling": {
+    "max_in_flight": 1,
+    "max_tokens": 8192,
+    "temperature": 0.6,
+    "top_p": 0.95
+  },
+  "slots": {
+    "formula": "2 models x 12 prompts x 3 repeats",
+    "prompt_order_source": "FROZEN_MANIFEST request_order",
+    "request_order": [
+      {
+        "index": 0,
+        "kind": "code",
+        "slot": "task_1"
+      },
+      {
+        "index": 1,
+        "kind": "code",
+        "slot": "task_2"
+      },
+      {
+        "index": 2,
+        "kind": "code",
+        "slot": "task_3"
+      },
+      {
+        "index": 3,
+        "kind": "code",
+        "slot": "task_4"
+      },
+      {
+        "index": 4,
+        "kind": "code",
+        "slot": "task_276"
+      },
+      {
+        "index": 5,
+        "kind": "code",
+        "slot": "task_277"
+      },
+      {
+        "index": 6,
+        "kind": "code",
+        "slot": "task_278"
+      },
+      {
+        "index": 7,
+        "kind": "code",
+        "slot": "task_279"
+      },
+      {
+        "index": 8,
+        "kind": "code",
+        "slot": "task_551"
+      },
+      {
+        "index": 9,
+        "kind": "code",
+        "slot": "task_552"
+      },
+      {
+        "index": 10,
+        "kind": "code",
+        "slot": "task_553"
+      },
+      {
+        "index": 11,
+        "kind": "code",
+        "slot": "task_554"
+      }
+    ],
+    "slot_id_scheme": "slot_r{1,2,3}_{small|large}_p{00..11}",
+    "total": 72
+  }
+}

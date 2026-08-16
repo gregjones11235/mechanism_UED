@@ -1,0 +1,168 @@
+{
+  "classification": "D3Q_CHUNK_RECOVERY",
+  "schema_version": 1,
+  "recoveries": [
+    {
+      "classification": "D3Q_CHUNK_RECOVERY",
+      "schema_version": 1,
+      "run_id": "d3q_p2_chunk3_r3_20260816T054159Z",
+      "incident_id": "D3Q_PHASE2_INCIDENT_02",
+      "blocked_reason": "gpu2_external_app",
+      "launcher_result_sha256": "0f3d00a0f53d75d496d5a81ea538f0e68378c641bd386e13d5ca22674f923e5f",
+      "chunk_sha256sums_files_checked": 162,
+      "slots": [
+        "slot_r3_small_p00",
+        "slot_r3_small_p01",
+        "slot_r3_small_p02",
+        "slot_r3_small_p03",
+        "slot_r3_small_p04",
+        "slot_r3_small_p05",
+        "slot_r3_small_p06",
+        "slot_r3_small_p07",
+        "slot_r3_small_p08",
+        "slot_r3_small_p09",
+        "slot_r3_small_p10",
+        "slot_r3_small_p11",
+        "slot_r3_large_p00",
+        "slot_r3_large_p01",
+        "slot_r3_large_p02",
+        "slot_r3_large_p03",
+        "slot_r3_large_p04",
+        "slot_r3_large_p05",
+        "slot_r3_large_p06",
+        "slot_r3_large_p07",
+        "slot_r3_large_p08",
+        "slot_r3_large_p09",
+        "slot_r3_large_p10",
+        "slot_r3_large_p11"
+      ],
+      "merged": [
+        {
+          "slot_id": "slot_r3_small_p00",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p01",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p02",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p03",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p04",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p05",
+          "posts": 3,
+          "final_valid": false
+        },
+        {
+          "slot_id": "slot_r3_small_p06",
+          "posts": 3,
+          "final_valid": false
+        },
+        {
+          "slot_id": "slot_r3_small_p07",
+          "posts": 3,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p08",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p09",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p10",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_small_p11",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p00",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p01",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p02",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p03",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p04",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p05",
+          "posts": 2,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p06",
+          "posts": 2,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p07",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p08",
+          "posts": 1,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p09",
+          "posts": 2,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p10",
+          "posts": 2,
+          "final_valid": true
+        },
+        {
+          "slot_id": "slot_r3_large_p11",
+          "posts": 2,
+          "final_valid": true
+        }
+      ],
+      "provider_counts_after": {
+        "ollama": 46,
+        "deepseek_official": 57
+      },
+      "remaining_slots_after": 0
+    }
+  ]
+}

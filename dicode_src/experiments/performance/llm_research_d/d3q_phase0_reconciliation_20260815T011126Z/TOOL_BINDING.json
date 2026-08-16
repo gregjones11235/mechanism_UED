@@ -1,0 +1,54 @@
+{
+  "classification": "D3Q_TOOL_BINDING",
+  "files": [
+    {
+      "path": "dicode_src/experiments/performance/llm_replay_harness.py",
+      "sha256": "18844f113adc9502e43032ba54827be84d09b892cfa5d99d9ed8092787312a6d"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_replay_manifest.py",
+      "sha256": "47c9da334d9918a1d703ad95b529e2a52bfc9d4f72c7fb0932f1fae0c3083afa"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_replay_benchmark.py",
+      "sha256": "8f90a7cd85bf531d463c3e9febc0c74dd74b67a2031795853e75ec249b794a85"
+    },
+    {
+      "path": "dicode_src/experiments/performance/preflight_replay.py",
+      "sha256": "7e431e8cd8bccfc019f22793c597bf4e2fa379096c87de11fab5386665281d53"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_runner.py",
+      "sha256": "c7d25083e5a41c7e8c01e095295c31a8ab5f7f8d3c98f3b6878c967e2205e66b"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_deepseek_provider.py",
+      "sha256": "94f5de686890d5ab36862c1846f4835314f01d9518a9813e7f297d6a0c185328"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_qwen_provider.py",
+      "sha256": "f32fd62979587996160969210c76862883395d8b04bff2dc30ce7c387f7efddd"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_deepseek_gate_launcher.py",
+      "sha256": "39691f135eeec2e87ccac56a4123d68ab88a3e00354b51e1539657911df5c713"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/d3_deepseek_metadata_gate_remote.py",
+      "sha256": "80ac2d92fb8e04a653058c50de06853973a8e67eae9fea1f633e7af0f9d96031"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/test_d3_cpu.py",
+      "sha256": "cf602fe6c05ffc4a23b9df5cebd14e4a21392fd7e75c10c3c62a0c099b9a8448"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/test_d3_qwen_provider.py",
+      "sha256": "3b8fdb7c2bdb201b85ea56f87c348d19e095b667f7b646bf32f9781db75b0713"
+    },
+    {
+      "path": "dicode_src/experiments/performance/llm_research_d/cpu_isolation_test.py",
+      "sha256": "9b0d4cbfad2709b12aae7fcdaa4eb7dae0467709f1f773d040d90049e9a32a3d"
+    }
+  ],
+  "recorded_utc": "2026-08-15T01:11:26Z"
+}

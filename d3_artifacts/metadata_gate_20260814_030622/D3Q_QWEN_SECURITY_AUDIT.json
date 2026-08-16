@@ -1,0 +1,35 @@
+{
+  "artifact_sha256": "bdee5373398d41bdd9ab9eac419897a6b5e417ee8274745915d190b1364c74ae",
+  "artifact_sha256_algorithm": "canonical_json_sha256",
+  "artifact_sha256_scope": "D3Q_SECURITY_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+  "authorization_header_logged": false,
+  "classification": "D3Q_QWEN_SECURITY_AUDIT",
+  "completion_requests": 0,
+  "credential_present": true,
+  "credential_value_serialized": false,
+  "cross_vendor_model_ids_persisted": false,
+  "deepseek_endpoint_requests": 0,
+  "embedding_requests": 0,
+  "gate_disposition": "BLOCKED_QWEN_MODEL_NOT_ADVERTISED",
+  "gpu2": {
+    "external_pid_after": false,
+    "external_pid_before": false,
+    "free_mib_after": 45619,
+    "free_mib_before": 45619,
+    "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c"
+  },
+  "metadata_endpoint_counts": {
+    "ollama_api_tags": 1,
+    "qwen_models": 1
+  },
+  "remote_safety": {
+    "gpu3_or_gpu1_touched": false,
+    "gpu_training_started": false,
+    "remote_files_modified": 0,
+    "remote_processes_started": 0,
+    "ssh_batch_mode": true,
+    "ssh_identity_only": true
+  },
+  "response_body_persisted": false,
+  "status": "PASS_WITH_BLOCKED_MODEL"
+}

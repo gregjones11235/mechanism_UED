@@ -1,0 +1,80 @@
+{
+  "classification": "D3Q_PREFLIGHT_ARM_CANDIDATES",
+  "schema_version": 1,
+  "arm_id": "small_r1",
+  "arm": "small",
+  "repeat": "r1",
+  "provider": "ollama",
+  "model": "qwen2.5-coder:14b",
+  "slots_scanned": [
+    "slot_r1_small_p00",
+    "slot_r1_small_p06",
+    "slot_r1_small_p07",
+    "slot_r1_small_p08",
+    "slot_r1_small_p09",
+    "slot_r1_small_p10",
+    "slot_r1_small_p11"
+  ],
+  "slots_lost_reconciled": [
+    "slot_r1_small_p01",
+    "slot_r1_small_p02",
+    "slot_r1_small_p03",
+    "slot_r1_small_p04",
+    "slot_r1_small_p05"
+  ],
+  "slots_final_valid": [
+    "slot_r1_small_p00",
+    "slot_r1_small_p07",
+    "slot_r1_small_p08",
+    "slot_r1_small_p09",
+    "slot_r1_small_p10",
+    "slot_r1_small_p11"
+  ],
+  "slots_final_invalid": [
+    "slot_r1_small_p06"
+  ],
+  "candidates": [
+    {
+      "id": "slot_r1_small_p00",
+      "path": "candidates/slot_r1_small_p00.py",
+      "code_sha256": "cec074a94e338b9c817ff4263a18dd952c3c8ef093dd141007f098b9a02b4031",
+      "source_slot": "slot_r1_small_p00",
+      "aliased_slots": []
+    },
+    {
+      "id": "slot_r1_small_p07",
+      "path": "candidates/slot_r1_small_p07.py",
+      "code_sha256": "82cb48a00fc71b1eaad3f0a259d293d1b342d5aa0760dce226c3cd9af21a8441",
+      "source_slot": "slot_r1_small_p07",
+      "aliased_slots": []
+    },
+    {
+      "id": "slot_r1_small_p08",
+      "path": "candidates/slot_r1_small_p08.py",
+      "code_sha256": "d498030040e6f5f947970c4c5efd425b51132f5cd9aa837844edd85f564f2c50",
+      "source_slot": "slot_r1_small_p08",
+      "aliased_slots": []
+    },
+    {
+      "id": "slot_r1_small_p09",
+      "path": "candidates/slot_r1_small_p09.py",
+      "code_sha256": "bd8c5aa87f370782bdd97aa812c705ae7e6be6c6b76cce9538d000b039116baa",
+      "source_slot": "slot_r1_small_p09",
+      "aliased_slots": []
+    },
+    {
+      "id": "slot_r1_small_p10",
+      "path": "candidates/slot_r1_small_p10.py",
+      "code_sha256": "1a3af667192fe906ca70a91d7ceffb3ebc855a3e8c4ce16f36de2747072dabbd",
+      "source_slot": "slot_r1_small_p10",
+      "aliased_slots": []
+    },
+    {
+      "id": "slot_r1_small_p11",
+      "path": "candidates/slot_r1_small_p11.py",
+      "code_sha256": "111a549d3e06ef087b4f79e566f5f2a9656147fa70d68240eed7aa7f0dffb0b1",
+      "source_slot": "slot_r1_small_p11",
+      "aliased_slots": []
+    }
+  ]
+}

@@ -1,0 +1,176 @@
+{
+  "classification": "D3Q_PREFLIGHT_REMOTE_SUMMARY",
+  "arms": [
+    {
+      "arm_id": "large_r1",
+      "status": "PASS",
+      "gpu_gate": {
+        "gpu2": {
+          "index": 2,
+          "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+          "memory_used_mib": 1
+        },
+        "external_pids": []
+      },
+      "accepted": [
+        "slot_r1_large_p04",
+        "slot_r1_large_p08"
+      ],
+      "rejected": [
+        "slot_r1_large_p00",
+        "slot_r1_large_p01",
+        "slot_r1_large_p02",
+        "slot_r1_large_p03",
+        "slot_r1_large_p05",
+        "slot_r1_large_p06",
+        "slot_r1_large_p07",
+        "slot_r1_large_p09",
+        "slot_r1_large_p10",
+        "slot_r1_large_p11"
+      ],
+      "result_sha256": "420c064321d0f7d81c635afd44a97c0a8eab598708f395e42c82c32593e5a141",
+      "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/large_r1/run/RESULT.json"
+    },
+    {
+      "arm_id": "large_r2",
+      "status": "PASS",
+      "gpu_gate": {
+        "gpu2": {
+          "index": 2,
+          "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+          "memory_used_mib": 1
+        },
+        "external_pids": []
+      },
+      "accepted": [
+        "slot_r2_large_p04",
+        "slot_r2_large_p07",
+        "slot_r2_large_p08",
+        "slot_r2_large_p09",
+        "slot_r2_large_p10"
+      ],
+      "rejected": [
+        "slot_r2_large_p00",
+        "slot_r2_large_p01",
+        "slot_r2_large_p02",
+        "slot_r2_large_p03",
+        "slot_r2_large_p05",
+        "slot_r2_large_p06",
+        "slot_r2_large_p11"
+      ],
+      "result_sha256": "f7b94ef9d252d9642cdaa30771bb9462d5465f968e4848c425d9437c5b8a6890",
+      "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/large_r2/run/RESULT.json"
+    },
+    {
+      "arm_id": "large_r3",
+      "status": "PASS",
+      "gpu_gate": {
+        "gpu2": {
+          "index": 2,
+          "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+          "memory_used_mib": 1
+        },
+        "external_pids": []
+      },
+      "accepted": [
+        "slot_r3_large_p04",
+        "slot_r3_large_p07",
+        "slot_r3_large_p08",
+        "slot_r3_large_p09"
+      ],
+      "rejected": [
+        "slot_r3_large_p00",
+        "slot_r3_large_p01",
+        "slot_r3_large_p02",
+        "slot_r3_large_p03",
+        "slot_r3_large_p05",
+        "slot_r3_large_p06",
+        "slot_r3_large_p10",
+        "slot_r3_large_p11"
+      ],
+      "result_sha256": "85986682bdd9c6fc14a2d0265c561687904042314811171bf6bf95f64a57f5dc",
+      "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/large_r3/run/RESULT.json"
+    },
+    {
+      "arm_id": "small_r1",
+      "status": "PASS",
+      "gpu_gate": {
+        "gpu2": {
+          "index": 2,
+          "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+          "memory_used_mib": 1
+        },
+        "external_pids": []
+      },
+      "accepted": [
+        "slot_r1_small_p07",
+        "slot_r1_small_p08",
+        "slot_r1_small_p09",
+        "slot_r1_small_p10",
+        "slot_r1_small_p11"
+      ],
+      "rejected": [
+        "slot_r1_small_p00"
+      ],
+      "result_sha256": "add51f8df377aa6b71aa7b28e3424da87fdfd0711f9b972beea4c587ef24cb7d",
+      "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r1/run/RESULT.json"
+    },
+    {
+      "arm_id": "small_r2",
+      "status": "PASS",
+      "gpu_gate": {
+        "gpu2": {
+          "index": 2,
+          "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+          "memory_used_mib": 1
+        },
+        "external_pids": []
+      },
+      "accepted": [
+        "slot_r2_small_p04",
+        "slot_r2_small_p07",
+        "slot_r2_small_p08",
+        "slot_r2_small_p09",
+        "slot_r2_small_p10",
+        "slot_r2_small_p11"
+      ],
+      "rejected": [
+        "slot_r2_small_p00",
+        "slot_r2_small_p01",
+        "slot_r2_small_p02",
+        "slot_r2_small_p03"
+      ],
+      "result_sha256": "7e868377cf5e08ce4b291141b45498fe40e700ae463bbffd86385c105f79aab2",
+      "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r2/run/RESULT.json"
+    },
+    {
+      "arm_id": "small_r3",
+      "status": "PASS",
+      "gpu_gate": {
+        "gpu2": {
+          "index": 2,
+          "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+          "memory_used_mib": 1
+        },
+        "external_pids": []
+      },
+      "accepted": [
+        "slot_r3_small_p04",
+        "slot_r3_small_p07",
+        "slot_r3_small_p08",
+        "slot_r3_small_p09",
+        "slot_r3_small_p10",
+        "slot_r3_small_p11"
+      ],
+      "rejected": [
+        "slot_r3_small_p00",
+        "slot_r3_small_p01",
+        "slot_r3_small_p02",
+        "slot_r3_small_p03"
+      ],
+      "result_sha256": "f27fa3a1674049fbc7830bc60074f7a347a9b74b34f8ccec27c8a8307975db8e",
+      "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/run/RESULT.json"
+    }
+  ],
+  "status": "PASS"
+}

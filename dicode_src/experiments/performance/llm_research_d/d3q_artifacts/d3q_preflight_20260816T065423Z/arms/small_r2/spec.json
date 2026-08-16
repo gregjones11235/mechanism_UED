@@ -1,0 +1,38 @@
+{
+  "classification": "PREFLIGHT_CANDIDATE_REPLAY",
+  "global_step": 2100,
+  "rollout_updates": 40,
+  "score_function": "learnability",
+  "source_commit": "4d1f54fd32223ec0d51b38a64a3e6902d334c3c3",
+  "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "base_dir": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r2",
+  "checkpoint": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/frozen/checkpoint/2100",
+  "conditioning_path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r2/conditioning.npy",
+  "archive_snapshot": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r2/archive_snapshot",
+  "config_path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/frozen/config.yaml",
+  "rng_path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/frozen/rng.npy",
+  "candidate_codes": {
+    "slot_r2_small_p00": "candidates/slot_r2_small_p00.py",
+    "slot_r2_small_p01": "candidates/slot_r2_small_p01.py",
+    "slot_r2_small_p02": "candidates/slot_r2_small_p02.py",
+    "slot_r2_small_p03": "candidates/slot_r2_small_p03.py",
+    "slot_r2_small_p04": "candidates/slot_r2_small_p04.py",
+    "slot_r2_small_p07": "candidates/slot_r2_small_p07.py",
+    "slot_r2_small_p08": "candidates/slot_r2_small_p08.py",
+    "slot_r2_small_p09": "candidates/slot_r2_small_p09.py",
+    "slot_r2_small_p10": "candidates/slot_r2_small_p10.py",
+    "slot_r2_small_p11": "candidates/slot_r2_small_p11.py"
+  },
+  "source_mapping": {
+    "gen_manager.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/dreaming/gen_manager.py",
+    "task_utils.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/task_utils.py",
+    "online_evaluation.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/evaluation/online_evaluation.py",
+    "ppo_tr.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/ppo_tr.py",
+    "scoring.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/scoring.py",
+    "setup.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/setup.py",
+    "preflight.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/skill_preflight/preflight.py",
+    "preflight_route.py": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/skill_preflight/preflight_route.py"
+  },
+  "num_envs": 1024,
+  "num_steps": 128
+}

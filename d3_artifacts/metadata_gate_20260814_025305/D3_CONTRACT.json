@@ -1,0 +1,133 @@
+{
+  "classification": "D3_METADATA_ONLY_RESULT",
+  "contract": {
+    "classification": "D3_MODEL_COMPARISON_CONTRACT",
+    "small_model": "qwen2.5-coder:14b",
+    "large_model": "deepseek-v4-pro",
+    "large_model_size": "UNKNOWN",
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "max_tokens": 8192
+    },
+    "prompt_count": 12,
+    "prompt_stages": {
+      "early": 4,
+      "mid": 4,
+      "late": 4
+    },
+    "repeat_count_per_model": 3,
+    "arm_order": [
+      [
+        "small",
+        "r1"
+      ],
+      [
+        "large",
+        "r1"
+      ],
+      [
+        "large",
+        "r2"
+      ],
+      [
+        "small",
+        "r2"
+      ],
+      [
+        "small",
+        "r3"
+      ],
+      [
+        "large",
+        "r3"
+      ]
+    ],
+    "max_repairs_per_slot": 2,
+    "post_limit_per_provider": 108,
+    "post_budget_scope": "generation + transport_retry + repair",
+    "preflight": {
+      "gpu_index": 2,
+      "updates": 40,
+      "num_envs": 1024,
+      "rollout_steps": 128
+    },
+    "manifest_sha256": "2066515499c305e263023e84a607c93ee4569708da57f23e56c8927c5b690d01",
+    "metadata_only_until_gate_review": true
+  },
+  "gate": {
+    "classification": "D3_METADATA_GATE",
+    "schema_version": 1,
+    "stage": "D3",
+    "source_commit": "8a3eb39",
+    "source_branch": "perf/llm-small-large-quality-cost-d3",
+    "checked_at_utc": "2026-08-13T18:53:10Z",
+    "small_arm": {
+      "model": "qwen2.5-coder:14b",
+      "provider": "ollama",
+      "gpu": 0
+    },
+    "large_arm": {
+      "model": "deepseek-v4-pro",
+      "provider": "deepseek_official",
+      "model_size": "UNKNOWN",
+      "gpu": "provider-managed"
+    },
+    "ollama": {
+      "provider": "ollama",
+      "base_url": "http://127.0.0.1:11434",
+      "endpoint": "http://127.0.0.1:11434/api/tags",
+      "expected_model": "qwen2.5-coder:14b",
+      "metadata_endpoint_only": true,
+      "metadata_requests": 1,
+      "completion_requests": 0,
+      "embedding_requests": 0,
+      "reachable": false,
+      "http_status": null,
+      "model_names": [],
+      "exact_model_available": false,
+      "error_class": "url_error"
+    },
+    "deepseek": {
+      "provider": "deepseek_official",
+      "base_url": "https://api.deepseek.com/v1",
+      "endpoint": "https://api.deepseek.com/v1/models",
+      "expected_model": "deepseek-v4-pro",
+      "credential_env_name": "DEEPSEEK_API_KEY",
+      "credential_present": true,
+      "credential_value_serialized": false,
+      "metadata_endpoint_only": true,
+      "metadata_requests": 1,
+      "completion_requests": 0,
+      "embedding_requests": 0,
+      "reachable": true,
+      "http_status": 200,
+      "model_ids": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro"
+      ],
+      "exact_model_available": true,
+      "error_class": null
+    },
+    "gpu": {
+      "nvidia_smi_present": true,
+      "query_ok": false,
+      "gpus": [],
+      "gpu2_present": false,
+      "returncode": 2,
+      "stderr": ""
+    },
+    "completion_requests_total": 0,
+    "embedding_requests_total": 0,
+    "metadata_requests_total": 2,
+    "gpu2_smoke_allowed": false,
+    "gate_status": "BLOCKED_METADATA_GATE",
+    "blocked_reasons": [
+      "Ollama exact qwen2.5-coder:14b model is not listed",
+      "dedicated GPU2 is not present"
+    ],
+    "artifact_sha256_algorithm": "canonical_json_sha256",
+    "artifact_sha256_scope": "D3_METADATA_GATE_FIELDS_EXCLUDING_ARTIFACT_SHA256",
+    "artifact_sha256": "a37be6d4a04e99b0a11d5282f6cab5b3ddd302dc933426b3228806e50787ed4e"
+  }
+}

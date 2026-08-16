@@ -1,0 +1,144 @@
+{
+  "classification": "D3Q_AGGREGATE",
+  "schema_version": 1,
+  "slots_total": 72,
+  "slots_completed": 67,
+  "slots_lost_reconciled": [
+    "slot_r1_small_p01",
+    "slot_r1_small_p02",
+    "slot_r1_small_p03",
+    "slot_r1_small_p04",
+    "slot_r1_small_p05"
+  ],
+  "error_taxonomy": {
+    "by_provider": {
+      "ollama": {
+        "empty_response": 0,
+        "timeout": 0,
+        "connection_error": 0,
+        "http_4xx": 0,
+        "http_5xx": 0,
+        "invalid_json": 0,
+        "extract_error": 0,
+        "syntax_error": 0,
+        "api_enum_error": 17,
+        "inventory_error": 0,
+        "dangerous_import": 0,
+        "dangerous_capability": 0,
+        "cpu_jax_error": 3,
+        "duplicate_code": 3
+      },
+      "deepseek_official": {
+        "empty_response": 0,
+        "timeout": 0,
+        "connection_error": 0,
+        "http_4xx": 0,
+        "http_5xx": 0,
+        "invalid_json": 0,
+        "extract_error": 16,
+        "syntax_error": 1,
+        "api_enum_error": 0,
+        "inventory_error": 0,
+        "dangerous_import": 0,
+        "dangerous_capability": 0,
+        "cpu_jax_error": 4,
+        "duplicate_code": 0
+      }
+    },
+    "totals": {
+      "empty_response": 0,
+      "timeout": 0,
+      "connection_error": 0,
+      "http_4xx": 0,
+      "http_5xx": 0,
+      "invalid_json": 0,
+      "extract_error": 16,
+      "syntax_error": 1,
+      "api_enum_error": 17,
+      "inventory_error": 0,
+      "dangerous_import": 0,
+      "dangerous_capability": 0,
+      "cpu_jax_error": 7,
+      "duplicate_code": 3
+    }
+  },
+  "token_usage": {
+    "ollama": {
+      "posts": 46,
+      "prompt_tokens": 753756,
+      "completion_tokens": 45222,
+      "cached_tokens": 0
+    },
+    "deepseek_official": {
+      "posts": 57,
+      "prompt_tokens": 3676850,
+      "completion_tokens": 313057,
+      "cached_tokens": 3630976
+    }
+  },
+  "reconciled_posts": {
+    "ollama": 7
+  },
+  "pipeline_metrics": {
+    "small_r1": {
+      "slots_completed": 7,
+      "slots_lost": 5,
+      "final_valid_count": 6,
+      "final_valid_rate": 0.857143,
+      "total_posts": 11,
+      "repair_requests": 4,
+      "pipeline_wall_s": 718.230693,
+      "pipeline_wall_per_final_valid_s": 119.705115
+    },
+    "small_r2": {
+      "slots_completed": 12,
+      "slots_lost": 0,
+      "final_valid_count": 10,
+      "final_valid_rate": 0.833333,
+      "total_posts": 17,
+      "repair_requests": 5,
+      "pipeline_wall_s": 1078.796584,
+      "pipeline_wall_per_final_valid_s": 107.879658
+    },
+    "small_r3": {
+      "slots_completed": 12,
+      "slots_lost": 0,
+      "final_valid_count": 10,
+      "final_valid_rate": 0.833333,
+      "total_posts": 18,
+      "repair_requests": 6,
+      "pipeline_wall_s": 1107.836691,
+      "pipeline_wall_per_final_valid_s": 110.783669
+    },
+    "large_r1": {
+      "slots_completed": 12,
+      "slots_lost": 0,
+      "final_valid_count": 12,
+      "final_valid_rate": 1.0,
+      "total_posts": 21,
+      "repair_requests": 9,
+      "pipeline_wall_s": 1525.134965,
+      "pipeline_wall_per_final_valid_s": 127.09458
+    },
+    "large_r2": {
+      "slots_completed": 12,
+      "slots_lost": 0,
+      "final_valid_count": 12,
+      "final_valid_rate": 1.0,
+      "total_posts": 19,
+      "repair_requests": 7,
+      "pipeline_wall_s": 1489.738594,
+      "pipeline_wall_per_final_valid_s": 124.144883
+    },
+    "large_r3": {
+      "slots_completed": 12,
+      "slots_lost": 0,
+      "final_valid_count": 12,
+      "final_valid_rate": 1.0,
+      "total_posts": 17,
+      "repair_requests": 5,
+      "pipeline_wall_s": 1226.648759,
+      "pipeline_wall_per_final_valid_s": 102.22073
+    }
+  }
+}

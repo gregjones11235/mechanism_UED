@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "classification": "D4_EMBEDDING_SHAPE_OFFLINE_AUDIT",
+  "generated_utc": "2026-08-13T19:17:58.227495+00:00",
+  "status": "NO_REPLAY_PAYLOAD",
+  "conclusion": "NO_REPLAY_PAYLOAD",
+  "eligible_for_mainline": false,
+  "network_calls": 0,
+  "completion_requests": 0,
+  "embedding_requests": 0,
+  "gpu_processes_started": 0,
+  "executed_count": 0,
+  "planned_matrix": {
+    "max_in_flight": [
+      1,
+      2,
+      4
+    ],
+    "repeats": 3
+  },
+  "executed_matrix": [],
+  "payload_availability": {
+    "request_bytes": false,
+    "response_bytes": false,
+    "request_text_bytes": false,
+    "task_text_pool_in_manifest": true,
+    "prompt_message_bytes": false,
+    "embedding_values": false,
+    "shape_metadata": true,
+    "batch_and_task_order": true
+  },
+  "frozen_shape": {
+    "embedding_provider": "local",
+    "embedding_model": "nomic-embed-text",
+    "embedding_size": 768,
+    "text_total": 16,
+    "batch_size_sequence": [
+      5,
+      10,
+      12,
+      13,
+      16,
+      10,
+      15,
+      16,
+      9,
+      16,
+      16,
+      10
+    ],
+    "ordered_task_ids": [
+      "task_1",
+      "task_38",
+      "task_75",
+      "task_112",
+      "task_148",
+      "task_185",
+      "task_222",
+      "task_259",
+      "task_296",
+      "task_333",
+      "task_370",
+      "task_407",
+      "task_443",
+      "task_480",
+      "task_517",
+      "task_554"
+    ],
+    "run_order": "A1,A2,B1,B2,C30_1,C30_2,C120_1,C120_2",
+    "max_retries": 2
+  },
+  "shape_consistency": {
+    "manifest_embedding_size": 768,
+    "mason_provider_config_embedding_size": 1024,
+    "consistent": false,
+    "note": "The archived manifest and provider-config summary disagree; neither contains byte-level values to resolve the discrepancy."
+  },
+  "historical_d1c_context": {
+    "arms": 8,
+    "successful_requests": 96,
+    "failed_requests": 0,
+    "sdk_retries": 0,
+    "shape_observed": 768,
+    "not_a_d4_replay": true
+  },
+  "attempt06_context": {
+    "mason_root": "/home/oseasy/e2_data_disk2/skill_preflight_runs/mason_full_budget_gpu3_91a75e5_20260810T1805/attempt_06",
+    "embedding_requests_in_attempt06": 575,
+    "attempt06_response_payload_logged": false,
+    "attempt06_request_timing_logged": false
+  },
+  "source": {
+    "manifest": {
+      "path": "FROZEN_PRODUCTION_EMBEDDING_MANIFEST.json",
+      "sha256": "32b98de712e7a4e1ff4376e8b81d5369e43030902d380fe6f3ccfd055cd757d7"
+    },
+    "d1c_summary": {
+      "path": "D1C_ALL_RESULTS.json",
+      "sha256": "bf4146aca928fe9e152fca99b0d98f9507259cbdd8658eee20f341047fdea09e"
+    },
+    "mason_audit": {
+      "path": "MASON_LLM_BASELINE_AUDIT.json",
+      "sha256": "f1ff56f47a217bab03205bf35eaeed6a9f09b3e3e4fb336a1a66c009d05426d8"
+    }
+  },
+  "guardrails": [
+    "No provider endpoint was contacted.",
+    "No Ollama process or GPU was started.",
+    "D1C results are cited only as prior context, not counted as D4 arms.",
+    "No byte-level request/response payload is available for faithful replay."
+  ],
+  "input_paths": [
+    "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\skill_preflight_ued_d3_worktree\\dicode_src\\experiments\\performance\\llm_research_d\\FROZEN_PRODUCTION_EMBEDDING_MANIFEST.json",
+    "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\skill_preflight_ued_d3_worktree\\dicode_src\\experiments\\performance\\llm_research_d\\D1C_ALL_RESULTS.json",
+    "C:\\Users\\Lenovo\\Desktop\\dicode-codex-director\\skill_preflight_ued_d3_worktree\\dicode_src\\experiments\\performance\\llm_research_d\\MASON_LLM_BASELINE_AUDIT.json"
+  ],
+  "script_sha256": "e2ffc238cc03c581584ca26609620316b742e81a2f6749636f151635defc6ac8",
+  "report_sha256": "2cfb51aa885ca265dd590b73227367da199113229a9b374319763d81cc64627b"
+}

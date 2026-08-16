@@ -1,0 +1,570 @@
+#!/usr/bin/env python3
+"""Audited one-request DeepSeek metadata gate for remote execution.
+
+This module performs no environment or remote access at import time.  It
+delegates dotenv parsing, credential handling, echo detection, and the single
+``GET /models`` request to :mod:`d3_deepseek_provider`.  It has no completion,
+embedding, shell, GPU, or cross-provider request path.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import secrets
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
+
+import d3_deepseek_provider as provider
+
+
+CLASSIFICATION = "D3_DEEPSEEK_METADATA_GATE"
+SCHEMA_VERSION = 1
+CANONICAL_ALGORITHM = "canonical_json_sha256"
+CANONICAL_SCOPE = "ALL_FIELDS_EXCLUDING_ARTIFACT_SHA256"
+TOOL_SOURCE = "d3_deepseek_metadata_gate_remote.py"
+ADAPTER_SOURCE = "d3_deepseek_provider.py"
+FILE_HASH_ALGORITHM = "sha256"
+FILE_HASH_CLAIM = "observed_file_bytes_only_not_executing_code_identity"
+INTEGRITY_CONTRACT = {
+    "threat_model": "trusted_process_no_in_process_adversary",
+    "internal_canonical_hash_detection": "accidental_or_non_rehashed_corruption_only",
+    "internal_canonical_hash_adversarial_tamper_boundary": False,
+    "self_attestation_security_boundary": False,
+    "observed_file_hash_claim": FILE_HASH_CLAIM,
+    "artifact_replacement_detection_boundary": (
+        "externally_retained_raw_artifact_file_sha256"
+    ),
+    "external_artifact_file_sha256_retention_required": True,
+    "external_artifact_file_sha256_verification_required": True,
+    "executing_identity_boundary": (
+        "external_launcher_supervisor_pre_and_post_execution_sha256"
+    ),
+    "external_tool_sha256_verification_required": True,
+    "external_provider_sha256_verification_required": True,
+    "metadata_result_acceptance_requires_external_verification": True,
+}
+EXTERNAL_HASH_KEYS = frozenset({"tool", "provider"})
+
+# The closed, sanitized failure classification the gate may emit. A BLOCKED
+# gate artifact's ``reason`` is always exactly one of these; the launcher
+# imports this set so it can preserve the precise failure_class instead of
+# collapsing it into a generic launcher-level reason.
+BLOCKED_REASONS = frozenset(
+    {
+        "configuration_invalid",
+        "credential_echo_detected",
+        "credential_missing",
+        "http_error",
+        "invalid_json",
+        "invalid_model_list",
+        "metadata_request_budget_exhausted",
+        "model_missing",
+        "transport_error",
+        "unauthorized",
+    }
+)
+
+PROVIDER_VARIABLE = "EXP_DEEPSEEK_PROVIDER"
+BASE_URL_VARIABLE = "EXP_DEEPSEEK_BASE_URL"
+MODEL_VARIABLE = "EXP_DEEPSEEK_MODEL"
+CREDENTIAL_VARIABLE = "EXP_DEEPSEEK_API_KEY"
+ENV_DECLARATION = provider.EnvDeclaration(
+    PROVIDER_VARIABLE,
+    BASE_URL_VARIABLE,
+    MODEL_VARIABLE,
+    CREDENTIAL_VARIABLE,
+)
+
+TOP_LEVEL_KEYS = frozenset(
+    {
+        "artifact_sha256",
+        "artifact_sha256_algorithm",
+        "artifact_sha256_scope",
+        "authorization_header_serialized",
+        "base_url",
+        "classification",
+        "completion_requests",
+        "credential_present",
+        "credential_value_serialized",
+        "deepseek_models_endpoint_requests",
+        "deepseek_other_endpoint_requests",
+        "embedding_requests",
+        "environment_declaration",
+        "exact_model_advertised",
+        "http_status",
+        "integrity_contract",
+        "metadata_method",
+        "metadata_path",
+        "model",
+        "observed_utc",
+        "official_references",
+        "provenance",
+        "provider",
+        "qwen_endpoint_requests",
+        "reason",
+        "request_count",
+        "response_body_serialized",
+        "schema_version",
+        "status",
+    }
+)
+ENVIRONMENT_DECLARATION_KEYS = frozenset(
+    {"provider_variable", "base_url_variable", "model_variable", "credential_variable"}
+)
+OBSERVED_SOURCE_FILES_KEYS = frozenset({"tool", "adapter"})
+OBSERVED_FILE_BINDING_KEYS = frozenset(
+    {"source", "hash_algorithm", "observed_file_bytes_sha256", "identity_claim"}
+)
+PROVENANCE_KEYS = frozenset({"observed_source_files"})
+INTEGRITY_CONTRACT_KEYS = frozenset(
+    {
+        "threat_model",
+        "internal_canonical_hash_detection",
+        "internal_canonical_hash_adversarial_tamper_boundary",
+        "self_attestation_security_boundary",
+        "observed_file_hash_claim",
+        "artifact_replacement_detection_boundary",
+        "external_artifact_file_sha256_retention_required",
+        "external_artifact_file_sha256_verification_required",
+        "executing_identity_boundary",
+        "external_tool_sha256_verification_required",
+        "external_provider_sha256_verification_required",
+        "metadata_result_acceptance_requires_external_verification",
+    }
+)
+
+
+class GateArtifactError(RuntimeError):
+    """A sanitized artifact creation or verification failure."""
+
+
+def canonical(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, Mapping):
+        return {
+            str(key): canonical(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [canonical(item) for item in value]
+    raise GateArtifactError("artifact contains a non-canonical value")
+
+
+def canonical_json_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        canonical(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        raise GateArtifactError("unable to hash gate provenance") from None
+
+
+def _observed_file_binding(source: str, path: Path) -> dict[str, str]:
+    return {
+        "source": source,
+        "hash_algorithm": FILE_HASH_ALGORITHM,
+        "observed_file_bytes_sha256": _file_sha256(path),
+        "identity_claim": FILE_HASH_CLAIM,
+    }
+
+
+def _current_provenance() -> dict[str, Any]:
+    adapter_path = Path(provider.__file__).resolve()
+    tool_path = Path(__file__).resolve()
+    return {
+        "observed_source_files": {
+            "tool": _observed_file_binding(TOOL_SOURCE, tool_path),
+            "adapter": _observed_file_binding(ADAPTER_SOURCE, adapter_path),
+        },
+    }
+
+
+def _utc_text(now: datetime | None) -> str:
+    observed = now if now is not None else datetime.now(timezone.utc)
+    if observed.tzinfo is None or observed.utcoffset() is None:
+        raise GateArtifactError("observed UTC must be timezone-aware")
+    return observed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _base_artifact(*, observed_utc: str, credential_present: bool) -> dict[str, Any]:
+    return {
+        "classification": CLASSIFICATION,
+        "schema_version": SCHEMA_VERSION,
+        "status": "BLOCKED",
+        "reason": "not_run",
+        "provider": provider.DEEPSEEK_PROVIDER,
+        "model": provider.DEEPSEEK_MODEL_ID,
+        "base_url": provider.DEEPSEEK_BASE_URL,
+        "metadata_method": "GET",
+        "metadata_path": provider.DEEPSEEK_METADATA_PATH,
+        "official_references": list(provider.OFFICIAL_REFERENCES),
+        "environment_declaration": {
+            "provider_variable": PROVIDER_VARIABLE,
+            "base_url_variable": BASE_URL_VARIABLE,
+            "model_variable": MODEL_VARIABLE,
+            "credential_variable": CREDENTIAL_VARIABLE,
+        },
+        "credential_present": bool(credential_present),
+        "credential_value_serialized": False,
+        "authorization_header_serialized": False,
+        "response_body_serialized": False,
+        "request_count": 0,
+        "http_status": None,
+        "exact_model_advertised": False,
+        "deepseek_models_endpoint_requests": 0,
+        "deepseek_other_endpoint_requests": 0,
+        "qwen_endpoint_requests": 0,
+        "completion_requests": 0,
+        "embedding_requests": 0,
+        "integrity_contract": dict(INTEGRITY_CONTRACT),
+        "observed_utc": observed_utc,
+        "provenance": _current_provenance(),
+        "artifact_sha256_algorithm": CANONICAL_ALGORITHM,
+        "artifact_sha256_scope": CANONICAL_SCOPE,
+    }
+
+
+def _seal(artifact: dict[str, Any]) -> dict[str, Any]:
+    sealed = canonical(artifact)
+    sealed["artifact_sha256"] = canonical_json_sha256(sealed)
+    verify_artifact(sealed)
+    return sealed
+
+
+def run_metadata_gate(
+    env_file: str | Path,
+    *,
+    urlopen: Callable[..., Any] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Run at most one DeepSeek ``GET /models`` and return redacted evidence."""
+    credential_present = False
+    snapshot: provider.EnvSnapshot | None = None
+    try:
+        snapshot = provider.parse_env_file(env_file)
+        credential_present = bool(snapshot.presence.get(CREDENTIAL_VARIABLE, False))
+        config = provider.DeepSeekProviderConfig.from_snapshot(snapshot, ENV_DECLARATION)
+    except provider.CredentialMissingError:
+        reason = "credential_missing"
+        config = None
+    except provider.DeepSeekProviderError:
+        reason = "configuration_invalid"
+        config = None
+    artifact = _base_artifact(
+        observed_utc=_utc_text(now), credential_present=credential_present
+    )
+    if config is None:
+        artifact["reason"] = reason
+        return _seal(artifact)
+
+    client = provider.DeepSeekMetadataClient(config, urlopen=urlopen)
+    try:
+        result = client.fetch_models()
+    except provider.MetadataGateBlocked as exc:
+        artifact["reason"] = exc.reason
+        artifact["http_status"] = exc.http_status
+    except provider.CredentialMissingError:
+        artifact["reason"] = "credential_missing"
+    else:
+        artifact["status"] = "PASS"
+        artifact["reason"] = None
+        artifact["http_status"] = result.http_status
+        artifact["exact_model_advertised"] = True
+    artifact["request_count"] = client.requests_used
+    artifact["deepseek_models_endpoint_requests"] = client.requests_used
+    return _seal(artifact)
+
+
+def _artifact_payload(artifact: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in artifact.items() if key != "artifact_sha256"}
+
+
+def _require_exact_keys(value: Any, allowed: frozenset[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != allowed:
+        raise GateArtifactError(f"gate artifact {label} schema mismatch")
+    return value
+
+
+def _require_sha256(value: Any, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise GateArtifactError(f"gate artifact {label} SHA256 invalid")
+    return value
+
+
+def verify_external_execution_hashes(
+    pre_execution: Mapping[str, str],
+    post_execution: Mapping[str, str],
+    expected_manifest: Mapping[str, str],
+) -> bool:
+    """Pure supervisor boundary for tool/provider hashes.
+
+    The eventual runner must call this with hashes it observed outside this
+    Python process before accepting a metadata result.  Self-reported artifact
+    hashes are not substitutes for these external observations.
+    """
+    mappings = (
+        (pre_execution, "pre-execution hashes"),
+        (post_execution, "post-execution hashes"),
+        (expected_manifest, "expected manifest hashes"),
+    )
+    checked: list[dict[str, Any]] = []
+    for value, label in mappings:
+        checked.append(_require_exact_keys(value, EXTERNAL_HASH_KEYS, label))
+    for name in sorted(EXTERNAL_HASH_KEYS):
+        for mapping in checked:
+            _require_sha256(mapping[name], "external execution")
+        if checked[0][name] != checked[1][name] or checked[0][name] != checked[2][name]:
+            raise GateArtifactError("external execution SHA256 verification failed")
+    return True
+
+
+def verify_artifact(artifact: Any) -> dict[str, Any]:
+    """Validate a recursively closed schema, integrity, and safety invariants."""
+    artifact = _require_exact_keys(artifact, TOP_LEVEL_KEYS, "top-level")
+    environment = _require_exact_keys(
+        artifact["environment_declaration"],
+        ENVIRONMENT_DECLARATION_KEYS,
+        "environment declaration",
+    )
+    provenance = _require_exact_keys(artifact["provenance"], PROVENANCE_KEYS, "provenance")
+    observed_files = _require_exact_keys(
+        provenance["observed_source_files"],
+        OBSERVED_SOURCE_FILES_KEYS,
+        "observed source files",
+    )
+    tool_binding = _require_exact_keys(
+        observed_files["tool"], OBSERVED_FILE_BINDING_KEYS, "tool source binding"
+    )
+    adapter_binding = _require_exact_keys(
+        observed_files["adapter"], OBSERVED_FILE_BINDING_KEYS, "adapter source binding"
+    )
+    integrity_contract = _require_exact_keys(
+        artifact["integrity_contract"],
+        INTEGRITY_CONTRACT_KEYS,
+        "integrity contract",
+    )
+    if artifact.get("artifact_sha256_algorithm") != CANONICAL_ALGORITHM:
+        raise GateArtifactError("gate artifact hash algorithm mismatch")
+    if artifact.get("artifact_sha256_scope") != CANONICAL_SCOPE:
+        raise GateArtifactError("gate artifact hash scope mismatch")
+    artifact_sha256 = _require_sha256(artifact["artifact_sha256"], "canonical")
+    if canonical_json_sha256(_artifact_payload(artifact)) != artifact_sha256:
+        raise GateArtifactError("gate artifact hash mismatch")
+    expected_fixed = {
+        "classification": CLASSIFICATION,
+        "schema_version": SCHEMA_VERSION,
+        "provider": provider.DEEPSEEK_PROVIDER,
+        "model": provider.DEEPSEEK_MODEL_ID,
+        "base_url": provider.DEEPSEEK_BASE_URL,
+        "metadata_method": "GET",
+        "metadata_path": provider.DEEPSEEK_METADATA_PATH,
+        "official_references": list(provider.OFFICIAL_REFERENCES),
+        "credential_value_serialized": False,
+        "authorization_header_serialized": False,
+        "response_body_serialized": False,
+        "deepseek_other_endpoint_requests": 0,
+        "qwen_endpoint_requests": 0,
+        "completion_requests": 0,
+        "embedding_requests": 0,
+    }
+    for key, expected in expected_fixed.items():
+        if artifact.get(key) != expected:
+            raise GateArtifactError("gate artifact fixed field mismatch")
+    if type(artifact["schema_version"]) is not int:
+        raise GateArtifactError("gate artifact schema version type invalid")
+    if integrity_contract != INTEGRITY_CONTRACT:
+        raise GateArtifactError("gate artifact integrity contract mismatch")
+    for contract_flag in (
+        "internal_canonical_hash_adversarial_tamper_boundary",
+        "self_attestation_security_boundary",
+        "external_artifact_file_sha256_retention_required",
+        "external_artifact_file_sha256_verification_required",
+        "external_tool_sha256_verification_required",
+        "external_provider_sha256_verification_required",
+        "metadata_result_acceptance_requires_external_verification",
+    ):
+        if type(integrity_contract[contract_flag]) is not bool:
+            raise GateArtifactError("gate artifact integrity contract type invalid")
+    for redaction_flag in (
+        "credential_value_serialized",
+        "authorization_header_serialized",
+        "response_body_serialized",
+    ):
+        if type(artifact[redaction_flag]) is not bool or artifact[redaction_flag] is not False:
+            raise GateArtifactError("gate artifact redaction flag invalid")
+    if environment != {
+        "provider_variable": PROVIDER_VARIABLE,
+        "base_url_variable": BASE_URL_VARIABLE,
+        "model_variable": MODEL_VARIABLE,
+        "credential_variable": CREDENTIAL_VARIABLE,
+    }:
+        raise GateArtifactError("gate artifact env declaration mismatch")
+    count = artifact.get("request_count")
+    if (
+        type(count) is not int
+        or count not in {0, 1}
+        or type(artifact.get("deepseek_models_endpoint_requests")) is not int
+        or artifact.get("deepseek_models_endpoint_requests") != count
+    ):
+        raise GateArtifactError("gate artifact request count mismatch")
+    for zero_count_field in (
+        "deepseek_other_endpoint_requests",
+        "qwen_endpoint_requests",
+        "completion_requests",
+        "embedding_requests",
+    ):
+        if type(artifact[zero_count_field]) is not int or artifact[zero_count_field] != 0:
+            raise GateArtifactError("gate artifact zero request field invalid")
+    status = artifact.get("status")
+    if status not in {"PASS", "BLOCKED"}:
+        raise GateArtifactError("gate artifact status invalid")
+    if status == "PASS":
+        if (
+            artifact.get("reason") is not None
+            or artifact.get("exact_model_advertised") is not True
+            or count != 1
+            or artifact.get("credential_present") is not True
+            or not isinstance(artifact.get("http_status"), int)
+            or not 200 <= artifact["http_status"] < 300
+        ):
+            raise GateArtifactError("gate artifact pass fields invalid")
+    elif (
+        type(artifact.get("reason")) is not str
+        or artifact.get("reason") not in BLOCKED_REASONS
+        or artifact.get("exact_model_advertised") is not False
+    ):
+        raise GateArtifactError("gate artifact blocked fields invalid")
+    if type(artifact.get("credential_present")) is not bool:
+        raise GateArtifactError("gate artifact credential presence invalid")
+    if artifact["http_status"] is not None and type(artifact["http_status"]) is not int:
+        raise GateArtifactError("gate artifact HTTP status invalid")
+    observed_utc = artifact.get("observed_utc")
+    if not isinstance(observed_utc, str) or not observed_utc.endswith("Z"):
+        raise GateArtifactError("gate artifact UTC invalid")
+    try:
+        parsed_utc = datetime.fromisoformat(observed_utc.removesuffix("Z") + "+00:00")
+    except ValueError:
+        raise GateArtifactError("gate artifact UTC invalid") from None
+    if parsed_utc.utcoffset() != timezone.utc.utcoffset(parsed_utc):
+        raise GateArtifactError("gate artifact UTC invalid")
+    for binding, expected_source in (
+        (tool_binding, TOOL_SOURCE),
+        (adapter_binding, ADAPTER_SOURCE),
+    ):
+        if (
+            binding["source"] != expected_source
+            or binding["hash_algorithm"] != FILE_HASH_ALGORITHM
+            or binding["identity_claim"] != FILE_HASH_CLAIM
+        ):
+            raise GateArtifactError("gate artifact observed file binding invalid")
+        _require_sha256(binding["observed_file_bytes_sha256"], "observed file bytes")
+    if provenance != _current_provenance():
+        raise GateArtifactError("gate artifact provenance mismatch")
+    return artifact
+
+
+def _read_verified_artifact(path: str | Path) -> tuple[dict[str, Any], bytes]:
+    try:
+        raw = Path(path).read_bytes()
+        parsed = json.loads(raw.decode("utf-8", errors="strict"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raise GateArtifactError("unable to load gate artifact") from None
+    return verify_artifact(parsed), raw
+
+
+def load_artifact(path: str | Path) -> dict[str, Any]:
+    return _read_verified_artifact(path)[0]
+
+
+def verify_external_artifact_hash(path: str | Path, expected_sha256: str) -> bool:
+    """Verify artifact bytes against a SHA256 retained outside this process."""
+    expected = _require_sha256(expected_sha256, "external artifact file")
+    try:
+        raw = Path(path).read_bytes()
+    except OSError:
+        raise GateArtifactError("unable to read external artifact file") from None
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise GateArtifactError("external artifact file SHA256 mismatch")
+    return True
+
+
+def atomic_write_refusing_overwrite(
+    path: str | Path, artifact: Mapping[str, Any]
+) -> str:
+    target = Path(path)
+    verify_artifact(dict(artifact))
+    text = json.dumps(canonical(artifact), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    for _ in range(100):
+        candidate = target.parent / f".{target.name}.{os.getpid()}.{secrets.token_hex(8)}"
+        try:
+            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            continue
+        temporary = candidate
+        break
+    else:
+        raise GateArtifactError("unable to allocate private artifact temporary")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            raise FileExistsError("refusing to overwrite existing gate artifact") from None
+        # Read the public path back, rerun the closed verifier, and return the
+        # raw-file SHA for retention by an external launcher/supervisor.
+        _, published_raw = _read_verified_artifact(target)
+        published_sha256 = hashlib.sha256(published_raw).hexdigest()
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+    return published_sha256
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run the audited DeepSeek metadata-only gate")
+    parser.add_argument("--env-file", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    return parser
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    urlopen: Callable[..., Any] | None = None,
+    now: datetime | None = None,
+) -> int:
+    args = _parser().parse_args(argv)
+    artifact = run_metadata_gate(args.env_file, urlopen=urlopen, now=now)
+    atomic_write_refusing_overwrite(args.output, artifact)
+    sys.stdout.write(json.dumps(artifact, sort_keys=True, separators=(",", ":")) + "\n")
+    return 0 if artifact["status"] == "PASS" else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

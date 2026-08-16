@@ -1,0 +1,1 @@
+{"compile_s": null, "error_class": "cpu_jax_error", "execute_s": null, "load_s": null, "message": "Compilation error: Inventory.__init__() got an unexpected keyword argument 'torch'", "total_s": 8.725059, "valid": false}

@@ -1,0 +1,42 @@
+{
+  "classification": "D3Q_MASON_WORKTREE_EVIDENCE",
+  "schema_version": 1,
+  "worktree_path": "/home/oseasy/git_work/wt_d3q_mason_91a75e5",
+  "main_repo_path": "/home/oseasy/git_work/mechanism_UED_rmt16_probe",
+  "head_commit": "91a75e5a1d3bfca5114caf776a710a0339f692d8",
+  "head_tree": "78c9b0e845e24a0bf13832e5e20acd1fa55a960d",
+  "git_status_clean": true,
+  "git_status_porcelain": "",
+  "sibling_e0_e1_worktree": {
+    "path": "/home/oseasy/git_work/wt_skill_preflight_e0_e1_v2",
+    "head_commit": "5cd3e122b0bc785a93c2417ad3a84e7cc9a41be7",
+    "note": "not touched; equals 91a75e5 + E1 (wrappers_cl.py only)"
+  },
+  "python": {
+    "path": "/home/oseasy/venvs/skill_preflight_e0e1/bin/python",
+    "version": "3.10.20"
+  },
+  "jax_version": "0.6.2",
+  "openai_version": "2.53.0",
+  "craftax": "installed in venv (craftax-1.4.5.dist-info); no __version__ attribute",
+  "dicode_import_resolves_to": "/home/oseasy/git_work/wt_d3q_mason_91a75e5/dicode_src/src/dicode/__init__.py",
+  "effective_pythonpath": "/home/oseasy/git_work/wt_d3q_mason_91a75e5/dicode_src/src",
+  "note_pythonpath": "dicode_src uses a src/ layout; the importable root is dicode_src/src (PYTHONPATH=dicode_src alone does not expose the dicode package).",
+  "cpu_only_jax_devices": [
+    "TFRT_CPU_0"
+  ],
+  "cpu_only_evidence_env": {
+    "JAX_PLATFORMS": "cpu",
+    "CUDA_VISIBLE_DEVICES": ""
+  },
+  "cpu_validation_smoke": {
+    "code_file": "dicode_src/src/minicraftax/tasks/seed_tasks/collecting.py",
+    "valid": true,
+    "load_s": 0.037765,
+    "compile_s": 16.160006,
+    "execute_s": 0.014156,
+    "total_s": 24.55358,
+    "note": "d3q_cpu_validate_remote.py subprocess semantics; CPU only; jax xla_cuda12 plugin emits CUDA_ERROR_NO_DEVICE because CUDA_VISIBLE_DEVICES='' (expected isolation evidence)"
+  },
+  "recorded_utc": "2026-08-15T10:01Z"
+}
