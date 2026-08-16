@@ -33,6 +33,30 @@ roll_vmap = jax.vmap(jnp.roll, in_axes=(-2, 0, None), out_axes=-2)
 batchify = lambda x: jnp.reshape(x, (x.shape[0] * x.shape[1],) + x.shape[2:])
 
 
+def _scan_with_retained_suffix(step_fn, init, length, keep_last):
+	"""Scan ``length`` steps while retaining outputs only for the final suffix.
+
+	The prefix uses the exact same ``step_fn`` but discards each output, so the
+	carry (including RNG state) is identical to a full scan.  Both lengths are
+	Python integers because they define the static scan unroll in JAX.
+	"""
+	if not 0 < keep_last <= length:
+		raise ValueError(f"keep_last must satisfy 0 < keep_last <= length; got {keep_last}, {length}")
+
+	prefix_length = length - keep_last
+	carry = init
+	if prefix_length:
+		def _step_without_output(carry, scan_input):
+			carry, _ = step_fn(carry, scan_input)
+			return carry, None
+
+		carry, _ = jax.lax.scan(
+			_step_without_output, carry, None, length=prefix_length
+		)
+
+	return jax.lax.scan(step_fn, carry, None, length=keep_last)
+
+
 def make_train(
 	config,
 	task_classes,
@@ -666,15 +690,19 @@ def make_train(
 			return next_runner_state, scoring_data
 
 		# --- Run fixed-iteration training loop ---
-		(final_runner_state, scan_scoring_data) = jax.lax.scan(
-			_update_step, initial_runner_state, None, length=NUM_UPDATES
-		)
+		k = config.scoring_window_updates
+		if config.get("retain_only_scoring_window", False):
+			final_runner_state, scoring_window_data = _scan_with_retained_suffix(
+				_update_step, initial_runner_state, NUM_UPDATES, k
+			)
+		else:
+			# Preserve the original single scan and post-hoc slice by default.
+			final_runner_state, scan_scoring_data = jax.lax.scan(
+				_update_step, initial_runner_state, None, length=NUM_UPDATES
+			)
+			scoring_window_data = jax.tree.map(lambda x: x[-k:], scan_scoring_data)
 
 		final_train_state = final_runner_state[0]
-
-		# --- Process outputs for the "Smart Calculator" (IDENTICAL TO OLD CODE) ---
-		k = config.scoring_window_updates
-		scoring_window_data = jax.tree.map(lambda x: x[-k:], scan_scoring_data)
 
 		# Flatten k and num_steps
 		flat_traj = jax.tree.map(
