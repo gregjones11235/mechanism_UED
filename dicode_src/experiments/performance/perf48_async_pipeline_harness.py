@@ -685,6 +685,9 @@ def run_async_controller(
 
 def production_reference_runtime(manifest: Mapping[str, Any], out: Path) -> dict[str, Any]:
     runtime = _dual._production_runtime_a(manifest, out)
+    runtime["source_evidence"] = lambda loaded: _dual._fast._runtime_source_evidence(
+        runtime, manifest
+    )
     return runtime
 
 

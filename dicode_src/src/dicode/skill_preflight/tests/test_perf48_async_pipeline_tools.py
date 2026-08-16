@@ -1066,6 +1066,21 @@ def test_benchmark_prepared_output_is_accepted_but_finalized_output_is_not(tmp_p
         harness.prepare_output(out)
 
 
+def test_production_reference_runtime_binds_full_source_evidence():
+    source = (PERF / "perf48_async_pipeline_harness.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    fn = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "production_reference_runtime"
+    )
+    body = ast.get_source_segment(source, fn)
+    assert "_runtime_source_evidence" in body
+    benchmark = load("perf48_async_pipeline_benchmark")
+    assert len(benchmark.REFERENCE_RUNTIME_SOURCES) == 13
+
+
 def test_sources_lock_default_research_and_no_eager_jax_import():
     deploy = load("perf48_async_pipeline_deploy")
     for name in ("perf48_async_pipeline_harness", "perf48_async_pipeline_benchmark"):
