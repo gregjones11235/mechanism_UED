@@ -49,6 +49,12 @@ GPU2_UUID = "GPU-8df11537-ab79-722d-606f-411966196c4c"
 OLLAMA_QWEN_DIGEST_PREFIX = "9ec8897f747e"
 EXEC_ROOT_RE = re.compile(r"^/tmp/d3q_preflight_\d{8}T\d{6}Z$")
 SSH_OPTS = ("-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes")
+# incident-04 hardening: the remote driver runs detached (setsid) so an ssh
+# disconnect can neither kill the run nor hide it; short ssh probes poll the
+# state; cleanup never removes an exec root with live driver/replay processes.
+POLL_INTERVAL_S = 60
+MAX_RUN_S = 6 * 3600
+MAX_CONSECUTIVE_POLL_FAILURES = 10
 
 
 class OrchestratorError(RuntimeError):
@@ -218,6 +224,51 @@ def _ollama_gate_remote(ssh_target: str, ssh_key: str) -> Dict[str, Any]:
     raise OrchestratorError("ollama_digest_changed", out[:300])
 
 
+# ---------------------------------------------------------------------------
+# remote driver launch / poll (incident-04: survives ssh drops)
+# ---------------------------------------------------------------------------
+
+
+def _poll_probe_cmd(exec_root: str) -> str:
+    # The [.] bracket trick keeps pgrep from matching the probe shell itself.
+    return (
+        f"if test -f {exec_root}/driver.rc; then echo \"DONE rc=$(cat {exec_root}/driver.rc)\"; "
+        f"elif pgrep -f \"d3q_preflight_remote[.]py --exec-root {exec_root}\" > /dev/null; then echo RUNNING; "
+        f"else echo DEAD; fi"
+    )
+
+
+def _classify_poll(probe: str) -> tuple[str, Optional[int]]:
+    text = probe.strip()
+    if text.startswith("DONE rc="):
+        rc_text = text.split("=", 1)[1].strip()
+        if rc_text.lstrip("-").isdigit():
+            return "DONE", int(rc_text)
+        return "UNKNOWN", None
+    if text == "RUNNING":
+        return "RUNNING", None
+    if text == "DEAD":
+        return "DEAD", None
+    return "UNKNOWN", None
+
+
+def _live_exec_root_procs(ssh_target: str, ssh_key: str, exec_root: str) -> str:
+    probe = (
+        f"pgrep -f \"d3q_preflight_remote[.]py --exec-root {exec_root}\"; "
+        f"pgrep -f \"preflight_replay[.]py --spec {exec_root}\"; true"
+    )
+    return _run_local(_ssh_argv(ssh_target, ssh_key, [probe]), timeout=120).stdout.strip()
+
+
+def _collect_remote_exec_root(ssh_target: str, ssh_key: str, exec_root: str, local_artifacts_dir: Path) -> None:
+    tar_out = subprocess.Popen(_ssh_argv(ssh_target, ssh_key, [f"tar czf - -C {exec_root} ."]), stdout=subprocess.PIPE)
+    untar = subprocess.Popen(["tar", "xzf", "-", "-C", str(local_artifacts_dir)], stdin=tar_out.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    tar_out.stdout.close()
+    _o, e2 = untar.communicate(timeout=900)
+    if untar.returncode != 0 or tar_out.wait() != 0:
+        raise OrchestratorError("collect_failed", e2.decode("utf-8", "replace")[-500:])
+
+
 def cmd_run(staging_dir: Path, ssh_target: str, ssh_key: str, local_artifacts_dir: Path) -> Dict[str, Any]:
     staging_dir = Path(staging_dir)
     plan = json.loads((staging_dir / "PREFLIGHT_PLAN.json").read_text(encoding="utf-8"))
@@ -249,23 +300,52 @@ def cmd_run(staging_dir: Path, ssh_target: str, ssh_key: str, local_artifacts_di
         verify = _remote_or_fail(ssh_target, ssh_key, [f"ls {exec_root}/arms | wc -l; test -f {exec_root}/preflight_replay.py && echo REPLAY_OK; test -f {exec_root}/d3q_preflight_remote.py && echo DRIVER_OK"])
         if "REPLAY_OK" not in verify or "DRIVER_OK" not in verify:
             raise OrchestratorError("deploy_verify_failed", verify)
-        # execute remote driver (all arms sequential)
-        proc = _run_local(_ssh_argv(ssh_target, ssh_key, [
-            f"cd {exec_root} && {REMOTE_PYTHON} d3q_preflight_remote.py",
-            f"--exec-root {exec_root} --mason-src {MASON_SRC} --replay-script {exec_root}/preflight_replay.py",
-        ]), timeout=6 * 3600)
-        remote_rc = proc.returncode
+        # launch the remote driver DETACHED: a dropped ssh connection must
+        # neither kill the run nor blind us to it (incident-04). Short ssh
+        # probes poll driver.rc / liveness; every probe is logged.
         local_artifacts_dir.mkdir(parents=True, exist_ok=False)
-        (local_artifacts_dir / "remote_run_stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
-        (local_artifacts_dir / "remote_run_stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+        poll_log = local_artifacts_dir / "poll_log.txt"
+        launch_cmd = (
+            f"cd {exec_root} && {{ setsid bash -c '{REMOTE_PYTHON} d3q_preflight_remote.py"
+            f" --exec-root {exec_root} --mason-src {MASON_SRC}"
+            f" --replay-script {exec_root}/preflight_replay.py"
+            f" > remote_driver_stdout.txt 2> remote_driver_stderr.txt;"
+            f" echo $? > driver.rc' < /dev/null > /dev/null 2>&1 & echo LAUNCHED; }}"
+        )
+        launched = _remote_or_fail(ssh_target, ssh_key, [launch_cmd], timeout=120)
+        if "LAUNCHED" not in launched:
+            raise OrchestratorError("driver_launch_failed", launched[-300:])
+        deadline = time.monotonic() + MAX_RUN_S
+        consecutive_failures = 0
+        remote_rc: Optional[int] = None
+        while True:
+            if time.monotonic() >= deadline:
+                raise OrchestratorError("run_timeout", {"exec_root": exec_root, "limit_s": MAX_RUN_S})
+            time.sleep(POLL_INTERVAL_S)
+            stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+            try:
+                probe_out = _remote_or_fail(ssh_target, ssh_key, [_poll_probe_cmd(exec_root)], timeout=120)
+                state, rc = _classify_poll(probe_out)
+            except OrchestratorError as exc:
+                state, rc = "SSH_ERROR", None
+                probe_out = f"{exc.reason}: {exc.detail}"
+            with poll_log.open("a", encoding="utf-8") as fh:
+                fh.write(f"{stamp} state={state} rc={rc} probe={probe_out.strip()[:200]!r}\n")
+            if state == "DONE":
+                remote_rc = rc
+                break
+            if state == "DEAD":
+                _collect_remote_exec_root(ssh_target, ssh_key, exec_root, local_artifacts_dir)
+                raise OrchestratorError("remote_driver_died_without_result", exec_root)
+            if state in ("SSH_ERROR", "UNKNOWN"):
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_POLL_FAILURES:
+                    raise OrchestratorError("poll_failures_exceeded", {"exec_root": exec_root, "consecutive": consecutive_failures})
+                continue
+            consecutive_failures = 0
         (local_artifacts_dir / "remote_run_rc.txt").write_text(str(remote_rc) + "\n", encoding="utf-8")
         # collect everything back
-        tar_out = subprocess.Popen(_ssh_argv(ssh_target, ssh_key, [f"tar czf - -C {exec_root} ."]), stdout=subprocess.PIPE)
-        untar = subprocess.Popen(["tar", "xzf", "-", "-C", str(local_artifacts_dir)], stdin=tar_out.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        tar_out.stdout.close()
-        _o, e2 = untar.communicate(timeout=900)
-        if untar.returncode != 0 or tar_out.wait() != 0:
-            raise OrchestratorError("collect_failed", e2.decode("utf-8", "replace")[-500:])
+        _collect_remote_exec_root(ssh_target, ssh_key, exec_root, local_artifacts_dir)
         summary_path = local_artifacts_dir / "D3Q_PREFLIGHT_REMOTE_SUMMARY.json"
         if not summary_path.is_file():
             raise OrchestratorError("remote_summary_missing", str(summary_path))
@@ -290,6 +370,14 @@ def cmd_run(staging_dir: Path, ssh_target: str, ssh_key: str, local_artifacts_di
         return result
     finally:
         if EXEC_ROOT_RE.fullmatch(exec_root):
+            # incident-04 guard: never delete an exec root whose driver/replay
+            # processes are still alive; fail closed and preserve evidence.
+            live = _live_exec_root_procs(ssh_target, ssh_key, exec_root)
+            if live:
+                raise OrchestratorError(
+                    "cleanup_skipped_live_processes",
+                    {"exec_root": exec_root, "pids": live, "note": "remote driver/replay still running; exec root preserved"},
+                )
             _run_local(_ssh_argv(ssh_target, ssh_key, [f"rm -rf {exec_root}"]), timeout=300)
             check = _run_local(_ssh_argv(ssh_target, ssh_key, [f"test ! -e {exec_root} && echo ABSENT"]))
             if "ABSENT" not in check.stdout:

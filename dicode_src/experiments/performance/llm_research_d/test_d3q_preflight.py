@@ -166,3 +166,27 @@ def test_provenance_constants_match_frozen_b1_snapshot():
     assert mapping["preflight_route.py"].endswith(
         "perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/skill_preflight/preflight_route.py"
     )
+
+
+def test_classify_poll_states():
+    assert orch._classify_poll("DONE rc=0") == ("DONE", 0)
+    assert orch._classify_poll("DONE rc=3\n") == ("DONE", 3)
+    assert orch._classify_poll("DONE rc=2") == ("DONE", 2)
+    assert orch._classify_poll("RUNNING\n") == ("RUNNING", None)
+    assert orch._classify_poll("DEAD") == ("DEAD", None)
+    assert orch._classify_poll("")[0] == "UNKNOWN"
+    assert orch._classify_poll("weird output")[0] == "UNKNOWN"
+    assert orch._classify_poll("DONE rc=")[0] == "UNKNOWN"
+
+
+def test_poll_probe_self_match_guard():
+    import re
+
+    exec_root = "/tmp/d3q_preflight_20260816T000000Z"
+    cmd = orch._poll_probe_cmd(exec_root)
+    pattern = f"d3q_preflight_remote[.]py --exec-root {exec_root}"
+    # a real driver command line must match...
+    real = f"/home/x/python d3q_preflight_remote.py --exec-root {exec_root} --mason-src /y"
+    assert re.search(pattern, real) is not None
+    # ...but the probe's own command line (bracketed) must not.
+    assert re.search(pattern, cmd) is None
