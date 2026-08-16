@@ -183,14 +183,34 @@ def _preflight_wall(arm_entry: Dict[str, Any], preflight_artifacts: Path) -> Opt
     # result_file is a REMOTE path; the identical collected copy lives under
     # preflight_artifacts/arms/<arm_id>/run/critical_path.json.
     arm_id = arm_entry.get("arm_id")
-    critical = Path(preflight_artifacts) / "arms" / arm_id / "run" / "critical_path.json"
+    run_dir = Path(preflight_artifacts) / "arms" / arm_id / "run"
+    critical = run_dir / "critical_path.json"
     if not critical.is_file():
         raise FinalizeError("preflight_critical_path_missing", str(critical))
     data = json.loads(critical.read_text(encoding="utf-8"))
+    # Preferred: an explicit preflight_wall field (forward-compatible with a
+    # future replay emitting it). Real replay output (verified against the B1
+    # reference run perf48_b1r2_gpu2_20260813T032611Z) instead records the
+    # wall as critical_path.session_wall, mirrored by
+    # replay_summary.session_wall_s (both 832.995494452 for B1).
     wall = data.get("preflight_wall")
     if isinstance(wall, dict):
         wall = wall.get("total_s", wall.get("duration_s"))
+    summary_wall = None
+    summary_path = run_dir / "replay_summary.json"
+    if summary_path.is_file():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary_wall = summary.get("session_wall_s")
+        if not isinstance(summary_wall, (int, float)):
+            summary_wall = None
     if not isinstance(wall, (int, float)):
+        wall = data.get("session_wall")
+    if isinstance(wall, (int, float)) and summary_wall is not None:
+        if abs(float(wall) - summary_wall) > max(0.005 * summary_wall, 0.05):
+            raise FinalizeError("preflight_wall_mismatch", arm_id)
+    if not isinstance(wall, (int, float)):
+        wall = summary_wall
+    if not isinstance(wall, (int, float)) or wall <= 0:
         raise FinalizeError("preflight_wall_missing", arm_id)
     return float(wall)
 
