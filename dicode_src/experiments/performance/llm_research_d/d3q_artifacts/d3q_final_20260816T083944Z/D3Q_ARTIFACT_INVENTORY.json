@@ -1,0 +1,31 @@
+{
+  "classification": "D3Q_ARTIFACT_INVENTORY",
+  "schema_version": 1,
+  "files": [
+    {
+      "path": "D3Q_COST_AND_TOKENS.json",
+      "sha256": "1fa7154c865883849eb64087bc427bc248f00b498f2fb30597b91cb43861d8fc",
+      "bytes": 1669
+    },
+    {
+      "path": "D3Q_ERROR_TAXONOMY.json",
+      "sha256": "f730d37f66b449f77ac1acef8ffd227f7f49d9f88ac928c54ea4fb89089e7d56",
+      "bytes": 1219
+    },
+    {
+      "path": "D3Q_FINAL_RESULT.json",
+      "sha256": "e522c013f7d0bf55949fb2c2540810e7a77122932ccf9222f58a60f4b117fe11",
+      "bytes": 16260
+    },
+    {
+      "path": "D3Q_PREFLIGHT_RESULTS.json",
+      "sha256": "b2b9d57ea23db12c35e85f2ac2f744f86e7da0c2bb8bacbd59dc0488303ec52a",
+      "bytes": 8138
+    },
+    {
+      "path": "D3Q_SLOT_RESULTS.csv",
+      "sha256": "72a20184b7885cc04f21ad91db6ccae1943c43c8d16ce0556b727f1383807732",
+      "bytes": 15984
+    }
+  ]
+}

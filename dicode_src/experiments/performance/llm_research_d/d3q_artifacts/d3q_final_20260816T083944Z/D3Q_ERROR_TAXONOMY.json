@@ -1,0 +1,52 @@
+{
+  "by_provider": {
+    "ollama": {
+      "empty_response": 0,
+      "timeout": 0,
+      "connection_error": 0,
+      "http_4xx": 0,
+      "http_5xx": 0,
+      "invalid_json": 0,
+      "extract_error": 0,
+      "syntax_error": 0,
+      "api_enum_error": 17,
+      "inventory_error": 0,
+      "dangerous_import": 0,
+      "dangerous_capability": 0,
+      "cpu_jax_error": 3,
+      "duplicate_code": 3
+    },
+    "deepseek_official": {
+      "empty_response": 0,
+      "timeout": 0,
+      "connection_error": 0,
+      "http_4xx": 0,
+      "http_5xx": 0,
+      "invalid_json": 0,
+      "extract_error": 16,
+      "syntax_error": 1,
+      "api_enum_error": 0,
+      "inventory_error": 0,
+      "dangerous_import": 0,
+      "dangerous_capability": 0,
+      "cpu_jax_error": 4,
+      "duplicate_code": 0
+    }
+  },
+  "totals": {
+    "empty_response": 0,
+    "timeout": 0,
+    "connection_error": 0,
+    "http_4xx": 0,
+    "http_5xx": 0,
+    "invalid_json": 0,
+    "extract_error": 16,
+    "syntax_error": 1,
+    "api_enum_error": 17,
+    "inventory_error": 0,
+    "dangerous_import": 0,
+    "dangerous_capability": 0,
+    "cpu_jax_error": 7,
+    "duplicate_code": 3
+  }
+}

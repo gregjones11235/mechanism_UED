@@ -1,0 +1,14 @@
+WARNING:absl:Configured `CheckpointManager` using deprecated legacy API. Please follow the instructions at https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html to migrate.
+/home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/orbax/checkpoint/_src/serialization/jax_array_handlers.py:736: UserWarning: Sharding info not provided when restoring. Populating sharding info from sharding file. Please note restoration time will be slightly increased due to reading from file. Note also that this option is unsafe when restoring on a different topology than the checkpoint was saved with.
+  warnings.warn(
+/home/oseasy/miniconda3/envs/dicode310/lib/python3.10/site-packages/jax/_src/ops/scatter.py:93: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=float32 to dtype=int32 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+2026-08-16 15:16:51.647115: E external/xla/xla/service/slow_operation_alarm.cc:73] 
+********************************
+[Compiling module jit_eval_loop] Very slow compile? If you want to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+********************************
+2026-08-16 15:20:04.889431: E external/xla/xla/service/slow_operation_alarm.cc:140] The operation took 5m13.242427012s
+
+********************************
+[Compiling module jit_eval_loop] Very slow compile? If you want to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+********************************

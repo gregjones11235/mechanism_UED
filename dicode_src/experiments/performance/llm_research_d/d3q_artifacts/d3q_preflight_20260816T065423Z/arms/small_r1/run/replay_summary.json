@@ -1,0 +1,20 @@
+{
+  "event_count": 19,
+  "exclusive_phase_totals": {
+    "archive_copy_or_load": 0.065523757,
+    "archive_update": 0.000122244,
+    "candidate_code_load": 0.00293453,
+    "checkpoint_load": 10.932610212,
+    "preflight_eval_build": 1.275930043,
+    "preflight_eval_execute": 192.640157011,
+    "preflight_eval_lower_compile": 446.326353918,
+    "preflight_task_reload": 0.000256593,
+    "replay_wall": 4.666461188,
+    "result_write": 0.006453017,
+    "route": 0.000767257,
+    "scoring_cpu": 15.021250805,
+    "scoring_transfer": 1.140444903
+  },
+  "run_id": "5894c96f55a6422e93f29fa31632207f",
+  "session_wall_s": 672.089549792
+}

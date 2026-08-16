@@ -1,0 +1,160 @@
+{
+  "archive_snapshot": {
+    "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/archive_snapshot",
+    "tree_sha256": "2202ab7f0ceee33446b2191a182f7b0c4e0fcad099d7dacf6ba712d21cce4a23"
+  },
+  "candidate_ids": [
+    "slot_r3_small_p00",
+    "slot_r3_small_p01",
+    "slot_r3_small_p02",
+    "slot_r3_small_p03",
+    "slot_r3_small_p04",
+    "slot_r3_small_p07",
+    "slot_r3_small_p08",
+    "slot_r3_small_p09",
+    "slot_r3_small_p10",
+    "slot_r3_small_p11"
+  ],
+  "candidates": [
+    {
+      "code_bytes": 3203,
+      "code_sha256": "effd18c278c3c13675a8d4aafeabeb7bc460a7ab6f291c258e48f1bb8bcfb0fa",
+      "id": "slot_r3_small_p00",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p00.py"
+    },
+    {
+      "code_bytes": 3213,
+      "code_sha256": "7f5ff5c02346840af0d2c7fd9f84687a9058996e302737eb653312ba0740c77e",
+      "id": "slot_r3_small_p01",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p01.py"
+    },
+    {
+      "code_bytes": 2893,
+      "code_sha256": "3e5a535697932531fa3cb443dbfc4190a2077ea441d22804ee90302ad15bb01b",
+      "id": "slot_r3_small_p02",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p02.py"
+    },
+    {
+      "code_bytes": 2556,
+      "code_sha256": "62db08e73708d2b9c9bd36b594b775f449fd4a9503ea4f69e00109b31d8981d0",
+      "id": "slot_r3_small_p03",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p03.py"
+    },
+    {
+      "code_bytes": 4924,
+      "code_sha256": "52172de6701928b200bde0531f223edba62705b28ff51e53318d4c93d93280a3",
+      "id": "slot_r3_small_p04",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p04.py"
+    },
+    {
+      "code_bytes": 3820,
+      "code_sha256": "ba8db75d7c981e354db8c03e6664985ba635383705346061b20f6244ac1be384",
+      "id": "slot_r3_small_p07",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p07.py"
+    },
+    {
+      "code_bytes": 3005,
+      "code_sha256": "3ae8d8323d5edf4f32926bec83e9a761b7cf517173ddffc0a7fa2fc7d9a7b97f",
+      "id": "slot_r3_small_p08",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p08.py"
+    },
+    {
+      "code_bytes": 4425,
+      "code_sha256": "020fd474898371196f654d301f464ddb038cb2314aaffd73cafbd0e329bfd036",
+      "id": "slot_r3_small_p09",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p09.py"
+    },
+    {
+      "code_bytes": 4741,
+      "code_sha256": "8b743b99753b232a9edb0167125a760b59a93a36b078c46d625cef03bc123121",
+      "id": "slot_r3_small_p10",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p10.py"
+    },
+    {
+      "code_bytes": 5357,
+      "code_sha256": "2daf8e698e28a8af8e94bb032826d20f157505a1d780a2645d93634a2a63f7a7",
+      "id": "slot_r3_small_p11",
+      "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/candidates/slot_r3_small_p11.py"
+    }
+  ],
+  "checkpoint": {
+    "basename": "2100",
+    "global_step": 2100,
+    "metadata_sha256": "2ad5d6af15ecfff348d3861e026ad680767f207227889c58aa67c0efc02a9241",
+    "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/frozen/checkpoint/2100",
+    "tree_sha256": "c67d9d733f268d567fcf3c352471ba8f5e68585843fbd31652c27dcfa3761dfc"
+  },
+  "classification": "PREFLIGHT_CANDIDATE_REPLAY",
+  "conditioning": {
+    "content_sha256": "a06832dee710e8ee0cf01115f9ea523136962ba83d586334e0d401bee696b679",
+    "dtype": "float32",
+    "path": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/conditioning.npy",
+    "sha256": "6aee585d95c366ba92fa3d49ba40be16cd196198f9955239e920eef87996a026",
+    "shape": [
+      11,
+      67
+    ]
+  },
+  "conditioning_dim": 67,
+  "config": {
+    "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/frozen/config.yaml",
+    "sha256": "87391af86ef0025e50ba251b342f64cf64b39e435105338a64b21d27fcd90689"
+  },
+  "gpu_uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+  "llm_api_calls": 0,
+  "manifest_sha256": "0e2398d34a1056a6a0409d026848acf170d887ccd89ede7d5b420e112a4e573f",
+  "mid_checkpoint_step": 2100,
+  "not_end_to_end_ued": true,
+  "rng": {
+    "content_sha256": "9888b60a7e448cd8d9560e4e2e8ec393bf0afa58bf4b28cf9af1468b5ab275f5",
+    "dtype": "uint32",
+    "file_sha256": "c99bf91423b6c3a180f53e2a9515198669a26b16c797fa63bbe25d55c91ccccc",
+    "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/frozen/rng.npy",
+    "shape": [
+      2
+    ]
+  },
+  "rollout_updates": 40,
+  "score_function": "learnability",
+  "source_commit": "4d1f54fd32223ec0d51b38a64a3e6902d334c3c3",
+  "source_mapping": {
+    "gen_manager.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/dreaming/gen_manager.py",
+      "sha256": "a97dc864e858d7c70b7a439134603e8d7425282cfcc6cfb17df86fe92541f9fd"
+    },
+    "online_evaluation.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/evaluation/online_evaluation.py",
+      "sha256": "0106be05a92f36984e0bfaa2511e31c97d1b4b9af8a5fe13a4714589f318e17c"
+    },
+    "ppo_tr.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/ppo_tr.py",
+      "sha256": "52ed64fe11210c0a6be3d6066c4275a5e15ac8529c48844f935caa946d18550f"
+    },
+    "preflight.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/skill_preflight/preflight.py",
+      "sha256": "afbb2ae9e42e7b7f7e043dced24f32c3a215832cb52af8ae6e6e6979bbdbee42"
+    },
+    "preflight_route.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/skill_preflight/preflight_route.py",
+      "sha256": "bb0b540e5f3a61c800b4089574562f66495dca5e90a975014472a60f93e140e7"
+    },
+    "scoring.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/scoring.py",
+      "sha256": "91f3d6f1f3d526e207f4fbddce563b13153d68da72ad1aed5e4f4b1e4a7a8f5c"
+    },
+    "setup.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/setup.py",
+      "sha256": "669eef68c887f45ddedbecc880ea7d2bc1bb893a8810b5bde6155d9828798af8"
+    },
+    "task_utils.py": {
+      "path": "/home/oseasy/e2_data_disk2/skill_preflight_runs/perf48_b1r2_gpu2_20260813T032611Z/dicode_src/src/dicode/task_utils.py",
+      "sha256": "c59b51e34c7c0943f12971e8f3d8ea878ff3624dd8bddf1e3fc742d30e7426d5"
+    }
+  },
+  "validation": {
+    "num_envs": 1024,
+    "num_steps": 128,
+    "rollout_updates": 40
+  },
+  "validator_version": "3"
+}

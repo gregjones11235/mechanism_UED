@@ -1,0 +1,98 @@
+{
+  "recovery": {
+    "classification": "D3Q_PREFLIGHT_RECOVERY",
+    "schema_version": 1,
+    "run_id": "d3q_preflight_20260816T065423Z",
+    "reason": "gpu2_external_app",
+    "allowed_reasons": [
+      "gpu2_external_app"
+    ],
+    "precedent": "D3Q_PHASE2_INCIDENT_02 recover-completed-chunk (gpu2_external_app)",
+    "external_process": {
+      "pid": 3753771,
+      "detail": "PID 3753771 python -m pytest tests/e3_litesim -q; lstart 2026-08-16T08:14:07Z; 262MiB GPU2 context; overlapped small_r3 window; interference analysis: no degradation (small_r3 execute 202.6s < small_r2 232.9s)",
+      "verified_gone": true
+    },
+    "interference_check": {
+      "limit": 1.25,
+      "arms": {
+        "large_r1": {
+          "execute_s": 194.117356142,
+          "candidates": 12,
+          "median_others_execute_s": 195.187320945,
+          "ratio_vs_median": 0.9945182668739969,
+          "ok": true
+        },
+        "large_r2": {
+          "execute_s": 195.187320945,
+          "candidates": 12,
+          "median_others_execute_s": 194.117356142,
+          "ratio_vs_median": 1.005511948154792,
+          "ok": true
+        },
+        "large_r3": {
+          "execute_s": 192.116937014,
+          "candidates": 12,
+          "median_others_execute_s": 195.187320945,
+          "ratio_vs_median": 0.9842695523657237,
+          "ok": true
+        },
+        "small_r1": {
+          "execute_s": 192.640157011,
+          "candidates": 6,
+          "median_others_execute_s": 195.187320945,
+          "ratio_vs_median": 0.9869501567946735,
+          "ok": true
+        },
+        "small_r2": {
+          "execute_s": 232.891668058,
+          "candidates": 10,
+          "median_others_execute_s": 194.117356142,
+          "ratio_vs_median": 1.199746754677804,
+          "ok": true
+        },
+        "small_r3": {
+          "execute_s": 202.624569197,
+          "candidates": 10,
+          "median_others_execute_s": 194.117356142,
+          "ratio_vs_median": 1.0438251026290346,
+          "ok": true
+        }
+      }
+    },
+    "recovered_utc": "20260816T083415Z",
+    "note": "post-run GPU gate blocked after ALL arms completed and were collected; pre-run gates passed at launch (gpu/ollama pre-checks were not persisted because the block preceded result write)"
+  },
+  "evidence_sha256": {
+    "large_r1/run/RESULT.json": "43c3ce441d85faaabb6ffc48d1f4b130a91b9835d162314d6b2292c159947ce5",
+    "large_r1/run/replay_summary.json": "6498f9dfc3c0f68c6a5c8185fba661e701cea6d0f919bb555dbe59d7a1ae46a7",
+    "large_r1/run/critical_path.json": "a9ceb583767e93d15bfeb5fb6cf6b558023465b0e42c4c7e5de585a680f2d437",
+    "large_r1/spec.json": "48c6a18da83394eb45caa2c39c6b3abe5e26f633356e77606331aff2b52e768f",
+    "large_r1/manifest.json": "e4eb6f8fcad4784cf0ca90182251a2bca9a0202e8dc97efb70aac5ec86f3eac4",
+    "large_r2/run/RESULT.json": "d9c10f72fd3c4b90472c91de880f9635c46df0cdec5fdd294883cc0ebaae7600",
+    "large_r2/run/replay_summary.json": "fd01199f3aa6cfc9c63e92b70028572256ecee6e4ce4f7e4212e76aab33af4e3",
+    "large_r2/run/critical_path.json": "f846e3266a8ce49e6a7dbb3b1d7f86b8e88164be4ae94cd5b9cb60a862e52893",
+    "large_r2/spec.json": "fa2bccda0db43f5b5d2d1dfcb00a755d5eb0e2e0c5f7c49aadc7c74d394009e9",
+    "large_r2/manifest.json": "a6fb1c576fd6ae563c81f9bfd49a93ec0d6c004c7afbc963493ab5a140423c5d",
+    "large_r3/run/RESULT.json": "66422ac7f8c5e0ab544d1e708facce8ce8fd4b30c852d5642e608d94cffa2fc6",
+    "large_r3/run/replay_summary.json": "0bb09683ac28ff30849d88a514412f536d8958ef3152b661326a9525dc95526d",
+    "large_r3/run/critical_path.json": "9eb28f05d6b1edd3ad44b045f3566c3adfd6caaaa71be9c9e7b91095c58d9490",
+    "large_r3/spec.json": "676c1d08967e58bc9087eb5bf6595f3a2ed923bcea739c1587744e5bafa41e73",
+    "large_r3/manifest.json": "0b2391a1f16fee506e144929749022be04e149818938e3a4162e48bc573c1ed4",
+    "small_r1/run/RESULT.json": "d3e7a3a8b0632dd2d13835cc5027d52c3754a1554c4320ed23bb404114e41753",
+    "small_r1/run/replay_summary.json": "154d5b1cf5d35dd48c9f14b83fe18424498362489ae065c86942168bee7f6d0f",
+    "small_r1/run/critical_path.json": "317fd5490988ea7f5a4b790f01a7d0700a45476b4560796c40f8296d3bb52d1d",
+    "small_r1/spec.json": "10616dd4df114b39fe428cd39c7c6f753d12f84d78440c8f897ed1c22b5e5a53",
+    "small_r1/manifest.json": "c66ff9bd8ae1ec79681f42434ad43d003a653417e06a8a65584fbea008b3ddeb",
+    "small_r2/run/RESULT.json": "5085e1306c6ff327d557a6c8d187f8428dcef859604c083b03d5848ead5c8fad",
+    "small_r2/run/replay_summary.json": "9b426c8676adb08bc944cbb7ad15b0ac1a94f47311fe812f82504311eed5efec",
+    "small_r2/run/critical_path.json": "5ee6a00231b38301a257a43f07667d5f197c204d6a6855185a718d46539e13e8",
+    "small_r2/spec.json": "0bf89b8e4c27dfd72304eec470702ee70cb200a83f29dd99395113e8cb725e16",
+    "small_r2/manifest.json": "4d6536ff553dac19c97e0f79cc303316d76e55c8ba5202bda77ac3935225f576",
+    "small_r3/run/RESULT.json": "cc6b1f511babb8531537229537f945ec2a314430f81b891d159a32b3bcf6aecf",
+    "small_r3/run/replay_summary.json": "8bd284ec29ecd27a7695f9ac03ededb4488e9efd97b347f32d4bf1470db4162f",
+    "small_r3/run/critical_path.json": "ac60b109904f3c7bdf0ce246c5ef54bde5b06bf8c97f37079d07fe12d7edffdf",
+    "small_r3/spec.json": "4a1db6f9a2deb99978a45891735935c399d75d4ea76abac8e4fc41b36962f4cb",
+    "small_r3/manifest.json": "918878c866cc9ee2c67a0693633fd3ec013690736b169f25bf6ba1b6bc4c7a12"
+  }
+}

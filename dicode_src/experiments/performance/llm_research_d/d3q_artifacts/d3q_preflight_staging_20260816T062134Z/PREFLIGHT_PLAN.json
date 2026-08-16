@@ -1,0 +1,63 @@
+{
+  "classification": "D3Q_PREFLIGHT_PLAN",
+  "schema_version": 1,
+  "recorded_utc": "2026-08-16T06:21:35Z",
+  "artifact_dirs": [
+    "d3q_artifacts\\d3q_p1_smoke_20260815T022644Z",
+    "d3q_artifacts\\d3q_p2_chunk1r_r1_20260816T043357Z",
+    "d3q_artifacts\\d3q_p2_chunk2_r2_20260816T050411Z",
+    "d3q_artifacts\\d3q_p2_chunk3_r3_20260816T054159Z"
+  ],
+  "arms": [
+    {
+      "arm_id": "small_r1",
+      "candidate_count": 6,
+      "final_valid_slots": 6,
+      "final_invalid_slots": 1,
+      "lost_slots": 5
+    },
+    {
+      "arm_id": "large_r1",
+      "candidate_count": 12,
+      "final_valid_slots": 12,
+      "final_invalid_slots": 0,
+      "lost_slots": 0
+    },
+    {
+      "arm_id": "large_r2",
+      "candidate_count": 12,
+      "final_valid_slots": 12,
+      "final_invalid_slots": 0,
+      "lost_slots": 0
+    },
+    {
+      "arm_id": "small_r2",
+      "candidate_count": 10,
+      "final_valid_slots": 10,
+      "final_invalid_slots": 2,
+      "lost_slots": 0
+    },
+    {
+      "arm_id": "small_r3",
+      "candidate_count": 10,
+      "final_valid_slots": 10,
+      "final_invalid_slots": 2,
+      "lost_slots": 0
+    },
+    {
+      "arm_id": "large_r3",
+      "candidate_count": 12,
+      "final_valid_slots": 12,
+      "final_invalid_slots": 0,
+      "lost_slots": 0
+    }
+  ],
+  "execution_order": [
+    "small_r1",
+    "large_r1",
+    "large_r2",
+    "small_r2",
+    "small_r3",
+    "large_r3"
+  ]
+}

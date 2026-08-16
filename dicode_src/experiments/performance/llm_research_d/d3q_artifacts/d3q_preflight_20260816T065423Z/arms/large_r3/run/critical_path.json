@@ -1,0 +1,132 @@
+{
+  "covered_union": 840.113297231,
+  "critical_path": [
+    {
+      "duration_s": 606.981585769,
+      "phase": "preflight_eval_lower_compile"
+    },
+    {
+      "duration_s": 192.116937014,
+      "phase": "preflight_eval_execute"
+    },
+    {
+      "duration_s": 22.953880961,
+      "phase": "scoring_cpu"
+    },
+    {
+      "duration_s": 10.934824703,
+      "phase": "checkpoint_load"
+    },
+    {
+      "duration_s": 4.757249623,
+      "phase": "replay_wall"
+    },
+    {
+      "duration_s": 1.245727317,
+      "phase": "preflight_eval_build"
+    },
+    {
+      "duration_s": 1.045703088,
+      "phase": "scoring_transfer"
+    },
+    {
+      "duration_s": 0.065636442,
+      "phase": "archive_copy_or_load"
+    },
+    {
+      "duration_s": 0.005050153,
+      "phase": "result_write"
+    },
+    {
+      "duration_s": 0.004828929,
+      "phase": "candidate_code_load"
+    },
+    {
+      "duration_s": 0.00145191,
+      "phase": "route"
+    },
+    {
+      "duration_s": 0.000262376,
+      "phase": "preflight_task_reload"
+    },
+    {
+      "duration_s": 0.000158946,
+      "phase": "archive_update"
+    }
+  ],
+  "exclusive_phase_totals": {
+    "archive_copy_or_load": 0.065636442,
+    "archive_update": 0.000158946,
+    "candidate_code_load": 0.004828929,
+    "checkpoint_load": 10.934824703,
+    "preflight_eval_build": 1.245727317,
+    "preflight_eval_execute": 192.116937014,
+    "preflight_eval_lower_compile": 606.981585769,
+    "preflight_task_reload": 0.000262376,
+    "replay_wall": 4.757249623,
+    "result_write": 0.005050153,
+    "route": 0.00145191,
+    "scoring_cpu": 22.953880961,
+    "scoring_transfer": 1.045703088
+  },
+  "phase_totals": {
+    "archive_copy_or_load": 0.065636442,
+    "archive_update": 0.000158946,
+    "candidate_code_load": 0.004828929,
+    "checkpoint_load": 10.934824703,
+    "preflight_eval_build": 1.245727317,
+    "preflight_eval_execute": 192.116937014,
+    "preflight_eval_lower_compile": 606.981585769,
+    "preflight_task_reload": 0.004921477,
+    "replay_wall": 840.108247078,
+    "result_write": 0.005050153,
+    "route": 0.001610856,
+    "scoring_cpu": 22.953880961,
+    "scoring_transfer": 1.045703088
+  },
+  "run_id": "5d2cb843a2f3488f87f558f19e1ba3e5",
+  "session_wall": 840.122608684,
+  "sessions": {
+    "replay": {
+      "covered_union": 840.113297231,
+      "exclusive_phase_totals": {
+        "archive_copy_or_load": 0.065636442,
+        "archive_update": 0.000158946,
+        "candidate_code_load": 0.004828929,
+        "checkpoint_load": 10.934824703,
+        "preflight_eval_build": 1.245727317,
+        "preflight_eval_execute": 192.116937014,
+        "preflight_eval_lower_compile": 606.981585769,
+        "preflight_task_reload": 0.000262376,
+        "replay_wall": 4.757249623,
+        "result_write": 0.005050153,
+        "route": 0.00145191,
+        "scoring_cpu": 22.953880961,
+        "scoring_transfer": 1.045703088
+      },
+      "overlap_groups": {
+        "__ungrouped__": {
+          "covered_union_s": 840.113297231
+        }
+      },
+      "phase_totals": {
+        "archive_copy_or_load": 0.065636442,
+        "archive_update": 0.000158946,
+        "candidate_code_load": 0.004828929,
+        "checkpoint_load": 10.934824703,
+        "preflight_eval_build": 1.245727317,
+        "preflight_eval_execute": 192.116937014,
+        "preflight_eval_lower_compile": 606.981585769,
+        "preflight_task_reload": 0.004921477,
+        "replay_wall": 840.108247078,
+        "result_write": 0.005050153,
+        "route": 0.001610856,
+        "scoring_cpu": 22.953880961,
+        "scoring_transfer": 1.045703088
+      },
+      "session_wall": 840.122608684,
+      "unattributed": 0.009311453000009351
+    }
+  },
+  "unattributed": 0.009311453000009351
+}

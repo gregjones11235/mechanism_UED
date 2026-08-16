@@ -1,0 +1,540 @@
+{
+  "classification": "D3Q_FINAL_RESULT",
+  "schema_version": 1,
+  "verdict": "D3_SMALL_MODEL_FASTER_END_TO_END",
+  "verdict_conditions": {
+    "mean_small": 310.715053,
+    "mean_large": 730.849939
+  },
+  "primary_metric_name": "seconds_per_preflight_accepted_task",
+  "primary_metric": {
+    "large_r1": {
+      "accepted": [
+        "slot_r1_large_p04",
+        "slot_r1_large_p08"
+      ],
+      "accepted_count": 2,
+      "pipeline_wall_s": 1525.134965,
+      "preflight_wall_s": 878.849203955,
+      "seconds_per_preflight_accepted_task": 1201.992084
+    },
+    "large_r2": {
+      "accepted": [
+        "slot_r2_large_p04",
+        "slot_r2_large_p07",
+        "slot_r2_large_p08",
+        "slot_r2_large_p09",
+        "slot_r2_large_p10"
+      ],
+      "accepted_count": 5,
+      "pipeline_wall_s": 1489.738594,
+      "preflight_wall_s": 879.585867173,
+      "seconds_per_preflight_accepted_task": 473.864892
+    },
+    "large_r3": {
+      "accepted": [
+        "slot_r3_large_p04",
+        "slot_r3_large_p07",
+        "slot_r3_large_p08",
+        "slot_r3_large_p09"
+      ],
+      "accepted_count": 4,
+      "pipeline_wall_s": 1226.648759,
+      "preflight_wall_s": 840.122608684,
+      "seconds_per_preflight_accepted_task": 516.692842
+    },
+    "small_r1": {
+      "accepted": [
+        "slot_r1_small_p07",
+        "slot_r1_small_p08",
+        "slot_r1_small_p09",
+        "slot_r1_small_p10",
+        "slot_r1_small_p11"
+      ],
+      "accepted_count": 5,
+      "pipeline_wall_s": 718.230693,
+      "preflight_wall_s": 672.089549792,
+      "seconds_per_preflight_accepted_task": 278.064049
+    },
+    "small_r2": {
+      "accepted": [
+        "slot_r2_small_p04",
+        "slot_r2_small_p07",
+        "slot_r2_small_p08",
+        "slot_r2_small_p09",
+        "slot_r2_small_p10",
+        "slot_r2_small_p11"
+      ],
+      "accepted_count": 6,
+      "pipeline_wall_s": 1078.796584,
+      "preflight_wall_s": 936.446738758,
+      "seconds_per_preflight_accepted_task": 335.873887
+    },
+    "small_r3": {
+      "accepted": [
+        "slot_r3_small_p04",
+        "slot_r3_small_p07",
+        "slot_r3_small_p08",
+        "slot_r3_small_p09",
+        "slot_r3_small_p10",
+        "slot_r3_small_p11"
+      ],
+      "accepted_count": 6,
+      "pipeline_wall_s": 1107.836691,
+      "preflight_wall_s": 801.406647797,
+      "seconds_per_preflight_accepted_task": 318.207223
+    }
+  },
+  "model_summary": {
+    "small": {
+      "accepted_per_repeat": [
+        5,
+        6,
+        6
+      ],
+      "seconds_per_accepted_task_per_repeat": [
+        278.064049,
+        335.873887,
+        318.207223
+      ],
+      "mean_seconds_per_accepted_task": 310.715053,
+      "total_accepted": 17
+    },
+    "large": {
+      "accepted_per_repeat": [
+        2,
+        5,
+        4
+      ],
+      "seconds_per_accepted_task_per_repeat": [
+        1201.992084,
+        473.864892,
+        516.692842
+      ],
+      "mean_seconds_per_accepted_task": 730.849939,
+      "total_accepted": 11
+    }
+  },
+  "aggregate": {
+    "classification": "D3Q_AGGREGATE",
+    "schema_version": 1,
+    "slots_total": 72,
+    "slots_completed": 67,
+    "slots_lost_reconciled": [
+      "slot_r1_small_p01",
+      "slot_r1_small_p02",
+      "slot_r1_small_p03",
+      "slot_r1_small_p04",
+      "slot_r1_small_p05"
+    ],
+    "error_taxonomy": {
+      "by_provider": {
+        "ollama": {
+          "empty_response": 0,
+          "timeout": 0,
+          "connection_error": 0,
+          "http_4xx": 0,
+          "http_5xx": 0,
+          "invalid_json": 0,
+          "extract_error": 0,
+          "syntax_error": 0,
+          "api_enum_error": 17,
+          "inventory_error": 0,
+          "dangerous_import": 0,
+          "dangerous_capability": 0,
+          "cpu_jax_error": 3,
+          "duplicate_code": 3
+        },
+        "deepseek_official": {
+          "empty_response": 0,
+          "timeout": 0,
+          "connection_error": 0,
+          "http_4xx": 0,
+          "http_5xx": 0,
+          "invalid_json": 0,
+          "extract_error": 16,
+          "syntax_error": 1,
+          "api_enum_error": 0,
+          "inventory_error": 0,
+          "dangerous_import": 0,
+          "dangerous_capability": 0,
+          "cpu_jax_error": 4,
+          "duplicate_code": 0
+        }
+      },
+      "totals": {
+        "empty_response": 0,
+        "timeout": 0,
+        "connection_error": 0,
+        "http_4xx": 0,
+        "http_5xx": 0,
+        "invalid_json": 0,
+        "extract_error": 16,
+        "syntax_error": 1,
+        "api_enum_error": 17,
+        "inventory_error": 0,
+        "dangerous_import": 0,
+        "dangerous_capability": 0,
+        "cpu_jax_error": 7,
+        "duplicate_code": 3
+      }
+    },
+    "token_usage": {
+      "ollama": {
+        "posts": 46,
+        "prompt_tokens": 753756,
+        "completion_tokens": 45222,
+        "cached_tokens": 0
+      },
+      "deepseek_official": {
+        "posts": 57,
+        "prompt_tokens": 3676850,
+        "completion_tokens": 313057,
+        "cached_tokens": 3630976
+      }
+    },
+    "reconciled_posts": {
+      "ollama": 7
+    },
+    "pipeline_metrics": {
+      "small_r1": {
+        "slots_completed": 7,
+        "slots_lost": 5,
+        "final_valid_count": 6,
+        "final_valid_rate": 0.857143,
+        "total_posts": 11,
+        "repair_requests": 4,
+        "pipeline_wall_s": 718.230693,
+        "pipeline_wall_per_final_valid_s": 119.705115
+      },
+      "small_r2": {
+        "slots_completed": 12,
+        "slots_lost": 0,
+        "final_valid_count": 10,
+        "final_valid_rate": 0.833333,
+        "total_posts": 17,
+        "repair_requests": 5,
+        "pipeline_wall_s": 1078.796584,
+        "pipeline_wall_per_final_valid_s": 107.879658
+      },
+      "small_r3": {
+        "slots_completed": 12,
+        "slots_lost": 0,
+        "final_valid_count": 10,
+        "final_valid_rate": 0.833333,
+        "total_posts": 18,
+        "repair_requests": 6,
+        "pipeline_wall_s": 1107.836691,
+        "pipeline_wall_per_final_valid_s": 110.783669
+      },
+      "large_r1": {
+        "slots_completed": 12,
+        "slots_lost": 0,
+        "final_valid_count": 12,
+        "final_valid_rate": 1.0,
+        "total_posts": 21,
+        "repair_requests": 9,
+        "pipeline_wall_s": 1525.134965,
+        "pipeline_wall_per_final_valid_s": 127.09458
+      },
+      "large_r2": {
+        "slots_completed": 12,
+        "slots_lost": 0,
+        "final_valid_count": 12,
+        "final_valid_rate": 1.0,
+        "total_posts": 19,
+        "repair_requests": 7,
+        "pipeline_wall_s": 1489.738594,
+        "pipeline_wall_per_final_valid_s": 124.144883
+      },
+      "large_r3": {
+        "slots_completed": 12,
+        "slots_lost": 0,
+        "final_valid_count": 12,
+        "final_valid_rate": 1.0,
+        "total_posts": 17,
+        "repair_requests": 5,
+        "pipeline_wall_s": 1226.648759,
+        "pipeline_wall_per_final_valid_s": 102.22073
+      }
+    }
+  },
+  "preflight": {
+    "classification": "D3Q_PREFLIGHT_ORCHESTRATOR",
+    "schema_version": 1,
+    "run_id": "d3q_preflight_20260816T065423Z",
+    "status": "PASS",
+    "remote_rc": 0,
+    "plan_execution_order": [
+      "large_r1",
+      "large_r2",
+      "large_r3",
+      "small_r1",
+      "small_r2",
+      "small_r3"
+    ],
+    "gpu_pre": {
+      "note": "passed at launch; not persisted (incident-05 block preceded result write)"
+    },
+    "gpu_post": {
+      "gpu2": {
+        "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+        "memory_used_mib": "1 MiB"
+      },
+      "external": []
+    },
+    "ollama_pre": {
+      "note": "passed at launch; not persisted (incident-05 block preceded result write)"
+    },
+    "ollama_post": {
+      "qwen_digest": "9ec8897f747e246e970bc5cfdda85d22f1123dc2e3d34978a010a75968716849"
+    },
+    "arms": [
+      {
+        "arm_id": "large_r1",
+        "status": "PASS",
+        "gpu_gate": {
+          "gpu2": {
+            "index": 2,
+            "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+            "memory_used_mib": 1
+          },
+          "external_pids": []
+        },
+        "accepted": [
+          "slot_r1_large_p04",
+          "slot_r1_large_p08"
+        ],
+        "rejected": [
+          "slot_r1_large_p00",
+          "slot_r1_large_p01",
+          "slot_r1_large_p02",
+          "slot_r1_large_p03",
+          "slot_r1_large_p05",
+          "slot_r1_large_p06",
+          "slot_r1_large_p07",
+          "slot_r1_large_p09",
+          "slot_r1_large_p10",
+          "slot_r1_large_p11"
+        ],
+        "result_sha256": "420c064321d0f7d81c635afd44a97c0a8eab598708f395e42c82c32593e5a141",
+        "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/large_r1/run/RESULT.json"
+      },
+      {
+        "arm_id": "large_r2",
+        "status": "PASS",
+        "gpu_gate": {
+          "gpu2": {
+            "index": 2,
+            "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+            "memory_used_mib": 1
+          },
+          "external_pids": []
+        },
+        "accepted": [
+          "slot_r2_large_p04",
+          "slot_r2_large_p07",
+          "slot_r2_large_p08",
+          "slot_r2_large_p09",
+          "slot_r2_large_p10"
+        ],
+        "rejected": [
+          "slot_r2_large_p00",
+          "slot_r2_large_p01",
+          "slot_r2_large_p02",
+          "slot_r2_large_p03",
+          "slot_r2_large_p05",
+          "slot_r2_large_p06",
+          "slot_r2_large_p11"
+        ],
+        "result_sha256": "f7b94ef9d252d9642cdaa30771bb9462d5465f968e4848c425d9437c5b8a6890",
+        "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/large_r2/run/RESULT.json"
+      },
+      {
+        "arm_id": "large_r3",
+        "status": "PASS",
+        "gpu_gate": {
+          "gpu2": {
+            "index": 2,
+            "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+            "memory_used_mib": 1
+          },
+          "external_pids": []
+        },
+        "accepted": [
+          "slot_r3_large_p04",
+          "slot_r3_large_p07",
+          "slot_r3_large_p08",
+          "slot_r3_large_p09"
+        ],
+        "rejected": [
+          "slot_r3_large_p00",
+          "slot_r3_large_p01",
+          "slot_r3_large_p02",
+          "slot_r3_large_p03",
+          "slot_r3_large_p05",
+          "slot_r3_large_p06",
+          "slot_r3_large_p10",
+          "slot_r3_large_p11"
+        ],
+        "result_sha256": "85986682bdd9c6fc14a2d0265c561687904042314811171bf6bf95f64a57f5dc",
+        "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/large_r3/run/RESULT.json"
+      },
+      {
+        "arm_id": "small_r1",
+        "status": "PASS",
+        "gpu_gate": {
+          "gpu2": {
+            "index": 2,
+            "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+            "memory_used_mib": 1
+          },
+          "external_pids": []
+        },
+        "accepted": [
+          "slot_r1_small_p07",
+          "slot_r1_small_p08",
+          "slot_r1_small_p09",
+          "slot_r1_small_p10",
+          "slot_r1_small_p11"
+        ],
+        "rejected": [
+          "slot_r1_small_p00"
+        ],
+        "result_sha256": "add51f8df377aa6b71aa7b28e3424da87fdfd0711f9b972beea4c587ef24cb7d",
+        "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r1/run/RESULT.json"
+      },
+      {
+        "arm_id": "small_r2",
+        "status": "PASS",
+        "gpu_gate": {
+          "gpu2": {
+            "index": 2,
+            "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+            "memory_used_mib": 1
+          },
+          "external_pids": []
+        },
+        "accepted": [
+          "slot_r2_small_p04",
+          "slot_r2_small_p07",
+          "slot_r2_small_p08",
+          "slot_r2_small_p09",
+          "slot_r2_small_p10",
+          "slot_r2_small_p11"
+        ],
+        "rejected": [
+          "slot_r2_small_p00",
+          "slot_r2_small_p01",
+          "slot_r2_small_p02",
+          "slot_r2_small_p03"
+        ],
+        "result_sha256": "7e868377cf5e08ce4b291141b45498fe40e700ae463bbffd86385c105f79aab2",
+        "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r2/run/RESULT.json"
+      },
+      {
+        "arm_id": "small_r3",
+        "status": "PASS",
+        "gpu_gate": {
+          "gpu2": {
+            "index": 2,
+            "uuid": "GPU-8df11537-ab79-722d-606f-411966196c4c",
+            "memory_used_mib": 1
+          },
+          "external_pids": []
+        },
+        "accepted": [
+          "slot_r3_small_p04",
+          "slot_r3_small_p07",
+          "slot_r3_small_p08",
+          "slot_r3_small_p09",
+          "slot_r3_small_p10",
+          "slot_r3_small_p11"
+        ],
+        "rejected": [
+          "slot_r3_small_p00",
+          "slot_r3_small_p01",
+          "slot_r3_small_p02",
+          "slot_r3_small_p03"
+        ],
+        "result_sha256": "f27fa3a1674049fbc7830bc60074f7a347a9b74b34f8ccec27c8a8307975db8e",
+        "result_file": "/tmp/d3q_preflight_20260816T065423Z/arms/small_r3/run/RESULT.json"
+      }
+    ],
+    "recovery": {
+      "classification": "D3Q_PREFLIGHT_RECOVERY",
+      "schema_version": 1,
+      "run_id": "d3q_preflight_20260816T065423Z",
+      "reason": "gpu2_external_app",
+      "allowed_reasons": [
+        "gpu2_external_app"
+      ],
+      "precedent": "D3Q_PHASE2_INCIDENT_02 recover-completed-chunk (gpu2_external_app)",
+      "external_process": {
+        "pid": 3753771,
+        "detail": "PID 3753771 python -m pytest tests/e3_litesim -q; lstart 2026-08-16T08:14:07Z; 262MiB GPU2 context; overlapped small_r3 window; interference analysis: no degradation (small_r3 execute 202.6s < small_r2 232.9s)",
+        "verified_gone": true
+      },
+      "interference_check": {
+        "limit": 1.25,
+        "arms": {
+          "large_r1": {
+            "execute_s": 194.117356142,
+            "candidates": 12,
+            "median_others_execute_s": 195.187320945,
+            "ratio_vs_median": 0.9945182668739969,
+            "ok": true
+          },
+          "large_r2": {
+            "execute_s": 195.187320945,
+            "candidates": 12,
+            "median_others_execute_s": 194.117356142,
+            "ratio_vs_median": 1.005511948154792,
+            "ok": true
+          },
+          "large_r3": {
+            "execute_s": 192.116937014,
+            "candidates": 12,
+            "median_others_execute_s": 195.187320945,
+            "ratio_vs_median": 0.9842695523657237,
+            "ok": true
+          },
+          "small_r1": {
+            "execute_s": 192.640157011,
+            "candidates": 6,
+            "median_others_execute_s": 195.187320945,
+            "ratio_vs_median": 0.9869501567946735,
+            "ok": true
+          },
+          "small_r2": {
+            "execute_s": 232.891668058,
+            "candidates": 10,
+            "median_others_execute_s": 194.117356142,
+            "ratio_vs_median": 1.199746754677804,
+            "ok": true
+          },
+          "small_r3": {
+            "execute_s": 202.624569197,
+            "candidates": 10,
+            "median_others_execute_s": 194.117356142,
+            "ratio_vs_median": 1.0438251026290346,
+            "ok": true
+          }
+        }
+      },
+      "recovered_utc": "20260816T083415Z",
+      "note": "post-run GPU gate blocked after ALL arms completed and were collected; pre-run gates passed at launch (gpu/ollama pre-checks were not persisted because the block preceded result write)"
+    }
+  },
+  "attrition_disclosure": {
+    "incident": "D3Q_PHASE2_INCIDENT_01",
+    "lost_slots": [
+      "slot_r1_small_p01",
+      "slot_r1_small_p02",
+      "slot_r1_small_p03",
+      "slot_r1_small_p04",
+      "slot_r1_small_p05"
+    ],
+    "note": "r1-small has 7/12 prompts with results; lost slots consumed real POST budget and are excluded from all rates."
+  }
+}
