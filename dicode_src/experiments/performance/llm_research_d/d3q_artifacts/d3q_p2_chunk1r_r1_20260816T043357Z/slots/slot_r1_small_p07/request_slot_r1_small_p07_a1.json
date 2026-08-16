@@ -1,0 +1,44 @@
+{
+  "arm": "small",
+  "attempt_index": 1,
+  "classification": "D3Q_REQUEST_METADATA",
+  "end_monotonic_ns": 2936144617080960,
+  "error_class": null,
+  "finish_reason": "stop",
+  "generation_wall_s": 36.427225256,
+  "http_status": 200,
+  "kind": "initial",
+  "ledger_event": {
+    "attempt_index": 1,
+    "kind": "initial",
+    "model": "qwen2.5-coder:14b",
+    "post_index_for_provider": 4,
+    "post_index_in_slot": 1,
+    "provider": "ollama",
+    "slot_id": "slot_r1_small_p07",
+    "ts_utc": "2026-08-16T04:36:26Z"
+  },
+  "model": "qwen2.5-coder:14b",
+  "model_field": "qwen2.5-coder:14b",
+  "model_field_exact": true,
+  "payload_sha256": "502627dfaff9eaed5ed61a08c3f07899f7edaa8b2aba0f90fd461f4ffbc53ff5",
+  "prompt_index": 7,
+  "prompt_slot": "task_279",
+  "provider": "ollama",
+  "raw_response_file": "raw_slot_r1_small_p07_a1.txt",
+  "raw_response_sha256": "c050966f44707d927a79c81cbdfdb3a5b750853e80a1ff23416ee537d7c07045",
+  "repeat": "1",
+  "request_id": null,
+  "run_id": "d3q_p2_chunk1r_r1_20260816T043357Z",
+  "slot_id": "slot_r1_small_p07",
+  "start_monotonic_ns": 2936108189855704,
+  "timeouts_frozen": {
+    "connect_s": 30.0,
+    "read_s": 600.0
+  },
+  "usage": {
+    "cached_tokens": 0,
+    "completion_tokens": 969,
+    "prompt_tokens": 16386
+  }
+}

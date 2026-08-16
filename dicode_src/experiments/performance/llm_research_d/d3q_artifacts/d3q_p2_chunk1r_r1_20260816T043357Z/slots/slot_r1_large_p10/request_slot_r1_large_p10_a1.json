@@ -1,0 +1,44 @@
+{
+  "arm": "large",
+  "attempt_index": 1,
+  "classification": "D3Q_REQUEST_METADATA",
+  "end_monotonic_ns": 2937533478955829,
+  "error_class": null,
+  "finish_reason": "length",
+  "generation_wall_s": 57.196369026,
+  "http_status": 200,
+  "kind": "initial",
+  "ledger_event": {
+    "attempt_index": 1,
+    "kind": "initial",
+    "model": "deepseek-v4-flash",
+    "post_index_for_provider": 17,
+    "post_index_in_slot": 1,
+    "provider": "deepseek_official",
+    "slot_id": "slot_r1_large_p10",
+    "ts_utc": "2026-08-16T04:59:14Z"
+  },
+  "model": "deepseek-v4-flash",
+  "model_field": "deepseek-v4-flash",
+  "model_field_exact": true,
+  "payload_sha256": "c4f7e158f831d7c76248ae709a9b5f5d5650b11561c0e7e625a55cebb6a90ded",
+  "prompt_index": 10,
+  "prompt_slot": "task_553",
+  "provider": "deepseek_official",
+  "raw_response_file": "raw_slot_r1_large_p10_a1.txt",
+  "raw_response_sha256": "186ecdc5b57fe7a7221f99ef2dc9d0dac6bb90477cfd6b0ef32e88a3b524c6b6",
+  "repeat": "1",
+  "request_id": null,
+  "run_id": "d3q_p2_chunk1r_r1_20260816T043357Z",
+  "slot_id": "slot_r1_large_p10",
+  "start_monotonic_ns": 2937476282586803,
+  "timeouts_frozen": {
+    "connect_s": 30.0,
+    "read_s": 600.0
+  },
+  "usage": {
+    "cached_tokens": 58624,
+    "completion_tokens": 8192,
+    "prompt_tokens": 60089
+  }
+}
