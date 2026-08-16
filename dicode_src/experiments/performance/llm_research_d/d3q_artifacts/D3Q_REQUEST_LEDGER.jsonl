@@ -1,0 +1,2 @@
+{"attempt_index":1,"kind":"initial","model":"qwen2.5-coder:14b","post_index_for_provider":1,"post_index_in_slot":1,"provider":"ollama","slot_id":"slot_r1_small_p00","ts_utc":"2026-08-15T02:26:51Z"}
+{"attempt_index":1,"kind":"initial","model":"deepseek-v4-flash","post_index_for_provider":1,"post_index_in_slot":1,"provider":"deepseek_official","slot_id":"slot_r1_large_p00","ts_utc":"2026-08-15T02:27:39Z"}
