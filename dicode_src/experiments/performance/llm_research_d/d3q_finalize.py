@@ -132,9 +132,12 @@ def cmd_aggregate(artifact_dirs: Sequence[Path], artifacts_root: Path, out_dir: 
         }
         for arm in ("small", "large"):
             for repeat in ("r1", "r2", "r3"):
+                # parse_slot_id stores the numeric repeat ("1"), not "r1";
+                # match on that so pipeline_metrics is actually populated.
+                repeat_num = repeat[1:]
                 arm_rows = [
                     r for r in rows
-                    if r["arm"] == arm and r["repeat"] == repeat and r["status"] == "completed"
+                    if r["arm"] == arm and r["repeat"] == repeat_num and r["status"] == "completed"
                 ]
                 if not arm_rows:
                     continue
