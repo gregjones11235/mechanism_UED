@@ -190,3 +190,110 @@ def test_poll_probe_self_match_guard():
     assert re.search(pattern, real) is not None
     # ...but the probe's own command line (bracketed) must not.
     assert re.search(pattern, cmd) is None
+
+
+# ---------------------------------------------------------------------------
+# incident-05 recovery
+# ---------------------------------------------------------------------------
+
+
+def _mk_recover_arm(root, arm_id, n_cands, execute_s):
+    import subprocess as _sp
+
+    arm = root / "arms" / arm_id
+    (arm / "run").mkdir(parents=True)
+    (arm / "ARM_CANDIDATES.json").write_text(
+        json.dumps({"arm_id": arm_id, "candidates": [{"id": f"c{i}", "path": f"c{i}.py"} for i in range(n_cands)]}),
+        encoding="utf-8",
+    )
+    (arm / "spec.json").write_text("{}", encoding="utf-8")
+    (arm / "manifest.json").write_text("{}", encoding="utf-8")
+    (arm / "run" / "RESULT.json").write_text(json.dumps({"accepted_ids": ["c0"], "rejected_ids": []}), encoding="utf-8")
+    (arm / "run" / "replay_summary.json").write_text(json.dumps({"session_wall_s": 100.0}), encoding="utf-8")
+    (arm / "run" / "critical_path.json").write_text(
+        json.dumps({"critical_path": [{"phase": "preflight_eval_execute", "duration_s": execute_s}]}), encoding="utf-8"
+    )
+    return arm
+
+
+def _mk_recover_dir(tmp_path, executes=(100.0, 105.0)):
+    root = tmp_path / "d3q_preflight_20260816T000000Z"
+    root.mkdir()
+    _mk_recover_arm(root, "arm_a", 10, executes[0])
+    _mk_recover_arm(root, "arm_b", 10, executes[1])
+    (root / "D3Q_PREFLIGHT_REMOTE_SUMMARY.json").write_text(
+        json.dumps({"status": "PASS", "arms": [
+            {"arm_id": "arm_a", "status": "PASS"}, {"arm_id": "arm_b", "status": "PASS"}]}),
+        encoding="utf-8",
+    )
+    (root / "remote_run_rc.txt").write_text("0\n", encoding="utf-8")
+    (root / "driver.rc").write_text("0\n", encoding="utf-8")
+    return root
+
+
+def _patch_remote_gates(monkeypatch):
+    monkeypatch.setattr(orch, "_gpu_gate_remote", lambda t, k: {"gpu2": {"uuid": "GPU-x"}, "external": []})
+    monkeypatch.setattr(orch, "_ollama_gate_remote", lambda t, k: {"qwen_digest": "9ec8897f747e"})
+
+
+def test_recovery_happy_path(tmp_path, monkeypatch):
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path)
+    result = orch.cmd_recover_completed_run(root, "gpu2_external_app", None, "test detail", "t", "k")
+    assert result["status"] == "PASS"
+    assert result["recovery"]["reason"] == "gpu2_external_app"
+    assert (root / "D3Q_PREFLIGHT_ORCHESTRATOR_RESULT.json").is_file()
+    assert (root / "D3Q_PREFLIGHT_RECOVERY.json").is_file()
+
+
+def test_recovery_reason_whitelist(tmp_path, monkeypatch):
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path)
+    with pytest.raises(orch.OrchestratorError):
+        orch.cmd_recover_completed_run(root, "something_else", None, "", "t", "k")
+
+
+def test_recovery_rejects_non_pass_summary(tmp_path, monkeypatch):
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path)
+    summary = json.loads((root / "D3Q_PREFLIGHT_REMOTE_SUMMARY.json").read_text(encoding="utf-8"))
+    summary["status"] = "FAILED"
+    (root / "D3Q_PREFLIGHT_REMOTE_SUMMARY.json").write_text(json.dumps(summary), encoding="utf-8")
+    with pytest.raises(orch.OrchestratorError):
+        orch.cmd_recover_completed_run(root, "gpu2_external_app", None, "", "t", "k")
+
+
+def test_recovery_rejects_nonzero_rc(tmp_path, monkeypatch):
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path)
+    (root / "driver.rc").write_text("3\n", encoding="utf-8")
+    with pytest.raises(orch.OrchestratorError):
+        orch.cmd_recover_completed_run(root, "gpu2_external_app", None, "", "t", "k")
+
+
+def test_recovery_rejects_existing_result(tmp_path, monkeypatch):
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path)
+    (root / "D3Q_PREFLIGHT_ORCHESTRATOR_RESULT.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(orch.OrchestratorError):
+        orch.cmd_recover_completed_run(root, "gpu2_external_app", None, "", "t", "k")
+
+
+def test_recovery_interference_ratio_fail_closed(tmp_path, monkeypatch):
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path, executes=(100.0, 400.0))  # arm_b 4x slower per candidate
+    with pytest.raises(orch.OrchestratorError):
+        orch.cmd_recover_completed_run(root, "gpu2_external_app", None, "", "t", "k")
+
+
+def test_recovery_rejects_live_external_pid(tmp_path, monkeypatch):
+    import subprocess as _sp
+
+    _patch_remote_gates(monkeypatch)
+    root = _mk_recover_dir(tmp_path)
+    monkeypatch.setattr(
+        orch, "_run_local",
+        lambda argv, timeout=600: _sp.CompletedProcess(argv, 0, stdout="ALIVE\n", stderr=""),
+    )
+    with pytest.raises(orch.OrchestratorError):
+        orch.cmd_recover_completed_run(root, "gpu2_external_app", 12345, "", "t", "k")

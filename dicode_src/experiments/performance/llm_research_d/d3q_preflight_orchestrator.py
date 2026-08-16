@@ -55,6 +55,10 @@ SSH_OPTS = ("-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHost
 POLL_INTERVAL_S = 60
 MAX_RUN_S = 6 * 3600
 MAX_CONSECUTIVE_POLL_FAILURES = 10
+# incident-05 recovery (mirrors the phase-2 recover-completed-chunk precedent):
+# only these post-run gate reasons may be recovered after the fact.
+ALLOWED_RECOVERY_REASONS = ("gpu2_external_app",)
+RECOVERY_EXECUTE_RATIO_LIMIT = 1.25
 
 
 class OrchestratorError(RuntimeError):
@@ -385,6 +389,123 @@ def cmd_run(staging_dir: Path, ssh_target: str, ssh_key: str, local_artifacts_di
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    return _main_impl(argv)
+
+
+# ---------------------------------------------------------------------------
+# incident-05 recovery: post-run gate blocked AFTER all arms completed
+# ---------------------------------------------------------------------------
+
+
+def _arm_execute_metrics(arm_dir: Path) -> tuple[float, int]:
+    critical = json.loads((arm_dir / "run" / "critical_path.json").read_text(encoding="utf-8"))
+    phases = [p for p in critical.get("critical_path", []) if p.get("phase") == "preflight_eval_execute"]
+    if len(phases) != 1:
+        raise OrchestratorError("recovery_execute_phase_missing", arm_dir.name)
+    meta = json.loads((arm_dir / "ARM_CANDIDATES.json").read_text(encoding="utf-8"))
+    n = len(meta.get("candidates", []))
+    if n <= 0:
+        raise OrchestratorError("recovery_candidates_missing", arm_dir.name)
+    return float(phases[0]["duration_s"]), n
+
+
+def _interference_check(arms_root: Path, arm_ids: Sequence[str]) -> Dict[str, Any]:
+    """Fail closed unless every arm's per-candidate GPU execute time is within
+    RECOVERY_EXECUTE_RATIO_LIMIT of the median of the other arms. A co-resident
+    GPU context that stole compute would inflate the overlapped arm(s)."""
+    metrics = {a: _arm_execute_metrics(arms_root / a) for a in arm_ids}
+    checks: Dict[str, Any] = {}
+    for arm in arm_ids:
+        dur, n = metrics[arm]
+        others = sorted(metrics[b][0] / metrics[b][1] for b in arm_ids if b != arm)
+        median = others[len(others) // 2]
+        norm = dur / n
+        ratio = norm / median if median > 0 else float("inf")
+        checks[arm] = {
+            "execute_s": dur, "candidates": n, "norm_execute_per_cand": norm,
+            "median_others_norm": median, "ratio": ratio, "ok": ratio <= RECOVERY_EXECUTE_RATIO_LIMIT,
+        }
+    if not all(c["ok"] for c in checks.values()):
+        raise OrchestratorError("recovery_interference_check_failed", checks)
+    return checks
+
+
+def cmd_recover_completed_run(artifact_dir: Path, reason: str, external_pid: Optional[int], incident_detail: str, ssh_target: str, ssh_key: str) -> Dict[str, Any]:
+    artifact_dir = Path(artifact_dir)
+    if reason not in ALLOWED_RECOVERY_REASONS:
+        raise OrchestratorError("recovery_reason_not_allowed", reason)
+    result_path = artifact_dir / "D3Q_PREFLIGHT_ORCHESTRATOR_RESULT.json"
+    if result_path.exists():
+        raise OrchestratorError("recovery_result_exists", str(result_path))
+    summary_path = artifact_dir / "D3Q_PREFLIGHT_REMOTE_SUMMARY.json"
+    if not summary_path.is_file():
+        raise OrchestratorError("recovery_summary_missing", str(artifact_dir))
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if summary.get("status") != "PASS":
+        raise OrchestratorError("recovery_summary_not_pass", summary.get("status"))
+    rc_path = artifact_dir / "remote_run_rc.txt"
+    driver_rc_path = artifact_dir / "driver.rc"
+    rc_text = rc_path.read_text(encoding="utf-8").strip() if rc_path.is_file() else ""
+    driver_rc = driver_rc_path.read_text(encoding="utf-8").strip() if driver_rc_path.is_file() else ""
+    if rc_text != "0" or driver_rc != "0":
+        raise OrchestratorError("recovery_rc_not_zero", {"remote_run_rc": rc_text, "driver_rc": driver_rc})
+    arms_root = artifact_dir / "arms"
+    evidence: Dict[str, str] = {}
+    for arm in summary.get("arms", []):
+        arm_id = arm.get("arm_id")
+        if arm.get("status") != "PASS":
+            raise OrchestratorError("recovery_arm_not_pass", arm_id)
+        arm_dir = arms_root / arm_id
+        for rel in ("run/RESULT.json", "run/replay_summary.json", "run/critical_path.json", "spec.json", "manifest.json"):
+            p = arm_dir / rel
+            if not p.is_file():
+                raise OrchestratorError("recovery_evidence_missing", f"{arm_id}/{rel}")
+            evidence[f"{arm_id}/{rel}"] = _sha256_file(p)
+    arm_ids = [a["arm_id"] for a in summary.get("arms", [])]
+    interference = _interference_check(arms_root, arm_ids)
+    verified_gone = False
+    if external_pid is not None:
+        proc = _run_local(_ssh_argv(ssh_target, ssh_key, [f"ps -p {int(external_pid)} > /dev/null 2>&1 && echo ALIVE || echo GONE"]), timeout=120)
+        if proc.returncode != 0 or "GONE" not in proc.stdout:
+            raise OrchestratorError("recovery_external_process_still_alive", external_pid)
+        verified_gone = True
+    gpu_post = _gpu_gate_remote(ssh_target, ssh_key)
+    ollama_post = _ollama_gate_remote(ssh_target, ssh_key)
+    recovered_utc = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    recovery = {
+        "classification": "D3Q_PREFLIGHT_RECOVERY",
+        "schema_version": 1,
+        "run_id": artifact_dir.name,
+        "reason": reason,
+        "allowed_reasons": list(ALLOWED_RECOVERY_REASONS),
+        "precedent": "D3Q_PHASE2_INCIDENT_02 recover-completed-chunk (gpu2_external_app)",
+        "external_process": {"pid": external_pid, "detail": incident_detail, "verified_gone": verified_gone},
+        "interference_check": {"limit": RECOVERY_EXECUTE_RATIO_LIMIT, "arms": interference},
+        "recovered_utc": recovered_utc,
+        "note": "post-run GPU gate blocked after ALL arms completed and were collected; pre-run gates passed at launch (gpu/ollama pre-checks were not persisted because the block preceded result write)",
+    }
+    result = {
+        "classification": "D3Q_PREFLIGHT_ORCHESTRATOR",
+        "schema_version": 1,
+        "run_id": artifact_dir.name,
+        "status": "PASS",
+        "remote_rc": 0,
+        "plan_execution_order": arm_ids,
+        "gpu_pre": {"note": "passed at launch; not persisted (incident-05 block preceded result write)"},
+        "gpu_post": gpu_post,
+        "ollama_pre": {"note": "passed at launch; not persisted (incident-05 block preceded result write)"},
+        "ollama_post": ollama_post,
+        "arms": summary.get("arms", []),
+        "recovery": recovery,
+    }
+    result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (artifact_dir / "D3Q_PREFLIGHT_RECOVERY.json").write_text(
+        json.dumps({"recovery": recovery, "evidence_sha256": evidence}, indent=2) + "\n", encoding="utf-8"
+    )
+    return result
+
+
+def _main_impl(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="d3q_preflight_orchestrator")
     sub = parser.add_subparsers(dest="command", required=True)
     p_prep = sub.add_parser("prepare")
@@ -396,12 +517,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_run.add_argument("--ssh-target", default=SSH_TARGET_DEFAULT)
     p_run.add_argument("--ssh-key", default=SSH_KEY_DEFAULT)
     p_run.add_argument("--out", required=True)
+    p_rec = sub.add_parser("recover-completed-run")
+    p_rec.add_argument("--artifact-dir", required=True)
+    p_rec.add_argument("--reason", required=True)
+    p_rec.add_argument("--external-pid", type=int, default=None)
+    p_rec.add_argument("--incident-detail", default="")
+    p_rec.add_argument("--ssh-target", default=SSH_TARGET_DEFAULT)
+    p_rec.add_argument("--ssh-key", default=SSH_KEY_DEFAULT)
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
         if args.command == "prepare":
             result = cmd_prepare([Path(p) for p in args.artifact_dir], Path(args.staging), Path(args.artifacts_root))
-        else:
+        elif args.command == "run":
             result = cmd_run(Path(args.staging), args.ssh_target, args.ssh_key, Path(args.out))
+        else:
+            result = cmd_recover_completed_run(
+                Path(args.artifact_dir), args.reason, args.external_pid,
+                args.incident_detail, args.ssh_target, args.ssh_key,
+            )
     except OrchestratorError as exc:
         print(json.dumps({"status": "BLOCKED", "reason": exc.reason, "detail": exc.detail}, sort_keys=True, default=str))
         return 2
