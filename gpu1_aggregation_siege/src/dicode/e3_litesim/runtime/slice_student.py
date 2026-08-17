@@ -33,6 +33,8 @@ class SliceNet(nn.Module):
 
 class SliceStudentBackend:
     architecture_family = "slice"
+    student_id = "slice_student"
+    checkpoint_step = 0
 
     def __init__(self, obs_dim: int, action_dim: int, mem_dim: int = 16,
                  hidden: int = 32) -> None:

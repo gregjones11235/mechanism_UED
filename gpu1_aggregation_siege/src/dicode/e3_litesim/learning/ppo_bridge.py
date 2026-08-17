@@ -111,7 +111,7 @@ class PPOBridge:
                     f"G5 ON_POLICY violation: batch policy {batch.policy_hash[:12]} "
                     f"!= current student {current_hash[:12]}; discard stale batch")
         preps = [self._prepare(b) for b in batches]
-        metrics = {"ppo_updates": 0.0}
+        metrics = {"ppo_updates": 0.0, "loss_finite": True, "grad_finite": True}
         for _epoch in range(cfg.update_epochs):
             rng, perm_key, mb_key = jax.random.split(rng, 3)
             sizes = [p["obs"].shape[1] for p in preps]
@@ -134,9 +134,28 @@ class PPOBridge:
                         loss_fn, has_aux=True)(train_state.params)
                     g_norm = optax.global_norm(grad)
                     train_state = train_state.apply_gradients(grads=grad)
+                    step_finite = bool(np.isfinite(float(a_l))
+                                       and np.isfinite(float(v_l))
+                                       and np.isfinite(float(e_l)))
                     metrics = {
                         "p_loss": float(a_l), "v_loss": float(v_l),
                         "entropy": float(e_l), "grad_norm": float(g_norm),
                         "ppo_updates": metrics["ppo_updates"] + 1.0,
+                        "loss_finite": bool(metrics["loss_finite"]) and step_finite,
+                        "grad_finite": (bool(metrics["grad_finite"])
+                                        and bool(np.isfinite(float(g_norm)))),
                     }
+        after_hash = hash_pytree(train_state.params)
+        metrics["params_finite"] = _params_finite(train_state.params)
+        metrics["params_hash_before"] = current_hash
+        metrics["params_hash_after"] = after_hash
+        metrics["params_changed"] = bool(current_hash != after_hash)
         return train_state, metrics
+
+
+def _params_finite(params: Any) -> bool:
+    for leaf in jax.tree_util.tree_leaves(params):
+        arr = np.asarray(leaf)
+        if arr.size and not np.isfinite(arr).all():
+            return False
+    return True

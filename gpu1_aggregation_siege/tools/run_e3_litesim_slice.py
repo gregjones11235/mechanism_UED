@@ -44,6 +44,9 @@ def main() -> int:
     ap.add_argument("--iterations", type=int, default=2)
     ap.add_argument("--num-envs", type=int, default=4)
     ap.add_argument("--horizon", type=int, default=12)
+    ap.add_argument("--mode", default="NoCausal", choices=("NoCausal", "CF"),
+                    help="NoCausal (E3_NO_LLM, default) or CF (counterfactual "
+                         "evidence affects the scheduler distribution)")
     ap.add_argument("--artifacts", default=os.path.join(
         HERE, "..", "artifacts", "e3_litesim"))
     args = ap.parse_args()
@@ -52,7 +55,7 @@ def main() -> int:
         iterations=args.iterations, num_envs=args.num_envs,
         rollout_horizon=args.horizon, seeds_per_tier=1, batch_envs=2,
         ppo=PPOConfig(update_epochs=2, num_minibatches=1),
-        artifacts_dir=args.artifacts, run_id=args.run_id),
+        artifacts_dir=args.artifacts, run_id=args.run_id, mode=args.mode),
         registry=slice_registry())
     summary = loop.run()
     out_dir = summary["artifacts_dir"]
@@ -63,7 +66,7 @@ def main() -> int:
     meas = run_capability_probe(registry=registry, backend=loop.backend,
                                 params=loop.train_state.params,
                                 env_params=loop.env_params,
-                                student_id="slice_student",
+                                student_id=loop._student_id(),
                                 seeds_per_tier=1, batch_envs=1)
     frontier = locate_frontier(meas, registry)
     fenv, capsule, _cb = loop._capture_frontier_capsule(
@@ -265,7 +268,7 @@ def print_console_summary(summary, bench, speedup, loop, out_dir) -> None:
     print("-" * 60)
     print("VERTICAL SLICE")
     print("-" * 60)
-    print(f"initial_student=slice_student")
+    print(f"initial_student={loop._student_id()}")
     print(f"initial_params_hash={loop.initial_params_hash[:16]}")
     print(f"initial_frontier={summary['frontier_initial']['tier']}")
     print(f"training_transitions={acc['training']}")

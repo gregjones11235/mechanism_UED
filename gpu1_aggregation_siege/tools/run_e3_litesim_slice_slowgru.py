@@ -81,6 +81,7 @@ def main() -> int:
     ap.add_argument("--horizon", type=int, default=24)
     ap.add_argument("--student-pool-cc3",
                     default="/home/oseasy/student_pool_v1/cc3")
+    ap.add_argument("--mode", default="NoCausal", choices=("NoCausal", "CF"))
     ap.add_argument("--artifacts", default=os.path.join(
         HERE, "..", "artifacts", "e3_litesim"))
     args = ap.parse_args()
@@ -91,7 +92,13 @@ def main() -> int:
                      rollout_horizon=args.horizon, seeds_per_tier=1,
                      batch_envs=2,
                      ppo=PPOConfig(update_epochs=2, num_minibatches=1),
-                     artifacts_dir=args.artifacts, run_id=args.run_id),
+                     artifacts_dir=args.artifacts, run_id=args.run_id,
+                     mode=args.mode,
+                     # Reduced-horizon slice: the frontier capsule is captured
+                     # before SlowGRU's 32-step slow interval, so its longstate
+                     # may still be zero.  Allow the fresh-episode start; the
+                     # full-horizon formal run keeps the strict default (False).
+                     allow_memory_reset_experiment=True),
         registry=slice_registry(),
         student_pool_cc3=args.student_pool_cc3)
     summary = loop.run()
@@ -104,8 +111,8 @@ def main() -> int:
         "carry_mode": "PERSISTENT",
         "backend": "SlowGRUTrainingBackend",
         "architecture_family": loop._arch_family(),
-        "student_id_note": "probe labels hardcoded to slice_student in "
-                           "E3Loop.run(); real student is " + CANDIDATE_ID,
+        "student_id": loop._student_id(),
+        "checkpoint_step": loop._checkpoint_step(),
         "initial_params_hash": loop.initial_params_hash,
         "final_params_hash": final_hash,
         "params_changed": bool(final_hash != loop.initial_params_hash),

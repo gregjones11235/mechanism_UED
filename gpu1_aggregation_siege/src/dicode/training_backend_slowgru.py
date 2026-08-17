@@ -113,6 +113,14 @@ class SlowGRUTrainingBackend(StudentTrainingBackend):
     ):
         self.architecture_family = "SLOWGRU"
         self.candidate_id = str(candidate_id)
+        # Canonical student identity used by E3-litesim binding (G1). The
+        # checkpoint step is derived from the trailing numeric token of the
+        # canonical id (e.g. SLOWGRU_PERSISTENT_CANONICAL_98304 -> 98304).
+        self.student_id = self.candidate_id
+        try:
+            self.checkpoint_step = int(self.candidate_id.rsplit("_", 1)[-1])
+        except ValueError:
+            self.checkpoint_step = 0
         self._slowgru_runtime_path = str(slowgru_runtime_path)
         self._checkpoint_contract_path = str(checkpoint_contract_path)
         self._checkpoint_path = str(checkpoint_path)

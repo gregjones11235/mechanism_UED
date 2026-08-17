@@ -37,7 +37,8 @@ class LightweightSimulatorDataEngine:
     def generate_batch(self, *, params, student_version: str,
                        distribution: Mapping[str, float],
                        num_envs: int, horizon: int, rng,
-                       deterministic: bool = False) -> dict:
+                       deterministic: bool = False,
+                       allow_memory_reset_experiment: bool = False) -> dict:
         total_w = float(sum(distribution.values()))
         if total_w <= 0:
             raise DataEngineError("empty distribution")
@@ -65,7 +66,8 @@ class LightweightSimulatorDataEngine:
                     student_version=student_version,
                     frontier_family=family,
                     start_state_ids=[f"{family}_reset"],
-                    architecture_family=self.architecture_family)
+                    architecture_family=self.architecture_family,
+                    allow_memory_reset_experiment=allow_memory_reset_experiment)
             else:
                 entries = sample_entries(self.bank.entries, n,
                                          seed=seed_base + hash(family) % 997)
@@ -83,7 +85,8 @@ class LightweightSimulatorDataEngine:
                     deterministic=deterministic,
                     student_version=student_version,
                     frontier_family=family, start_state_ids=ids,
-                    architecture_family=self.architecture_family)
+                    architecture_family=self.architecture_family,
+                    allow_memory_reset_experiment=allow_memory_reset_experiment)
             batches[family] = batch
             accounting[family] = batch.num_transitions
         return {"batches": batches, "accounting": accounting,
